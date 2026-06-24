@@ -26,14 +26,13 @@
 
 ### 1. 项目配置 & 依赖
 
-- ⬜ 完善 `pyproject.toml`：添加 `sentence_transformers`、`chromadb`、`rich`、LLM SDK（`openai` / `anthropic`）等依赖
-- ⬜ 创建 `requirements.txt` 或使用 `pip install -e .` 验证依赖可安装
+- ✅ 完善 `pyproject.toml`：添加 `sentence_transformers`、`chromadb`、`rich`、`openai`、`python-dotenv` 等依赖
+- ✅ `uv sync` 安装所有依赖并验证
 
 ### 2. LLM 适配层 (`src/llm/`)
 
-- ⬜ 实现 `client.py`：统一 LLM 调用接口（`chat(messages, **kwargs) -> str`）
-- ⬜ 实现 `providers/` 下至少一个后端适配（Claude API 或 OpenAI）
-- ⬜ 支持从环境变量读取 API Key
+- ⬜ 实现 `client.py`：`LLMClient` 双 tier 调用（`chat_pro()` / `chat_flash()`），从环境变量读取 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`LLM_PRO_MODEL`、`LLM_FLASH_MODEL`
+- ⬜ 创建 `.env.example` 模板文件（含 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`LLM_PRO_MODEL`、`LLM_FLASH_MODEL` 四项）
 
 ### 3. CLI 交互层 (`src/cli/`)
 

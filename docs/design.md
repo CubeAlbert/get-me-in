@@ -18,13 +18,14 @@
 - [3. 项目结构](#3-项目结构)
 - [4. 模块设计](#4-模块设计)
   - [4.1 提示词模块](#41-提示词模块)
-  - [4.2 RAG 模块](#42-rag-模块)
-  - [4.3 记忆模块](#43-记忆模块)
-  - [4.4 主 Agent（编排器）](#44-主-agent编排器)
-  - [4.5 简历 Agent](#45-简历-agent)
-  - [4.6 学习 Agent](#46-学习-agent)
-  - [4.7 面试 Agent](#47-面试-agent)
-  - [4.8 岗位搜索 Agent](#48-岗位搜索-agent)
+  - [4.2 LLM 调用模块](#42-llm-调用模块)
+  - [4.3 RAG 模块](#43-rag-模块)
+  - [4.4 记忆模块](#44-记忆模块)
+  - [4.5 主 Agent（编排器）](#45-主-agent编排器)
+  - [4.6 简历 Agent](#46-简历-agent)
+  - [4.7 学习 Agent](#47-学习-agent)
+  - [4.8 面试 Agent](#48-面试-agent)
+  - [4.9 岗位搜索 Agent](#49-岗位搜索-agent)
 - [5. 参考资料与约定](#5-参考资料与约定)
 
 ---
@@ -76,7 +77,7 @@
 |----|------|------|
 | 语言 | Python 3.14 | pyproject.toml 已设定 |
 | Agent 框架 | 自研轻量 | 最大控制力，最小依赖，匹配 Hub-and-Spoke 模式 |
-| LLM 接入 | 适配层封装 | 支持切换后端（Claude API / OpenAI / 本地模型） |
+| LLM 接入 | OpenAI SDK（`openai`） | 双 tier（pro / flash），base_url 通过环境变量注入，兼容所有 OpenAI-compatible 后端 |
 | CLI 交互 | `input()` + `$EDITOR` 临时文件 + `rich` 渲染 | 日常对话用 `input()`；长文本（JD、简历、回答）弹出编辑器编辑临时文件；Markdown 输出用 `rich` 美化 |
 | 向量存储 | Chroma（内存模式） | 开发阶段零配置，后续可切换本地持久化 |
 | 向量化 & 重排 | `sentence_transformers` | bi-encoder 做召回，cross-encoder 做重排 |
@@ -128,10 +129,9 @@ get-me-in/
 │   │   ├── store.py         # 记忆读写接口
 │   │   ├── compressor.py    # LLM 对话压缩成记忆
 │   │   └── schemas.py       # 记忆数据结构定义
-│   ├── llm/                 # LLM 调用封装（适配层）
+│   ├── llm/                 # LLM 调用封装
 │   │   ├── __init__.py
-│   │   ├── client.py        # 统一 LLM 调用接口
-│   │   └── providers/       # 各 LLM 后端适配
+│   │   └── client.py         # 双 tier（pro / flash）统一调用
 │   ├── rag/                 # RAG 模块（Chroma + 召回 + 重排）
 │   │   ├── __init__.py
 │   │   ├── embedder.py      # 向量化（sentence_transformers）
@@ -203,7 +203,61 @@ get-me-in/
 - 提示词与代码分离 —— 调整提示词不需要改代码，降低迭代成本
 - `PromptLoader` 无状态 —— 每次 `get()` 都重新读文件，修改提示词后无需重启
 
-### 4.2 RAG 模块
+### 4.2 LLM 调用模块
+
+**用途：** 封装 LLM 调用，提供两种能力等级（pro / flash），供 Agent 基类复用。Agent 不感知具体 model 名称，只需选择调用等级。
+
+**职责：**
+- 初始化 OpenAI 客户端（base_url、api_key 从环境变量注入）
+- 提供 `chat_pro()` 和 `chat_flash()` 两个入口
+- 错误直接抛出，不做 fallback
+
+**环境变量：**
+
+| 变量 | 用途 | 默认值 |
+|------|------|--------|
+| `OPENAI_BASE_URL` | API 地址 | `https://api.openai.com/v1` |
+| `OPENAI_API_KEY` | API 密钥 | 无（必填） |
+| `LLM_PRO_MODEL` | pro tier 模型名 | `gpt-4o` |
+| `LLM_FLASH_MODEL` | flash tier 模型名 | `gpt-4o-mini` |
+
+`.env` 文件通过 `python-dotenv` 在应用启动时加载。
+
+**关键接口 / 公开 API：**
+- `LLMClient.chat_pro(messages: list[dict], **kwargs) -> str` —— 调用 pro tier 模型，返回回复文本
+- `LLMClient.chat_flash(messages: list[dict], **kwargs) -> str` —— 调用 flash tier 模型，返回回复文本
+
+**内部结构：**
+- `client.py`：`LLMClient` 类，构造函数从 `os.environ` 读取配置，实例化 `openai.OpenAI`；两个 `chat_*` 方法内部调用 `self.client.chat.completions.create(model=..., messages=...)` 并返回 `choice.message.content`
+
+**Agent 基类中的封装（`src/agents/base.py`）：**
+
+Agent 基类持有 `LLMClient` 引用，暴露两个便利方法供子类调用：
+
+```python
+class BaseAgent:
+    def __init__(self, llm_client: LLMClient, ...):
+        self._llm = llm_client
+
+    def _llm_pro(self, messages: list[dict], **kwargs) -> str:
+        """高能力调用 — 用于需要深度推理的任务"""
+        return self._llm.chat_pro(messages, **kwargs)
+
+    def _llm_flash(self, messages: list[dict], **kwargs) -> str:
+        """快速调用 — 用于简单分类、格式化等轻量任务"""
+        return self._llm.chat_flash(messages, **kwargs)
+```
+
+子 Agent 调用 `self._llm_pro(messages)` 或 `self._llm_flash(messages)`，不传 model 名。
+
+**设计决策：**
+- 双 tier 而非单一接口 —— 不同任务对模型能力/延迟需求不同，pro 做深度推理（简历分析、面试评估），flash 做轻量任务（意图分类、格式化输出）
+- model 名不暴露给 Agent —— 由运维/部署层面决定具体模型，Agent 只关心能力等级
+- 不做 fallback —— 保持简单，调用失败直接抛出错误到 CLI 层展示
+- 环境变量注入 —— 切换后端只需改 `.env`，不修改代码
+- 使用 OpenAI SDK 而非自建 HTTP 调用 —— 生态兼容性好（任何 OpenAI-compatible 后端均可），且 SDK 内建重试、流式等能力
+
+### 4.3 RAG 模块
 
 **用途：** 共享基础设施层，为各模块提供语义检索能力。使用 `sentence_transformers` 做向量化和重排，`Chroma` 作为向量存储。向量存储先使用内存模式，后续可切换为本地持久化。
 
@@ -266,7 +320,7 @@ Chroma 按模块/用途划分 collection，不按 Agent 划分：
 - 召回和重排分离 —— 召回用 bi-encoder（快，粗筛），重排用 cross-encoder（慢但准，精排）
 - RAG 是基础设施，不是 Agent —— 不参与 Agent 调度，由需要检索能力的模块直接调用
 
-### 4.3 记忆模块
+### 4.4 记忆模块
 
 **用途：** 系统的持久化上下文层。存储用户档案、偏好，以及经过 LLM 压缩的对话记忆。所有 Agent 通过此模块获取上下文。记忆按 Agent 隔离存储，各 Agent 写入自己的子目录。
 
@@ -313,7 +367,7 @@ query_cross_agent(query, agents, limit)
 - 记忆按日期分文件 —— 便于检索和人工翻阅，单文件不会过大
 - 对话压缩由 LLM 完成 —— 压缩质量是关键，规则压缩会丢失语义
 
-### 4.4 主 Agent（编排器）
+### 4.5 主 Agent（编排器）
 
 **用途：** 系统的入口 Agent。与所有 Agent 共享相同的基础能力（对话循环、意图识别、工具调用、记忆读写），唯一区别是主 Agent 持有 `AgentRegistry`，可以调度子 Agent。子 Agent 不允许持有或调度其他 Agent。
 
@@ -342,7 +396,7 @@ query_cross_agent(query, agents, limit)
 - 主 Agent 的唯一特权是 Agent 调度 —— 子 Agent 不允许再持有子 Agent，保持两级结构
 - 意图路由在主 Agent 内完成 —— 主 Agent 拥有全局上下文，适合做调度决策
 
-### 4.5 简历 Agent
+### 4.6 简历 Agent
 
 **用途：** 帮助用户创建、优化、定制简历。根据目标岗位 JD 调整简历内容，提供修改建议。
 
@@ -365,7 +419,7 @@ query_cross_agent(query, agents, limit)
 **设计决策：**
 - 简历 Agent 不直接存储简历 —— 简历内容作为记忆存储在记忆模块中，便于其他 Agent 引用
 
-### 4.6 学习 Agent
+### 4.7 学习 Agent
 
 **用途：** 根据用户技能差距（由简历 Agent 和岗位搜索 Agent 的输出推导）制定学习计划，追踪学习进度。
 
@@ -388,7 +442,7 @@ query_cross_agent(query, agents, limit)
 **设计决策：**
 - 学习计划和学习进度都存储在记忆模块中
 
-### 4.7 面试 Agent
+### 4.8 面试 Agent
 
 **用途：** 模拟技术面试，提供反馈。覆盖行为面试、技术问答、系统设计、代码实战等面试类型。
 
@@ -411,7 +465,7 @@ query_cross_agent(query, agents, limit)
 **设计决策：**
 - 面试会话结束后，关键反馈写入记忆模块
 
-### 4.8 岗位搜索 Agent
+### 4.9 岗位搜索 Agent
 
 **用途：** （待定 —— 具体实施方案尚未确定）
 

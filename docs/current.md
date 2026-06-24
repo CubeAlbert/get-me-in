@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 1 — M1: 项目骨架 & 基础设施
 
-**当前任务：** 1. 项目配置 & 依赖
+**当前任务：** 2. LLM 适配层 (`src/llm/`)
 
-**当前子任务：** ⬜ 完善 `pyproject.toml`：添加 `sentence_transformers`、`chromadb`、`rich`、LLM SDK 等依赖
+**当前子任务：** ⬜ 实现 `client.py`：`LLMClient` 双 tier 调用（`chat_pro()` / `chat_flash()`），从环境变量读取 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`LLM_PRO_MODEL`、`LLM_FLASH_MODEL`
 
 **当前阻塞：** 无
 
-**下一步：** 确定 LLM 后端选型（Claude API / OpenAI），完善 `pyproject.toml` 添加所需依赖，创建虚拟环境并安装
+**下一步：** 创建 `src/llm/client.py`，实现 `LLMClient` 类（从 `os.environ` 读取配置，实例化 `openai.OpenAI`，暴露 `chat_pro()` / `chat_flash()` 两个方法）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -18,3 +18,6 @@
 5. 所有 Agent 的 LLM 调用由 PromptLoader 强制拼接 general_agent_prompt（安全策略+工具+输出格式）
 6. 工作流遵循 Plan → Execute → Result Validation → Replan
 7. 编码时不写测试，除非用户显式要求
+8. 使用 `uv` 管理依赖和运行（`uv add`/`uv sync`/`uv run`），PyPI 镜像使用上交 SJTUG
+9. LLM 后端使用 OpenAI SDK，双 tier（pro / flash），base_url 和 api_key 通过环境变量注入，不设 fallback
+10. Jupyter 交互式调试用 `uv run --with jupyter jupyter lab`，jupyter 不写入项目依赖

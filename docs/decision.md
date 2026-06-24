@@ -16,6 +16,9 @@
 - [决策 6 — 工作流：Plan → Execute → Result Validation → Replan](#决策-6--工作流plan--execute--result-validation--replan)
 - [决策 7 — 编码时不写测试](#决策-7--编码时不写测试)
 - [决策 8 — CLI 方案：input() + $EDITOR + rich](#决策-8--cli-方案input--editor--rich)
+- [决策 9 — 包管理：uv + SJTU 镜像](#决策-9--包管理uv--sjtu-镜像)
+- [决策 10 — LLM 后端：OpenAI SDK + 双 tier 封装](#决策-10--llm-后端openai-sdk--双-tier-封装)
+- [决策 11 — Jupyter 交互式调试工作流](#决策-11--jupyter-交互式调试工作流)
 
 ---
 
@@ -157,3 +160,63 @@
 **曾考虑的替代方案：**
 - `click` —— 适合命令行多子命令工具，对话式 AI 用不上
 - `prompt_toolkit` —— 提供输入历史和自动补全，但对当前需求过度
+
+---
+
+### 决策 9 — 包管理：uv + SJTU 镜像
+
+**背景：** 需要选择 Python 项目的包管理和虚拟环境方案。
+
+**决策：** 使用 `uv` 管理依赖和运行（`uv add` / `uv remove` / `uv sync` / `uv run`），PyPI 镜像配置在上海交大 SJTUG 镜像站（`https://mirrors.sjtug.sjtu.edu.cn/pypi/web/simple`），在 `pyproject.toml` 中通过 `[[tool.uv.index]]` 持久化配置。
+
+**理由：**
+- `uv` 是当前最快的 Python 包管理器（Rust 实现），下载和解析速度远超 pip/Poetry
+- `uv run` 统一了"在项目 venv 中执行命令"的入口，避免激活虚拟环境的混乱
+- 国内镜像大幅提升下载速度（从 550KB/s → 25MB/s）
+- `pyproject.toml` 持久化镜像配置，团队共享无需各自配置
+
+**曾考虑的替代方案：**
+- Poetry —— 功能完善但比 uv 慢一个数量级，且 `poetry run` 不如 `uv run` 简洁
+- pip + venv —— 需要手动管理虚拟环境，`uv` 自动处理
+- 清华 TUNA 镜像 / 中科大镜像 —— 均可替代，速度接近
+
+---
+
+### 决策 10 — LLM 后端：OpenAI SDK + 双 tier 封装
+
+**背景：** 项目需要 LLM 调用能力，需要选择 SDK 和封装方式。
+
+**决策：**
+- 使用 `openai` 包（OpenAI SDK），兼容所有 OpenAI-compatible 后端（如 vLLM、Ollama、DeepSeek 等）
+- 封装为双 tier：`chat_pro()`（高能力，默认 `gpt-4o`）和 `chat_flash()`（快速，默认 `gpt-4o-mini`）
+- 通过 4 个环境变量注入配置：`OPENAI_BASE_URL`、`OPENAI_API_KEY`、`LLM_PRO_MODEL`、`LLM_FLASH_MODEL`
+- `python-dotenv` 在应用启动时加载 `.env`
+- 调用逻辑封装在 `src/agents/base.py` 中，子 Agent 调用 `self._llm_pro()` / `self._llm_flash()`，不传 model 名
+
+**理由：**
+- OpenAI SDK 是事实标准，生态兼容性最广，换后端只改环境变量不动代码
+- 双 tier 覆盖两种场景：深度推理（简历分析、面试评估）用 pro，轻量任务（意图分类、格式化）用 flash
+- model 名不暴露给 Agent —— 具体模型由运维决定，Agent 只关心能力等级
+- 不做 fallback —— 保持简单，错误直接抛出到 CLI 前端
+
+**曾考虑的替代方案：**
+- 直接使用 Anthropic SDK —— 仅支持 Claude，不如 OpenAI-compatible 生态广
+- 多 provider 适配层 —— 过度设计，OpenAI-compatible 协议已足够通用
+- 硬编码 model 名 —— 换模型需要改代码
+
+---
+
+### 决策 11 — Jupyter 交互式调试工作流
+
+**背景：** 开发阶段需要快速验证局部函数（如 RAG embedding、Chunker 逻辑），直接跑完整 CLI 链路太重。
+
+**决策：** 使用 `uv run --with jupyter jupyter lab` 启动 Jupyter Notebook 做交互式验证，`jupyter` 不写入项目依赖。
+
+**理由：**
+- `uv run` 确保 notebook 在项目 venv 中运行，能 import 项目代码
+- `--with jupyter` 临时注入不污染 `pyproject.toml`
+- 交互式环境适合调试局部逻辑，改一行跑一行，不需要每次从头启动 CLI
+
+**曾考虑的替代方案：**
+- 单元测试 —— early阶段接口不稳定，测试维护成本高（决策 7 已有约束）
+- `python -i` 交互式解释器 —— 功能弱，不支持富文本和代码块
