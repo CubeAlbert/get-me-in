@@ -29,18 +29,23 @@
 - ✅ 完善 `pyproject.toml`：添加 `sentence_transformers`、`chromadb`、`rich`、`openai`、`python-dotenv` 等依赖
 - ✅ `uv sync` 安装所有依赖并验证
 
-### 2. LLM 适配层 (`src/llm/`)
+### 2. 配置模块 (`src/config.py`)
+
+- ⬜ 实现 `config.py`：启动时调用 `load_dotenv()`、校验 4 个必填环境变量（缺失则打印清单并 `sys.exit(1)`）、将变量挂到模块属性上
+- ⬜ 其他模块（LLM 等）统一 `from src.config import config` 获取配置，不再直接调用 `os.environ`
+
+### 3. LLM 适配层 (`src/llm/`)
 
 - ⬜ 实现 `client.py`：`LLMClient` 双 tier 调用（`chat_pro()` / `chat_flash()`），从环境变量读取 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`LLM_PRO_MODEL`、`LLM_FLASH_MODEL`
 - ⬜ 创建 `.env.example` 模板文件（含 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`LLM_PRO_MODEL`、`LLM_FLASH_MODEL` 四项）
 
-### 3. CLI 交互层 (`src/cli/`)
+### 4. CLI 交互层 (`src/cli/`)
 
 - ⬜ 实现 `app.py`：对话循环（`while True: input() → LLM → rich 渲染输出`）
 - ⬜ 实现 `$EDITOR` 临时文件长文本输入（用户输入特殊命令时弹出编辑器）
 - ⬜ `rich` 渲染 Markdown 输出（代码块、表格、列表等）
 
-### 4. 提示词模块 (`src/prompts/`)
+### 5. 提示词模块 (`src/prompts/`)
 
 - ⬜ 实现 `loader.py`：扫描 `data/prompts/` 构建名称→模板映射；`get()` 替换变量；`get_raw()` 跳过公共前缀
 - ⬜ 创建 `data/prompts/general_agent/safety.md`（安全策略）
@@ -49,7 +54,7 @@
 - ⬜ 创建 `data/prompts/orchestrator.md`（编排器意图识别提示词）
 - ⬜ 创建 `data/prompts/memory_compressor.md`（对话压缩提示词）
 
-### 5. 入口集成
+### 6. 入口集成
 
 - ⬜ 更新 `main.py`：初始化 LLM Client → PromptLoader → CLI App，串联完整对话流程
 - ⬜ 端到端验证：启动程序 → 输入一句话 → LLM 返回 → rich 渲染输出

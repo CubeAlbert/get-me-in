@@ -21,6 +21,7 @@
 - **预期产出：** 可运行的项目骨架，LLM 能调用，CLI 能对话
 - **验收标准：**
   - `pyproject.toml` 包含所需依赖
+  - `src/config.py` 完成环境变量集中管理（启动加载 .env + 校验必填变量）
   - `src/llm/` 完成适配层封装，至少支持一个后端（Claude API 或 OpenAI）
   - `src/cli/app.py` 实现基本对话循环（`input()` + `rich` 渲染 Markdown 输出 + `$EDITOR` 长文本输入）
   - `src/prompts/loader.py` 完成模板加载和变量替换，`data/prompts/` 下创建初始模板文件
