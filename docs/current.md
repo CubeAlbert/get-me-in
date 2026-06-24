@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 1 — M1: 项目骨架 & 基础设施
 
-**当前任务：** 2. 配置模块 (`src/config.py`)
+**当前任务：** 3. LLM 适配层 (`src/llm/`)
 
-**当前子任务：** ⬜ 实现 `config.py`：启动时调用 `load_dotenv()`、校验 4 个必填环境变量、将变量挂到模块属性上
+**当前子任务：** ⬜ 实现 `client.py`：`LLMClient` 双 tier 调用（`chat_pro()` / `chat_flash()`），通过 `config` 模块读取环境变量
 
 **当前阻塞：** 无
 
-**下一步：** 创建 `src/config.py`，实现启动加载 + 必填校验 + 模块级单例暴露
+**下一步：** 实现 `src/llm/client.py`，从 `config` 取值实例化 `openai.OpenAI`，暴露 `chat_pro()` / `chat_flash()`
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
