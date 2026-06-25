@@ -17,6 +17,7 @@
 - [2. 架构设计](#2-架构设计)
 - [3. 项目结构](#3-项目结构)
 - [4. 模块设计](#4-模块设计)
+  - [4.0 Handler 协议](#40-handler-协议)
   - [4.1 提示词模块](#41-提示词模块)
   - [4.2 配置模块](#42-配置模块)
   - [4.3 LLM 调用模块](#43-llm-调用模块)
@@ -146,7 +147,8 @@ get-me-in/
 │   │   └── loader.py        # 模板加载 & 变量替换
 │   └── cli/                 # CLI 交互层
 │       ├── __init__.py
-│       └── app.py           # 终端交互入口
+│       ├── app.py           # 终端交互入口
+│       └── handler.py       # Handler 抽象基类 + DemoHandler（桩）
 ├── data/                    # 持久化存储（文件系统）
 │   ├── profile/
 │   │   └── profile.md       # 用户档案（技能、经历、教育）
@@ -180,6 +182,24 @@ get-me-in/
 ```
 
 ## 4. 模块设计
+
+### 4.0 Handler 协议
+
+**用途：** 定义 CLI 层与业务逻辑层之间的桥接接口。CLI 不直接调用 LLM 或 Agent，而是调用注入的 `Handler`，由 Handler 负责具体的输入处理逻辑。这是一个抽象协议，初期用桩实现（`DemoHandler`）验证 I/O 管线，后续主 Agent 实现同一协议后无缝替换。
+
+**职责：**
+- 定义 `process(user_input: str) -> str` 抽象方法
+- 提供 `DemoHandler` 桩实现用于测试渲染（输入 1→纯文本、2→markdown、3→选项列表）
+
+**关键接口：**
+- `Handler.process(user_input: str) -> str` —— 处理用户输入，返回响应文本
+
+**位置：** `src/cli/handler.py`
+
+**设计决策：**
+- Handler 作为抽象协议而不是写死在 CLI 中 —— CLI 不关心谁在处理输入，后续主 Agent 只需实现 `process()` 接口即可接入
+- M1 阶段用 `DemoHandler` 桩 —— 此时 Agent 层尚未构建，桩实现足够验证 I/O 管线
+- 返回值是纯文本 —— 渲染由 CLI 层的 `rich` 负责
 
 ### 4.1 提示词模块
 

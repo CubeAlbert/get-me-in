@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 1 — M1: 项目骨架 & 基础设施
 
-**当前任务：** 4. CLI 交互层 (`src/cli/`)
+**当前任务：** 5. 提示词模块 (`src/prompts/`)
 
-**当前子任务：** ⬜ 实现 `app.py`：对话循环（`while True: input() → LLM → rich 渲染输出`）
+**当前子任务：** ⬜ 实现 `loader.py`：扫描 `data/prompts/` 构建名称→模板映射；`get()` 替换变量并自动拼接 `general_agent/` 公共前缀；`get_raw()` 跳过拼接
 
 **当前阻塞：** 无
 
-**下一步：** 实现 `src/cli/app.py`，对接 `LLMClient` 完成输入→调用→渲染的闭环
+**下一步：** 实现 `src/prompts/loader.py`，创建 `data/prompts/general_agent/` 目录及初始模板文件
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -23,3 +23,4 @@
 10. Jupyter 交互式调试用 `uv run --with jupyter jupyter lab`，jupyter 不写入项目依赖
 11. 环境变量由 `src/config.py` 集中管理，启动时校验，其他模块禁止直接使用 `os.environ`
 12. LLM 参数分层管理：`LLMClient` 只管透传 `**kwargs`，不关心调用方；`BaseAgent` 提供 `_pro_params` / `_flash_params` 类属性设置默认值，子 Agent 按需覆盖；调用时 `**kwargs` 可覆盖默认值
+13. CLI 通过 `Handler` 抽象协议与业务逻辑解耦：`App` 依赖注入 `Handler`，不直接调 LLM；M1 阶段用 `DemoHandler` 桩验证 I/O 管线，后续主 Agent 实现同一 `process()` 接口后无缝替换

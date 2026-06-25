@@ -41,9 +41,10 @@
 
 ### 4. CLI 交互层 (`src/cli/`)
 
-- ⬜ 实现 `app.py`：对话循环（`while True: input() → LLM → rich 渲染输出`）
-- ⬜ 实现 `$EDITOR` 临时文件长文本输入（用户输入特殊命令时弹出编辑器）
-- ⬜ `rich` 渲染 Markdown 输出（代码块、表格、列表等）
+- ✅ 实现 `handler.py`：抽象基类 `Handler`（`process(user_input: str) -> str`）+ `DemoHandler`（输入 1→纯文本、2→markdown、3→选项列表），仅用于测试 I/O 管线
+- ✅ 实现 `app.py`：`App` 类，依赖注入 `Handler`，对话循环 `while True: input() → handler.process() → rich`，不直接调 LLM
+- ✅ 实现 `$EDITOR` 临时文件长文本输入（用户输入特殊命令时弹出编辑器）
+- ✅ `rich` 渲染 Markdown 输出（代码块、表格、列表等）
 
 ### 5. 提示词模块 (`src/prompts/`)
 
