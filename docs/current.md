@@ -4,11 +4,11 @@
 
 **当前任务：** 5. 提示词模块 (`src/prompts/`)
 
-**当前子任务：** ⬜ 实现 `loader.py`：扫描 `data/prompts/` 构建名称→模板映射；`get()` 替换变量并自动拼接 `general_agent/` 公共前缀；`get_raw()` 跳过拼接
+**当前子任务：** ⬜ 填充 `data/prompts/memory_compressor.md` —— 当前为空文件，待记忆模块（里程碑 3）实现时填充
 
-**当前阻塞：** 无
+**当前阻塞：** 无（memory_compressor.md 依赖 M3，不影响 M1 进度）
 
-**下一步：** 实现 `src/prompts/loader.py`，创建 `data/prompts/general_agent/` 目录及初始模板文件
+**下一步：** 任务 6 入口集成：更新 `main.py` 串联 LLM Client → PromptLoader → CLI App，完成端到端对话
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -24,3 +24,5 @@
 11. 环境变量由 `src/config.py` 集中管理，启动时校验，其他模块禁止直接使用 `os.environ`
 12. LLM 参数分层管理：`LLMClient` 只管透传 `**kwargs`，不关心调用方；`BaseAgent` 提供 `_pro_params` / `_flash_params` 类属性设置默认值，子 Agent 按需覆盖；调用时 `**kwargs` 可覆盖默认值
 13. CLI 通过 `Handler` 抽象协议与业务逻辑解耦：`App` 依赖注入 `Handler`，不直接调 LLM；M1 阶段用 `DemoHandler` 桩验证 I/O 管线，后续主 Agent 实现同一 `process()` 接口后无缝替换
+14. Agent 无专属模板文件 —— 所有 Agent 共用 `general_agent/` 下 7 个模板，差异由 14 个 per-Agent 占位符填充值体现（清单见 `data/prompts/PLACEHOLDER.md`）
+15. 编排不依赖独立提示词 —— 调度子 Agent 定义为工具（如 `dispatch_resume`），通过 `{{ADDITION_TOOLS}}` 注入主 Agent 的工具列表

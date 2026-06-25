@@ -162,11 +162,15 @@ get-me-in/
 │   │   ├── interview/
 │   │   └── job_search/
 │   └── prompts/             # 提示词模板（按用途组织，不按 Agent 划分）
-│       ├── general_agent/   # 所有 Agent 强制拼接的公共前缀（多文件拼接）
-│       │   ├── safety.md
-│       │   ├── tools.md
-│       │   └── output_format.md
-│       ├── orchestrator.md
+│       ├── general_agent/   # 所有 Agent 强制拼接的公共前缀（按文件名排序拼接）
+│       │   ├── 01_role.md
+│       │   ├── 02_mission.md
+│       │   ├── 03_constraint.md
+│       │   ├── 04_tools.md
+│       │   ├── 05_communtion_style.md
+│       │   ├── 06_output_format.md
+│       │   └── 07_reserved.md
+│       ├── PLACEHOLDER.md    # 占位符清单（14 个 per-Agent 占位符，不参与拼接）
 │       ├── memory_compressor.md
 │       ├── resume_analysis.md
 │       └── ...
@@ -212,18 +216,36 @@ get-me-in/
 - 按名称获取提示词，调用方不关心文件路径
 
 **关键接口 / 公开 API：**
-- `PromptLoader.get(name: str, **variables) -> str` —— 按名称加载提示词并替换变量；若调用方是 Agent，自动在前面拼接 `general_agent/` 内容
-- `PromptLoader.list() -> list[str]` —— 列出所有可用提示词名称
-- `PromptLoader.get_raw(name: str, **variables) -> str` —— 仅加载指定提示词，不拼接公共前缀（供记忆压缩等非 Agent 模块使用）
+- `PromptLoader.get(**variables) -> str` —— 拼接 `general_agent/` 下所有文件 + 替换占位符，返回完整 Agent 提示词。所有 Agent 通过此方法获取提示词，区别仅在于传入的变量值不同
+- `PromptLoader.list() -> list[str]` —— 列出 `general_agent/` 下所有文件
+- `PromptLoader.get_raw(name: str, **variables) -> str` —— 加载 `data/prompts/` 下指定模板文件并替换变量，不拼接公共前缀（供记忆压缩等非 Agent 模块使用）
 
 **内部结构：**
-- `loader.py`：扫描 `data/prompts/` 下的所有模板文件，构建名称→模板的映射；`get()` 对 Agent 调用方强制拼接 `general_agent/` 目录下所有 `.md` 文件；`get_raw()` 跳过拼接
+- `loader.py`：`get()` 读取 `general_agent/` 下所有 `.md` 文件，按文件名排序拼接后替换占位符；`get_raw()` 加载 `data/prompts/` 下指定文件，跳过公共前缀。不再使用名称→模板映射——Agent 差异完全由占位符值体现
+- `PLACEHOLDER.md`：记录 `general_agent/` 中所有 `{{占位符}}` 的完整清单，供 Agent 实现时参考，不参与拼接
+
+**占位符系统：**
+
+`general_agent/` 下的模板文件使用 `{{占位符}}` 语法标记可变内容，共 14 个占位符，全部由各 Agent 实现时分别定义。`PromptLoader.get()` 在加载时用 Agent 提供的变量字典替换占位符。
+
+| 文件 | 占位符 | 类型 |
+|------|--------|------|
+| `01_role.md` | `{{AGENT_NAME}}`, `{{AGENT_DESCRIPTION}}`, `{{RESPONSIBILITIES}}` | Agent 身份 |
+| `02_mission.md` | `{{PRIMARY_GOAL}}`, `{{SUCCESS_CRITERIONS}}`, `{{PRIORITIES}}` | 任务目标 |
+| `03_constraint.md` | `{{HARD_CONSTRAINTS}}`, `{{SOFT_CONSTRAINTS}}` | 约束规则 |
+| `04_tools.md` | `{{ADDITION_TOOLS}}` | 专属工具 |
+| `05_communtion_style.md` | `{{TONE}}`, `{{VERBOSITY}}`, `{{EXPLANATION_STYLE}}`, `{{STYLE_RULES}}`, `{{STYLE_AVOIDS}}` | 沟通风格 |
+| `06_output_format.md` | 无 | 固定 |
+| `07_reserved.md` | 无 | 固定 |
+
+完整清单及各占位符说明见 `data/prompts/PLACEHOLDER.md`。
 
 **设计决策：**
-- 按用途而非按 Agent 命名 —— 提示词可能被多个模块复用（例如 `skill_gap.md` 可能被简历 Agent 和学习 Agent 同时使用）
-- Markdown 格式 —— 人可读，支持 Markdown 语法，LLM 提示词天然适合
+- Agent 无专属模板文件 —— 所有 Agent 共用 `general_agent/` 下的同一套模板，差异仅由占位符填充值体现
+- Markdown + XML 混合格式 —— Markdown 人可读，XML 标签便于 LLM 解析语义块
 - 提示词与代码分离 —— 调整提示词不需要改代码，降低迭代成本
 - `PromptLoader` 无状态 —— 每次 `get()` 都重新读文件，修改提示词后无需重启
+- 占位符由 Agent 定义值 —— 固定提示词模板 + 可变占位符，同一套模板适配所有 Agent
 
 ### 4.2 配置模块
 
@@ -442,6 +464,7 @@ query_cross_agent(query, agents, limit)
 
 **主 Agent 额外特权：**
 - 持有 `AgentRegistry`，根据意图调度子 Agent
+- 调度子 Agent 不依赖独立提示词，而是定义为工具（如 `dispatch_resume`），通过 `{{ADDITION_TOOLS}}` 注入主 Agent 的工具列表。LLM 通过标准工具选择流程（`04_tools.md` + `06_output_format.md`）完成意图识别和调度
 
 **关键接口 / 公开 API：**
 - `Orchestrator.run(user_input: str) -> str` —— 主循环入口，接收用户输入，返回 Agent 响应

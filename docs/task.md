@@ -48,12 +48,11 @@
 
 ### 5. 提示词模块 (`src/prompts/`)
 
-- ⬜ 实现 `loader.py`：扫描 `data/prompts/` 构建名称→模板映射；`get()` 替换变量；`get_raw()` 跳过公共前缀
-- ⬜ 创建 `data/prompts/general_agent/safety.md`（安全策略）
-- ⬜ 创建 `data/prompts/general_agent/tools.md`（可用工具列表）
-- ⬜ 创建 `data/prompts/general_agent/output_format.md`（输出格式约定）
-- ⬜ 创建 `data/prompts/orchestrator.md`（编排器意图识别提示词）
-- ⬜ 创建 `data/prompts/memory_compressor.md`（对话压缩提示词）
+- ✅ 实现 `loader.py`：`get(**kwargs)` 读取 `general_agent/` 下所有 `.md`（按文件名排序拼接）并替换占位符；`get_raw(name, **kwargs)` 加载 `data/prompts/<name>.md` 跳过拼接
+- ✅ 创建 `data/prompts/general_agent/` 下 7 个模板文件（`01_role.md` ~ `07_reserved.md`）
+- ✅ 创建 `data/prompts/PLACEHOLDER.md`（14 个 per-Agent 占位符清单）
+- ⬜ 创建 `data/prompts/memory_compressor.md`（对话压缩提示词）—— ⚠️ 当前为空文件，待记忆模块（里程碑 3）实现时填充
+- 编排不再使用独立提示词 —— 调度子 Agent 定义为工具，通过 `{{ADDITION_TOOLS}}` 注入
 
 ### 6. 入口集成
 

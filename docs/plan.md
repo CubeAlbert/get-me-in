@@ -24,7 +24,8 @@
   - `src/config.py` 完成环境变量集中管理（启动加载 .env + 校验必填变量）
   - `src/llm/` 完成适配层封装，至少支持一个后端（Claude API 或 OpenAI）
   - `src/cli/app.py` 实现基本对话循环（`input()` + `rich` 渲染 Markdown 输出 + `$EDITOR` 长文本输入）
-  - `src/prompts/loader.py` 完成模板加载和变量替换，`data/prompts/` 下创建初始模板文件
+  - `src/prompts/loader.py` 完成：`get(**kwargs)` 拼接 `general_agent/` + 替换占位符；`get_raw(name, **kwargs)` 加载指定文件跳过拼接
+  - `data/prompts/` 下 `general_agent/` 已创建 7 个模板文件（`01_role.md` ~ `07_reserved.md`），`memory_compressor.md` 已创建占位文件
   - `main.py` 能启动并完成一轮对话
 - **前置依赖：** 无
 
