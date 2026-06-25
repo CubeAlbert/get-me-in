@@ -20,6 +20,7 @@
 - [决策 10 — LLM 后端：OpenAI SDK + 双 tier 封装](#决策-10--llm-后端openai-sdk--双-tier-封装)
 - [决策 11 — Jupyter 交互式调试工作流](#决策-11--jupyter-交互式调试工作流)
 - [决策 12 — 集中式环境变量管理](#决策-12--集中式环境变量管理configpy-模块)
+- [决策 13 — LLM 参数分层管理](#决策-13--llm-参数分层管理)
 
 ---
 
@@ -239,4 +240,26 @@
 **曾考虑的替代方案：**
 - 各模块各自校验 —— 校验逻辑散落，可能遗漏，错误信息不一致
 - 使用 `pydantic-settings` —— 功能完善但引入额外依赖，当前 4 个变量不需要
+
+---
+
+### 决策 13 — LLM 参数分层管理
+
+**背景：** LLM 调用需要支持 temperature、top_p、response_format 等参数，不同 Agent 需要不同的默认值，同时调用方需要能临时覆盖。
+
+**决策：**
+- `LLMClient.chat_pro()` / `chat_flash()` 通过 `**kwargs` 透传所有额外参数给 OpenAI SDK，不预设也不拦截任何参数
+- `BaseAgent` 提供 `_pro_params` / `_flash_params` 类属性（dict），子 Agent 按需覆盖声明自己的默认值
+- `BaseAgent._llm_pro()` / `_llm_flash()` 合并类默认值 + 调用时覆盖：`{**self._pro_params, **kwargs}`
+- 需要精细控制时，直接通过 `LLMClient.client`（暴露底层 `openai.OpenAI` 实例）走原生 SDK
+
+**理由：**
+- `LLMClient` 保持薄管道角色，不关心调用方是谁、传了什么参数
+- 参数默认值声明在子 Agent 类定义处，一目了然，不用翻调用代码
+- 分层清晰：`LLMClient` 管 API 连接，`BaseAgent` 管参数合并，子 Agent 管具体值
+- 暴露底层 client 让高级用户不被封装限制
+
+**曾考虑的替代方案：**
+- 在 `LLMClient` 中硬编码 temperature 等参数 —— 不同 Agent 需求不同，耦合
+- 每个子 Agent 各自拼 `**kwargs` 传参 —— 参数散落各处，缺乏统一入口
 

@@ -256,31 +256,39 @@ get-me-in/
 **环境变量来源：** 由 `src/config.py` 统一加载和校验（见 §4.2），`LLMClient` 不直接读取 `os.environ`。
 
 **关键接口 / 公开 API：**
-- `LLMClient.chat_pro(messages: list[dict], **kwargs) -> str` —— 调用 pro tier 模型（model 名取自 `config.LLM_PRO_MODEL`），返回回复文本
-- `LLMClient.chat_flash(messages: list[dict], **kwargs) -> str` —— 调用 flash tier 模型（model 名取自 `config.LLM_FLASH_MODEL`），返回回复文本
+- `LLMClient.chat_pro(messages: list[dict], **kwargs) -> str` —— 调用 pro tier 模型（model 名取自 `config.LLM_PRO_MODEL`），返回回复文本。`**kwargs` 透传给 `chat.completions.create`（如 `temperature`、`top_p`、`response_format`），`LLMClient` 不做预设或拦截
+- `LLMClient.chat_flash(messages: list[dict], **kwargs) -> str` —— 调用 flash tier 模型（model 名取自 `config.LLM_FLASH_MODEL`），返回回复文本。`**kwargs` 同上透传
+- `LLMClient.client` —— 暴露底层 `openai.OpenAI` 实例，用于需要精细化控制（如自定义 model、流式）的场景，绕过便捷封装
 
 **内部结构：**
 - `client.py`：`LLMClient` 类，构造函数从 `config.OPENAI_BASE_URL` 和 `config.OPENAI_API_KEY` 读取配置，实例化 `openai.OpenAI`；两个 `chat_*` 方法内部调用 `self.client.chat.completions.create(model=..., messages=...)` 并返回 `choice.message.content`，model 名分别来自 `config.LLM_PRO_MODEL` 和 `config.LLM_FLASH_MODEL`
 
 **Agent 基类中的封装（`src/agents/base.py`）：**
 
-Agent 基类持有 `LLMClient` 引用，暴露两个便利方法供子类调用：
+Agent 基类持有 `LLMClient` 引用，通过类属性 `_pro_params` / `_flash_params` 声明默认参数，子类按需覆盖。暴露两个便利方法，内部合并默认值 + 调用时覆盖参数：
 
 ```python
 class BaseAgent:
+    _pro_params: dict = {}    # 子类按需覆盖，如 {"temperature": 0.3, "top_p": 0.9}
+    _flash_params: dict = {}  # 子类按需覆盖，如 {"temperature": 0.0}
+
     def __init__(self, llm_client: LLMClient, ...):
         self._llm = llm_client
 
     def _llm_pro(self, messages: list[dict], **kwargs) -> str:
         """高能力调用 — 用于需要深度推理的任务"""
-        return self._llm.chat_pro(messages, **kwargs)
+        params = {**self._pro_params, **kwargs}
+        return self._llm.chat_pro(messages, **params)
 
     def _llm_flash(self, messages: list[dict], **kwargs) -> str:
         """快速调用 — 用于简单分类、格式化等轻量任务"""
-        return self._llm.chat_flash(messages, **kwargs)
+        params = {**self._flash_params, **kwargs}
+        return self._llm.chat_flash(messages, **params)
 ```
 
-子 Agent 调用 `self._llm_pro(messages)` 或 `self._llm_flash(messages)`，不传 model 名。
+参数优先级：调用时 `**kwargs` > 子类 `_pro_params/_flash_params` > LLMClient 默认（model 名）。
+
+子 Agent 调用 `self._llm_pro(messages)` 或 `self._llm_flash(messages)`，不传 model 名。需要临时覆盖参数时传 `self._llm_pro(messages, temperature=0.9)`。
 
 **设计决策：**
 - 双 tier 而非单一接口 —— 不同任务对模型能力/延迟需求不同，pro 做深度推理（简历分析、面试评估），flash 做轻量任务（意图分类、格式化输出）
@@ -288,6 +296,8 @@ class BaseAgent:
 - 不做 fallback —— 保持简单，调用失败直接抛出错误到 CLI 层展示
 - 配置由 `src/config.py` 集中管理 —— LLMClient 不直接读 `os.environ`，换变量名只改 config 一处
 - 使用 OpenAI SDK 而非自建 HTTP 调用 —— 生态兼容性好（任何 OpenAI-compatible 后端均可），且 SDK 内建重试、流式等能力
+- LLM 参数分层管理 —— `LLMClient` 保持薄管道角色，仅透传 `**kwargs` 不做预设；temperature / top_p 等参数默认值由 `BaseAgent._pro_params` / `_flash_params` 类属性声明，子 Agent 按需覆盖，调用时 `**kwargs` 可临时覆盖；需要原生 SDK 控制时通过 `LLMClient.client` 直接操作
+- 暴露底层 client —— `LLMClient.client` 公开 `openai.OpenAI` 实例，高级场景（自定义 model、流式）可直接使用，不被便捷封装限制
 
 ### 4.4 RAG 模块
 
