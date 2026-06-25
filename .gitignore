@@ -43,6 +43,7 @@ data/chroma_db/
 # === Jupyter ===
 .ipynb_checkpoints/
 *.ipynb
+.virtual_documents/
 
 # === Logs ===
 *.log

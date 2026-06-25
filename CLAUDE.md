@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 本项目遵循 **Plan → Execute → Result Validation → Replan** 循环。
 工作完成后应使用 `/project-checkpoint` 更新 `docs/current.md` 和 `docs/task.md`。
 新会话开始时使用 `/project-bootstrap` 恢复上下文。
+**不要主动推进项目进度** — 完成当前任务后，主动提醒用户审查成果并保存状态（`/project-checkpoint`），由用户决定是否继续下一步。
 
 ## Architecture
 
