@@ -274,6 +274,8 @@ get-me-in/
 | `LLM_FLASH_MODEL` | flash tier 模型名 | `gpt-4o-mini` |
 | `BI_ENCODER_MODEL` | RAG 召回（bi-encoder） | `BAAI/bge-base-zh-v1.5` |
 | `CROSS_ENCODER_MODEL` | RAG 重排（cross-encoder） | `BAAI/bge-reranker-v2-m3` |
+| `EMBED_BATCH_SIZE` | Embedding 批处理大小 | `32` |
+| `HF_ENDPOINT` | HuggingFace 镜像 | `https://hf-mirror.com` |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
 
@@ -391,11 +393,11 @@ class BaseAgent:
 ```
 
 **内部结构：**
-- `Embedder`：封装 `sentence_transformers`，加载 bi-encoder 模型（默认 `BAAI/bge-base-zh-v1.5`，由 `BI_ENCODER_MODEL` 配置）
+- `Embedder`：封装 `sentence_transformers` 的 bi-encoder 模型（默认 `BAAI/bge-base-zh-v1.5`，由 `BI_ENCODER_MODEL` 配置），将文本转为归一化向量；`embed()` 支持 `batch_size` 参数（默认值由 `EMBED_BATCH_SIZE` 环境变量配置）
 - `Chunker`：通用切分器，按传入的 `separator` 切分文本为逻辑块，附加 `metadata`（agent、date、chunk_id、category 等）—— 不关心内容语义，只按分隔符切
 - `ChromaStore`：封装 Chroma 客户端，管理 collection 的创建、写入、查询。默认内存模式
 - `Retriever`：组合 `Embedder` + `ChromaStore`，完成召回流程
-- `Reranker`：使用 `sentence_transformers` 的 CrossEncoder（默认 `BAAI/bge-reranker-v2-m3`，由 `CROSS_ENCODER_MODEL` 配置；若性能不足可降级为 `BAAI/bge-reranker-base`），对粗排结果精排
+- `Reranker`：独立加载 `sentence_transformers` 的 CrossEncoder 模型（默认 `BAAI/bge-reranker-v2-m3`，由 `CROSS_ENCODER_MODEL` 配置；若性能不足可降级为 `BAAI/bge-reranker-base`），对粗排结果精排
 
 **Collection 设计：**
 

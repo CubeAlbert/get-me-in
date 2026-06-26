@@ -70,9 +70,8 @@
 
 ### 2. Embedder (`src/rag/embedder.py`)
 
-- ⬜ 封装 `sentence_transformers`，从环境变量 `BI_ENCODER_MODEL` / `CROSS_ENCODER_MODEL` 读取模型名
-- ⬜ 实现 `embed(texts: list[str]) -> list[list[float]]`（bi-encoder 向量化）
-- ⬜ 实现 `rerank(query: str, documents: list[str]) -> list[float]`（cross-encoder 相似度分数）
+- ✅ 加载 bi-encoder 模型（模型名由环境变量 `BI_ENCODER_MODEL` 配置）
+- ✅ 实现 `embed(texts: list[str], batch_size: int) -> list[list[float]]`，将文本列表转为归一化向量列表，`batch_size` 默认值由环境变量 `EMBED_BATCH_SIZE` 配置
 
 ### 3. Chunker (`src/rag/chunker.py`)
 
@@ -93,15 +92,16 @@
 
 ### 6. Reranker (`src/rag/reranker.py`)
 
-- ⬜ 持有 `Embedder` 引用，复用其 cross-encoder 模型
-- ⬜ 实现 `rerank(query: str, candidates: list[dict], top_k: int = 5) -> list[dict]`，对召回结果精排后返回 top_k
+- ⬜ 独立加载 cross-encoder 模型（模型名由环境变量 `CROSS_ENCODER_MODEL` 配置）
+- ⬜ 实现 `rerank(query: str, candidates: list[dict], top_k: int = 5) -> list[dict]`，对 (query, candidate.content) 逐对评分，按分数降序排列后返回 top_k
 
 ### 7. RagLoader (`src/rag/loader.py`)
 
 - ⬜ 持有 `Chunker` 和 `ChromaStore` 引用
-- ⬜ 实现 `auto_load()`：`threading.Thread` 后台遍历 `data/reference/` 和 `data/memories/`，子目录名自动提取为 category（references）或 agent（memories），完成后设置 `_ready` Event
+- ⬜ 实现 `auto_load()`：`threading.Thread` 后台遍历，内部 catch 异常（模型下载失败等），异常时 `_ready` 保持 False
 - ⬜ 实现 `is_ready() -> bool`：返回 RAG 是否加载完毕
 - ⬜ 实现 `load_file(path: Path) -> None`：增量加载单个文件（先 `remove(source_file)` 再重新 chunk + add）
+- 📌 后续增加 `/ragreload` 命令手动重新触发加载（模型下载成功后重试）
 
 ### 8. 端到端验证
 

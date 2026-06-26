@@ -27,6 +27,9 @@
 - [决策 17 — RAG 双 Collection + 统一分隔符](#决策-17--rag-双-collection--统一分隔符)
 - [决策 18 — RAG 模型选型](#决策-18--rag-模型选型)
 - [决策 19 — RagLoader 后台加载与降级](#决策-19--ragloader-后台加载与降级)
+- [决策 20 — Embedder/Reranker 模型分离 + batch_size 环境变量化](#决策-20--embedderreranker-模型分离--batch_size-环境变量化)
+- [决策 21 — HF_ENDPOINT 镜像配置](#决策-21--hf_endpoint-镜像配置)
+- [决策 22 — /ragreload 手动重载命令](#决策-22--ragreload-手动重载命令)
 
 ---
 
@@ -397,4 +400,60 @@
 - 同步加载 —— 启动慢，数据量大时不可接受
 - 启动时预建 collection —— Chroma 首次写入自动创建，预建无额外收益
 - 全量重载 —— 改一个文件就要全部重新加载
+
+---
+
+### 决策 20 — Embedder/Reranker 模型分离 + batch_size 环境变量化
+
+**背景：** 设计初期将 bi-encoder 和 cross-encoder 都放在 Embedder 中，由 Reranker 复用 Embedder 的 cross-encoder 模型。实现阶段发现两个模型职责不同、调用方不同，耦合不必要。
+
+**决策：**
+- Embedder 只持有 bi-encoder（`SentenceTransformer`），只提供 `embed(texts)` 向量化方法
+- Reranker 独立加载 cross-encoder（`CrossEncoder`），不依赖 Embedder
+- `batch_size` 通过环境变量 `EMBED_BATCH_SIZE` 配置（默认 32），`embed()` 作为可选参数
+
+**理由：**
+- 单一职责：Embedder 就是文本 → 向量，不关心评分逻辑
+- 独立加载避免模块间不必要的耦合
+- 环境变量配置支持不同硬件灵活调整，无需改代码
+
+**曾考虑的替代方案：**
+- Embedder 同时持有两个模型 → 职责冗余
+- batch_size 硬编码 → GPU/CPU 差异大
+
+---
+
+### 决策 21 — HF_ENDPOINT 镜像配置
+
+**背景：** 国内访问 HuggingFace Hub 经常超时，`sentence_transformers` 首次加载需下载数百 MB 权重文件。
+
+**决策：**
+- 新增 `HF_ENDPOINT` 环境变量，默认值 `https://hf-mirror.com`（国内镜像）
+- `load_dotenv()` 自动注入 `os.environ`，`sentence_transformers` 底层自动读取，零代码改动
+
+**理由：**
+- 国内用户开箱即用，海外用户可覆盖为官方地址
+- 不侵入代码，完全由环境变量控制
+
+**曾考虑的替代方案：**
+- 不做处理 —— 国内用户首次加载必然失败
+
+---
+
+### 决策 22 — /ragreload 手动重载命令（📌 暂缓，未实现）
+
+**背景：** RAG 后台加载可能因模型下载失败而无法就绪，用户需要在不重启程序的情况下重新触发加载。
+
+**决策：**
+- 新增 CLI 命令 `/ragreload`，手动重新触发 `auto_load()`
+- 当前阶段不实现（标记为 📌 暂缓），M2 末尾或 M3 再做
+- RagLoader 内部 catch 异常，加载失败时 `_ready` 保持 False，对话自动降级纯 LLM
+
+**理由：**
+- 模型下载成功后一条命令恢复 RAG，无需退出程序
+- 与 `is_ready()` 降级机制互补
+
+**曾考虑的替代方案：**
+- 自动重试 —— 可能反复失败浪费资源
+- 要求重启程序 —— 体验差
 

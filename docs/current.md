@@ -2,9 +2,9 @@
 
 **当前阶段：** 阶段 2 — M2: RAG 模块
 
-**当前任务：** 2. Embedder (`src/rag/embedder.py`)
+**当前任务：** 3. Chunker (`src/rag/chunker.py`)
 
-**当前子任务：** ⬜ 封装 `sentence_transformers`，从环境变量加载 bi-encoder 和 cross-encoder 模型
+**当前子任务：** ⬜ 定义 `Chunk` 数据类（`id: str`、`content: str`、`metadata: dict`）
 
 **当前阻塞：** 无
 
@@ -30,3 +30,6 @@
 17. RAG 双 collection（`references` + `memories`），统一 `---` 分隔符，category 由子目录名自动标注，全库搜索 + 可选 filter，不需要 index.md 或 router
 18. RAG 模型选型：bi-encoder = `BAAI/bge-base-zh-v1.5`，cross-encoder = `BAAI/bge-reranker-v2-m3`（性能不足降级 `bge-reranker-base`），均通过环境变量配置
 19. RagLoader 后台加载（`threading.Thread`），`is_ready()` 标记就绪状态，未就绪时对话降级为纯 LLM；`load_file()` 支持增量热更新
+20. Embedder/Reranker 分离 — Embedder 只持 bi-encoder（`embed()`），Reranker 独立加载 cross-encoder；`EMBED_BATCH_SIZE` 环境变量化
+21. `HF_ENDPOINT` 默认 `https://hf-mirror.com`，国内用户开箱即用
+22. `/ragreload` 命令（📌 暂缓），手动重载 RAG，模型下载失败后无需重启

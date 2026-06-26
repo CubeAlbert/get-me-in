@@ -28,6 +28,8 @@ _VAR_SPECS: list[tuple[str, bool, str | None]] = [
     ("LLM_FLASH_MODEL",   True, None),
     ("BI_ENCODER_MODEL",  False, "BAAI/bge-base-zh-v1.5"),
     ("CROSS_ENCODER_MODEL", False, "BAAI/bge-reranker-v2-m3"),
+    ("EMBED_BATCH_SIZE",  False, "32"),
+    ("HF_ENDPOINT",        False, "https://hf-mirror.com"),
 ]
 
 _missing: list[str] = []
