@@ -21,6 +21,12 @@
 - [决策 11 — Jupyter 交互式调试工作流](#决策-11--jupyter-交互式调试工作流)
 - [决策 12 — 集中式环境变量管理](#决策-12--集中式环境变量管理configpy-模块)
 - [决策 13 — LLM 参数分层管理](#决策-13--llm-参数分层管理)
+- [决策 14 — Agent 无专属模板文件](#决策-14--agent-无专属模板文件)
+- [决策 15 — 编排工具化而非提示词化](#决策-15--编排工具化而非提示词化)
+- [决策 16 — JSON 输出解析留待 M4](#决策-16--json-输出解析留待-m4)
+- [决策 17 — RAG 双 Collection + 统一分隔符](#决策-17--rag-双-collection--统一分隔符)
+- [决策 18 — RAG 模型选型](#决策-18--rag-模型选型)
+- [决策 19 — RagLoader 后台加载与降级](#决策-19--ragloader-后台加载与降级)
 
 ---
 
@@ -262,4 +268,133 @@
 **曾考虑的替代方案：**
 - 在 `LLMClient` 中硬编码 temperature 等参数 —— 不同 Agent 需求不同，耦合
 - 每个子 Agent 各自拼 `**kwargs` 传参 —— 参数散落各处，缺乏统一入口
+
+---
+
+### 决策 14 — Agent 无专属模板文件
+
+**背景：** 提示词模块设计初期讨论了两种组织方式：每个 Agent 各有一组专属模板文件，还是所有 Agent 共用一套模板文件、差异由占位符值体现。
+
+**决策：**
+- 所有 Agent 共用 `general_agent/` 下 7 个模板文件，不允许 Agent 拥有自己的模板文件
+- Agent 之间的差异完全由 14 个 per-Agent 占位符填充值体现（清单见 `data/prompts/PLACEHOLDER.md`）
+- `PromptLoader.get(**variables)` 加载时拼接通用模板 + 替换占位符，`**variables` 的键值对由各 Agent 提供
+
+**理由：**
+- 共用模板确保所有 Agent 遵守统一的角色框架、安全约束和输出格式，不会因各自编写而出现遗漏或不一致
+- 占位符系统提供了足够的差异化空间（身份、目标、约束、工具、风格五个维度）
+- 模板文件数量可控（固定 7 个），新增 Agent 不需要新增模板文件
+
+**曾考虑的替代方案：**
+- 每个 Agent 各自管理完整提示词 —— 公共约束变更时需要改 N 处，容易遗漏
+- Agent 专属模板文件覆盖公共模板 —— 复杂度高，Agent 可能绕过核心安全策略
+
+---
+
+### 决策 15 — 编排工具化而非提示词化
+
+**背景：** 主 Agent 调度子 Agent 的方式有两种选择：在提示词中描述调度规则，或将调度定义为工具调用。
+
+**决策：**
+- 不在提示词中写"当用户说 X 时调用 Y Agent"
+- 调度子 Agent 定义为工具（如 `dispatch_resume`、`dispatch_interview`），通过 `{{ADDITION_TOOLS}}` 占位符注入主 Agent 的工具列表
+- LLM 通过标准工具选择流程（`04_tools.md` + `06_output_format.md`）完成意图识别和调度
+
+**理由：**
+- 工具化调度利用 LLM 原生的 function calling 能力，无需在提示词中维护调度规则
+- 新增或移除子 Agent 只需增删工具定义，不改提示词
+- 与输出格式（JSON + action.tool）一致，LLM 的工具选择和调度是同一套流程
+
+**曾考虑的替代方案：**
+- 在提示词中枚举调度规则 —— 调度逻辑耦合在文本中，变更需要改提示词，且长提示词降低 LLM 遵从度
+- 独立的意图路由模块（规则匹配 / 分类器）—— 增加维护成本，且不如 LLM 灵活
+
+---
+
+### 决策 16 — JSON 输出解析留待 M4
+
+**背景：** `06_output_format.md` 已定义结构化 JSON 输出 schema（`thinking` + `action`），M1 阶段的 `LLMHandler` 面临选择：立即实现 JSON 解析，还是透传原始回复。
+
+**决策：**
+- M1 阶段不做 JSON 解析，`LLMHandler` 将 LLM 原始回复直接返回给 CLI
+- JSON 解析（`json.loads` → 提取 `action.message` → 识别 `action.tool` → agent loop）留到 M4 由 Orchestrator 实现
+- M1 裸 JSON 输出不影响端到端验证目的
+
+**理由：**
+- JSON 解析逻辑属于 Agent 编排层（Orchestrator），不属于 M1 基础设施验证范畴
+- 提前实现需要在 `LLMHandler` 中引入 Agent loop 逻辑（工具分发、多轮对话状态机），跨到了 M4 的边界
+- M1 目标是验证 config → LLM → prompts → CLI 管线，裸 JSON 输出已足够验证
+
+**曾考虑的替代方案：**
+- 在 M1 立即解析 JSON —— 需要在 Handler 中实现半个 agent loop，边界模糊，且 M4 时会被 Orchestrator 替换，额外工作量无积累价值
+- 临时移除 `06_output_format.md` 中的 JSON 约束 —— 不需要，LLM 输出裸 JSON 不影响测试目的
+
+---
+
+### 决策 17 — RAG 双 Collection + 统一分隔符
+
+**背景：** M2 阶段设计 RAG 数据存储方案，需要确定 collection 划分策略、分隔符约定、以及参考数据的组织方式。
+
+**决策：**
+- 两个 collection：`references`（参考数据）+ `memories`（记忆），不按数据类型拆细
+- 统一使用 Markdown 水平线 `---` 作为条目边界，记忆和参考数据共用同一套切分规则
+- 参考数据的 category 由子目录名自动提取（`data/reference/<category>/` → `{"category": "<category>"}`），不维护独立配置文件
+- 默认全库检索，Reranker 自然排序；调用方可传 `filter={"category": "knowledge_base"}` 限定范围
+- 不需要 index.md 或 router 做前置分类
+
+**理由：**
+- 两个 collection 足够覆盖所有场景，更多 collection 增加跨 collection 合并排序的复杂度，收益有限
+- `---` 是 Markdown 原生语法，人和 LLM 写起来自然
+- 子目录名即 category，零维护，新增数据类型只需新建目录
+- 全库检索 + Reranker 排序已经够准，前置路由是过度设计
+
+**曾考虑的替代方案：**
+- 每种参考数据一个 collection —— 跨 collection 检索需要合并排序
+- 维护 index.md 做两级检索 —— 增加维护负担且不必要
+- `<!-- chunk -->` 做分隔符 —— 语义明确但输入繁琐
+
+---
+
+### 决策 18 — RAG 模型选型
+
+**背景：** RAG 模块需要 bi-encoder（召回）和 cross-encoder（重排），需选定具体模型并做成可配置。
+
+**决策：**
+- Bi-encoder：`BAAI/bge-base-zh-v1.5`（中文优化，召回速度快）
+- Cross-encoder：`BAAI/bge-reranker-v2-m3`（精排准确率高）
+- 模型名通过环境变量 `BI_ENCODER_MODEL` / `CROSS_ENCODER_MODEL` 配置，带默认值
+- 若 cross-encoder 性能不足可降级为 `BAAI/bge-reranker-base`（仅记录备选，不做在代码中）
+
+**理由：**
+- BGE 系列是国内中文语义检索事实标准，社区验证充分
+- 环境变量配置支持不同环境灵活切换
+- `bge-reranker-v2-m3` 是 v2 系列最强模型，本地推理慢时可降级 base
+
+**曾考虑的替代方案：**
+- `all-MiniLM-L6-v2` —— 英文优化，中文效果差
+- OpenAI Embeddings API —— 需网络、有成本、不可离线
+
+---
+
+### 决策 19 — RagLoader 后台加载与降级
+
+**背景：** 参考数据和记忆的文件数量可能较多，启动时同步加载会阻塞 CLI。需要设计加载机制。
+
+**决策：**
+- 新增 `src/rag/loader.py`（RagLoader），负责遍历磁盘 → Chunker → ChromaStore
+- `auto_load()` 使用 `threading.Thread` 后台执行，不阻塞主线程
+- 暴露 `is_ready()` 供调用方判断；RAG 未就绪时对话走纯 LLM 降级
+- `load_file(path)` 支持增量加载：按 `source_file` 删旧 chunk 后重新入库
+- Collection 不预建，ChromaStore 首次 `add()` 时自动创建
+
+**理由：**
+- `threading` 而非 `asyncio`，与项目同步代码约定一致（决策 2）
+- 后台加载保证 CLI 秒级可交互
+- `is_ready()` 降级机制简单可靠
+- 增量加载支持热更新（新增面试题、Agent 写入记忆后即时入库）
+
+**曾考虑的替代方案：**
+- 同步加载 —— 启动慢，数据量大时不可接受
+- 启动时预建 collection —— Chroma 首次写入自动创建，预建无额外收益
+- 全量重载 —— 改一个文件就要全部重新加载
 

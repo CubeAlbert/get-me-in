@@ -135,11 +135,12 @@ get-me-in/
 │   ├── llm/                 # LLM 调用封装
 │   │   ├── __init__.py
 │   │   └── client.py         # 双 tier（pro / flash）统一调用
-│   ├── rag/                 # RAG 模块（Chroma + 召回 + 重排）
+│   ├── rag/                 # RAG 模块（Chroma + 召回 + 重排 + 加载）
 │   │   ├── __init__.py
 │   │   ├── embedder.py      # 向量化（sentence_transformers）
 │   │   ├── chunker.py       # 按分隔符切分文本为逻辑块
 │   │   ├── store.py         # Chroma 封装（collection 增删查）
+│   │   ├── loader.py        # 启动加载 + 增量加载（threading 后台）
 │   │   ├── retriever.py     # 召回
 │   │   └── reranker.py      # 重排
 │   ├── prompts/             # 提示词加载器
@@ -148,12 +149,19 @@ get-me-in/
 │   └── cli/                 # CLI 交互层
 │       ├── __init__.py
 │       ├── app.py           # 终端交互入口
-│       └── handler.py       # Handler 抽象基类 + DemoHandler（桩）
+│       └── handler.py       # Handler 抽象基类 + LLMHandler（M1 验证管线，M4 由 Orchestrator 替换）
 ├── data/                    # 持久化存储（文件系统）
 │   ├── profile/
 │   │   └── profile.md       # 用户档案（技能、经历、教育）
 │   ├── preferences/
 │   │   └── preferences.md   # 用户偏好（目标岗位、薪资、地点等）
+│   ├── reference/           # 参考数据（RAG 检索源）
+│   │   ├── interview_questions/   # 面试题库
+│   │   ├── company_info/          # 面经 / 公司情报
+│   │   ├── knowledge_base/        # 知识库（已验证的正确答案）
+│   │   ├── resume_examples/       # 简历范例
+│   │   ├── recommended_materials/ # 推荐资料
+│   │   └── job_descriptions/      # 岗位描述
 │   ├── memories/
 │   │   ├── main/            # 按 Agent 分目录，各自按日期分文件
 │   │   │   └── 2026-06-24.md
@@ -264,6 +272,8 @@ get-me-in/
 | `OPENAI_API_KEY` | API 密钥 | 无（必填） |
 | `LLM_PRO_MODEL` | pro tier 模型名 | `gpt-4o` |
 | `LLM_FLASH_MODEL` | flash tier 模型名 | `gpt-4o-mini` |
+| `BI_ENCODER_MODEL` | RAG 召回（bi-encoder） | `BAAI/bge-base-zh-v1.5` |
+| `CROSS_ENCODER_MODEL` | RAG 重排（cross-encoder） | `BAAI/bge-reranker-v2-m3` |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
 
@@ -347,7 +357,7 @@ class BaseAgent:
 
 **职责：**
 - 将文本向量化（Embedder）
-- 将文档按分隔符切分为逻辑块（Chunker）—— 分隔符由写入方定义
+- 将文档按分隔符切分为逻辑块（Chunker）—— 统一使用 Markdown 水平线 `---` 作为条目边界，记忆和参考数据共用同一套切分规则
 - 向量存储与检索（ChromaStore）
 - 召回（Retriever）与重排（Reranker）
 
@@ -381,26 +391,60 @@ class BaseAgent:
 ```
 
 **内部结构：**
-- `Embedder`：封装 `sentence_transformers` 模型加载和推理
-- `Chunker`：通用切分器，按传入的 `separator` 切分文本为逻辑块，附加 `metadata`（agent、date、chunk_id 等）—— 不关心内容语义，只按分隔符切
+- `Embedder`：封装 `sentence_transformers`，加载 bi-encoder 模型（默认 `BAAI/bge-base-zh-v1.5`，由 `BI_ENCODER_MODEL` 配置）
+- `Chunker`：通用切分器，按传入的 `separator` 切分文本为逻辑块，附加 `metadata`（agent、date、chunk_id、category 等）—— 不关心内容语义，只按分隔符切
 - `ChromaStore`：封装 Chroma 客户端，管理 collection 的创建、写入、查询。默认内存模式
 - `Retriever`：组合 `Embedder` + `ChromaStore`，完成召回流程
-- `Reranker`：使用 `sentence_transformers` 的 CrossEncoder 对粗排结果精排
+- `Reranker`：使用 `sentence_transformers` 的 CrossEncoder（默认 `BAAI/bge-reranker-v2-m3`，由 `CROSS_ENCODER_MODEL` 配置；若性能不足可降级为 `BAAI/bge-reranker-base`），对粗排结果精排
 
 **Collection 设计：**
 
-Chroma 按模块/用途划分 collection，不按 Agent 划分：
+两个 collection，不按 Agent 划分：
 
-| Collection | 用途 | 数据来源 |
-|------------|------|----------|
-| `memories` | 所有 Agent 的记忆条目 | Agent 通过记忆模块写入 |
-| `interview_questions` | 面试题库 | 项目初始化时导入 |
-| `job_descriptions` | 岗位描述库 | 用户输入或爬取 |
+| Collection | 用途 | 数据来源 | category 自动标注 |
+|------------|------|----------|-------------------|
+| `references` | 所有参考数据 | `data/reference/<category>/*.md`，按 `---` 切分 | 子目录名即 category 值，Chunker 自动打 metadata |
+| `memories` | 所有 Agent 的记忆条目 + 简历内容 + 面试记录 | Agent 通过 MemoryStore 写入 `data/memories/<agent>/<date>.md`，按 `---` 切分 | 无（memories collection 不按 category 过滤，按 agent 字段过滤） |
+
+检索时默认跨所有 chunk 搜索，Reranker 自然排序。调用方可传 `filter={"category": "knowledge_base"}` 限定范围。
+
+**Chunk 数据结构：**
+
+```python
+@dataclass
+class Chunk:
+    id: str          # uuid4，Chroma 主键
+    content: str     # 条目原始文本（不含分隔符）
+    metadata: dict   # 因 collection 而异（见下表）
+```
+
+| 字段 | references | memories | 用途 |
+|------|-----------|----------|------|
+| `category` | ✅ 必填 | — | 子目录名，限定检索范围 |
+| `source_file` | ✅ | ✅ | 来源文件路径，便于追溯和增量更新时删除旧 chunk |
+| `agent` | — | ✅ 必填 | 写入方 Agent 名，跨 Agent 检索过滤 |
+| `date` | — | ✅ | 写入日期，时间范围过滤 |
+
+Chunk 本身不校验 metadata 结构，规范由写入方遵守。
+
+**RagLoader 模块：**
+
+`loader.py` 负责读取磁盘文件 → 调 Chunker → 写入 ChromaStore，是 RAG 模块的唯一数据入口。
+
+| 方法 | 说明 |
+|------|------|
+| `auto_load()` | 后台启动（`threading.Thread`），遍历 `data/reference/` 和 `data/memories/`，全部入库后设置 ready 标记 |
+| `load_file(path)` | 增量加载单个文件：先按 `source_file` 删旧 chunk，再读文件重新切分入库 |
+| `is_ready()` | 返回 `bool`，调用方据此决定检索是否走 RAG（未就绪时降级为纯 LLM） |
+
+加载逻辑：遍历目录时，子目录名自动提取为 category（仅 `references`）或 agent（仅 `memories`），传入 Chunker 作为 metadata。
 
 **设计决策：**
-- 切分策略由写入方定义 —— Agent 在固化记忆时按约定分隔符组织输出，Chunker 只负责按分隔符切，不感知内容语义
+- 统一分隔符 `---` —— 所有数据（参考数据、记忆）以 Markdown 水平线作为条目边界，写入方负责保证每条之间是自包含的语义单元
+- category 自动标注 —— 参考数据的 category 由子目录名自动提取（`data/reference/<category>/` → `{"category": "<category>"}`），不维护独立配置文件
+- 全库搜索 + 可选过滤 —— 默认不传 filter 全库检索，Reranker 自然排序；调用方可传 `{"category": "knowledge_base"}` 限定范围
 - Chroma 内存模式先行 —— 开发阶段零配置，后续切换持久化只需改 Chroma 初始化参数
-- Collection 按模块划分 —— 不同数据的检索场景和使用频率不同，独立 collection 便于管理
+- 两个 collection —— `references`（参考数据）和 `memories`（记忆），不按 Agent 或数据类型拆分
 - 召回和重排分离 —— 召回用 bi-encoder（快，粗筛），重排用 cross-encoder（慢但准，精排）
 - RAG 是基础设施，不是 Agent —— 不参与 Agent 调度，由需要检索能力的模块直接调用
 

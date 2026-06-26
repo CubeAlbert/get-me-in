@@ -26,6 +26,8 @@ _VAR_SPECS: list[tuple[str, bool, str | None]] = [
     ("OPENAI_API_KEY",    True,  None),
     ("LLM_PRO_MODEL",     True, None),
     ("LLM_FLASH_MODEL",   True, None),
+    ("BI_ENCODER_MODEL",  False, "BAAI/bge-base-zh-v1.5"),
+    ("CROSS_ENCODER_MODEL", False, "BAAI/bge-reranker-v2-m3"),
 ]
 
 _missing: list[str] = []

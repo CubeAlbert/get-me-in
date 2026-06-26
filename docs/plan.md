@@ -16,7 +16,7 @@
 
 ## 1. 里程碑
 
-### 里程碑 1 —— 项目骨架 & 基础设施
+### 里程碑 1 —— 项目骨架 & 基础设施 ✅ 已完成
 
 - **预期产出：** 可运行的项目骨架，LLM 能调用，CLI 能对话
 - **验收标准：**
@@ -33,10 +33,11 @@
 
 - **预期产出：** 可用的语义检索能力，支持写入和查询
 - **验收标准：**
-  - `src/rag/embedder.py` 封装 `sentence_transformers`，加载 bi-encoder 和 cross-encoder 模型
-  - `src/rag/chunker.py` 实现按分隔符切分文本为逻辑块
-  - `src/rag/store.py` 封装 Chroma（内存模式），支持 collection 的增删查
-  - `src/rag/retriever.py` 实现召回流程（Embedder + ChromaStore）
+  - `src/rag/embedder.py` 封装 `sentence_transformers`，加载 bi-encoder（`BAAI/bge-base-zh-v1.5`）和 cross-encoder（`BAAI/bge-reranker-v2-m3`）模型，模型名由环境变量配置
+  - `src/rag/chunker.py` 按 `---`（Markdown 水平线）切分文本为逻辑块，附加 metadata
+  - `src/rag/store.py` 封装 Chroma（内存模式），管理 `references` 和 `memories` 两个 collection
+  - `src/rag/loader.py` 遍历 `data/reference/` 和 `data/memories/`，将 `.md` 文件切分后入库；支持 `auto_load()`（threading 后台加载）和 `load_file(path)`（增量热更新）；暴露 `is_ready()` 供降级判断
+  - `src/rag/retriever.py` 实现召回流程（Embedder + ChromaStore），支持 `filter` 限定 category
   - `src/rag/reranker.py` 实现 CrossEncoder 重排
   - 写入和检索流程可跑通（不依赖其他模块）
 - **前置依赖：** 里程碑 1（LLM 不必须，但项目骨架和依赖管理需就绪）
