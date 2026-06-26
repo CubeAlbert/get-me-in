@@ -21,7 +21,7 @@
 
 ---
 
-> **后续阶段（M2-M8）尚未生成任务。** 当 M1 完成后，回到 `docs/design.md` 和 `docs/plan.md` 查看里程碑 2-8 的详细设计，再生成对应的 Task 列表。
+> **后续阶段（M3-M8）尚未生成任务。** 当 M2 完成后，回到 `docs/design.md` 和 `docs/plan.md` 查看里程碑 3-8 的详细设计，再生成对应的 Task 列表。
 
 ## 阶段 1 —— M1: 项目骨架 & 基础设施
 
@@ -60,3 +60,50 @@
 - ✅ 更新 `main.py`：初始化 LLM Client → PromptLoader → CLI App，串联完整对话流程
 - ✅ 端到端验证：启动程序 → 输入一句话 → LLM 返回 → rich 渲染输出
 - 📌 `06_output_format.md` 已定义结构化 JSON 输出，`LLMHandler` 当前透传原始回复不做解析 —— JSON 解析留待 M4 主 Agent 实现
+
+## 阶段 2 —— M2: RAG 模块
+
+### 1. 参考数据目录
+
+- ✅ 创建 `data/reference/` 及 6 个子目录（`interview_questions/`、`company_info/`、`knowledge_base/`、`resume_examples/`、`recommended_materials/`、`job_descriptions/`）
+- ✅ 每种子目录下创建示例 `.md` 文件，按 `---` 分隔条目，供开发调试使用
+
+### 2. Embedder (`src/rag/embedder.py`)
+
+- ⬜ 封装 `sentence_transformers`，从环境变量 `BI_ENCODER_MODEL` / `CROSS_ENCODER_MODEL` 读取模型名
+- ⬜ 实现 `embed(texts: list[str]) -> list[list[float]]`（bi-encoder 向量化）
+- ⬜ 实现 `rerank(query: str, documents: list[str]) -> list[float]`（cross-encoder 相似度分数）
+
+### 3. Chunker (`src/rag/chunker.py`)
+
+- ⬜ 定义 `Chunk` 数据类（`id: str`、`content: str`、`metadata: dict`）
+- ⬜ 实现 `chunk(text: str, separator: str = "\n---\n", metadata: dict = {}) -> list[Chunk]`，按 `---` 切分文本，每个片段生成 uuid4 并附加 metadata
+
+### 4. ChromaStore (`src/rag/store.py`)
+
+- ⬜ 封装 Chroma 客户端（内存模式），管理 `references` 和 `memories` 两个 collection
+- ⬜ 实现 `add(chunks: list[Chunk], collection: str) -> None`，将 chunk 向量化后写入指定 collection
+- ⬜ 实现 `query(query_vector: list[float], collection: str, filter: dict | None = None, top_k: int = 20) -> list[dict]`，支持 metadata 过滤
+- ⬜ 实现 `remove(source_file: str, collection: str) -> None`，按 `source_file` 删除旧 chunk（供增量更新使用）
+
+### 5. Retriever (`src/rag/retriever.py`)
+
+- ⬜ 组合 `Embedder` + `ChromaStore`，实现 `retrieve(query: str, collection: str, filter: dict | None = None, top_k: int = 20) -> list[dict]`
+- ⬜ 流程：query → embed → chroma query → 返回 top_k
+
+### 6. Reranker (`src/rag/reranker.py`)
+
+- ⬜ 持有 `Embedder` 引用，复用其 cross-encoder 模型
+- ⬜ 实现 `rerank(query: str, candidates: list[dict], top_k: int = 5) -> list[dict]`，对召回结果精排后返回 top_k
+
+### 7. RagLoader (`src/rag/loader.py`)
+
+- ⬜ 持有 `Chunker` 和 `ChromaStore` 引用
+- ⬜ 实现 `auto_load()`：`threading.Thread` 后台遍历 `data/reference/` 和 `data/memories/`，子目录名自动提取为 category（references）或 agent（memories），完成后设置 `_ready` Event
+- ⬜ 实现 `is_ready() -> bool`：返回 RAG 是否加载完毕
+- ⬜ 实现 `load_file(path: Path) -> None`：增量加载单个文件（先 `remove(source_file)` 再重新 chunk + add）
+
+### 8. 端到端验证
+
+- ⬜ 创建示例参考数据（如 `knowledge_base/algorithms.md` 含 3 条 `---` 分隔条目）
+- ⬜ 启动 → `auto_load()` → 等待 `is_ready()` → `retrieve("快速排序")` → 返回正确 chunk → `rerank()` 精排 → 结果正确

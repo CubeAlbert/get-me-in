@@ -1,12 +1,14 @@
 # 当前状态
 
-**当前阶段：** 阶段 1 — M1: 项目骨架 & 基础设施
+**当前阶段：** 阶段 2 — M2: RAG 模块
 
-**当前任务：** 6. 入口集成 — ✅ 已完成
+**当前任务：** 2. Embedder (`src/rag/embedder.py`)
 
-**当前子任务：** 无（M1 全部任务已完成）
+**当前子任务：** ⬜ 封装 `sentence_transformers`，从环境变量加载 bi-encoder 和 cross-encoder 模型
 
-**下一步：** 里程碑 2 — RAG 模块（embedder → chunker → store → retriever → reranker）
+**当前阻塞：** 无
+
+**下一步：** 创建数据目录和示例文件，然后按 embedder → chunker → store → loader → retriever → reranker 顺序实现
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
