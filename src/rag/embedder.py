@@ -7,9 +7,9 @@
     vectors = emb.embed(["Python GIL", "快速排序"])
 """
 
-from sentence_transformers import SentenceTransformer
-
 from src.config import config
+
+from sentence_transformers import SentenceTransformer
 
 
 class Embedder:

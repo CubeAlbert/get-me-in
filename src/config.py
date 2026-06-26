@@ -29,7 +29,7 @@ _VAR_SPECS: list[tuple[str, bool, str | None]] = [
     ("BI_ENCODER_MODEL",  False, "BAAI/bge-base-zh-v1.5"),
     ("CROSS_ENCODER_MODEL", False, "BAAI/bge-reranker-v2-m3"),
     ("EMBED_BATCH_SIZE",  False, "32"),
-    ("HF_ENDPOINT",        False, "https://hf-mirror.com"),
+    ("HF_ENDPOINT",        False, None),
 ]
 
 _missing: list[str] = []
@@ -52,5 +52,11 @@ if _missing:
     print()
     print("Check your .env file or set them directly.")
     sys.exit(1)
+
+# 将已解析的值回写 os.environ，确保第三方库（如 sentence_transformers、
+# huggingface_hub）能读取到 HF_ENDPOINT 等配置（这些库不通过本模块获取配置，
+# 而是直接读 os.environ）
+for _name, _value in _values.items():
+    os.environ.setdefault(_name, _value)
 
 config = SimpleNamespace(**_values)

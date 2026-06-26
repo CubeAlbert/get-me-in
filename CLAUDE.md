@@ -43,6 +43,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Agent 框架自研，不使用 LangChain/CrewAI/AutoGen 等现成框架
 - LLM 对话压缩由 LLM 自身完成，不引入额外 NLP 依赖
 - **使用 `uv` 管理依赖和运行** — 添加/移除依赖用 `uv add` / `uv remove`；运行项目内 Python 代码必须带 `uv run` 前缀（如 `uv run python main.py`）；安装依赖用 `uv sync`；构建发布用 `uv build`
+- **`from src.config import config` 放在所有第三方 import 之前** — `config` 模块 import 时触发 `load_dotenv()` 注入环境变量。某些第三方库（如 `huggingface_hub`、`sentence_transformers`）在 import 时读取 `os.environ` 并缓存，必须先让 config 把 `.env` 加载完再导入它们
 - **Jupyter 交互式调试** — 用 `uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab` 启动 notebook 验证局部函数（含自动补全），`jupyter`/`jupyterlab-lsp`/`jedi-language-server` 均不写入项目依赖
 
 ## Doc Files

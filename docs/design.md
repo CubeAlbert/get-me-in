@@ -275,7 +275,7 @@ get-me-in/
 | `BI_ENCODER_MODEL` | RAG 召回（bi-encoder） | `BAAI/bge-base-zh-v1.5` |
 | `CROSS_ENCODER_MODEL` | RAG 重排（cross-encoder） | `BAAI/bge-reranker-v2-m3` |
 | `EMBED_BATCH_SIZE` | Embedding 批处理大小 | `32` |
-| `HF_ENDPOINT` | HuggingFace 镜像 | `https://hf-mirror.com` |
+| `HF_ENDPOINT` | HuggingFace 镜像（国内用户建议 `https://hf-mirror.com`） | 无（缺失时走官方站 huggingface.co） |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
 
