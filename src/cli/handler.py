@@ -3,11 +3,14 @@
 CLI 不直接调用 LLM 或 Agent，而是调用注入的 Handler。
 Handler 负责具体的输入处理逻辑，CLI 只负责 I/O 和渲染。
 
-M1 阶段用 DemoHandler 桩验证 I/O 管线；
-后续主 Agent 实现同一 process() 接口后无缝替换。
+M1 阶段用 LLMHandler 验证端到端管线（config → LLM → prompts → CLI）；
+后续主 Agent（Orchestrator）实现同一 process() 接口后无缝替换。
 """
 
 from abc import ABC, abstractmethod
+
+from src.llm.client import LLMClient
+from src.prompts.loader import PromptLoader
 
 
 class Handler(ABC):
@@ -30,64 +33,46 @@ class Handler(ABC):
         ...
 
 
-class DemoHandler(Handler):
-    """桩实现 — 用于测试 CLI I/O 管线。
+class LLMHandler(Handler):
+    """M1 阶段 Handler — 直接调 LLM，无 Agent 逻辑。
 
-    输入 1 → 纯文本
-    输入 2 → markdown（代码块、表格、列表）
-    输入 3 → 选项列表
+    持有 LLMClient 和 PromptLoader，维护对话历史。
+    M4 主 Agent 就绪后，本类由 Orchestrator 替换。
+
+    占位符值内联在类常量中 —— M1 用通用助手描述，
+    后续各 Agent 实现时各自覆盖 _PLACEHOLDER_VALUES。
     """
 
+    # M1 demo 占位符值（M4 各 Agent 实现时各自定义）
+    _PLACEHOLDER_VALUES: dict[str, str] = {
+        "AGENT_NAME": "get-me-in 助手",
+        "AGENT_DESCRIPTION": "AI 求职助手，帮助程序员完成求职全流程（M1 验证阶段，暂不调度子 Agent，直接回答用户问题）",
+        "RESPONSIBILITIES": "- 回答用户关于求职的各类问题\n- 在能力范围内提供建议和指导\n- 诚实告知能力的边界",
+        "PRIMARY_GOAL": "帮助用户解决求职相关问题，提供有用的信息和建议",
+        "SUCCESS_CRITERIONS": "- 用户的问题得到了清晰、有用的回答\n- 回答准确、专业、可操作",
+        "PRIORITIES": "1. 准确性 — 不确定时坦诚说明\n2. 可操作性 — 给具体的建议而非泛泛而谈\n3. 简洁 — 不废话",
+        "HARD_CONSTRAINTS": "- 严禁编造虚假信息\n- 不确定时必须坦诚说明\n- 不得提供违法或违反平台政策的建议",
+        "SOFT_CONSTRAINTS": "- 尽量用中文回答\n- 尽量给出具体可操作的建议\n- 尽量简洁",
+        "ADDITION_TOOLS": "<!-- M1 阶段无额外工具，M4 主 Agent 注入 dispatch_* 工具 -->",
+        "TONE": "专业、友好、务实",
+        "VERBOSITY": "简洁，不啰嗦，问什么答什么",
+        "EXPLANATION_STYLE": "直接给出结论和建议，必要时简要说明理由",
+        "STYLE_RULES": "- 使用中文\n- 适当使用 Markdown 格式增强可读性\n- 代码和技术术语使用英文原文",
+        "STYLE_AVOIDS": "- 避免过度的客套话和寒暄\n- 避免在不确定时强行给出建议\n- 避免长篇大论",
+    }
+
+    def __init__(self, llm: LLMClient, prompts: PromptLoader) -> None:
+        self._llm = llm
+        self._prompts = prompts
+
+        system_prompt = prompts.get(**self._PLACEHOLDER_VALUES)
+        self._messages: list[dict] = [
+            {"role": "system", "content": system_prompt}
+        ]
+
     def process(self, user_input: str) -> str:
-        key = user_input.strip()
-
-        if key == "1":
-            return "Hello! 👋 这是一段**纯文本**回复。"
-
-        if key == "2":
-            return """\
-# Markdown 渲染测试
-
-## 代码块
-
-```python
-def hello():
-    print("Hello, get-me-in!")
-```
-
-## 表格
-
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| 配置模块 | ✅ 完成 | 环境变量集中管理 |
-| LLM 适配层 | ✅ 完成 | 双 tier 调用封装 |
-| CLI 交互层 | 🔄 进行中 | 对话循环 + rich 渲染 |
-| 提示词模块 | ⬜ 待开始 | PromptLoader |
-
-## 无序列表
-
-- 基础设施层：config / llm / cli / prompts
-- RAG 层：embedder / chunker / store / retriever / reranker
-- Agent 层：base / orchestrator / router
-
-## 有序列表
-
-1. 第一阶段：项目骨架 & 基础设施
-2. 第二阶段：RAG 模块
-3. 第三阶段：记忆模块
-4. 第四阶段：Agent 基类 & 主 Agent
-"""
-
-        if key == "3":
-            return """\
-请选择一个操作：
-
-- **1. 简历优化** — 上传简历，根据目标岗位定制优化
-- **2. 技能学习** — 分析技能差距，生成学习路线
-- **3. 模拟面试** — 选择岗位和难度，开始模拟面试
-- **4. 岗位搜索** — 搜索匹配的职位并分析匹配度
-
-输入数字选择，或输入 `/quit` 退出。
-"""
-
-        return f"未知输入: **{key}**。请输入 1、2 或 3。"
+        """调 LLM 获取回复，维护对话历史。"""
+        self._messages.append({"role": "user", "content": user_input})
+        reply = self._llm.chat_pro(self._messages)
+        self._messages.append({"role": "assistant", "content": reply})
+        return reply
