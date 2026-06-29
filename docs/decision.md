@@ -33,6 +33,7 @@
 - [决策 23 — ChromaStore 内部设计决策](#决策-23--chromastore-内部设计决策)
 - [决策 24 — RAG 增量加载与文件同步策略](#决策-24--rag-增量加载与文件同步策略)
 - [决策 25 — Reranker 设计决策](#决策-25--reranker-设计决策)
+- [决策 26 — ChromaStore 统一检索入口（移除 Retriever）](#决策-26--chromastore-统一检索入口移除-retriever)
 
 ---
 
@@ -547,3 +548,25 @@
 - top-k 硬编码 5 —— 不同场景（面试题 vs JD 匹配）可能需要不同数量
 - 不预热 —— 每次启动后第一次检索体验差
 - Reranker 内部 try/except 返回原结果 —— 调用方不知道重排失败了，反而被当作正常结果使用
+
+---
+
+### 决策 26 — ChromaStore 统一检索入口（移除 Retriever）
+
+**背景：** 为实现阶段发现 `ChromaStore.__init__` 和 `Retriever.__init__` 各自创建 `Embedder` 实例，导致 bi-encoder 模型被加载两次（内存翻倍 + 加载时间翻倍）。追溯设计发现一旦 `ChromaStore.query()` 改为接受文本、内部向量化，`Retriever` 的职责退化为一层透传调用：`retrieve(query) { return store.query(query) }`。
+
+**决策：**
+- 移除 `src/rag/retriever.py`（不创建该文件）
+- `ChromaStore.query()` 改为接受查询文本（`query_text: str`），内部调 `self._embedder.embed()` 向量化后检索
+- 检索流程从 `Embedder.embed() → Retriever → Store.query()` 简化为 `Store.query(query_text)`
+- Reranker 仍独立存在，在 Store 召回后做精排
+
+**理由：**
+- 消除双 Embedder 实例，bi-encoder 模型只加载一次（ChromaStore 内部持有）
+- Retriever 成为纯粹的透传层，无独立存在价值
+- 调用方更简洁：`store.query("排序算法")` 而非先创建 Embedder 再传向量
+- RAG 模块从 6 个文件减为 5 个，职责边界更清晰
+
+**曾考虑的替代方案：**
+- Embedder 做成单例 —— 治标，Retriever 本身仍是透传层
+- ChromaStore 暴露 embedder —— 增加耦合，不如内部消化

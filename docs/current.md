@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 2 — M2: RAG 模块
 
-**当前任务：** 6. Reranker (`src/rag/reranker.py`)
+**当前任务：** 7. RagLoader (`src/rag/loader.py`)
 
-**当前子任务：** ⬜ 独立加载 cross-encoder 模型（模型名由环境变量 `CROSS_ENCODER_MODEL` 配置）
+**当前子任务：** ⬜ 持有 `Chunker` 和 `ChromaStore` 引用
 
 **当前阻塞：** 无
 
-**下一步：** 实现 ChromaStore 封装 Chroma 客户端 → `add()` → `query()` → `remove()`
+**下一步：** 实现 RagLoader，持有 Chunker + ChromaStore → `auto_load()`（threading 后台 + `.last_update` 增量）→ `is_ready()` → `load_file()`
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -36,3 +36,4 @@
 23. ChromaStore 内部创建 Embedder（不注入），原文存 `documents` 字段，filter 透传，不加锁，L2 距离，不校验 collection 名，持久化通过 `CHROMA_PERSIST_DIR` 环境变量切换
 24. 增量加载：`.last_update` 时间戳比对 mtime；用户手动删文件不管；Agent 程序化操作统一封装同步 Chroma
 25. Reranker：分数存 `metadata["rerank_score"]`，`RERANK_BATCH_SIZE` + `RERANK_TOP_K` 环境变量控制，`__init__` 预热，异常直接抛出由调用方降级
+26. Store.query() 接受文本内部向量化，移除 Retriever —— 消除双 Embedder 实例，检索流程简化为 Store.query() → Reranker.rerank()

@@ -82,7 +82,7 @@
 
 - ✅ 封装 Chroma 客户端：内部持有 `Embedder`；通过 `CHROMA_PERSIST_DIR` 环境变量切换内存/持久化模式；不预建 collection，不校验 collection 名
 - ✅ 实现 `add(chunks: list[Chunk], collection: str) -> None`：内部调 `Embedder.embed()` 向量化，将原始文本存入 Chroma `documents` 字段，metadata 透传
-- ✅ 实现 `query(query_text: str, collection: str, filter: dict | None = None, top_k: int = 20) -> list[Chunk]`：接受文本内部向量化，透传 where filter，结果还原为 Chunk 对象（含 content）
+- ✅ 实现 `query(query_text: str, collection: str, filter: dict | None = None, top_k: int | None = None) -> list[Chunk]`：接受文本内部向量化（top_k 默认由 `RETRIEVAL_TOP_K` 配置），透传 where filter，结果还原为 Chunk 对象（含 content）
 - ✅ 实现 `remove(source_file: str, collection: str) -> None`：按 `source_file` metadata 过滤删除（供增量更新使用）
 
 ### 5. Retriever (`src/rag/retriever.py`)
@@ -92,8 +92,8 @@
 
 ### 6. Reranker (`src/rag/reranker.py`)
 
-- ⬜ 独立加载 cross-encoder 模型（模型名由 `CROSS_ENCODER_MODEL` 配置），`__init__` 时用假数据跑一次 `predict()` 预热
-- ⬜ 实现 `rerank(query: str, candidates: list[Chunk], top_k: int | None = None) -> list[Chunk]`：对 (query, candidate.content) 逐对评分（batch_size 由 `RERANK_BATCH_SIZE` 配置），分数写入 `Chunk.metadata["rerank_score"]`，按分数降序返回 top_k 条（默认值由 `RERANK_TOP_K` 配置）；异常直接抛出
+- ✅ 独立加载 cross-encoder 模型（模型名由 `CROSS_ENCODER_MODEL` 配置），`__init__` 时用假数据跑一次 `predict()` 预热
+- ✅ 实现 `rerank(query: str, candidates: list[Chunk], top_k: int | None = None) -> list[Chunk]`：对 (query, candidate.content) 逐对评分（batch_size 由 `RERANK_BATCH_SIZE` 配置），分数写入 `Chunk.metadata["rerank_score"]`，按分数降序返回 top_k 条（默认值由 `RERANK_TOP_K` 配置）；异常直接抛出
 
 ### 7. RagLoader (`src/rag/loader.py`)
 
