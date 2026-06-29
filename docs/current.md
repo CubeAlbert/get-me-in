@@ -32,10 +32,10 @@
 19. RagLoader 后台加载（`threading.Thread`），`is_ready()` 标记就绪状态，未就绪时对话降级为纯 LLM；`load_file()` 支持增量热更新
 20. Embedder/Reranker 分离 — Embedder 只持 bi-encoder（`embed()`），Reranker 独立加载 cross-encoder；`EMBED_BATCH_SIZE` 环境变量化
 21. `HF_ENDPOINT` 默认 `https://hf-mirror.com`，国内用户开箱即用
-22. `/ragreload` 命令（📌 暂缓），手动重载 RAG，模型下载失败后无需重启
+22. `/ragreload` 命令，手动重载 RAG（`/ragreload` 全量，`/ragreload <关键词>` 匹配），已实现
 23. ChromaStore 内部创建 Embedder（不注入），原文存 `documents` 字段，filter 透传，不加锁，L2 距离，不校验 collection 名，持久化通过 `CHROMA_PERSIST_DIR` 环境变量切换
 24. 增量加载：`.last_update` 时间戳比对 mtime；用户手动删文件不管；Agent 程序化操作统一封装同步 Chroma
 25. Reranker：分数存 `metadata["rerank_score"]`，`RERANK_BATCH_SIZE` + `RERANK_TOP_K` 环境变量控制，`__init__` 预热，异常直接抛出由调用方降级
 26. Store.query() 接受文本内部向量化，移除 Retriever —— 消除双 Embedder 实例，检索流程简化为 Store.query() → Reranker.rerank()
 27. RagLoader：Store/Reranker 注入（单例由 `rag/__init__.py` 懒加载），Chunker 内部创建；`LoaderState` 状态机（IDLE/LOADING/READY/ERROR）；同步+锁，异常写状态不抛出；内存全量/持久化增量
-41	28. RAG 公共 API 极简化：仅暴露 `search()` / `load()` / `is_ready()` 三个函数，Store 和 Reranker 完全隐藏在模块内部
+28. RAG 公共 API 极简化：仅暴露 `start()` / `search()` / `load()` / `is_ready()` 四个函数，Store 和 Reranker 完全隐藏在模块内部；3 个环境变量在 import 前静默模型加载进度条

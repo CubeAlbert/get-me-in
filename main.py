@@ -5,9 +5,11 @@ from src.llm.client import LLMClient
 from src.prompts.loader import PromptLoader
 from src.cli.app import App
 from src.cli.handler import LLMHandler
+from src.rag import start
 
 
 def main() -> None:
+    start()  # 后台加载 RAG 模型+数据，不阻塞 CLI
     llm = LLMClient()
     prompts = PromptLoader()
     handler = LLMHandler(llm, prompts)

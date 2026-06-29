@@ -132,17 +132,18 @@ class RagLoader:
             self._state = LoaderState.LOADING
             self._error_msg = None
 
-            self._load_all()
+            count = self._load_all()
             if getattr(config, "CHROMA_PERSIST_DIR", None):
                 self._write_timestamp()
 
             self._state = LoaderState.READY
+            return f"全量重载完成，共 {count} 个文件"
         except Exception as e:
             self._state = LoaderState.ERROR
             self._error_msg = str(e)
+            return f"重载失败: {e}"
         finally:
             self._lock.release()
-        return ""
 
     def _reload_matched(self, target: str) -> str:
         """匹配路径重载，不动状态机。已在锁内。"""
@@ -157,20 +158,27 @@ class RagLoader:
         if not matched:
             return f"未匹配到包含 '{target}' 的文件"
 
+        ok, errors = 0, []
         for md in matched:
-            collection, extra_meta = self._infer_meta(md)
-            self._load_one(md, collection, extra_meta)
+            try:
+                collection, extra_meta = self._infer_meta(md)
+                self._load_one(md, collection, extra_meta)
+                ok += 1
+            except Exception as e:
+                errors.append(f"{md.name}: {e}")
 
-        return f"已重载 {len(matched)} 个文件"
+        msg = f"已重载 {ok} 个文件"
+        if errors:
+            msg += f"，{len(errors)} 个失败: {'; '.join(errors)}"
+        return msg
 
     # ------------------------------------------------------------------
     # 内部 — 遍历 & 加载
     # ------------------------------------------------------------------
 
-    def _load_all(self) -> None:
-        """全量加载 references + memories 下所有 .md，已在锁内。"""
-        self._load_dir(self.REFERENCE_DIR, collection="references")
-        self._load_dir(self.MEMORIES_DIR, collection="memories")
+    def _load_all(self) -> int:
+        """全量加载 references + memories 下所有 .md，已在锁内。返回加载文件数。"""
+        return self._load_dir(self.REFERENCE_DIR, collection="references") + self._load_dir(self.MEMORIES_DIR, collection="memories")
 
     def _load_incremental(self, last_update: float) -> None:
         """增量加载 mtime > last_update 的文件，已在锁内。"""
@@ -185,13 +193,15 @@ class RagLoader:
                     _, extra_meta = self._infer_meta(md, root)
                     self._load_one(md, collection, extra_meta)
 
-    def _load_dir(self, root: Path, collection: str) -> None:
-        """遍历目录下所有 .md 入库，已在锁内。"""
+    def _load_dir(self, root: Path, collection: str) -> int:
+        """遍历目录下所有 .md 入库，已在锁内。返回加载文件数。"""
         if not root.exists():
-            return
-        for md in sorted(root.rglob("*.md")):
+            return 0
+        files = sorted(root.rglob("*.md"))
+        for md in files:
             _, extra_meta = self._infer_meta(md, root)
             self._load_one(md, collection, extra_meta)
+        return len(files)
 
     def _load_one(self, path: Path, collection: str, extra_meta: dict) -> None:
         """读取文件 → chunk → remove 旧数据 → add，已在锁内。"""

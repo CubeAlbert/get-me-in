@@ -1,13 +1,22 @@
 """RAG 模块入口 — 管理单例与装配。
 
 用法:
-    from src.rag import search, load, is_ready
+    from src.rag import start, search, load, is_ready
+
+    start()  # 程序入口调用一次，后台加载模型+数据，不阻塞
 
     if is_ready():
         results = search("排序算法", collection="references")
     info = load("cs_fundamentals")  # 匹配重载
     info = load()                    # 全量重载
 """
+
+import os
+
+# 必须在 sentence_transformers import 之前设置，否则进度条不受控
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TQDM_DISABLE"] = "1"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 import threading
 
@@ -25,16 +34,22 @@ _init_lock = threading.Lock()
 def _ensure_init() -> None:
     """线程安全的懒加载初始化，仅执行一次。"""
     global _store, _reranker, _loader
-    if _store is not None:
+    if _loader is not None:
         return
     with _init_lock:
-        if _store is not None:
+        if _loader is not None:
             return
         _store = ChromaStore()
         _reranker = Reranker()
         _loader = RagLoader(store=_store, reranker=_reranker)
         t = threading.Thread(target=_loader.auto_load, daemon=True, name="rag-loader")
         t.start()
+
+
+def start() -> None:
+    """启动 RAG 后台初始化（模型加载 + 数据入库），不阻塞调用方。"""
+    t = threading.Thread(target=_ensure_init, daemon=True, name="rag-start")
+    t.start()
 
 
 def is_ready() -> bool:

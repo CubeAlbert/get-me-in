@@ -18,6 +18,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from src.cli.handler import Handler
+from src.rag import load
 
 
 def _ensure_utf8() -> None:
@@ -103,6 +104,14 @@ class App:
                 self._console.print("[dim]再见！[/]")
                 break
 
+            if user_input == "/ragreload" or user_input.startswith("/ragreload "):
+                target = user_input[11:].strip() or None
+                self._console.print(f"[dim]正在重载{target or '全量'}...[/]")
+                result = load(target)
+                self._console.print(f"[dim]{result}[/]")
+                self._console.print()
+                continue
+
             if user_input == "/edit":
                 self._console.print(f"[dim]启动编辑器: {self._editor} ...[/]")
                 content = _edit_text()
@@ -122,5 +131,5 @@ class App:
         self._console.print(
             Panel.fit("[bold green]get-me-in[/] — AI 求职助手")
         )
-        self._console.print("[dim]命令: /edit 长文本输入 | /exit 退出[/]")
+        self._console.print("[dim]命令: /edit 长文本输入 | /ragreload [关键词] 重载RAG | /exit 退出[/]")
         self._console.print()

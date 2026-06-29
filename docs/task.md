@@ -101,8 +101,8 @@
 - ✅ 实现 `auto_load()`：同步 + `threading.Lock`（LOADING 时拒绝）；内存模式全量 / 持久化模式 `.last_update` 增量；异常写 `state=ERROR` + `error_msg` 不抛出；完成后写时间戳 + `state=READY`
 - ✅ 实现 `load_file(path: Path) -> None`：同步 + 同锁，`remove(source_file)` → chunk → add；异常写 state 不抛出
 - ✅ 暴露 `state: LoaderState` 和 `error: str | None` 属性
-- ✅ `src/rag/__init__.py` 模块入口：双检锁懒加载单例 + daemon 线程 auto_load；公共 API 仅暴露 `search()` / `load()` / `is_ready()` 三个函数
-- 📌 后续增加 `/ragreload` 命令手动重新触发加载（模型下载成功后重试）
+- ✅ `src/rag/__init__.py` 模块入口：双检锁懒加载单例 + `start()` 后台初始化 + 环境变量静默进度条；公共 API：`start()` / `search()` / `load()` / `is_ready()`
+- ✅ `/ragreload` 命令：CLI 命令 `/ragreload [关键词]`，调 `load()` 完成重载；`_reload_full()` 返回文件计数；`_reload_matched()` 逐文件 try/except 防崩
 
 ### 8. 端到端验证
 
