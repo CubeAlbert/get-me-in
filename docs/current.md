@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 2 — M2: RAG 模块
 
-**当前任务：** 7. RagLoader (`src/rag/loader.py`)
+**当前任务：** M2 完成，待进入 M3 — Memory 模块
 
-**当前子任务：** ⬜ 持有 `Chunker` 和 `ChromaStore` 引用
+**当前子任务：** 无（M2 全部完成）
 
 **当前阻塞：** 无
 
-**下一步：** 实现 RagLoader，持有 Chunker + ChromaStore → `auto_load()`（threading 后台 + `.last_update` 增量）→ `is_ready()` → `load_file()`
+**下一步：** 回顾 `docs/design.md` 和 `docs/plan.md` 中 M3 的设计，生成 Memory 模块任务列表
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -37,3 +37,5 @@
 24. 增量加载：`.last_update` 时间戳比对 mtime；用户手动删文件不管；Agent 程序化操作统一封装同步 Chroma
 25. Reranker：分数存 `metadata["rerank_score"]`，`RERANK_BATCH_SIZE` + `RERANK_TOP_K` 环境变量控制，`__init__` 预热，异常直接抛出由调用方降级
 26. Store.query() 接受文本内部向量化，移除 Retriever —— 消除双 Embedder 实例，检索流程简化为 Store.query() → Reranker.rerank()
+27. RagLoader：Store/Reranker 注入（单例由 `rag/__init__.py` 懒加载），Chunker 内部创建；`LoaderState` 状态机（IDLE/LOADING/READY/ERROR）；同步+锁，异常写状态不抛出；内存全量/持久化增量
+41	28. RAG 公共 API 极简化：仅暴露 `search()` / `load()` / `is_ready()` 三个函数，Store 和 Reranker 完全隐藏在模块内部

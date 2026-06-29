@@ -430,15 +430,19 @@ Chunk 本身不校验 metadata 结构，规范由写入方遵守。
 
 **RagLoader 模块：**
 
-`loader.py` 负责读取磁盘文件 → 调 Chunker → 写入 ChromaStore，是 RAG 模块的唯一数据入口。
+`loader.py` 负责读取磁盘文件 → 调 Chunker → 写入 ChromaStore，是 RAG 模块的唯一数据入口。Store 和 Reranker 通过构造函数注入（单例由 `src/rag/__init__.py` 模块级懒加载管理），Chunker 内部创建。
+
+**状态机：** `LoaderState` 枚举（IDLE → LOADING → READY / ERROR）。调用方通过 `state` / `error` 属性查询，据此决策降级或重试。
 
 | 方法 | 说明 |
 |------|------|
-| `auto_load()` | 后台启动（`threading.Thread`）；持久化模式下读取 `data/chroma/.last_update` 时间戳（不存在 → epoch 0），仅重载 mtime > 时间戳的变更文件；全部入库后设置 ready 标记并写入当前时间戳 |
-| `load_file(path)` | 增量加载单个文件：先按 `source_file` 删旧 chunk，再读文件重新切分入库 |
-| `is_ready()` | 返回 `bool`，调用方据此决定检索是否走 RAG（未就绪时降级为纯 LLM） |
+| `__init__(store, reranker)` | Store/Reranker 注入，Chunker 内部创建，初始 state=IDLE |
+| `auto_load()` | 同步 + `threading.Lock`，LOADING 状态下拒绝；内存模式全量加载；持久化模式读取 `.last_update` 时间戳仅加载变更文件；异常写 state=ERROR 不抛出；完成后写时间戳 + state=READY |
+| `load_file(path)` | 同步 + 同锁，增量更新：remove(source_file) → chunk → add |
+| `state` (property) | 返回 `LoaderState` |
+| `error` (property) | 返回 `str | None`（仅 ERROR 时有值） |
 
-加载逻辑：遍历目录时，子目录名自动提取为 category（仅 `references`）或 agent（仅 `memories`），传入 Chunker 作为 metadata。
+加载逻辑：遍历目录时，子目录名自动提取为 category（仅 `references`）或 agent（仅 `memories`），传入 Chunker 作为 metadata。memories 目录为空时不创建 collection。
 
 **设计决策：**
 - 统一分隔符 `---` —— 所有数据（参考数据、记忆）以 Markdown 水平线作为条目边界，写入方负责保证每条之间是自包含的语义单元
@@ -448,6 +452,18 @@ Chunk 本身不校验 metadata 结构，规范由写入方遵守。
 - 两个 collection —— `references`（参考数据）和 `memories`（记忆），不按 Agent 或数据类型拆分
 - Store 召回 + Reranker 重排 —— ChromaStore.query() 用 bi-encoder 粗筛，Reranker 用 cross-encoder 精排，两阶段分离
 - RAG 是基础设施，不是 Agent —— 不参与 Agent 调度，由需要检索能力的模块直接调用
+
+**模块入口 API（`src/rag/__init__.py`）：**
+
+外部调用方不直接接触 `ChromaStore` / `Reranker` / `RagLoader`，仅通过三个函数使用 RAG：
+
+| 函数 | 说明 |
+|------|------|
+| `search(query_text, collection="references", top_k=None) -> list[Chunk]` | 检索 + 重排，内部串联 `store.query()` → `reranker.rerank()`。LOADING/ERROR 状态时抛出 `RuntimeError` |
+| `load(target=None) -> str` | 加载/重载。`load()` 全量重载；`load("pattern")` 按子串匹配文件路径重载，返回结果描述 |
+| `is_ready() -> bool` | RAG 是否就绪（`loader.state == READY`），供外部轮询 |
+
+内部单例管理：`_ensure_init()` 双检锁懒加载 `ChromaStore` / `Reranker` / `RagLoader`，首次 import 时启动 daemon 线程执行 `auto_load()`。Store 和 Reranker 对外不可见。
 
 ### 4.5 记忆模块
 

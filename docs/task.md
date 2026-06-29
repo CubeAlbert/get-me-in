@@ -97,13 +97,14 @@
 
 ### 7. RagLoader (`src/rag/loader.py`)
 
-- ⬜ 持有 `Chunker` 和 `ChromaStore` 引用
-- ⬜ 实现 `auto_load()`：`threading.Thread` 后台遍历；持久化模式下读取 `data/chroma/.last_update` 时间戳（不存在 → epoch 0），仅加载 mtime > 时间戳的变更文件；内部 catch 异常（模型下载失败等），异常时 `_ready` 保持 False；完成后写入当前时间戳
-- ⬜ 实现 `is_ready() -> bool`：返回 RAG 是否加载完毕
-- ⬜ 实现 `load_file(path: Path) -> None`：增量加载单个文件（先 `remove(source_file)` 再重新 chunk + add）
+- ✅ 构造函数注入 `ChromaStore` + `Reranker`，内部创建 `Chunker`；定义 `LoaderState` 枚举（IDLE / LOADING / READY / ERROR）
+- ✅ 实现 `auto_load()`：同步 + `threading.Lock`（LOADING 时拒绝）；内存模式全量 / 持久化模式 `.last_update` 增量；异常写 `state=ERROR` + `error_msg` 不抛出；完成后写时间戳 + `state=READY`
+- ✅ 实现 `load_file(path: Path) -> None`：同步 + 同锁，`remove(source_file)` → chunk → add；异常写 state 不抛出
+- ✅ 暴露 `state: LoaderState` 和 `error: str | None` 属性
+- ✅ `src/rag/__init__.py` 模块入口：双检锁懒加载单例 + daemon 线程 auto_load；公共 API 仅暴露 `search()` / `load()` / `is_ready()` 三个函数
 - 📌 后续增加 `/ragreload` 命令手动重新触发加载（模型下载成功后重试）
 
 ### 8. 端到端验证
 
-- ⬜ 创建示例参考数据（如 `knowledge_base/algorithms.md` 含 3 条 `---` 分隔条目）
-- ⬜ 启动 → `auto_load()` → 等待 `is_ready()` → `store.query("快速排序")` → 返回正确 chunk → `rerank()` 精排 → 结果正确
+- ✅ 示例参考数据就绪（`cs_fundamentals.md` 含 19 条条目）
+- ✅ `search("快速排序")` → 经 `store.query()` 召回 → `Reranker.rerank()` 精排 → 返回结果正确（快速排序 0.973，归并排序 0.311，分数区分度良好）

@@ -34,6 +34,8 @@
 - [决策 24 — RAG 增量加载与文件同步策略](#决策-24--rag-增量加载与文件同步策略)
 - [决策 25 — Reranker 设计决策](#决策-25--reranker-设计决策)
 - [决策 26 — ChromaStore 统一检索入口（移除 Retriever）](#决策-26--chromastore-统一检索入口移除-retriever)
+- [决策 27 — RagLoader 设计决策](#决策-27--ragloader-设计决策)
+- [决策 28 — RAG 公共 API 极简化](#决策-28--rag-公共-api-极简化)
 
 ---
 
@@ -570,3 +572,59 @@
 **曾考虑的替代方案：**
 - Embedder 做成单例 —— 治标，Retriever 本身仍是透传层
 - ChromaStore 暴露 embedder —— 增加耦合，不如内部消化
+
+---
+
+### 决策 27 — RagLoader 设计决策
+
+**背景：** Loader 是 RAG 数据的唯一入口，需要管理加载状态以支持降级机制。Store 和 Reranker 需保持单例，Loader 如何获取这些实例影响整体耦合。
+
+**决策：**
+
+- **Store/Reranker 构造函数注入，不做内部创建**：`RagLoader(store: ChromaStore, reranker: Reranker)`。单例由 `src/rag/__init__.py` 模块级懒加载管理
+- **Chunker 内部创建**：无状态，不需要注入
+- **状态机管理加载状态**：`LoaderState` 枚举（IDLE / LOADING / READY / ERROR），通过 `state` 属性和 `error` 属性暴露
+- **同步 + 锁保证串行**：`auto_load()` 和 `load_file()` 均为同步方法，用 `threading.Lock` 保护。LOADING 状态下拒绝新请求
+- **异常不抛出，写入状态**：加载失败时 `state = ERROR` + `error_msg = str(e)`，由用户/调用方根据状态决策重试或降级
+- **内存模式全量，持久化模式增量**：内存每次全量加载；持久化通过 `.last_update` 时间戳比对 mtime 做增量
+- **memories 目录为空不处理**：不创建空 collection，等记忆模块实际写入后 `load_file()` 增量入库
+
+**理由：**
+
+- 注入优于内部创建：避免在 Loader 内部重复构建 Store/Reranker 实例，既保持单例又符合依赖反转原则
+- 状态机替代简单的 `is_ready() bool`：调用方需要区分 "还在加载" vs "加载失败"，前者需等待后者需用户介入
+- Loader 本身不开线程：同步 + 锁，调用方如需异步自己开 thread，保持职责单一
+- 异常写入状态而非抛出：LOADER 被多处调用，抛异常意味着每个调用方都要处理，状态机统一管理
+
+**曾考虑的替代方案：**
+
+- Loader 内部创建 Store/Reranker —— 多实例问题
+- `auto_load_async()` 内部开线程 —— 增加 Loader 复杂度，异步包装应是调用方职责
+- `is_ready() + is_error()` 两个方法 —— 不如单一 state 枚举清晰
+- 异常直接抛给调用方 —— 每个调用点都要 try/except，不如状态统一
+
+---
+
+### 决策 28 — RAG 公共 API 极简化
+
+**背景：** `src/rag/__init__.py` 最初暴露了 `get_store()`、`get_reranker()`、`get_loader()` 三个 getter，调用方需要手动拼接 `store.query()` → `reranker.rerank()` 流程。外部只需两件事：检索和重载。
+
+**决策：**
+
+- `src/rag/__init__.py` 仅暴露三个公共函数：`search(query_text, collection, top_k)`、`load(target)`、`is_ready()`
+- `search()` 内部串联 `store.query()` → `reranker.rerank()`，LOADING/ERROR 状态时抛出 `RuntimeError`
+- `load(target=None)` 透传 `loader.reload(target)`：None 全量重载，非空匹配路径重载
+- `is_ready()` 返回 `loader.state == LoaderState.READY`，供外部轮询
+- `ChromaStore` 和 `Reranker` 完全隐藏在模块内部，外部不可见
+
+**理由：**
+
+- 外部调用方不需要知道 Store/Reranker 的存在，只需"给我结果"
+- `search()` 在 LOADING/ERROR 时抛异常，语义清晰，调用方自然选择 try/except 或 `is_ready()` 轮询
+- 2+1 个函数构成完整公共 API，学习成本为零
+- 内部单例管理、双检锁、daemon 线程等复杂度对外透明
+
+**曾考虑的替代方案：**
+
+- 暴露 `get_store()` + `get_reranker()` —— 调用方需理解内部 pipeline，增加使用成本
+- `search()` 在 LOADING 时阻塞等待而非抛异常 —— 阻塞时长不可控，不如让调用方决定何时重试

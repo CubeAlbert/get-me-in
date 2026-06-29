@@ -29,17 +29,17 @@
   - `main.py` 能启动并完成一轮对话
 - **前置依赖：** 无
 
-### 里程碑 2 —— RAG 模块
+### 里程碑 2 —— RAG 模块 ✅ 已完成
 
 - **预期产出：** 可用的语义检索能力，支持写入和查询
 - **验收标准：**
-  - `src/rag/embedder.py` 封装 `sentence_transformers`，加载 bi-encoder（`BAAI/bge-base-zh-v1.5`）和 cross-encoder（`BAAI/bge-reranker-v2-m3`）模型，模型名由环境变量配置
-  - `src/rag/chunker.py` 按 `---`（Markdown 水平线）切分文本为逻辑块，附加 metadata
-  - `src/rag/store.py` 封装 Chroma（内存模式 / 持久化模式通过 `CHROMA_PERSIST_DIR` 环境变量切换），管理 `references` 和 `memories` 两个 collection；内部持有 Embedder 完成向量化；`add()` 将原始文本存入 `documents` 字段；`query()` 返回 `list[Chunk]`；支持 `remove(source_file)` 按 metadata 删除
-  - `src/rag/loader.py` 遍历 `data/reference/` 和 `data/memories/`，将 `.md` 文件切分后入库；支持 `auto_load()`（threading 后台加载，持久化模式下通过 `data/chroma/.last_update` 时间戳做增量加载）和 `load_file(path)`（增量热更新）；暴露 `is_ready()` 供降级判断
-  - `src/rag/reranker.py` 实现 CrossEncoder 重排
-  - 写入和检索流程可跑通（不依赖其他模块）
-- **前置依赖：** 里程碑 1（LLM 不必须，但项目骨架和依赖管理需就绪）
+  - `src/rag/embedder.py` ✅ — 封装 `sentence_transformers` bi-encoder（`BAAI/bge-base-zh-v1.5`），模型名由环境变量配置
+  - `src/rag/chunker.py` ✅ — 按 `---` 切分文本为逻辑块，附加 metadata，过滤空白片段
+  - `src/rag/store.py` ✅ — 封装 Chroma（内存/持久化），内部持有 Embedder；`add()` / `query(query_text)` / `remove(source_file)`
+  - `src/rag/loader.py` ✅ — 遍历 `data/reference/` + `data/memories/`，状态机（IDLE/LOADING/READY/ERROR），`auto_load()` daemon 后台加载，持久化模式 `.last_update` 增量，`reload(target)` 手动重载
+  - `src/rag/reranker.py` ✅ — CrossEncoder 精排，分数注入 `metadata["rerank_score"]`，`__init__` 预热
+  - `src/rag/__init__.py` ✅ — 公共入口：`search()` / `load()` / `is_ready()` 三个函数，内部双检锁懒加载单例
+  - 端到端验证通过 ✅ — `search("快速排序")` 经召回→重排返回正确结果
 
 ### 里程碑 3 —— 记忆模块
 

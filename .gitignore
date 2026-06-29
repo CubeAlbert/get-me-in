@@ -32,7 +32,7 @@ Desktop.ini
 
 # === Project Data (runtime) ===
 data/memories/
-data/chroma_db/
+data/chroma/
 
 # === Python version ===
 .python-version
