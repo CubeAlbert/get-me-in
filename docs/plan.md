@@ -37,7 +37,6 @@
   - `src/rag/chunker.py` 按 `---`（Markdown 水平线）切分文本为逻辑块，附加 metadata
   - `src/rag/store.py` 封装 Chroma（内存模式 / 持久化模式通过 `CHROMA_PERSIST_DIR` 环境变量切换），管理 `references` 和 `memories` 两个 collection；内部持有 Embedder 完成向量化；`add()` 将原始文本存入 `documents` 字段；`query()` 返回 `list[Chunk]`；支持 `remove(source_file)` 按 metadata 删除
   - `src/rag/loader.py` 遍历 `data/reference/` 和 `data/memories/`，将 `.md` 文件切分后入库；支持 `auto_load()`（threading 后台加载，持久化模式下通过 `data/chroma/.last_update` 时间戳做增量加载）和 `load_file(path)`（增量热更新）；暴露 `is_ready()` 供降级判断
-  - `src/rag/retriever.py` 实现召回流程（Embedder + ChromaStore），支持 `filter` 限定 category
   - `src/rag/reranker.py` 实现 CrossEncoder 重排
   - 写入和检索流程可跑通（不依赖其他模块）
 - **前置依赖：** 里程碑 1（LLM 不必须，但项目骨架和依赖管理需就绪）

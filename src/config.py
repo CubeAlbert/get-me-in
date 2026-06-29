@@ -29,6 +29,7 @@ _VAR_SPECS: list[tuple[str, bool, str | None]] = [
     ("BI_ENCODER_MODEL",  False, "BAAI/bge-base-zh-v1.5"),
     ("CROSS_ENCODER_MODEL", False, "BAAI/bge-reranker-v2-m3"),
     ("EMBED_BATCH_SIZE",  False, "32"),
+    ("CHROMA_PERSIST_DIR", False, None),
     ("HF_ENDPOINT",        False, None),
 ]
 

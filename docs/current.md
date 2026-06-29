@@ -2,9 +2,9 @@
 
 **当前阶段：** 阶段 2 — M2: RAG 模块
 
-**当前任务：** 4. ChromaStore (`src/rag/store.py`)
+**当前任务：** 6. Reranker (`src/rag/reranker.py`)
 
-**当前子任务：** ⬜ 封装 Chroma 客户端（内存模式），管理 `references` 和 `memories` 两个 collection
+**当前子任务：** ⬜ 独立加载 cross-encoder 模型（模型名由环境变量 `CROSS_ENCODER_MODEL` 配置）
 
 **当前阻塞：** 无
 

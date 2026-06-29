@@ -135,13 +135,12 @@ get-me-in/
 │   ├── llm/                 # LLM 调用封装
 │   │   ├── __init__.py
 │   │   └── client.py         # 双 tier（pro / flash）统一调用
-│   ├── rag/                 # RAG 模块（Chroma + 召回 + 重排 + 加载）
+│   ├── rag/                 # RAG 模块（Embedder + Chunker + Store + Loader + Reranker）
 │   │   ├── __init__.py
 │   │   ├── embedder.py      # 向量化（sentence_transformers）
 │   │   ├── chunker.py       # 按分隔符切分文本为逻辑块
 │   │   ├── store.py         # Chroma 封装（collection 增删查）
 │   │   ├── loader.py        # 启动加载 + 增量加载（threading 后台）
-│   │   ├── retriever.py     # 召回
 │   │   └── reranker.py      # 重排
 │   ├── prompts/             # 提示词加载器
 │   │   ├── __init__.py
@@ -367,9 +366,8 @@ class BaseAgent:
 - `Embedder.embed(texts: list[str]) -> list[list[float]]` —— 将文本转换为向量
 - `Chunker.chunk(text: str, separator: str, metadata: dict) -> list[Chunk]` —— 按分隔符切分文本为逻辑块，每个块携带 metadata
 - `ChromaStore.add(chunks: list[Chunk], collection: str) -> None` —— 将块向量化后存入指定 collection
-- `ChromaStore.query(query_vector: list[float], collection: str, filter: dict | None, top_k: int) -> list[Chunk]` —— 在指定 collection 中检索
-- `Retriever.retrieve(query: str, collection: str, filter: dict | None, top_k: int = 20) -> list[RetrievalResult]` —— 召回
-- `Reranker.rerank(query: str, candidates: list[RetrievalResult], top_k: int = 5) -> list[RetrievalResult]` —— 重排
+- `ChromaStore.query(query_text: str, collection: str, filter: dict | None, top_k: int) -> list[Chunk]` —— 内部向量化后检索，返回 Chunk 列表
+- `Reranker.rerank(query: str, candidates: list[Chunk], top_k: int = 5) -> list[Chunk]` —— 重排
 
 **处理流程：**
 
@@ -377,26 +375,22 @@ class BaseAgent:
 写入:
   MD 文本 → Chunker.chunk(text, separator, metadata) → 逻辑块列表
               │
-              └→ Embedder.embed(chunks) → 向量
+              └→ ChromaStore.add(chunks, collection)
                       │
-                      └→ ChromaStore.add(vectors, metadata, collection)
+                      └→ Embedder.embed() → Chroma collection
 
 检索:
-  查询 → Embedder.embed(query) → 查询向量
-          │
-          ├→ ChromaStore.query(vector, collection, filter, top_k=20)
-          │      │
-          │      └→ Reranker.rerank(query, candidates, top_k=5)
-          │             │
-          └─────────────┘
-                 最终结果
+  查询文本 → ChromaStore.query(query_text, collection, filter, top_k=20)
+              │
+              └→ Reranker.rerank(query, candidates, top_k=5)
+                      │
+                      └→ 最终结果
 ```
 
 **内部结构：**
 - `Embedder`：封装 `sentence_transformers` 的 bi-encoder 模型（默认 `BAAI/bge-base-zh-v1.5`，由 `BI_ENCODER_MODEL` 配置），将文本转为归一化向量；`embed()` 支持 `batch_size` 参数（默认值由 `EMBED_BATCH_SIZE` 环境变量配置）
 - `Chunker`：通用切分器，按传入的 `separator` 切分文本为逻辑块，附加 `metadata`（agent、date、chunk_id、category 等）—— 不关心内容语义，只按分隔符切
-- `ChromaStore`：封装 Chroma 客户端，内部持有 `Embedder` 完成向量化，管理 collection 的创建、写入、查询。默认内存模式（设置 `CHROMA_PERSIST_DIR` 环境变量则切换为 `PersistentClient` 持久化到 `data/chroma/`）。`add()` 使用 Chroma `documents` 字段存储原始文本，`query()` 返回 `list[Chunk]`。不预建 collection（首次 `add()` 自动创建），不校验 collection 名
-- `Retriever`：组合 `Embedder` + `ChromaStore`，完成召回流程
+- `ChromaStore`：封装 Chroma 客户端，内部持有 `Embedder` 完成向量化，统一提供 `add()` / `query()` / `remove()` 接口。默认内存模式（设置 `CHROMA_PERSIST_DIR` 环境变量则切换为 `PersistentClient` 持久化到 `data/chroma/`）。`add()` 使用 Chroma `documents` 字段存储原始文本，`query()` 接受文本直接检索并返回 `list[Chunk]`。不预建 collection（首次 `add()` 自动创建），不校验 collection 名
 - `Reranker`：独立加载 `sentence_transformers` 的 CrossEncoder 模型（默认 `BAAI/bge-reranker-v2-m3`，由 `CROSS_ENCODER_MODEL` 配置；若性能不足可降级为 `BAAI/bge-reranker-base`），对粗排结果精排
 
 **Collection 设计：**

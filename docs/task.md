@@ -80,20 +80,20 @@
 
 ### 4. ChromaStore (`src/rag/store.py`)
 
-- ⬜ 封装 Chroma 客户端：内部持有 `Embedder`；通过 `CHROMA_PERSIST_DIR` 环境变量切换内存/持久化模式；不预建 collection，不校验 collection 名
-- ⬜ 实现 `add(chunks: list[Chunk], collection: str) -> None`：内部调 `Embedder.embed()` 向量化，将原始文本存入 Chroma `documents` 字段，metadata 透传
-- ⬜ 实现 `query(query_vector: list[float], collection: str, filter: dict | None = None, top_k: int = 20) -> list[Chunk]`：透传 where filter 给 Chroma，结果还原为 Chunk 对象（含 content）
-- ⬜ 实现 `remove(source_file: str, collection: str) -> None`：按 `source_file` metadata 过滤删除（供增量更新使用）
+- ✅ 封装 Chroma 客户端：内部持有 `Embedder`；通过 `CHROMA_PERSIST_DIR` 环境变量切换内存/持久化模式；不预建 collection，不校验 collection 名
+- ✅ 实现 `add(chunks: list[Chunk], collection: str) -> None`：内部调 `Embedder.embed()` 向量化，将原始文本存入 Chroma `documents` 字段，metadata 透传
+- ✅ 实现 `query(query_text: str, collection: str, filter: dict | None = None, top_k: int = 20) -> list[Chunk]`：接受文本内部向量化，透传 where filter，结果还原为 Chunk 对象（含 content）
+- ✅ 实现 `remove(source_file: str, collection: str) -> None`：按 `source_file` metadata 过滤删除（供增量更新使用）
 
 ### 5. Retriever (`src/rag/retriever.py`)
 
-- ⬜ 组合 `Embedder` + `ChromaStore`，实现 `retrieve(query: str, collection: str, filter: dict | None = None, top_k: int = 20) -> list[dict]`
-- ⬜ 流程：query → embed → chroma query → 返回 top_k
+- ⛔ 已废弃 — Store.query() 改为接受文本、内部向量化后，Retriever 职责退化为一层透传，无存在必要
+- >> 替代：直接使用 ChromaStore.query() 做检索
 
 ### 6. Reranker (`src/rag/reranker.py`)
 
 - ⬜ 独立加载 cross-encoder 模型（模型名由环境变量 `CROSS_ENCODER_MODEL` 配置）
-- ⬜ 实现 `rerank(query: str, candidates: list[dict], top_k: int = 5) -> list[dict]`，对 (query, candidate.content) 逐对评分，按分数降序排列后返回 top_k
+- ⬜ 实现 `rerank(query: str, candidates: list[Chunk], top_k: int = 5) -> list[Chunk]`，对 (query, candidate.content) 逐对评分，按分数降序排列后返回 top_k
 
 ### 7. RagLoader (`src/rag/loader.py`)
 
@@ -106,4 +106,4 @@
 ### 8. 端到端验证
 
 - ⬜ 创建示例参考数据（如 `knowledge_base/algorithms.md` 含 3 条 `---` 分隔条目）
-- ⬜ 启动 → `auto_load()` → 等待 `is_ready()` → `retrieve("快速排序")` → 返回正确 chunk → `rerank()` 精排 → 结果正确
+- ⬜ 启动 → `auto_load()` → 等待 `is_ready()` → `store.query("快速排序")` → 返回正确 chunk → `rerank()` 精排 → 结果正确
