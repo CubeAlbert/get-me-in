@@ -18,7 +18,19 @@ class Chunk:
     Attributes:
         id: uuid4 字符串，Chroma 主键。
         content: 条目原始文本（不含分隔符）。
-        metadata: 附带元数据，结构由调用方保证。
+        metadata: 附带元数据，结构由写入方保证。
+
+    Metadata 字段约定（写入方自行组合，Chunk 不校验）：
+
+    ┌──────────────────┬──────────┬──────────────────────────────────────┐
+    │ 字段             │ 写入方   │ 说明                                 │
+    ├──────────────────┼──────────┼──────────────────────────────────────┤
+    │ source_file      │ Loader   │ 来源文件路径，增删查均依赖此字段     │
+    │ category         │ Loader   │ 仅 references，子目录名自动注入      │
+    │ agent            │ Loader   │ 仅 memories，Agent 目录名自动注入    │
+    │ date             │ Loader   │ 仅 memories，写入日期                │
+    │ rerank_score     │ Reranker │ cross-encoder 重排分数（float）      │
+    └──────────────────┴──────────┴──────────────────────────────────────┘
     """
 
     content: str

@@ -81,7 +81,7 @@
 | Agent 框架 | 自研轻量 | 最大控制力，最小依赖，匹配 Hub-and-Spoke 模式 |
 | LLM 接入 | OpenAI SDK（`openai`） | 双 tier（pro / flash），base_url 通过环境变量注入，兼容所有 OpenAI-compatible 后端 |
 | CLI 交互 | `input()` + `$EDITOR` 临时文件 + `rich` 渲染 | 日常对话用 `input()`；长文本（JD、简历、回答）弹出编辑器编辑临时文件；Markdown 输出用 `rich` 美化 |
-| 向量存储 | Chroma（内存模式） | 开发阶段零配置，后续可切换本地持久化 |
+| 向量存储 | Chroma（内存模式 / 持久化模式通过 `CHROMA_PERSIST_DIR` 切换） | 开发阶段零配置，设置环境变量即可持久化到 `data/chroma/` |
 | 向量化 & 重排 | `sentence_transformers` | bi-encoder 做召回，cross-encoder 做重排 |
 | 记忆存储 | 文件系统（Markdown） | 人机可读，Git 可追踪，无需数据库 |
 
@@ -274,6 +274,10 @@ get-me-in/
 | `BI_ENCODER_MODEL` | RAG 召回（bi-encoder） | `BAAI/bge-base-zh-v1.5` |
 | `CROSS_ENCODER_MODEL` | RAG 重排（cross-encoder） | `BAAI/bge-reranker-v2-m3` |
 | `EMBED_BATCH_SIZE` | Embedding 批处理大小 | `32` |
+| `CHROMA_PERSIST_DIR` | Chroma 持久化目录（留空 = 内存模式） | 无（内存模式） |
+| `RETRIEVAL_TOP_K` | Chroma 召回返回数量 | `10` |
+| `RERANK_BATCH_SIZE` | Reranker 批处理大小 | `32` |
+| `RERANK_TOP_K` | Reranker 重排后保留数量 | `5` |
 | `HF_ENDPOINT` | HuggingFace 镜像（国内用户建议 `https://hf-mirror.com`） | 无（缺失时走官方站 huggingface.co） |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
@@ -359,15 +363,15 @@ class BaseAgent:
 **职责：**
 - 将文本向量化（Embedder）
 - 将文档按分隔符切分为逻辑块（Chunker）—— 统一使用 Markdown 水平线 `---` 作为条目边界，记忆和参考数据共用同一套切分规则
-- 向量存储与检索（ChromaStore）
-- 召回（Retriever）与重排（Reranker）
+- 向量存储与检索（ChromaStore）—— 内部持有 Embedder，统一提供 add/query/remove
+- 重排（Reranker）—— cross-encoder 精排，分数存 metadata
 
 **关键接口 / 公开 API：**
 - `Embedder.embed(texts: list[str]) -> list[list[float]]` —— 将文本转换为向量
 - `Chunker.chunk(text: str, separator: str, metadata: dict) -> list[Chunk]` —— 按分隔符切分文本为逻辑块，每个块携带 metadata
 - `ChromaStore.add(chunks: list[Chunk], collection: str) -> None` —— 将块向量化后存入指定 collection
 - `ChromaStore.query(query_text: str, collection: str, filter: dict | None, top_k: int) -> list[Chunk]` —— 内部向量化后检索，返回 Chunk 列表
-- `Reranker.rerank(query: str, candidates: list[Chunk], top_k: int = 5) -> list[Chunk]` —— 重排
+- `Reranker.rerank(query: str, candidates: list[Chunk], top_k: int | None = None) -> list[Chunk]` —— 重排（top_k 默认值由 `RERANK_TOP_K` 配置，分数注入 `metadata["rerank_score"]`，异常直接抛出）
 
 **处理流程：**
 
@@ -391,7 +395,7 @@ class BaseAgent:
 - `Embedder`：封装 `sentence_transformers` 的 bi-encoder 模型（默认 `BAAI/bge-base-zh-v1.5`，由 `BI_ENCODER_MODEL` 配置），将文本转为归一化向量；`embed()` 支持 `batch_size` 参数（默认值由 `EMBED_BATCH_SIZE` 环境变量配置）
 - `Chunker`：通用切分器，按传入的 `separator` 切分文本为逻辑块，附加 `metadata`（agent、date、chunk_id、category 等）—— 不关心内容语义，只按分隔符切
 - `ChromaStore`：封装 Chroma 客户端，内部持有 `Embedder` 完成向量化，统一提供 `add()` / `query()` / `remove()` 接口。默认内存模式（设置 `CHROMA_PERSIST_DIR` 环境变量则切换为 `PersistentClient` 持久化到 `data/chroma/`）。`add()` 使用 Chroma `documents` 字段存储原始文本，`query()` 接受文本直接检索并返回 `list[Chunk]`。不预建 collection（首次 `add()` 自动创建），不校验 collection 名
-- `Reranker`：独立加载 `sentence_transformers` 的 CrossEncoder 模型（默认 `BAAI/bge-reranker-v2-m3`，由 `CROSS_ENCODER_MODEL` 配置；若性能不足可降级为 `BAAI/bge-reranker-base`），对粗排结果精排
+- `Reranker`：独立加载 `sentence_transformers` 的 CrossEncoder 模型（默认 `BAAI/bge-reranker-v2-m3`，由 `CROSS_ENCODER_MODEL` 配置），`__init__` 时预热；`rerank()` 批处理大小和 top-k 由 `RERANK_BATCH_SIZE` / `RERANK_TOP_K` 环境变量控制；分数注入 `Chunk.metadata["rerank_score"]`，结果从高到低排序；异常直接抛出，由调用方降级
 
 **Collection 设计：**
 
@@ -414,12 +418,13 @@ class Chunk:
     metadata: dict   # 因 collection 而异（见下表）
 ```
 
-| 字段 | references | memories | 用途 |
-|------|-----------|----------|------|
-| `category` | ✅ 必填 | — | 子目录名，限定检索范围 |
-| `source_file` | ✅ | ✅ | 来源文件路径，便于追溯和增量更新时删除旧 chunk |
-| `agent` | — | ✅ 必填 | 写入方 Agent 名，跨 Agent 检索过滤 |
-| `date` | — | ✅ | 写入日期，时间范围过滤 |
+| 字段 | references | memories | 写入方 | 用途 |
+|------|-----------|----------|--------|------|
+| `category` | ✅ 必填 | — | Loader | 子目录名，限定检索范围 |
+| `source_file` | ✅ | ✅ | Loader | 来源文件路径，便于追溯和增量更新时删除旧 chunk |
+| `agent` | — | ✅ 必填 | Loader | 写入方 Agent 名，跨 Agent 检索过滤 |
+| `date` | — | ✅ | Loader | 写入日期，时间范围过滤 |
+| `rerank_score` | ✅ | ✅ | Reranker | cross-encoder 重排分数（float），仅排序后结果携带 |
 
 Chunk 本身不校验 metadata 结构，规范由写入方遵守。
 
@@ -441,7 +446,7 @@ Chunk 本身不校验 metadata 结构，规范由写入方遵守。
 - 全库搜索 + 可选过滤 —— 默认不传 filter 全库检索，Reranker 自然排序；调用方可传 `{"category": "knowledge_base"}` 限定范围
 - Chroma 内存模式先行 —— 开发阶段零配置，后续切换持久化只需改 Chroma 初始化参数
 - 两个 collection —— `references`（参考数据）和 `memories`（记忆），不按 Agent 或数据类型拆分
-- 召回和重排分离 —— 召回用 bi-encoder（快，粗筛），重排用 cross-encoder（慢但准，精排）
+- Store 召回 + Reranker 重排 —— ChromaStore.query() 用 bi-encoder 粗筛，Reranker 用 cross-encoder 精排，两阶段分离
 - RAG 是基础设施，不是 Agent —— 不参与 Agent 调度，由需要检索能力的模块直接调用
 
 ### 4.5 记忆模块
@@ -469,7 +474,7 @@ Chunk 本身不校验 metadata 结构，规范由写入方遵守。
 
 **Memory ↔ RAG 接口：**
 
-记忆模块持有 RAG 模块的 `Chunker`、`ChromaStore`、`Retriever`、`Reranker` 引用，在写入和跨 Agent 检索时调用：
+记忆模块持有 RAG 模块的 `Chunker`、`ChromaStore`、`Reranker` 引用，在写入和跨 Agent 检索时调用：
 
 ```
 write_memory(agent, memory)
@@ -477,10 +482,10 @@ write_memory(agent, memory)
   │       分隔符由 Agent 定义，固化在记忆输出中
   ├─ 2. 写入文件: data/memories/<agent>/<date>.md
   └─ 3. 切分入库: Chunker.chunk(md_text, separator, {agent, date})
-           └─ Embedder.embed(chunks) → ChromaStore.add(chunks, collection="memories")
+           └─ ChromaStore.add(chunks, collection="memories")
 
 query_cross_agent(query, agents, limit)
-  ├─ 1. Retriever.retrieve(query, collection="memories", filter={agent: in(agents)}, top_k=20)
+  ├─ 1. ChromaStore.query(query, collection="memories", filter={agent: in(agents)}, top_k=20)
   ├─ 2. Reranker.rerank(query, candidates, top_k=limit)
   └─ 3. 返回 Memory 对象列表
 ```

@@ -35,3 +35,4 @@
 22. `/ragreload` 命令（📌 暂缓），手动重载 RAG，模型下载失败后无需重启
 23. ChromaStore 内部创建 Embedder（不注入），原文存 `documents` 字段，filter 透传，不加锁，L2 距离，不校验 collection 名，持久化通过 `CHROMA_PERSIST_DIR` 环境变量切换
 24. 增量加载：`.last_update` 时间戳比对 mtime；用户手动删文件不管；Agent 程序化操作统一封装同步 Chroma
+25. Reranker：分数存 `metadata["rerank_score"]`，`RERANK_BATCH_SIZE` + `RERANK_TOP_K` 环境变量控制，`__init__` 预热，异常直接抛出由调用方降级

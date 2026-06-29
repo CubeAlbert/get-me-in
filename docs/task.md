@@ -92,8 +92,8 @@
 
 ### 6. Reranker (`src/rag/reranker.py`)
 
-- ⬜ 独立加载 cross-encoder 模型（模型名由环境变量 `CROSS_ENCODER_MODEL` 配置）
-- ⬜ 实现 `rerank(query: str, candidates: list[Chunk], top_k: int = 5) -> list[Chunk]`，对 (query, candidate.content) 逐对评分，按分数降序排列后返回 top_k
+- ⬜ 独立加载 cross-encoder 模型（模型名由 `CROSS_ENCODER_MODEL` 配置），`__init__` 时用假数据跑一次 `predict()` 预热
+- ⬜ 实现 `rerank(query: str, candidates: list[Chunk], top_k: int | None = None) -> list[Chunk]`：对 (query, candidate.content) 逐对评分（batch_size 由 `RERANK_BATCH_SIZE` 配置），分数写入 `Chunk.metadata["rerank_score"]`，按分数降序返回 top_k 条（默认值由 `RERANK_TOP_K` 配置）；异常直接抛出
 
 ### 7. RagLoader (`src/rag/loader.py`)
 

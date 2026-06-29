@@ -55,7 +55,7 @@ class ChromaStore:
         query_text: str,
         collection: str,
         filter: dict | None = None,
-        top_k: int = 20,
+        top_k: int | None = None,
     ) -> list[Chunk]:
         """在指定 collection 中执行语义检索。
 
@@ -63,17 +63,18 @@ class ChromaStore:
             query_text: 查询文本，内部自动向量化。
             collection: collection 名。
             filter: Chroma where 条件，直接透传。None 表示全库检索。
-            top_k: 返回数量。
+            top_k: 返回数量，默认值由 RETRIEVAL_TOP_K 环境变量配置。
 
         Returns:
             匹配的 Chunk 列表，content 从 Chroma documents 字段还原。
         """
+        n_results = top_k if top_k is not None else int(config.RETRIEVAL_TOP_K)
         query_vector = self._embedder.embed([query_text])[0]
 
         col = self._client.get_collection(collection)
         result = col.query(
             query_embeddings=[query_vector],
-            n_results=top_k,
+            n_results=n_results,
             where=filter,
             include=["documents", "metadatas", "distances"],
         )

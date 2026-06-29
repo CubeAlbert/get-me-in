@@ -32,6 +32,7 @@
 - [决策 22 — /ragreload 手动重载命令](#决策-22--ragreload-手动重载命令)
 - [决策 23 — ChromaStore 内部设计决策](#决策-23--chromastore-内部设计决策)
 - [决策 24 — RAG 增量加载与文件同步策略](#决策-24--rag-增量加载与文件同步策略)
+- [决策 25 — Reranker 设计决策](#决策-25--reranker-设计决策)
 
 ---
 
@@ -518,3 +519,31 @@
 - 文件 hash 比对 —— 精准但复杂度高，当前文件数量少时无必要
 - 在 Store 中实现文件操作封装 —— Store 只管 Chroma，文件操作不是其职责
 - 监听文件系统事件（watchdog）—— 引入额外依赖，过度设计
+
+---
+
+### 决策 25 — Reranker 设计决策
+
+**背景：** Reranker 独立加载 cross-encoder 对召回结果精排，需确定分数传递方式、批处理配置、预热策略和异常处理。
+
+**决策：**
+
+- **分数存入 `metadata["rerank_score"]`**：Reranker 不修改 Chunk 结构，在现有 `metadata: dict` 中注入浮点数分数，结果按分数从高到低排列
+- **批处理大小环境变量化**：新增 `RERANK_BATCH_SIZE` 环境变量（默认值 32），控制 `CrossEncoder.predict()` 每次传入多少对 (query, document)
+- **Top-K 环境变量化**：新增 `RERANK_TOP_K` 环境变量（默认值 5），控制重排后保留条数
+- **`__init__` 时预热**：加载模型后用一对假数据 `[("预热", "预热")]` 跑一次 `predict()`，避免首次真实调用卡顿
+- **异常直接抛出**：模型加载失败或 predict 异常不吞，抛给调用方。调用方（检索链路）try/except 后降级，用 ChromaStore 原始召回结果
+
+**理由：**
+
+- dict 注入分数改 metadata 不动 Chunk 字段，最小侵入
+- 批处理和 top-k 环境变量化延续 Embedder 风格（决策 20），不同硬件灵活调整
+- 预热收益明显（首次调用从 2-3s 降至 100ms），一行代码换取流畅用户体验
+- Reranker 不做降级逻辑：降级是调用方（检索链路）的调度职责，Reranker 只管评分
+
+**曾考虑的替代方案：**
+
+- 在 Chunk 上加 `score` 字段 —— 改动数据结构，只有 Reranker 使用，放入 metadata 更合适
+- top-k 硬编码 5 —— 不同场景（面试题 vs JD 匹配）可能需要不同数量
+- 不预热 —— 每次启动后第一次检索体验差
+- Reranker 内部 try/except 返回原结果 —— 调用方不知道重排失败了，反而被当作正常结果使用
