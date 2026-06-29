@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 2 — M2: RAG 模块
 
-**当前任务：** 3. Chunker (`src/rag/chunker.py`)
+**当前任务：** 4. ChromaStore (`src/rag/store.py`)
 
-**当前子任务：** ⬜ 定义 `Chunk` 数据类（`id: str`、`content: str`、`metadata: dict`）
+**当前子任务：** ⬜ 封装 Chroma 客户端（内存模式），管理 `references` 和 `memories` 两个 collection
 
 **当前阻塞：** 无
 
-**下一步：** 创建数据目录和示例文件，然后按 embedder → chunker → store → loader → retriever → reranker 顺序实现
+**下一步：** 实现 ChromaStore 封装 Chroma 客户端 → `add()` → `query()` → `remove()`
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen

@@ -75,8 +75,8 @@
 
 ### 3. Chunker (`src/rag/chunker.py`)
 
-- ⬜ 定义 `Chunk` 数据类（`id: str`、`content: str`、`metadata: dict`）
-- ⬜ 实现 `chunk(text: str, separator: str = "\n---\n", metadata: dict = {}) -> list[Chunk]`，按 `---` 切分文本，每个片段生成 uuid4 并附加 metadata
+- ✅ 定义 `Chunk` 数据类（`id: str`、`content: str`、`metadata: dict`）
+- ✅ 实现 `chunk(text: str, separator: str = "\n---\n", metadata: dict = {}) -> list[Chunk]`，按 `---` 切分文本，每个片段生成 uuid4 并附加 metadata；自动过滤仅含空白字符的片段
 
 ### 4. ChromaStore (`src/rag/store.py`)
 
