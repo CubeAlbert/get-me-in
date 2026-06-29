@@ -45,6 +45,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **使用 `uv` 管理依赖和运行** — 添加/移除依赖用 `uv add` / `uv remove`；运行项目内 Python 代码必须带 `uv run` 前缀（如 `uv run python main.py`）；安装依赖用 `uv sync`；构建发布用 `uv build`
 - **`from src.config import config` 放在所有第三方 import 之前** — `config` 模块 import 时触发 `load_dotenv()` 注入环境变量。某些第三方库（如 `huggingface_hub`、`sentence_transformers`）在 import 时读取 `os.environ` 并缓存，必须先让 config 把 `.env` 加载完再导入它们
 - **Jupyter 交互式调试** — 用 `uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab` 启动 notebook 验证局部函数（含自动补全），`jupyter`/`jupyterlab-lsp`/`jedi-language-server` 均不写入项目依赖
+- **新模块先讨论设计** — 每次开始实现新模块前，先与用户讨论模块设计细节（接口、职责边界、依赖关系），确认后再动手写代码。不要跳过讨论直接实现
+- **新文件先列方法清单** — 每次准备新建代码文件之前，先告知用户该文件计划提供哪些功能/方法/类，让用户确认后再创建文件
+- **非交互模块测试后提供 Notebook 代码** — 每次新模块测试完毕后，如果是非交互式功能（如 RAG 各组件），提供给用户一段可在 Jupyter Notebook 中运行的代码块，让用户自行验证；不要仅提供命令行测试结果
 
 ## Doc Files
 
