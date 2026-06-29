@@ -30,6 +30,8 @@
 - [决策 20 — Embedder/Reranker 模型分离 + batch_size 环境变量化](#决策-20--embedderreranker-模型分离--batch_size-环境变量化)
 - [决策 21 — HF_ENDPOINT 镜像配置](#决策-21--hf_endpoint-镜像配置)
 - [决策 22 — /ragreload 手动重载命令](#决策-22--ragreload-手动重载命令)
+- [决策 23 — ChromaStore 内部设计决策](#决策-23--chromastore-内部设计决策)
+- [决策 24 — RAG 增量加载与文件同步策略](#决策-24--rag-增量加载与文件同步策略)
 
 ---
 
@@ -457,3 +459,62 @@
 - 自动重试 —— 可能反复失败浪费资源
 - 要求重启程序 —— 体验差
 
+---
+
+### 决策 23 — ChromaStore 内部设计决策
+
+**背景：** ChromaStore 作为 Chroma 的封装层，需要确定 Embedder 依赖方式、数据存储格式、线程安全策略、距离度量、collection 校验、持久化切换等内部设计。
+
+**决策：**
+
+- **Embedder 内部创建**：Store 在 `__init__` 直接 `Embedder()`，不接受构造函数注入。未来切换 API 后端时在 Embedder 内部通过环境变量控制，Store 不动
+- **原始文本存入 Chroma**：`add()` 时使用 Chroma 的 `documents` 参数存储原文，`query()` 返回 `list[Chunk]`（直接从 Chroma 结果还原 content）
+- **filter 直接透传**：`query()` 的 where filter dict 透传给 Chroma，不做封装（Chroma 语法是 MongoDB 子集）
+- **不加锁**：`auto_load()` 期间 `is_ready()` 为 False，查询走纯 LLM 降级；`load_file()` 增量更新为单文件操作，耗时极短
+- **距离度量用默认 L2**：Embedder 已输出归一化向量，L2 与 cosine 排序结果数学上等价，无需显式设置 `hnsw:space`
+- **不校验 collection 名**：信任调用方传对 `"references"` 或 `"memories"`
+- **持久化通过环境变量切换**：设置 `CHROMA_PERSIST_DIR` → `PersistentClient(path)`，不设置 → `Client()`（内存模式）。持久化目录 `data/chroma/` 加入 `.gitignore`
+
+**理由：**
+
+- 内部创建 Embedder 保持调用方零配置，同时 Embedder 接口 `embed(texts) -> list[list[float]]` 足够通用，后端切换不影响 Store
+- `documents` 字段是 Chroma 原生能力，存原文避免 query 后回源读文件
+- filter 透传零学习成本，Chroma 语法与 MongoDB 一致
+- 线程安全简化：运行时自然隔离，无需引入锁复杂度
+- L2 等价性由数学保证，无需额外配置
+- collection 校验收益为零（调用方只有 Loader 和 MemoryStore，均编写时已知）
+
+**曾考虑的替代方案：**
+
+- 构造函数注入 Embedder —— 当前只有一个使用方，注入无收益
+- content 塞入 metadata —— 污染 metadata，Chroma 原生 `documents` 字段更合适
+- filter 封装一层 —— 增加学习成本，Chrom 语法已标准
+- 加锁 —— 当前访问模式天然隔离，加锁是过度设计
+- 显式设置 `hnsw:space=cosine` —— 归一化向量下与 L2 等价
+
+---
+
+### 决策 24 — RAG 增量加载与文件同步策略
+
+**背景：** 持久化模式下，重启后需要判断哪些文件已变更，避免对未变化的文件重复做 embedding。同时，运行时文件的增删需要与 Chroma 保持同步。
+
+**决策：**
+
+- **时间戳增量加载**：持久化模式下，`auto_load()` 读取 `data/chroma/.last_update` 时间戳（不存在 → epoch 0），扫描 `data/reference/` 和 `data/memories/`，收集 mtime > 时间戳的文件，对每个变化的文件执行 `remove(source_file)` → `chunk` → `add`，最后写入当前时间戳
+- **用户手动删除磁盘文件**：不管，不清理 Chroma 中的孤儿 chunk
+- **Agent 程序化操作**：删除文件时统一封装，同步清理 Chroma 对应数据；写入记忆时走统一路径（写文件 → Chunker → ChromaStore.add()），确保文件与 Chroma 一致
+- 封装逻辑在 Memory 模块实现时处理，Store 只提供 `add()` / `remove()` / `query()` 基础接口
+
+**理由：**
+
+- 时间戳比对 O(n) 扫描足够简单，无需维护文件 hash 或变更日志
+- 用户手动删除属于外部操作，清理孤儿 chunk 需要全量比对（拿 Chroma 所有 source_file 去磁盘检查），成本高收益低
+- Agent 程序化操作统一封装，避免各处重复 delete+add 逻辑
+- 职责分层：Store 提供原子操作，Memory 模块负责一致性封装
+
+**曾考虑的替代方案：**
+
+- 全量删重建 —— 每次都重新 embedding，持久化优势浪费
+- 文件 hash 比对 —— 精准但复杂度高，当前文件数量少时无必要
+- 在 Store 中实现文件操作封装 —— Store 只管 Chroma，文件操作不是其职责
+- 监听文件系统事件（watchdog）—— 引入额外依赖，过度设计

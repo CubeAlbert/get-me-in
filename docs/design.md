@@ -395,7 +395,7 @@ class BaseAgent:
 **内部结构：**
 - `Embedder`：封装 `sentence_transformers` 的 bi-encoder 模型（默认 `BAAI/bge-base-zh-v1.5`，由 `BI_ENCODER_MODEL` 配置），将文本转为归一化向量；`embed()` 支持 `batch_size` 参数（默认值由 `EMBED_BATCH_SIZE` 环境变量配置）
 - `Chunker`：通用切分器，按传入的 `separator` 切分文本为逻辑块，附加 `metadata`（agent、date、chunk_id、category 等）—— 不关心内容语义，只按分隔符切
-- `ChromaStore`：封装 Chroma 客户端，管理 collection 的创建、写入、查询。默认内存模式
+- `ChromaStore`：封装 Chroma 客户端，内部持有 `Embedder` 完成向量化，管理 collection 的创建、写入、查询。默认内存模式（设置 `CHROMA_PERSIST_DIR` 环境变量则切换为 `PersistentClient` 持久化到 `data/chroma/`）。`add()` 使用 Chroma `documents` 字段存储原始文本，`query()` 返回 `list[Chunk]`。不预建 collection（首次 `add()` 自动创建），不校验 collection 名
 - `Retriever`：组合 `Embedder` + `ChromaStore`，完成召回流程
 - `Reranker`：独立加载 `sentence_transformers` 的 CrossEncoder 模型（默认 `BAAI/bge-reranker-v2-m3`，由 `CROSS_ENCODER_MODEL` 配置；若性能不足可降级为 `BAAI/bge-reranker-base`），对粗排结果精排
 
@@ -435,7 +435,7 @@ Chunk 本身不校验 metadata 结构，规范由写入方遵守。
 
 | 方法 | 说明 |
 |------|------|
-| `auto_load()` | 后台启动（`threading.Thread`），遍历 `data/reference/` 和 `data/memories/`，全部入库后设置 ready 标记 |
+| `auto_load()` | 后台启动（`threading.Thread`）；持久化模式下读取 `data/chroma/.last_update` 时间戳（不存在 → epoch 0），仅重载 mtime > 时间戳的变更文件；全部入库后设置 ready 标记并写入当前时间戳 |
 | `load_file(path)` | 增量加载单个文件：先按 `source_file` 删旧 chunk，再读文件重新切分入库 |
 | `is_ready()` | 返回 `bool`，调用方据此决定检索是否走 RAG（未就绪时降级为纯 LLM） |
 

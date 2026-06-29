@@ -80,10 +80,10 @@
 
 ### 4. ChromaStore (`src/rag/store.py`)
 
-- ⬜ 封装 Chroma 客户端（内存模式），管理 `references` 和 `memories` 两个 collection
-- ⬜ 实现 `add(chunks: list[Chunk], collection: str) -> None`，将 chunk 向量化后写入指定 collection
-- ⬜ 实现 `query(query_vector: list[float], collection: str, filter: dict | None = None, top_k: int = 20) -> list[dict]`，支持 metadata 过滤
-- ⬜ 实现 `remove(source_file: str, collection: str) -> None`，按 `source_file` 删除旧 chunk（供增量更新使用）
+- ⬜ 封装 Chroma 客户端：内部持有 `Embedder`；通过 `CHROMA_PERSIST_DIR` 环境变量切换内存/持久化模式；不预建 collection，不校验 collection 名
+- ⬜ 实现 `add(chunks: list[Chunk], collection: str) -> None`：内部调 `Embedder.embed()` 向量化，将原始文本存入 Chroma `documents` 字段，metadata 透传
+- ⬜ 实现 `query(query_vector: list[float], collection: str, filter: dict | None = None, top_k: int = 20) -> list[Chunk]`：透传 where filter 给 Chroma，结果还原为 Chunk 对象（含 content）
+- ⬜ 实现 `remove(source_file: str, collection: str) -> None`：按 `source_file` metadata 过滤删除（供增量更新使用）
 
 ### 5. Retriever (`src/rag/retriever.py`)
 
@@ -98,7 +98,7 @@
 ### 7. RagLoader (`src/rag/loader.py`)
 
 - ⬜ 持有 `Chunker` 和 `ChromaStore` 引用
-- ⬜ 实现 `auto_load()`：`threading.Thread` 后台遍历，内部 catch 异常（模型下载失败等），异常时 `_ready` 保持 False
+- ⬜ 实现 `auto_load()`：`threading.Thread` 后台遍历；持久化模式下读取 `data/chroma/.last_update` 时间戳（不存在 → epoch 0），仅加载 mtime > 时间戳的变更文件；内部 catch 异常（模型下载失败等），异常时 `_ready` 保持 False；完成后写入当前时间戳
 - ⬜ 实现 `is_ready() -> bool`：返回 RAG 是否加载完毕
 - ⬜ 实现 `load_file(path: Path) -> None`：增量加载单个文件（先 `remove(source_file)` 再重新 chunk + add）
 - 📌 后续增加 `/ragreload` 命令手动重新触发加载（模型下载成功后重试）
