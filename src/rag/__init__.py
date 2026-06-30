@@ -20,7 +20,7 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 import threading
 
-from src.rag.chunker import Chunk
+from src.utils.chunker import Chunk
 from src.rag.loader import LoaderState, RagLoader
 from src.rag.reranker import Reranker
 from src.rag.store import ChromaStore

@@ -10,7 +10,7 @@
 """
 
 from src.config import config
-from src.rag.chunker import Chunk
+from src.utils.chunker import Chunk
 from src.rag.embedder import Embedder
 
 import chromadb

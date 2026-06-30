@@ -8,7 +8,7 @@
 """
 
 from src.config import config
-from src.rag.chunker import Chunk
+from src.utils.chunker import Chunk
 
 from sentence_transformers import CrossEncoder
 

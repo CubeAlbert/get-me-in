@@ -112,7 +112,7 @@
 
 ### 0. M2 收尾 — Chunker 抽出 + RAG 接口扩充 + 文件改造
 
-- ⬜ Chunker/Chunk 从 `src/rag/chunker.py` 移至 `src/utils/chunker.py`，更新 `src/rag/` 下所有 import
+- ✅ Chunker/Chunk 从 `src/rag/chunker.py` 移至 `src/utils/chunker.py`，更新 `src/rag/` 下所有 import
 - ⬜ Chunker.chunk() 新增 front-matter 解析：文件开头第一对 `---` 提取 KV → metadata 注入所有 Chunk；后续 `---` 正常切分
 - ⬜ RAG `search()` 加 `filter: dict | None` 参数，透传 Chroma `where`
 - ⬜ RAG 新增 `delete(where: dict, collection="memories") -> int`，空 `{}` 抛 `ValueError`

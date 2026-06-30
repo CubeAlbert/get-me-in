@@ -17,7 +17,7 @@ from enum import Enum
 from pathlib import Path
 
 from src.config import config
-from src.rag.chunker import Chunker
+from src.utils.chunker import Chunker
 from src.rag.reranker import Reranker
 from src.rag.store import ChromaStore
 

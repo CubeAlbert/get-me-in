@@ -1,7 +1,7 @@
-"""RAG Chunker — 按分隔符切分文本为逻辑块。
+"""通用文本切分工具 — 按分隔符切分文本为逻辑块。
 
 用法:
-    from src.rag.chunker import Chunker, Chunk
+    from src.utils.chunker import Chunker, Chunk
 
     c = Chunker()
     chunks = c.chunk(text, metadata={"category": "knowledge_base"})
