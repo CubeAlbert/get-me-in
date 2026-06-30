@@ -21,8 +21,6 @@
 
 ---
 
-> **后续阶段（M3-M8）尚未生成任务。** 当 M2 完成后，回到 `docs/design.md` 和 `docs/plan.md` 查看里程碑 3-8 的详细设计，再生成对应的 Task 列表。
-
 ## 阶段 1 —— M1: 项目骨架 & 基础设施
 
 ### 1. 项目配置 & 依赖
@@ -52,7 +50,8 @@
 - ✅ 实现 `loader.py`：`get(**kwargs)` 读取 `general_agent/` 下所有 `.md`（按文件名排序拼接）并替换占位符；`get_raw(name, **kwargs)` 加载 `data/prompts/<name>.md` 跳过拼接
 - ✅ 创建 `data/prompts/general_agent/` 下 7 个模板文件（`01_role.md` ~ `07_reserved.md`）
 - ✅ 创建 `data/prompts/PLACEHOLDER.md`（14 个 per-Agent 占位符清单）
-- ⬜ 创建 `data/prompts/memory_compressor.md`（对话压缩提示词）—— ⚠️ 当前为空文件，待记忆模块（里程碑 3）实现时填充
+- ⛔ 创建 `data/prompts/memory_compressor.md` —— memory_compressor.md 已删除，替代为 `data/prompts/memory/builder.md`
+>> 替代：M3-6 实现 MemoryBuilder 提示词模板
 - 编排不再使用独立提示词 —— 调度子 Agent 定义为工具，通过 `{{ADDITION_TOOLS}}` 注入
 
 ### 6. 入口集成
@@ -108,3 +107,60 @@
 
 - ✅ 示例参考数据就绪（`cs_fundamentals.md` 含 19 条条目）
 - ✅ `search("快速排序")` → 经 `store.query()` 召回 → `Reranker.rerank()` 精排 → 返回结果正确（快速排序 0.973，归并排序 0.311，分数区分度良好）
+
+## 阶段 3 —— M3: 记忆模块 + RAG 收尾
+
+### 0. M2 收尾 — Chunker 抽出 + RAG 接口扩充 + 文件改造
+
+- ⬜ Chunker/Chunk 从 `src/rag/chunker.py` 移至 `src/utils/chunker.py`，更新 `src/rag/` 下所有 import
+- ⬜ Chunker.chunk() 新增 front-matter 解析：文件开头第一对 `---` 提取 KV → metadata 注入所有 Chunk；后续 `---` 正常切分
+- ⬜ RAG `search()` 加 `filter: dict | None` 参数，透传 Chroma `where`
+- ⬜ RAG 新增 `delete(where: dict, collection="memories") -> int`，空 `{}` 抛 `ValueError`
+- ⬜ 现有 `data/reference/` 下所有 `.md` 文件加 front-matter（`category: <子目录名>`）
+- ⬜ `RagLoader` 改为从 `src.utils.chunker` 导入 Chunker
+
+### 1. 记忆数据结构 (`src/memory/schemas.py`)
+
+- ⬜ `Memory` 数据类：`id: str` (uuid) + `agent: str` + `time: datetime` + `content: str`
+- ⬜ `Message` 数据类：`role: str` + `content: str` + `timestamp: datetime`
+- ⬜ 事件数据类：`MemoryWrittenEvent(agent, memory, file_path)`、`MemoryDeletedEvent(agent, file_path)`
+- ⬜ `chunk_to_memory(chunk: Chunk) -> Memory` 转换函数
+
+### 2. MemoryStore 文件读写 + 事件 (`src/memory/store.py`)
+
+- ⬜ `write_memory(agent, memory) -> None`：取 `memory.time` 生成时间戳文件名 → 格式化 front-matter + 正文 → 创建目录 → 写文件 → 发射 `MemoryWritten`
+- ⬜ `delete_memory(agent, file_path) -> None`：删文件 → 发射 `MemoryDeleted`
+- ⬜ `on_write(callback)` / `on_delete(callback)` 事件注册 + `_emit(event)` 发射
+- ⬜ 失败仅记日志，不抛异常
+
+### 3. MemoryIndexer (`src/memory/indexer.py`)
+
+- ⬜ `__init__(store)`：注册 `on_write` / `on_delete` 回调
+- ⬜ `_on_write(event)` → `rag.load(file_path)`
+- ⬜ `_on_delete(event)` → `rag.delete(where={"source_file": file_path})`
+
+### 4. MemoryRetriever (`src/memory/retriever.py`)
+
+- ⬜ `search(query, agent=None, top_k=5) -> list[Memory]`：内部调 `rag.search(filter={"agent": agent})` → `chunk_to_memory()`
+- ⬜ RAG 未就绪时抛出 `RuntimeError`
+
+### 5. 目录 + 文件准备
+
+- ⬜ 创建 `data/memories/` 及 5 个 Agent 子目录（`main/`、`resume/`、`learning/`、`interview/`、`job_search/`）
+
+### 6. MemoryBuilder + 提示词 (`src/memory/builder.py`)
+
+- ⬜ 完善 `data/prompts/memory/builder.md` 系统提示词（输入格式 + 输出格式 + 构建规则）
+- ⬜ `MemoryBuilder.__init__(llm: LLMClient)`：加载 `builder.md` 提示词
+- ⬜ `build(conversation: list[Message], agent: str) -> list[Memory]`：对话 → Markdown → LLM → `---` 分隔输出 → Chunker 切分 → 注入 `id`/`time`/`agent` → 返回 Memory 列表
+
+### 7. Facade (`src/memory/__init__.py`)
+
+- ⬜ `build_memories(conversation, agent, llm, store, sync_mode=False) -> list[Memory] | None`：sync 模式调 `builder.build()` → `store.write_memory()` 返回列表；async 模式开 daemon 线程执行后返回 `None`
+
+### 8. 端到端验证
+
+- ⬜ sync 模式：对话 → 构建 → 写入 → 检索 全链路验证
+- ⬜ async 模式：对话 → 构建（后台）→ 等待 → 检索验证
+- ⬜ 删除：写入 → 检索确认存在 → 删除文件 → 检索确认不存在
+- ⬜ `/ragreload` 全量重载后检索验证（metadata 持久化确认）

@@ -36,6 +36,10 @@
 - [决策 26 — ChromaStore 统一检索入口（移除 Retriever）](#决策-26--chromastore-统一检索入口移除-retriever)
 - [决策 27 — RagLoader 设计决策](#决策-27--ragloader-设计决策)
 - [决策 28 — RAG 公共 API 极简化](#决策-28--rag-公共-api-极简化)
+- [决策 29 — MemoryStore 与 RAG 解耦（观察者模式）](#决策-29--memorystore-与-rag-解耦观察者模式)
+- [决策 30 — 一文件一条记忆 + front-matter KV 格式](#决策-30--一文件一条记忆--front-matter-kv-格式)
+- [决策 31 — Chunker 通用化 + front-matter 解析](#决策-31--chunker-通用化--front-matter-解析)
+- [决策 32 — MemoryBuilder 替代 Compressor（对话构建而非压缩）](#决策-32--memorybuilder-替代-compressor对话构建而非压缩)
 
 ---
 
@@ -628,3 +632,96 @@
 
 - 暴露 `get_store()` + `get_reranker()` —— 调用方需理解内部 pipeline，增加使用成本
 - `search()` 在 LOADING 时阻塞等待而非抛异常 —— 阻塞时长不可控，不如让调用方决定何时重试
+
+---
+
+### 决策 29 — MemoryStore 与 RAG 解耦（观察者模式）
+
+**背景：** 原设计 MemoryStore 直接持有 RAG 内部组件（Chunker、ChromaStore、Reranker）的引用，`write_memory()` 和 `query_cross_agent()` 内部直接调 RAG。这导致 Memory 模块与 RAG 内部实现细节强耦合，换 RAG 底层就得改 MemoryStore。
+
+**决策：**
+- MemoryStore 只管文件系统读写，不持有任何 RAG 引用
+- 解耦方式为观察者模式：Store 写文件后发射 `MemoryWritten` / `MemoryDeleted` 事件
+- `MemoryIndexer` 监听事件→调用 RAG 公共 API（`rag.load()` / `rag.delete()`）
+- `MemoryRetriever` 封装 RAG `search()`，返回 Memory 对象
+- Store 通过 `on_write(callback)` / `on_delete(callback)` 注册监听器，callback 同步执行
+
+**理由：**
+- Store 不再知道 RAG 的存在，换 RAG 实现只需改 Indexer
+- 事件驱动解耦，写入路径（Store→Indexer→RAG）和读取路径（Retriever→RAG）完全独立
+- 不需要引入消息队列或异步框架，Python 原生 callback 足够
+
+**曾考虑的替代方案：**
+- Store 依赖 RAG 公共 API 而非内部组件 —— 耦合方向反了，RAG 是基础设施，Memory 是上层
+- 全异步消息队列 —— 过度设计，当前规模不需要
+
+---
+
+### 决策 30 — 一文件一条记忆 + front-matter KV 格式
+
+**背景：** 原设计 `data/memories/<agent>/<date>.md` 一个文件包含多条记忆，Chunker 按 `---` 切分为多个 Chunk。这导致记忆之间边界模糊，增删改单条记忆需要操作整文件，且 metadata（id、agent、time）无法持久化到文件中。
+
+**决策：**
+- **一条 Memory 一个文件：** `data/memories/<agent>/<yyyyMMddHHmmss.fff>.md`，文件名即时间戳，天然有序
+- **Front-matter KV 格式：** 文件以 `---` 包裹的 KV 开头（`id`、`agent`、`time`），后接正文 content
+- **所有文件统一格式：** reference 文件同样加 front-matter（`category`），Chunker 自动解析注入 metadata
+- **`file_path` 可从 `memory.time` 推导：** 不存储在 Memory 对象中
+
+**理由：**
+- 一文件一条：`source_file` 天然是单条记忆标识，增删精确到文件级别
+- Front-matter 持久化 metadata：`/ragreload` 全量重载时不丢
+- 时间戳文件名：天然有序，浏览记忆时一目了然
+- 所有文件统一格式：一套 Chunker 处理 reference 和 memory
+
+**曾考虑的替代方案：**
+- 按日期文件存多条记忆 —— 增删需要改整文件，Chunk 粒度与文件粒度不一致
+- JSON 文件 —— 不如 Markdown 人机可读
+- 文件名用 uuid —— 排序混乱，人工无法浏览
+
+---
+
+### 决策 31 — Chunker 通用化 + front-matter 解析
+
+**背景：** Chunker 原是 RAG 模块专属（`src/rag/chunker.py`），仅做 `---` 机械切分。M3 的 MemoryBuilder 也需要用 Chunker 解析 LLM 输出的 Markdown，同时所有文件需要 front-matter 支持以持久化 metadata。
+
+**决策：**
+- Chunker 从 `src/rag/` 移至 `src/utils/chunker.py`，成为通用工具
+- `chunk()` 新增 front-matter 解析：文件开头第一对 `---` 提取 KV → metadata 注入所有 Chunk → 剥离 front-matter → 后续 `---` 正常切分
+- metadata 优先级：front-matter KV < chunk() 的 metadata 参数（调用方可覆盖）
+- `source_file` 仍由 RagLoader 自动注入，不写在 front-matter 中
+- 解析用简单 `key: value` 格式，不用 YAML（避免额外依赖）
+
+**理由：**
+- 移至 utils 消除 memory→rag 的依赖方向问题
+- front-matter 解析让 metadata 持久化在文件中，与程序注入互补
+- 简单 KV 解析零依赖，足够覆盖 Memory（id/agent/time）和 Reference（category）的场景
+- 调用方覆盖优先级保证灵活性
+
+**曾考虑的替代方案：**
+- Chunker 留在 RAG —— MemoryBuilder 需要依赖 RAG，耦合方向不合理
+- 用 YAML front-matter —— 需要 `pyyaml` 依赖，当前需求不必要
+- 不改 Chunker，由 RagLoader/MemoryStore 各自解析 front-matter —— 重复逻辑
+
+---
+
+### 决策 32 — MemoryBuilder 替代 Compressor（对话构建而非压缩）
+
+**背景：** 原设计 `MemoryCompressor.compress(conversation) -> list[Memory]` 定义为"LLM 对话压缩成记忆"，但这个名字暗示只是压缩/摘要，而不是主动从对话中提取关键信息构建记忆。
+
+**决策：**
+- 重命名为 `MemoryBuilder`，职责定义为"从对话中提取/构建记忆条目"
+- 系统提示词放在 `data/prompts/memory/builder.md`（替代已删除的 `memory_compressor.md`）
+- LLM 输出 Markdown 格式（`---` 分隔 + front-matter），Builder 注入 `id`/`time`/`agent` 后复用 Chunker 解析
+- `memory/__init__.py` 提供 Facade：`build_memories(conversation, agent, llm, store, sync_mode=False)`
+- `sync_mode=True` 同步返回 `list[Memory]`；`False` 后台线程执行，立即返回 `None`
+- 异步控制在 Builder Facade，MemoryStore 本身纯同步
+
+**理由：**
+- "构建"比"压缩"更准确 —— LLM 主动判断什么值得记住并组织为 Memory，而非机械压缩
+- LLM 输出与 memory 文件同格式，一套 Chunker 两端复用
+- 异步由上层控制，Store 保持简单同步
+
+**曾考虑的替代方案：**
+- 保持 Compressor 名字 —— 名不副实，压缩暗示降维/摘要而非提取
+- LLM 输出 JSON —— Markdown 更自然，且与文件格式统一
+- MemoryStore 内部做异步队列 —— 职责混淆，Builder 是更好的异步控制点

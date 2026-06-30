@@ -128,17 +128,20 @@ get-me-in/
 │   │   ├── interview/       # 面试 Agent
 │   │   └── job_search/      # 岗位搜索 Agent (TBD)
 │   ├── memory/              # 记忆模块
-│   │   ├── __init__.py
-│   │   ├── store.py         # 记忆读写接口
-│   │   ├── compressor.py    # LLM 对话压缩成记忆
-│   │   └── schemas.py       # 记忆数据结构定义
+│   │   ├── __init__.py       # Facade：build_memories() + sync/async
+│   │   ├── store.py          # 文件系统写入 + 事件发射（同步）
+│   │   ├── indexer.py        # MemoryIndexer：监听事件 → RAG 索引
+│   │   ├── retriever.py      # MemoryRetriever：语义检索
+│   │   ├── builder.py        # MemoryBuilder：LLM 从对话构建记忆
+│   │   └── schemas.py        # Memory, Message 等数据结构
+│   ├── utils/               # 通用工具
+│   │   └── chunker.py        # 通用文本切分（front-matter + --- 分隔）
 │   ├── llm/                 # LLM 调用封装
 │   │   ├── __init__.py
 │   │   └── client.py         # 双 tier（pro / flash）统一调用
-│   ├── rag/                 # RAG 模块（Embedder + Chunker + Store + Loader + Reranker）
+│   ├── rag/                 # RAG 模块（Embedder + Store + Loader + Reranker）
 │   │   ├── __init__.py
 │   │   ├── embedder.py      # 向量化（sentence_transformers）
-│   │   ├── chunker.py       # 按分隔符切分文本为逻辑块
 │   │   ├── store.py         # Chroma 封装（collection 增删查）
 │   │   ├── loader.py        # 启动加载 + 增量加载（threading 后台）
 │   │   └── reranker.py      # 重排
@@ -151,9 +154,7 @@ get-me-in/
 │       └── handler.py       # Handler 抽象基类 + LLMHandler（M1 验证管线，M4 由 Orchestrator 替换）
 ├── data/                    # 持久化存储（文件系统）
 │   ├── profile/
-│   │   └── profile.md       # 用户档案（技能、经历、教育）
-│   ├── preferences/
-│   │   └── preferences.md   # 用户偏好（目标岗位、薪资、地点等）
+│   │   └── profile.md       # 用户画像（free-form section，记录技能、经历、偏好等）
 │   ├── reference/           # 参考数据（RAG 检索源）
 │   │   ├── interview_questions/   # 面试题库
 │   │   ├── company_info/          # 面经 / 公司情报
@@ -162,8 +163,7 @@ get-me-in/
 │   │   ├── recommended_materials/ # 推荐资料
 │   │   └── job_descriptions/      # 岗位描述
 │   ├── memories/
-│   │   ├── main/            # 按 Agent 分目录，各自按日期分文件
-│   │   │   └── 2026-06-24.md
+│   │   ├── main/            # 按 Agent 分目录，每个文件一条记忆
 │   │   ├── resume/
 │   │   ├── learning/
 │   │   ├── interview/
@@ -178,7 +178,8 @@ get-me-in/
 │       │   ├── 06_output_format.md
 │       │   └── 07_reserved.md
 │       ├── PLACEHOLDER.md    # 占位符清单（14 个 per-Agent 占位符，不参与拼接）
-│       ├── memory_compressor.md
+│       ├── memory/
+│       │   └── builder.md    # MemoryBuilder 系统提示词
 │       ├── resume_analysis.md
 │       └── ...
 ├── tests/
@@ -404,9 +405,9 @@ class BaseAgent:
 | Collection | 用途 | 数据来源 | category 自动标注 |
 |------------|------|----------|-------------------|
 | `references` | 所有参考数据 | `data/reference/<category>/*.md`，按 `---` 切分 | 子目录名即 category 值，Chunker 自动打 metadata |
-| `memories` | 所有 Agent 的记忆条目 + 简历内容 + 面试记录 | Agent 通过 MemoryStore 写入 `data/memories/<agent>/<date>.md`，按 `---` 切分 | 无（memories collection 不按 category 过滤，按 agent 字段过滤） |
+| `memories` | 所有 Agent 的记忆条目 | MemoryStore 写入 `data/memories/<agent>/<timestamp>.md`，每个文件一条记忆，front-matter 含 `id`/`agent`/`time` | 按 agent 过滤 |
 
-检索时默认跨所有 chunk 搜索，Reranker 自然排序。调用方可传 `filter={"category": "knowledge_base"}` 限定范围。
+检索时默认跨所有 chunk 搜索，Reranker 自然排序。调用方可传 `filter={"agent": "resume"}` 限定范围。
 
 **Chunk 数据结构：**
 
@@ -424,13 +425,15 @@ class Chunk:
 | `source_file` | ✅ | ✅ | Loader | 来源文件路径，便于追溯和增量更新时删除旧 chunk |
 | `agent` | — | ✅ 必填 | Loader | 写入方 Agent 名，跨 Agent 检索过滤 |
 | `date` | — | ✅ | Loader | 写入日期，时间范围过滤 |
+| `id` | — | ✅ | Chunker (front-matter) | Memory uuid，精确标识一条记忆 |
+| `time` | — | ✅ | Chunker (front-matter) | Memory 时间戳 |
 | `rerank_score` | ✅ | ✅ | Reranker | cross-encoder 重排分数（float），仅排序后结果携带 |
 
 Chunk 本身不校验 metadata 结构，规范由写入方遵守。
 
 **RagLoader 模块：**
 
-`loader.py` 负责读取磁盘文件 → 调 Chunker → 写入 ChromaStore，是 RAG 模块的唯一数据入口。Store 和 Reranker 通过构造函数注入（单例由 `src/rag/__init__.py` 模块级懒加载管理），Chunker 内部创建。
+`loader.py` 负责读取磁盘文件 → 调 Chunker（从 `src/utils/chunker.py` 导入）→ 写入 ChromaStore，是 RAG 模块的唯一数据入口。Store 和 Reranker 通过构造函数注入（单例由 `src/rag/__init__.py` 模块级懒加载管理）。
 
 **状态机：** `LoaderState` 枚举（IDLE → LOADING → READY / ERROR）。调用方通过 `state` / `error` 属性查询，据此决策降级或重试。
 
@@ -455,62 +458,98 @@ Chunk 本身不校验 metadata 结构，规范由写入方遵守。
 
 **模块入口 API（`src/rag/__init__.py`）：**
 
-外部调用方不直接接触 `ChromaStore` / `Reranker` / `RagLoader`，仅通过三个函数使用 RAG：
+外部调用方不直接接触 `ChromaStore` / `Reranker` / `RagLoader`，仅通过以下函数使用 RAG：
 
 | 函数 | 说明 |
 |------|------|
-| `search(query_text, collection="references", top_k=None) -> list[Chunk]` | 检索 + 重排，内部串联 `store.query()` → `reranker.rerank()`。LOADING/ERROR 状态时抛出 `RuntimeError` |
+| `search(query_text, collection="references", filter=None, top_k=None) -> list[Chunk]` | 检索 + 重排，内部串联 `store.query()` → `reranker.rerank()`。`filter` 透传 Chroma `where` 限定检索范围。LOADING/ERROR 状态时抛出 `RuntimeError` |
 | `load(target=None) -> str` | 加载/重载。`load()` 全量重载；`load("pattern")` 按子串匹配文件路径重载，返回结果描述 |
+| `delete(where, collection="memories") -> int` | 按 metadata 过滤删除，返回删除条数。空 `where={}` 抛 `ValueError` |
 | `is_ready() -> bool` | RAG 是否就绪（`loader.state == READY`），供外部轮询 |
 
 内部单例管理：`_ensure_init()` 双检锁懒加载 `ChromaStore` / `Reranker` / `RagLoader`，首次 import 时启动 daemon 线程执行 `auto_load()`。Store 和 Reranker 对外不可见。
 
+**Chunker 归属：** `Chunker` / `Chunk` 已抽出到 `src/utils/chunker.py`，作为通用文本切分工具被 RAG 和记忆模块共用。
+
 ### 4.5 记忆模块
 
-**用途：** 系统的持久化上下文层。存储用户档案、偏好，以及经过 LLM 压缩的对话记忆。所有 Agent 通过此模块获取上下文。记忆按 Agent 隔离存储，各 Agent 写入自己的子目录。
+**用途：** 系统的持久化上下文层。存储 LLM 构建的记忆条目。所有 Agent 通过此模块获取上下文。记忆按 Agent 隔离存储，各 Agent 写入自己的子目录。
 
 **职责：**
-- 结构化数据（档案、偏好）的 CRUD
-- 对话记忆的写入和检索（按 Agent 隔离）
-- 对话压缩：调用 LLM 将原始对话压缩为结构化记忆条目
-- 为各 Agent 提供上下文查询接口
+- 记忆的写入和删除（按 Agent 隔离，一文件一条记忆）
+- 对话构建记忆：调用 LLM 从对话中提取关键信息，构建结构化记忆条目
+- 为各 Agent 提供语义检索接口（跨 Agent / 单 Agent）
 
-**关键接口 / 公开 API：**
-- `MemoryStore.get_profile() -> Profile` —— 获取用户档案
-- `MemoryStore.get_preferences() -> Preferences` —— 获取用户偏好
-- `MemoryStore.write_memory(agent: str, memory: Memory) -> None` —— 写入一条记忆到指定 Agent 的子目录
-- `MemoryStore.get_recent_memories(agent: str, limit: int, related_to: str | None) -> list[Memory]` —— 获取指定 Agent 最近的记忆条目
-- `MemoryStore.query_cross_agent(query: str, agents: list[str] | None, limit: int) -> list[Memory]` —— 跨 Agent 检索记忆（通过 RAG 模块），agents 为 None 时查询全部
-- `MemoryCompressor.compress(conversation: list[Message]) -> list[Memory]` —— 将对话压缩为记忆
+**架构：MemoryStore 与 RAG 解耦**
+
+MemoryStore **不直接持有 RAG**，通过观察者模式解耦：
+
+```
+写入方向:
+  MemoryStore (只管文件系统)
+    │ 发射事件 (同步 callback)
+    ├── MemoryWritten ──→ MemoryIndexer ──→ RAG (写入)
+    └── MemoryDeleted ──→ MemoryIndexer ──→ RAG (删除)
+
+读取方向:
+  MemoryRetriever ←── RAG (search)
+
+Store 与 RAG 完全隔离。
+```
+
+**公开 API：**
+
+| 接口 | 位置 | 说明 |
+|------|------|------|
+| `build_memories(conversation, agent, llm, store, sync_mode=False) -> list[Memory] \| None` | `memory/__init__.py` | Facade，构建记忆 + 保存。`sync_mode=True` 同步返回 Memory 列表；`False` 后台线程执行，返回 `None` |
+| `MemoryStore.write_memory(agent, memory) -> None` | `store.py` | 写文件（同步），发 `MemoryWritten` 事件 |
+| `MemoryStore.delete_memory(agent, file_path) -> None` | `store.py` | 删文件（同步），发 `MemoryDeleted` 事件。删除由用户驱动，不提供更新 |
+| `MemoryRetriever.search(query, agent=None, top_k=5) -> list[Memory]` | `retriever.py` | 语义检索。`agent=None` 跨 Agent 全量检索 |
+| `MemoryStore.on_write(callback)` / `on_delete(callback)` | `store.py` | 注册事件监听器 |
 
 **内部结构：**
-- `MemoryStore`：文件系统读写封装，按 Agent 路由到 `data/memories/<agent>/` 子目录，按日期分文件
-- `MemoryCompressor`：调用 LLM 完成对话压缩，提取关键信息和决策
-- `schemas.py`：定义 `Profile`、`Preferences`、`Memory` 等数据结构
 
-**Memory ↔ RAG 接口：**
+| 文件 | 职责 |
+|------|------|
+| `schemas.py` | `Memory(id: uuid, agent: str, time: datetime, content: str)`、`Message` 等数据结构 |
+| `store.py` | 同步文件系统读写。`write_memory()`：生成时间戳文件名 → front-matter 格式化 → 写文件 → 发射事件。`delete_memory()`：删文件 → 发射事件。不提供读方法，不持队列/线程 |
+| `indexer.py` | `MemoryIndexer`：监听 Store 事件，`_on_write` → `rag.load(file_path)`，`_on_delete` → `rag.delete(where={"source_file": file_path})`。构造即绑定，无公开方法 |
+| `retriever.py` | `MemoryRetriever`：封装 `rag.search(filter={"agent": ...})`，`Chunk` → `Memory` 转换后返回 |
+| `builder.py` | `MemoryBuilder`：加载 `data/prompts/memory/builder.md` 系统提示词 → 对话作为用户消息 → LLM 输出 `---` 分隔的 Markdown → Chunker 切分 → 注入 `id`/`time`/`agent` → `list[Memory]` |
+| `__init__.py` | Facade：`build_memories()` 统一入口，支持 sync/async 模式 |
 
-记忆模块持有 RAG 模块的 `Chunker`、`ChromaStore`、`Reranker` 引用，在写入和跨 Agent 检索时调用：
+**文件组织：**
+
+一条 Memory 一个文件：`data/memories/<agent>/<yyyyMMddHHmmss.fff>.md`
+
+文件格式为 front-matter (简单 KV，`---` 包裹) + 正文：
 
 ```
-write_memory(agent, memory)
-  ├─ 1. 格式化: memory.to_markdown() → 带分隔符的 Markdown 文本
-  │       分隔符由 Agent 定义，固化在记忆输出中
-  ├─ 2. 写入文件: data/memories/<agent>/<date>.md
-  └─ 3. 切分入库: Chunker.chunk(md_text, separator, {agent, date})
-           └─ ChromaStore.add(chunks, collection="memories")
+---
+id: abc123
+agent: resume
+time: 2026-06-30T14:30:00
+---
 
-query_cross_agent(query, agents, limit)
-  ├─ 1. ChromaStore.query(query, collection="memories", filter={agent: in(agents)}, top_k=20)
-  ├─ 2. Reranker.rerank(query, candidates, top_k=limit)
-  └─ 3. 返回 Memory 对象列表
+用户的目标岗位是后端工程师，技能栈为 Python/Go...
 ```
+
+- `file_path` 可从 `memory.time` 推导，Memory 不存储文件路径
+- MemoryStore 写文件前创建目录；RagLoader 扫描时目录不存在则跳过
+
+**Chunk ↔ Memory 转换：**
+
+`chunk_to_memory(chunk) -> Memory`：从 Chunk metadata 取 `id`/`agent`/`time`，content 取 Chunk.content。MemoryRetriever 和 MemoryBuilder 共用。
 
 **设计决策：**
-- 记忆按 Agent 分目录 —— 每个 Agent 独立管理自己的记忆，避免互相干扰；跨 Agent 检索通过 RAG 模块的语义搜索实现
+- 记忆按 Agent 分目录 —— 每个 Agent 独立管理自己的记忆；跨 Agent 检索走 `MemoryRetriever.search(agent=None)`
 - 文件系统而非数据库 —— 人机可读、Git 可追踪、免运维
-- 记忆按日期分文件 —— 便于检索和人工翻阅，单文件不会过大
-- 对话压缩由 LLM 完成 —— 压缩质量是关键，规则压缩会丢失语义
+- 一文件一条记忆 —— 时间戳文件名天然有序，精确标识，无需再切分
+- 观察者模式解耦 —— MemoryStore 不持有 RAG，通过事件 + Indexer/Retriever 桥接
+- 不提供更新 —— 每次调用创建新文件；删除由用户驱动
+- 记忆构建由 LLM 完成 —— 从对话中提取关键信息，非简单压缩
+- 异步由 Builder facade 控制 —— MemoryStore 本身纯同步
+- Profile / Preferences 暂缓 —— `data/profile/profile.md`，free-form section，LLM 辅助生成画像，后续详细讨论
 
 ### 4.6 主 Agent（编排器）
 

@@ -43,13 +43,19 @@
 
 ### 里程碑 3 —— 记忆模块
 
-- **预期产出：** 完整的记忆读写、压缩、跨 Agent 检索能力
+- **预期产出：** 完整的记忆写入、删除、语义检索、LLM 构建能力；RAG 公开接口扩充
 - **验收标准：**
-  - `src/memory/schemas.py` 定义 Profile、Preferences、Memory 数据结构
-  - `src/memory/store.py` 实现文件系统读写：`get_profile()`、`get_preferences()`、`write_memory()`、`get_recent_memories()`、`query_cross_agent()`
-  - `src/memory/compressor.py` 实现 LLM 对话压缩，输入对话消息列表，输出 Memory 列表
-  - Memory ↔ RAG 接口：写入记忆时自动切分入库；跨 Agent 检索走 RAG 召回+重排
-  - `data/memories/<agent>/` 目录结构就绪
+  - Chunker 抽出到 `src/utils/chunker.py`，新增 front-matter 解析（`---` KV → metadata）
+  - RAG `search()` 加 `filter` 参数；`delete(where)` 按 metadata 删除
+  - 现有 reference 文件添加 front-matter（`category`）
+  - `src/memory/schemas.py` 定义 Memory、Message、事件等数据结构
+  - `src/memory/store.py` 同步文件系统读写 + 事件机制（`on_write` / `on_delete`）
+  - `src/memory/indexer.py` MemoryIndexer 监听事件 → RAG 索引
+  - `src/memory/retriever.py` MemoryRetriever 语义检索（`rag.search(filter=...)`）
+  - `src/memory/builder.py` MemoryBuilder LLM 从对话构建记忆（`data/prompts/memory/builder.md`）
+  - `src/memory/__init__.py` Facade：`build_memories()` + sync/async 控制
+  - `data/memories/<agent>/` 目录结构就绪，一文件一条记忆（`yyyyMMddHHmmss.fff.md`）
+  - 端到端：构建记忆 → 写入 → 索引 → 检索 链路验证通过
 - **前置依赖：** 里程碑 1（LLM）+ 里程碑 2（RAG）
 
 ### 里程碑 4 —— BaseAgent & 主 Agent

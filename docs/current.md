@@ -1,14 +1,14 @@
 # 当前状态
 
-**当前阶段：** 阶段 2 — M2: RAG 模块
+**当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** M2 完成，待进入 M3 — Memory 模块
+**当前任务：** 任务 0 — M2 收尾（Chunker 抽出 + RAG 接口扩充 + reference 改造）
 
-**当前子任务：** 无（M2 全部完成）
+**当前子任务：** Chunker/Chunk 从 `src/rag/chunker.py` 移至 `src/utils/chunker.py`
 
 **当前阻塞：** 无
 
-**下一步：** 回顾 `docs/design.md` 和 `docs/plan.md` 中 M3 的设计，生成 Memory 模块任务列表
+**下一步：** 开始实现 M2 收尾 6 项子任务，然后进入 M3 本体
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -39,3 +39,7 @@
 26. Store.query() 接受文本内部向量化，移除 Retriever —— 消除双 Embedder 实例，检索流程简化为 Store.query() → Reranker.rerank()
 27. RagLoader：Store/Reranker 注入（单例由 `rag/__init__.py` 懒加载），Chunker 内部创建；`LoaderState` 状态机（IDLE/LOADING/READY/ERROR）；同步+锁，异常写状态不抛出；内存全量/持久化增量
 28. RAG 公共 API 极简化：仅暴露 `start()` / `search()` / `load()` / `is_ready()` 四个函数，Store 和 Reranker 完全隐藏在模块内部；3 个环境变量在 import 前静默模型加载进度条
+29. MemoryStore 与 RAG 解耦：观察者模式，Store 只写文件+发事件，MemoryIndexer 监听→RAG 索引，MemoryRetriever 封装 RAG 检索
+30. 一文件一条记忆：`data/memories/<agent>/<yyyyMMddHHmmss.fff>.md`，front-matter KV 格式持久化 metadata（id/agent/time）
+31. Chunker 通用化：移至 `src/utils/chunker.py`，新增 front-matter 解析，所有文件统一格式
+32. MemoryBuilder 替代 Compressor：从对话构建记忆而非简单压缩，async/sync 由 Builder Facade 控制，Store 纯同步
