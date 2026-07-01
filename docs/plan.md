@@ -43,8 +43,9 @@
 
 ### 里程碑 3 —— 记忆模块
 
-- **预期产出：** 完整的记忆写入、删除、语义检索、LLM 构建能力；RAG 公开接口扩充
+- **预期产出：** 完整的记忆写入、删除、语义检索、LLM 构建能力；RAG 公开接口扩充；日志基础设施
 - **验收标准：**
+  - `src/logger.py` 日志模块就绪（`get_logger()` + `RotatingFileHandler` + stderr 输出）
   - Chunker 抽出到 `src/utils/chunker.py`，新增 front-matter 解析（`---` KV → metadata）
   - RAG `search()` 加 `filter` 参数；`delete(where)` 按 metadata 删除
   - 现有 reference 文件添加 front-matter（`category`）

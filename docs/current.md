@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** 任务 1 — 记忆数据结构 (`src/memory/schemas.py`)
+**当前任务：** 任务 1 — 日志模块 (`src/logger.py`)
 
-**当前子任务：** 实现 Memory / Message / 事件 数据类
+**当前子任务：** 实现 `get_logger()` + `_setup()` 内部初始化，`src/config.py` 追加 `LOG_LEVEL`/`LOG_DIR`
 
 **当前阻塞：** 无
 
-**下一步：** 创建 `src/memory/schemas.py`，定义 Memory、Message、事件数据类及 chunk_to_memory 转换函数
+**下一步：** 创建 `src/logger.py`，封装 `logging` 标准库（RotatingFileHandler + stderr），然后继续 M3 任务 2（schemas.py）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -44,3 +44,4 @@
 31. Chunker 通用化：移至 `src/utils/chunker.py`，新增 front-matter 解析，所有文件统一格式
 32. MemoryBuilder 替代 Compressor：从对话构建记忆而非简单压缩，async/sync 由 Builder Facade 控制，Store 纯同步
 33. Chunker 强制 front-matter：所有输入文本必须以 `---` KV 块开头，无 front-matter 返回空列表并留 TODO 桩；caller metadata 覆盖 front-matter 同名字段
+34. 日志使用 Python 标准库 `logging`：`RotatingFileHandler`（10MB × 5）写入 `data/logs/app.log`，`StreamHandler(stderr)` 输出 WARNING+；懒加载初始化（`get_logger()` 首次调用自动配置）；`LOG_LEVEL`（默认 INFO）和 `LOG_DIR`（默认 `data/logs/`）通过环境变量配置

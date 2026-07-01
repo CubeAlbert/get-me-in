@@ -40,6 +40,7 @@
 - [决策 30 — 一文件一条记忆 + front-matter KV 格式](#决策-30--一文件一条记忆--front-matter-kv-格式)
 - [决策 31 — Chunker 通用化 + front-matter 解析](#决策-31--chunker-通用化--front-matter-解析)
 - [决策 32 — MemoryBuilder 替代 Compressor（对话构建而非压缩）](#决策-32--memorybuilder-替代-compressor对话构建而非压缩)
+- [决策 33 — 日志系统：标准库 logging + 按大小轮转](#决策-33--日志系统标准库-logging--按大小轮转)
 
 ---
 
@@ -729,3 +730,30 @@
 - 保持 Compressor 名字 —— 名不副实，压缩暗示降维/摘要而非提取
 - LLM 输出 JSON —— Markdown 更自然，且与文件格式统一
 - MemoryStore 内部做异步队列 —— 职责混淆，Builder 是更好的异步控制点
+
+---
+
+### 决策 33 — 日志系统：标准库 logging + 按大小轮转
+
+**背景：** 项目当前没有任何日志系统，调试依赖 `print()` 或异常堆栈。M3 记忆模块即将开始实现，MemoryStore 任务清单中已写明"失败仅记日志，不抛异常"，需要一个统一的日志基础设施。
+
+**决策：**
+- 使用 Python 标准库 `logging`，零额外依赖
+- 提供 `get_logger(name: str) -> logging.Logger` 单一入口，懒加载初始化（首次调用自动配置 handler）
+- 文件输出使用 `RotatingFileHandler`，按大小轮转（10MB × 5 备份），写入 `data/logs/app.log`
+- 控制台输出使用 `StreamHandler(stderr, WARNING+)`，不干扰 `rich` 的 stdout 渲染
+- 2 个环境变量：`LOG_LEVEL`（默认 `INFO`）、`LOG_DIR`（默认 `data/logs/`）
+- 日志格式：`2026-07-01 14:30:00 | INFO     | memory.store | 写入记忆成功`
+
+**理由：**
+- 标准库足够 —— 项目是命令行工具，不是分布式系统，不需要 ELK/Sentry 等外部日志平台
+- 按大小轮转比按天轮转更适合 CLI 应用 —— 使用频率不均，按天可能在某次密集使用中产生超大文件
+- stderr 而非 stdout —— `rich` 接管 stdout 做 Markdown 渲染，日志写 stdout 会破坏终端输出
+- 懒加载 —— 不强制在 `main.py` 显式初始化，任意模块 `get_logger(__name__)` 即开即用
+- 环境变量控制级别和路径 —— 开发期设 `DEBUG` 看详细日志，正式使用设 `WARNING` 减少噪音
+
+**曾考虑的替代方案：**
+- `print()` 到 stderr —— 无级别过滤、无轮转、无时间戳，不可维护
+- `loguru` —— 功能强大但引入额外依赖，当前需求标准库完全覆盖
+- `TimedRotatingFileHandler` 按天轮转 —— CLI 应用使用频率不均，按大小更可预测
+- 仅在 `main.py` 初始化 root logger —— 强依赖启动顺序，`get_logger()` 调用在 import 阶段就会执行，此时 root 可能尚未配置

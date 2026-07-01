@@ -24,6 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 基础设施 | 提示词模块 (`src/prompts/`) | 加载 `data/prompts/` 下的模板；Agent 调用时强制拼接 `general_agent/` 公共前缀 |
 | 基础设施 | RAG 模块 (`src/rag/`) | Chroma（内存模式）+ `sentence_transformers`；召回（bi-encoder）→ 重排（cross-encoder） |
 | 基础设施 | 记忆模块 (`src/memory/`) | 按 Agent 分目录存储；持有 RAG 引用实现跨 Agent 语义检索 |
+| 基础设施 | 日志模块 (`src/logger.py`) | 封装 `logging` 标准库；`RotatingFileHandler`（10MB × 5）→ `data/logs/app.log`；`StreamHandler(stderr)` 输出 WARNING+ |
 | Agent | 主 Agent / 简历 / 学习 / 面试 / 岗位搜索 | 岗位搜索 Agent 为 TBD |
 
 **记忆模块是唯一共享通道：** 所有 Agent 通过记忆模块读写上下文，记忆按 Agent 隔离存储在 `data/memories/<agent>/` 下。跨 Agent 检索通过 `MemoryStore.query_cross_agent()` 走 RAG 语义搜索。
@@ -48,6 +49,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **新模块先讨论设计** — 每次开始实现新模块前，先与用户讨论模块设计细节（接口、职责边界、依赖关系），确认后再动手写代码。不要跳过讨论直接实现
 - **新文件先列方法清单** — 每次准备新建代码文件之前，先告知用户该文件计划提供哪些功能/方法/类，让用户确认后再创建文件
 - **非交互模块测试后提供 Notebook 代码** — 每次新模块测试完毕后，如果是非交互式功能（如 RAG 各组件），提供给用户一段可在 Jupyter Notebook 中运行的代码块，让用户自行验证；不要仅提供命令行测试结果
+- **日志用 `get_logger(__name__)`** — 禁止 `print()` 调试；各模块通过 `from src.logger import get_logger` + `logger = get_logger(__name__)` 获取 logger；失败记日志不抛异常（防御性编程）
+- **current.md 新增决策时同步更新 decision.md** — `docs/current.md` 的"重要决策"每新增一条编号，必须同步在 `docs/decision.md` 追加完整决策条目（背景/决策/理由/曾考虑的替代方案），两边的编号体系保持一致
 
 ## Doc Files
 

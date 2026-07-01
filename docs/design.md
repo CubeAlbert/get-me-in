@@ -28,6 +28,7 @@
   - [4.8 学习 Agent](#48-学习-agent)
   - [4.9 面试 Agent](#49-面试-agent)
   - [4.10 岗位搜索 Agent](#410-岗位搜索-agent)
+  - [4.11 日志模块](#411-日志模块)
 - [5. 参考资料与约定](#5-参考资料与约定)
 
 ---
@@ -136,6 +137,7 @@ get-me-in/
 │   │   └── schemas.py        # Memory, Message 等数据结构
 │   ├── utils/               # 通用工具
 │   │   └── chunker.py        # 通用文本切分（front-matter + --- 分隔）
+│   ├── logger.py             # 日志模块（横切基础设施）
 │   ├── llm/                 # LLM 调用封装
 │   │   ├── __init__.py
 │   │   └── client.py         # 双 tier（pro / flash）统一调用
@@ -280,6 +282,8 @@ get-me-in/
 | `RERANK_BATCH_SIZE` | Reranker 批处理大小 | `32` |
 | `RERANK_TOP_K` | Reranker 重排后保留数量 | `5` |
 | `HF_ENDPOINT` | HuggingFace 镜像（国内用户建议 `https://hf-mirror.com`） | 无（缺失时走官方站 huggingface.co） |
+| `LOG_LEVEL` | 日志级别（DEBUG / INFO / WARNING / ERROR） | `INFO` |
+| `LOG_DIR` | 日志文件目录 | `data/logs/` |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
 
@@ -663,6 +667,33 @@ time: 2026-06-30T14:30:00
 - 数据源的选择
 - 自动化程度（全自动搜索 vs 用户驱动）
 - 合规性考量
+
+### 4.11 日志模块
+
+**用途：** 横切基础设施，为所有模块提供统一的日志记录能力。封装 Python 标准库 `logging`，零额外依赖。
+
+**职责：**
+- 提供 `get_logger(name: str) -> logging.Logger` 单一入口，获取命名 logger
+- 懒加载初始化 —— 首次调用 `get_logger()` 时自动配置 handler 和格式，无需显式 `init()`
+- 日志写入 `data/logs/app.log`，按文件大小轮转（`RotatingFileHandler`，10MB × 5 备份）
+- `WARNING` 及以上级别同步输出到 stderr，不干扰 `rich` 的 stdout
+
+**关键接口 / 公开 API：**
+- `get_logger(name: str) -> logging.Logger` —— 获取命名 logger，首次调用自动初始化日志系统
+
+**日志格式：**
+```
+2026-07-01 14:30:00 | INFO     | memory.store | 写入记忆成功
+```
+
+**内部结构：**
+- `logger.py`：`get_logger()` 公开函数 + `_setup()` 内部初始化（读 config → 创建 `RotatingFileHandler` + `StreamHandler(stderr)` → 绑定到 root logger）
+
+**设计决策：**
+- 标准库即可，零额外依赖 —— `logging` + `RotatingFileHandler` 覆盖所有需求
+- 懒加载 —— 不强制在 `main.py` 中显式初始化，任意模块 `get_logger(__name__)` 即可
+- stderr 而非 stdout —— 不污染 `rich` 的终端渲染输出
+- 按大小轮转而非按天 —— CLI 应用使用频率不均，按大小更可预测
 
 ## 5. 参考资料与约定
 

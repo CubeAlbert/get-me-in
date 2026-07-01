@@ -119,46 +119,53 @@
 - ✅ 现有 `data/reference/` 下所有 `.md` 文件加 front-matter（`category: <子目录名>`）
 - ✅ `RagLoader` 改为从 `src.utils.chunker` 导入 Chunker
 
-### 1. 记忆数据结构 (`src/memory/schemas.py`)
+### 1. 日志模块 (`src/logger.py`)
+
+- ⬜ `_setup()` 内部初始化：读 `config.LOG_LEVEL` / `config.LOG_DIR` → 创建 `RotatingFileHandler`（10MB × 5）+ `StreamHandler(stderr, WARNING+)` → 绑定 root logger
+- ⬜ `get_logger(name: str) -> logging.Logger`：首次调用触发 `_setup()`，返回 `logging.getLogger(name)`
+- ⬜ `src/config.py` 追加 `LOG_LEVEL`（默认 `INFO`）、`LOG_DIR`（默认 `data/logs/`）
+- ⬜ 创建 `data/logs/` 目录（`.gitkeep` 占位，确保目录被 Git 追踪）
+
+### 2. 记忆数据结构 (`src/memory/schemas.py`)
 
 - ⬜ `Memory` 数据类：`id: str` (uuid) + `agent: str` + `time: datetime` + `content: str`
 - ⬜ `Message` 数据类：`role: str` + `content: str` + `timestamp: datetime`
 - ⬜ 事件数据类：`MemoryWrittenEvent(agent, memory, file_path)`、`MemoryDeletedEvent(agent, file_path)`
 - ⬜ `chunk_to_memory(chunk: Chunk) -> Memory` 转换函数
 
-### 2. MemoryStore 文件读写 + 事件 (`src/memory/store.py`)
+### 3. MemoryStore 文件读写 + 事件 (`src/memory/store.py`)
 
 - ⬜ `write_memory(agent, memory) -> None`：取 `memory.time` 生成时间戳文件名 → 格式化 front-matter + 正文 → 创建目录 → 写文件 → 发射 `MemoryWritten`
 - ⬜ `delete_memory(agent, file_path) -> None`：删文件 → 发射 `MemoryDeleted`
 - ⬜ `on_write(callback)` / `on_delete(callback)` 事件注册 + `_emit(event)` 发射
 - ⬜ 失败仅记日志，不抛异常
 
-### 3. MemoryIndexer (`src/memory/indexer.py`)
+### 4. MemoryIndexer (`src/memory/indexer.py`)
 
 - ⬜ `__init__(store)`：注册 `on_write` / `on_delete` 回调
 - ⬜ `_on_write(event)` → `rag.load(file_path)`
 - ⬜ `_on_delete(event)` → `rag.delete(where={"source_file": file_path})`
 
-### 4. MemoryRetriever (`src/memory/retriever.py`)
+### 5. MemoryRetriever (`src/memory/retriever.py`)
 
 - ⬜ `search(query, agent=None, top_k=5) -> list[Memory]`：内部调 `rag.search(filter={"agent": agent})` → `chunk_to_memory()`
 - ⬜ RAG 未就绪时抛出 `RuntimeError`
 
-### 5. 目录 + 文件准备
+### 6. 目录 + 文件准备
 
 - ⬜ 创建 `data/memories/` 及 5 个 Agent 子目录（`main/`、`resume/`、`learning/`、`interview/`、`job_search/`）
 
-### 6. MemoryBuilder + 提示词 (`src/memory/builder.py`)
+### 7. MemoryBuilder + 提示词 (`src/memory/builder.py`)
 
 - ⬜ 完善 `data/prompts/memory/builder.md` 系统提示词（输入格式 + 输出格式 + 构建规则）
 - ⬜ `MemoryBuilder.__init__(llm: LLMClient)`：加载 `builder.md` 提示词
 - ⬜ `build(conversation: list[Message], agent: str) -> list[Memory]`：对话 → Markdown → LLM → `---` 分隔输出 → Chunker 切分 → 注入 `id`/`time`/`agent` → 返回 Memory 列表
 
-### 7. Facade (`src/memory/__init__.py`)
+### 8. Facade (`src/memory/__init__.py`)
 
 - ⬜ `build_memories(conversation, agent, llm, store, sync_mode=False) -> list[Memory] | None`：sync 模式调 `builder.build()` → `store.write_memory()` 返回列表；async 模式开 daemon 线程执行后返回 `None`
 
-### 8. 端到端验证
+### 9. 端到端验证
 
 - ⬜ sync 模式：对话 → 构建 → 写入 → 检索 全链路验证
 - ⬜ async 模式：对话 → 构建（后台）→ 等待 → 检索验证
