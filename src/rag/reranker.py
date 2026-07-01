@@ -8,9 +8,12 @@
 """
 
 from src.config import config
+from src.logger import get_logger
 from src.utils.chunker import Chunk
 
 from sentence_transformers import CrossEncoder
+
+logger = get_logger(__name__)
 
 
 class Reranker:
@@ -22,9 +25,14 @@ class Reranker:
     """
 
     def __init__(self) -> None:
-        self._model = CrossEncoder(config.CROSS_ENCODER_MODEL)
+        model_name = config.CROSS_ENCODER_MODEL
+        logger.info("开始加载 cross-encoder 模型: %s", model_name)
+        self._model = CrossEncoder(model_name)
+        logger.info("cross-encoder 加载完成，开始预热")
+        self._model.predict([("预热", "预热")], show_progress_bar=False)
+        logger.info("cross-encoder 预热完成")
+
         self._default_batch_size = int(config.RERANK_BATCH_SIZE)
-        self._model.predict([("预热", "预热")])
 
     def rerank(
         self,
@@ -46,6 +54,8 @@ class Reranker:
 
         if not candidates:
             return []
+
+        logger.info("重排 %d 条候选 → top_k=%d", len(candidates), n_top)
 
         pairs = [(query, c.content) for c in candidates]
         scores = self._model.predict(

@@ -3,6 +3,10 @@
 import re
 from pathlib import Path
 
+from src.logger import get_logger
+
+logger = get_logger(__name__)
+
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
 
 
@@ -32,6 +36,8 @@ class PromptLoader:
                 f"No .md files found in {self._general_agent_dir}"
             )
 
+        logger.info("PromptLoader.get: 拼接 %d 个公共模板文件", len(md_files))
+
         parts: list[str] = []
         for f in md_files:
             parts.append(f.read_text(encoding="utf-8"))
@@ -46,6 +52,8 @@ class PromptLoader:
             FileNotFoundError: 指定文件不存在。
             KeyError: 模板中的占位符在 variables 中没有提供对应的值。
         """
+        logger.info("PromptLoader.get_raw: %s", name)
+
         file_path = self._prompts_dir / f"{name}.md"
         if not file_path.is_file():
             raise FileNotFoundError(f"Template not found: {file_path}")

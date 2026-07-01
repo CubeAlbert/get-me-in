@@ -10,10 +10,13 @@
 """
 
 from src.config import config
+from src.logger import get_logger
 from src.utils.chunker import Chunk
 from src.rag.embedder import Embedder
 
 import chromadb
+
+logger = get_logger(__name__)
 
 
 class ChromaStore:
@@ -40,6 +43,8 @@ class ChromaStore:
         """
         if not chunks:
             return
+
+        logger.info("ChromaStore.add: %d chunks → collection '%s'", len(chunks), collection)
 
         contents = [chunk.content for chunk in chunks]
         ids = [chunk.id for chunk in chunks]
@@ -69,6 +74,9 @@ class ChromaStore:
             匹配的 Chunk 列表，content 从 Chroma documents 字段还原。
         """
         n_results = top_k if top_k is not None else int(config.RETRIEVAL_TOP_K)
+
+        logger.info("ChromaStore.query: collection '%s', filter=%s, top_k=%s", collection, filter, top_k)
+
         query_vector = self._embedder.embed([query_text])[0]
 
         col = self._client.get_collection(collection)
@@ -102,6 +110,7 @@ class ChromaStore:
         try:
             col = self._client.get_collection(collection)
             col.delete(where={"source_file": source_file})
+            logger.info("ChromaStore.remove: source_file='%s' → collection '%s'", source_file, collection)
         except Exception:
             pass
 
@@ -126,6 +135,7 @@ class ChromaStore:
             ids = result.get("ids", [])
             if ids:
                 col.delete(ids=ids)
+            logger.info("ChromaStore.delete_by_filter: where=%s → %d 条, collection '%s'", where, len(ids), collection)
             return len(ids)
         except ValueError:
             raise

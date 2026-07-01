@@ -17,9 +17,12 @@ from enum import Enum
 from pathlib import Path
 
 from src.config import config
+from src.logger import get_logger
 from src.utils.chunker import Chunker
 from src.rag.reranker import Reranker
 from src.rag.store import ChromaStore
+
+logger = get_logger(__name__)
 
 
 class LoaderState(Enum):
@@ -68,6 +71,7 @@ class RagLoader:
         if not self._lock.acquire(blocking=False):
             return
         try:
+            logger.info("RagLoader: 开始加载")
             self._state = LoaderState.LOADING
             self._error_msg = None
 
@@ -83,9 +87,11 @@ class RagLoader:
                 self._write_timestamp()
 
             self._state = LoaderState.READY
+            logger.info("RagLoader: 加载完成 → READY")
         except Exception as e:
             self._state = LoaderState.ERROR
             self._error_msg = str(e)
+            logger.error("RagLoader: 加载失败 → ERROR", exc_info=True)
         finally:
             self._lock.release()
 
@@ -98,6 +104,8 @@ class RagLoader:
         if target is None:
             return self._reload_full()
 
+        logger.info("RagLoader: reload(target='%s')", target)
+
         if not self._lock.acquire(blocking=False):
             return "加载中，请稍后重试"
         try:
@@ -109,6 +117,7 @@ class RagLoader:
         """增量加载单个文件。Memory 模块运行时调用。"""
         with self._lock:
             try:
+                logger.info("RagLoader: 增量加载 %s", path)
                 self._state = LoaderState.LOADING
                 self._error_msg = None
 
@@ -119,6 +128,7 @@ class RagLoader:
             except Exception as e:
                 self._state = LoaderState.ERROR
                 self._error_msg = str(e)
+                logger.error("RagLoader: 增量加载失败 %s", path, exc_info=True)
 
     # ------------------------------------------------------------------
     # reload 子逻辑

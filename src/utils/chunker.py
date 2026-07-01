@@ -15,6 +15,10 @@ import re
 import uuid
 from dataclasses import dataclass, field
 
+from src.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class Chunk:
@@ -79,6 +83,7 @@ class Chunker:
         """
         fm_meta, body = self._parse_front_matter(text)
         if fm_meta is None:
+            logger.warning("Chunker: front-matter 缺失，返回空列表")
             # TODO: 未来增加无 front-matter 文件的处理逻辑
             #   - 纯文本自动注入默认 metadata
             #   - 或根据文件扩展名/目录推断 category
@@ -95,6 +100,7 @@ class Chunker:
                 continue
             chunks.append(Chunk(content=content, metadata=dict(merged)))
 
+        logger.info("Chunker: 切分完成，产出 %d 条 chunks", len(chunks))
         return chunks
 
     # ------------------------------------------------------------------

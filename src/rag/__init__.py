@@ -20,10 +20,13 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 import threading
 
+from src.logger import get_logger
 from src.utils.chunker import Chunk
 from src.rag.loader import LoaderState, RagLoader
 from src.rag.reranker import Reranker
 from src.rag.store import ChromaStore
+
+logger = get_logger(__name__)
 
 _store: ChromaStore | None = None
 _reranker: Reranker | None = None
@@ -44,10 +47,12 @@ def _ensure_init() -> None:
         _loader = RagLoader(store=_store, reranker=_reranker)
         t = threading.Thread(target=_loader.auto_load, daemon=True, name="rag-loader")
         t.start()
+        logger.info("RAG: 单例初始化完成，启动 daemon 加载线程")
 
 
 def start() -> None:
     """启动 RAG 后台初始化（模型加载 + 数据入库），不阻塞调用方。"""
+    logger.info("RAG: 启动后台初始化")
     t = threading.Thread(target=_ensure_init, daemon=True, name="rag-start")
     t.start()
 
@@ -77,8 +82,10 @@ def search(
     """
     _ensure_init()
     if _loader.state == LoaderState.LOADING:  # type: ignore[union-attr]
+        logger.warning("RAG: 未就绪 (state=%s)，拒绝查询", _loader.state.value)  # type: ignore[union-attr]
         raise RuntimeError("RAG 正在加载中，请稍后重试")
     if _loader.state == LoaderState.ERROR:  # type: ignore[union-attr]
+        logger.warning("RAG: 未就绪 (state=%s)，拒绝查询", _loader.state.value)  # type: ignore[union-attr]
         raise RuntimeError(f"RAG 加载失败: {_loader.error}")  # type: ignore[union-attr]
     candidates = _store.query(query_text, collection=collection, filter=filter)  # type: ignore[union-attr]
     return _reranker.rerank(query_text, candidates, top_k=top_k)  # type: ignore[union-attr]

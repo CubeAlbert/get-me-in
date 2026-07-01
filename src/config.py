@@ -24,6 +24,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from src.logger import get_logger
+
+logger = get_logger(__name__)
+logger.debug(".env 文件已加载")
+
 _VAR_SPECS: list[tuple[str, bool, str | None]] = [
     ("OPENAI_BASE_URL",   True, None),
     ("OPENAI_API_KEY",    True,  None),
@@ -54,7 +59,10 @@ for _name, _required, _default in _VAR_SPECS:
     else:
         _values[_name] = _value
 
+logger.debug("环境变量: %s", dict(sorted(_values.items())))
+
 if _missing:
+    logger.error("缺少 %d 个必填环境变量: %s", len(_missing), _missing)
     print("Missing required environment variables:")
     for _name in _missing:
         print(f"  • {_name}")
@@ -67,5 +75,7 @@ if _missing:
 # 而是直接读 os.environ）
 for _name, _value in _values.items():
     os.environ.setdefault(_name, _value)
+
+logger.debug("环境变量校验通过，共 %d 项", len(_values))
 
 config = SimpleNamespace(**_values)

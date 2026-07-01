@@ -8,8 +8,11 @@
 """
 
 from src.config import config
+from src.logger import get_logger
 
 from sentence_transformers import SentenceTransformer
+
+logger = get_logger(__name__)
 
 
 class Embedder:
@@ -19,7 +22,11 @@ class Embedder:
     """
 
     def __init__(self) -> None:
-        self._model = SentenceTransformer(config.BI_ENCODER_MODEL)
+        model_name = config.BI_ENCODER_MODEL
+        logger.info("开始加载 bi-encoder 模型: %s", model_name)
+        self._model = SentenceTransformer(model_name)
+        logger.info("bi-encoder 模型加载完成")
+
         self._default_batch_size = int(config.EMBED_BATCH_SIZE)
 
     def embed(
@@ -35,10 +42,12 @@ class Embedder:
             与 texts 等长的向量列表。
         """
         bs = batch_size if batch_size is not None else self._default_batch_size
+        logger.info("向量化 %d 条文本，batch_size=%d", len(texts), bs)
         result = self._model.encode(
             texts,
             batch_size=bs,
             convert_to_numpy=True,
             normalize_embeddings=True,
+            show_progress_bar=False,
         )
         return [vec.tolist() for vec in result]

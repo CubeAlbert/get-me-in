@@ -11,6 +11,9 @@
 from openai import OpenAI
 
 from src.config import config
+from src.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class LLMClient:
@@ -40,6 +43,7 @@ class LLMClient:
             模型回复文本
         """
         kwargs.setdefault("model", config.LLM_PRO_MODEL)
+        logger.debug("LLM pro 调用: model=%s, messages=%d", kwargs["model"], len(messages))
         response = self._client.chat.completions.create(
             messages=messages,
             **kwargs,
@@ -57,6 +61,7 @@ class LLMClient:
             模型回复文本
         """
         kwargs.setdefault("model", config.LLM_FLASH_MODEL)
+        logger.debug("LLM flash 调用: model=%s, messages=%d", kwargs["model"], len(messages))
         response = self._client.chat.completions.create(
             messages=messages,
             **kwargs,
