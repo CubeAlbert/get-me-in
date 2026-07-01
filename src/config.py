@@ -11,6 +11,9 @@
         base_url=config.OPENAI_BASE_URL,
         api_key=config.OPENAI_API_KEY,
     )
+
+注意：在 _VAR_SPECS 中添加新变量时，必须同步更新项目根目录的
+.env.example 文件（追加对应的注释和默认值）。
 """
 
 import os
@@ -34,6 +37,8 @@ _VAR_SPECS: list[tuple[str, bool, str | None]] = [
     ("RERANK_BATCH_SIZE",  False, "32"),
     ("RERANK_TOP_K",       False, "5"),
     ("HF_ENDPOINT",        False, None),
+    ("LOG_LEVEL",          False, "INFO"),
+    ("LOG_DIR",            False, "data/logs/"),
 ]
 
 _missing: list[str] = []

@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** 任务 1 — 日志模块 (`src/logger.py`)
+**当前任务：** 任务 2 — 记忆数据结构 (`src/memory/schemas.py`)
 
-**当前子任务：** 实现 `get_logger()` + `_setup()` 内部初始化，`src/config.py` 追加 `LOG_LEVEL`/`LOG_DIR`
+**当前子任务：** 实现 Memory / Message / 事件 数据类
 
 **当前阻塞：** 无
 
-**下一步：** 创建 `src/logger.py`，封装 `logging` 标准库（RotatingFileHandler + stderr），然后继续 M3 任务 2（schemas.py）
+**下一步：** 创建 `src/memory/schemas.py`，定义 Memory、Message、事件数据类及 chunk_to_memory 转换函数
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
