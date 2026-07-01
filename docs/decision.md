@@ -741,7 +741,7 @@
 - 使用 Python 标准库 `logging`，零额外依赖
 - 提供 `get_logger(name: str) -> logging.Logger` 单一入口，懒加载初始化（首次调用自动配置 handler）
 - 文件输出使用 `RotatingFileHandler`，按大小轮转（10MB × 5 备份），写入 `data/logs/app.log`
-- 控制台输出使用 `StreamHandler(stderr, WARNING+)`，不干扰 `rich` 的 stdout 渲染
+- 控制台输出使用 `StreamHandler(stderr, ERROR+)`，不干扰 `rich` 的 stdout 渲染
 - 2 个环境变量：`LOG_LEVEL`（默认 `INFO`）、`LOG_DIR`（默认 `data/logs/`）
 - 日志格式：`2026-07-01 14:30:00 | INFO     | memory.store | 写入记忆成功`
 

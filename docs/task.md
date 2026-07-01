@@ -121,7 +121,7 @@
 
 ### 1. 日志模块 (`src/logger.py`)
 
-- ✅ `_setup()` 内部初始化：读 `config.LOG_LEVEL` / `config.LOG_DIR` → 创建 `RotatingFileHandler`（10MB × 5）+ `StreamHandler(stderr, WARNING+)` → 绑定 root logger
+- ✅ `_setup()` 内部初始化：读 `config.LOG_LEVEL` / `config.LOG_DIR` → 创建 `RotatingFileHandler`（10MB × 5）+ `StreamHandler(stderr, ERROR+)` → 绑定 root logger
 - ✅ `get_logger(name: str) -> logging.Logger`：首次调用触发 `_setup()`，返回 `logging.getLogger(name)`
 - ✅ `src/config.py` 追加 `LOG_LEVEL`（默认 `INFO`）、`LOG_DIR`（默认 `data/logs/`）
 - ✅ 创建 `data/logs/` 目录（`.gitkeep` 占位，确保目录被 Git 追踪）

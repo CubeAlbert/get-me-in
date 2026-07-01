@@ -44,4 +44,4 @@
 31. Chunker 通用化：移至 `src/utils/chunker.py`，新增 front-matter 解析，所有文件统一格式
 32. MemoryBuilder 替代 Compressor：从对话构建记忆而非简单压缩，async/sync 由 Builder Facade 控制，Store 纯同步
 33. Chunker 强制 front-matter：所有输入文本必须以 `---` KV 块开头，无 front-matter 返回空列表并留 TODO 桩；caller metadata 覆盖 front-matter 同名字段
-34. 日志使用 Python 标准库 `logging`：`RotatingFileHandler`（10MB × 5）写入 `data/logs/app.log`，`StreamHandler(stderr)` 输出 WARNING+；懒加载初始化（`get_logger()` 首次调用自动配置）；`LOG_LEVEL`（默认 INFO）和 `LOG_DIR`（默认 `data/logs/`）通过环境变量配置
+34. 日志使用 Python 标准库 `logging`：`RotatingFileHandler`（10MB × 5）写入 `data/logs/app.log`，`StreamHandler(stderr)` 输出 ERROR+；懒加载初始化（`get_logger()` 首次调用自动配置）；`LOG_LEVEL`（默认 INFO）和 `LOG_DIR`（默认 `data/logs/`）通过环境变量配置

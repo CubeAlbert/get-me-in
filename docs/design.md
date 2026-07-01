@@ -676,7 +676,7 @@ time: 2026-06-30T14:30:00
 - 提供 `get_logger(name: str) -> logging.Logger` 单一入口，获取命名 logger
 - 懒加载初始化 —— 首次调用 `get_logger()` 时自动配置 handler 和格式，无需显式 `init()`
 - 日志写入 `data/logs/app.log`，按文件大小轮转（`RotatingFileHandler`，10MB × 5 备份）
-- `WARNING` 及以上级别同步输出到 stderr，不干扰 `rich` 的 stdout
+- `ERROR` 及以上级别同步输出到 stderr，不干扰 `rich` 的 stdout
 
 **关键接口 / 公开 API：**
 - `get_logger(name: str) -> logging.Logger` —— 获取命名 logger，首次调用自动初始化日志系统

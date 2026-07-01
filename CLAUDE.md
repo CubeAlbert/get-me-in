@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 基础设施 | 提示词模块 (`src/prompts/`) | 加载 `data/prompts/` 下的模板；Agent 调用时强制拼接 `general_agent/` 公共前缀 |
 | 基础设施 | RAG 模块 (`src/rag/`) | Chroma（内存模式）+ `sentence_transformers`；召回（bi-encoder）→ 重排（cross-encoder） |
 | 基础设施 | 记忆模块 (`src/memory/`) | 按 Agent 分目录存储；持有 RAG 引用实现跨 Agent 语义检索 |
-| 基础设施 | 日志模块 (`src/logger.py`) | 封装 `logging` 标准库；`RotatingFileHandler`（10MB × 5）→ `data/logs/app.log`；`StreamHandler(stderr)` 输出 WARNING+ |
+| 基础设施 | 日志模块 (`src/logger.py`) | 封装 `logging` 标准库；`RotatingFileHandler`（10MB × 5）→ `data/logs/app.log`；`StreamHandler(stderr)` 输出 ERROR+ |
 | Agent | 主 Agent / 简历 / 学习 / 面试 / 岗位搜索 | 岗位搜索 Agent 为 TBD |
 
 **记忆模块是唯一共享通道：** 所有 Agent 通过记忆模块读写上下文，记忆按 Agent 隔离存储在 `data/memories/<agent>/` 下。跨 Agent 检索通过 `MemoryStore.query_cross_agent()` 走 RAG 语义搜索。

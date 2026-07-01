@@ -15,10 +15,9 @@
 
 import logging
 import logging.handlers
+import os
 import sys
 from pathlib import Path
-
-from src.config import config
 
 _initialized = False
 
@@ -36,15 +35,20 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def _setup() -> None:
-    """内部初始化：读 config → 创建 handler → 绑定 root logger。
+    """内部初始化：从 os.environ 读 LOG_LEVEL/LOG_DIR → 创建 handler → 绑定 root logger。
+
+    注意：不 import src.config（避免与 config.py 形成循环导入），直接从 os.environ
+    读取。load_dotenv() 已在 config.py 中先于本模块执行，os.environ 已有值。
 
     - 文件 handler：RotatingFileHandler，10MB × 5 备份，写入 data/logs/app.log
     - 控制台 handler：StreamHandler(stderr)，仅 WARNING+ 级别，不干扰 rich 的 stdout
     """
-    log_dir = Path(config.LOG_DIR)
-    log_dir.mkdir(parents=True, exist_ok=True)
+    log_level = os.environ.get("LOG_LEVEL", "INFO")
+    log_dir = os.environ.get("LOG_DIR", "data/logs/")
 
-    level = getattr(logging, config.LOG_LEVEL.upper(), logging.INFO)
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+
+    level = getattr(logging, log_level.upper(), logging.INFO)
 
     fmt = logging.Formatter(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -56,7 +60,7 @@ def _setup() -> None:
 
     # 文件 handler — 记录所有 >= LOG_LEVEL 的消息
     fh = logging.handlers.RotatingFileHandler(
-        log_dir / "app.log",
+        Path(log_dir) / "app.log",
         maxBytes=10 * 1024 * 1024,  # 10 MB
         backupCount=5,
         encoding="utf-8",
@@ -65,8 +69,11 @@ def _setup() -> None:
     fh.setFormatter(fmt)
     root.addHandler(fh)
 
-    # stderr handler — WARNING+ 输出到控制台，不干扰 rich 的 stdout
+    # stderr handler — ERROR+ 输出到控制台，简洁样式 + Unicode 符号
+    console_fmt = logging.Formatter(
+        "✘ %(name)s | %(message)s"  # ✘ module | message
+    )
     ch = logging.StreamHandler(sys.stderr)
-    ch.setLevel(logging.WARNING)
-    ch.setFormatter(fmt)
+    ch.setLevel(logging.ERROR)
+    ch.setFormatter(console_fmt)
     root.addHandler(ch)
