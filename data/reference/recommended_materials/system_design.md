@@ -1,3 +1,7 @@
+---
+category: recommended_materials
+---
+
 ### 《Designing Data-Intensive Applications》— 中文译名《数据密集型应用系统设计》
 
 **推荐理由：** 系统设计面试的必读书。覆盖数据模型、存储引擎、分布式共识、批流处理等核心主题。每章独立，可按需跳读。

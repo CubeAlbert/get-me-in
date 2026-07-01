@@ -1,3 +1,7 @@
+---
+category: resume_examples
+---
+
 ### 后端开发简历 — 项目经验
 
 > **电商平台订单系统** | Python / Django / MySQL / Redis

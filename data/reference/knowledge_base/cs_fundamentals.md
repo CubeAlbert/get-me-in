@@ -1,3 +1,7 @@
+---
+category: knowledge_base
+---
+
 ### Python GIL（全局解释器锁）
 
 **结论：** GIL 是 CPython 的机制，同一时刻只有一个线程执行 Python 字节码。
