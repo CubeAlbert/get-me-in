@@ -58,8 +58,19 @@ def is_ready() -> bool:
     return _loader.state == LoaderState.READY  # type: ignore[union-attr]
 
 
-def search(query_text: str, collection: str = "references", top_k: int | None = None) -> list[Chunk]:
+def search(
+    query_text: str,
+    collection: str = "references",
+    filter: dict | None = None,
+    top_k: int | None = None,
+) -> list[Chunk]:
     """检索并重排，返回最终结果。
+
+    Args:
+        query_text: 查询文本。
+        collection: 目标 collection，默认 ``"references"``。
+        filter: Chroma where 条件，透传至 store.query()。None 表示全库检索。
+        top_k: 返回数量，默认由 RERANK_TOP_K 环境变量控制。
 
     Raises:
         RuntimeError: RAG 处于 LOADING 或 ERROR 状态时抛出。
@@ -69,8 +80,28 @@ def search(query_text: str, collection: str = "references", top_k: int | None = 
         raise RuntimeError("RAG 正在加载中，请稍后重试")
     if _loader.state == LoaderState.ERROR:  # type: ignore[union-attr]
         raise RuntimeError(f"RAG 加载失败: {_loader.error}")  # type: ignore[union-attr]
-    candidates = _store.query(query_text, collection=collection)  # type: ignore[union-attr]
+    candidates = _store.query(query_text, collection=collection, filter=filter)  # type: ignore[union-attr]
     return _reranker.rerank(query_text, candidates, top_k=top_k)  # type: ignore[union-attr]
+
+
+def delete(where: dict, collection: str = "memories") -> int:
+    """按 metadata 条件删除 chunk。
+
+    Args:
+        where: Chroma where 条件，空 ``{}`` 抛 ValueError。
+        collection: 目标 collection，默认 ``"memories"``。
+
+    Returns:
+        删除条数。
+
+    Raises:
+        ValueError: where 为空。
+        RuntimeError: RAG 处于 LOADING 状态。
+    """
+    _ensure_init()
+    if _loader.state == LoaderState.LOADING:  # type: ignore[union-attr]
+        raise RuntimeError("RAG 正在加载中，请稍后重试")
+    return _store.delete_by_filter(where, collection=collection)  # type: ignore[union-attr]
 
 
 def load(target: str | None = None) -> str:

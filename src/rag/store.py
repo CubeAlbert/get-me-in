@@ -104,3 +104,30 @@ class ChromaStore:
             col.delete(where={"source_file": source_file})
         except Exception:
             pass
+
+    def delete_by_filter(self, where: dict, collection: str) -> int:
+        """按 metadata 条件删除 chunk，返回删除条数。
+
+        Args:
+            where: Chroma where 条件，空 ``{}`` 抛 ValueError 防止误删全库。
+            collection: collection 名。
+
+        Returns:
+            实际删除的条目数。collection 不存在时返回 0。
+
+        Raises:
+            ValueError: where 为空 dict。
+        """
+        if not where:
+            raise ValueError("where 不能为空，防止误删全部数据")
+        try:
+            col = self._client.get_collection(collection)
+            result = col.get(where=where)
+            ids = result.get("ids", [])
+            if ids:
+                col.delete(ids=ids)
+            return len(ids)
+        except ValueError:
+            raise
+        except Exception:
+            return 0

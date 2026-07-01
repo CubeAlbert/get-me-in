@@ -114,8 +114,8 @@
 
 - ✅ Chunker/Chunk 从 `src/rag/chunker.py` 移至 `src/utils/chunker.py`，更新 `src/rag/` 下所有 import
 - ✅ Chunker.chunk() 新增 front-matter 解析：正则匹配 `^---` KV 块 → 注入所有 Chunk；无 front-matter 返回 []，留 TODO 桩
-- ⬜ RAG `search()` 加 `filter: dict | None` 参数，透传 Chroma `where`
-- ⬜ RAG 新增 `delete(where: dict, collection="memories") -> int`，空 `{}` 抛 `ValueError`
+- ✅ RAG `search()` 加 `filter: dict | None` 参数，透传 Chroma `where`
+- ✅ RAG 新增 `delete(where: dict, collection="memories") -> int`，空 `{}` 抛 `ValueError`
 - ✅ 现有 `data/reference/` 下所有 `.md` 文件加 front-matter（`category: <子目录名>`）
 - ✅ `RagLoader` 改为从 `src.utils.chunker` 导入 Chunker
 

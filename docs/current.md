@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** 任务 0 — M2 收尾（Chunker 抽出 + RAG 接口扩充 + reference 改造）
+**当前任务：** 任务 1 — 记忆数据结构 (`src/memory/schemas.py`)
 
-**当前子任务：** RAG `search()` 加 `filter` 参数，透传 Chroma `where`
+**当前子任务：** 实现 Memory / Message / 事件 数据类
 
 **当前阻塞：** 无
 
-**下一步：** 修改 `src/rag/__init__.py` 的 `search()` 签名，加 `filter` 参数透传至 `store.query()`
+**下一步：** 创建 `src/memory/schemas.py`，定义 Memory、Message、事件数据类及 chunk_to_memory 转换函数
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
