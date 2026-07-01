@@ -4,11 +4,11 @@
 
 **当前任务：** 任务 0 — M2 收尾（Chunker 抽出 + RAG 接口扩充 + reference 改造）
 
-**当前子任务：** Chunker.chunk() 新增 front-matter 解析
+**当前子任务：** RAG `search()` 加 `filter` 参数，透传 Chroma `where`
 
 **当前阻塞：** 无
 
-**下一步：** 实现 Chunker front-matter 解析（检测 `^---` KV → 剥离 → 注入 metadata）
+**下一步：** 修改 `src/rag/__init__.py` 的 `search()` 签名，加 `filter` 参数透传至 `store.query()`
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -43,3 +43,4 @@
 30. 一文件一条记忆：`data/memories/<agent>/<yyyyMMddHHmmss.fff>.md`，front-matter KV 格式持久化 metadata（id/agent/time）
 31. Chunker 通用化：移至 `src/utils/chunker.py`，新增 front-matter 解析，所有文件统一格式
 32. MemoryBuilder 替代 Compressor：从对话构建记忆而非简单压缩，async/sync 由 Builder Facade 控制，Store 纯同步
+33. Chunker 强制 front-matter：所有输入文本必须以 `---` KV 块开头，无 front-matter 返回空列表并留 TODO 桩；caller metadata 覆盖 front-matter 同名字段

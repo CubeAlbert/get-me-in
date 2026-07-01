@@ -702,6 +702,10 @@
 - 用 YAML front-matter —— 需要 `pyyaml` 依赖，当前需求不必要
 - 不改 Chunker，由 RagLoader/MemoryStore 各自解析 front-matter —— 重复逻辑
 
+**实施细化（2026-07-01）：**
+- `chunk()` 返回值从空列表变为 front-matter 强制要求：无 front-matter 的输入返回 `[]`，在调用处留 TODO 桩供未来扩展（如纯文本自动注入默认 metadata）
+- 实现方式：编译正则 `_FM_RE` 匹配 `^---...---`，解析失败 → 返回 `[]`；成功 → `{**fm_meta, **caller_meta}` 合并（caller 覆盖）
+
 ---
 
 ### 决策 32 — MemoryBuilder 替代 Compressor（对话构建而非压缩）
