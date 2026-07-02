@@ -179,4 +179,4 @@
 - ✅ async 模式：对话 → 构建（后台）→ 等待 → 检索验证
 - ✅ 删除：写入 → 检索确认存在 → 删除文件 → Chroma 行数 -1
 - ✅ `/ragreload` 全量重载后检索验证（metadata 持久化确认）
-- ⚠️ 已知小问题：ragreload 后偶发 1 条重复（Chroma in-memory `delete(where=)` 偶发漏删，非阻塞，后续用 `delete_collection` 重建替代逐文件 remove）
+- ✅ Chroma in-memory `delete(where=)` 漏删已修复：全量 `/ragreload` 用 `delete_collection` 原子删除后重建；单文件重载保留 `remove` + `add`（接受间歇性不匹配，见决策 39）

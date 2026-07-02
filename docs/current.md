@@ -1,10 +1,8 @@
 # 当前状态
 
-**当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
-
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾 ✅ 基本完成
 
-**当前任务：** 全部完成（⚠️ ragreload 偶发重复，非阻塞）
+**当前任务：** 全部完成 ✅
 
 **当前阻塞：** 无
 
@@ -49,3 +47,4 @@
 36. Memory 类别重构：`category` 字段（"fact" / "preference"），builder.md 输出 `{"facts": "<string>", "preferences": "<string>"}` 严格 JSON，废弃 entities/events 合并入 facts
 37. MemoryBuilder：`response_format={"type": "json_object"}` 强制 JSON，LLM 输出按 `\n` 拆分 → `\n\n---\n\n` 拼接 → Chunker 切分独立索引
 38. 记忆模块统一入口：`src/memory/__init__.py` 四大公开函数（`init`/`build_memories`/`search_memories`/`delete_memory`），类 RAG 单例懒加载；文件名加 `category` 防冲突；`---` 分隔符实现一文件多条独立检索
+39. Chroma in-memory `delete(where=...)` 不可靠（社区已知 bug：#4275/#5367）：全量 `/ragreload` 改用 `delete_collection` 原子删除后重建，单文件重载保留 `remove` + `add`（接受间歇性）

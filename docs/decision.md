@@ -46,6 +46,7 @@
 - [决策 36 — Memory 类别重构：fact/preference 两分类 + builder 严格 JSON 输出](#决策-36--memory-类别重构factpreference-两分类--builder-严格-json-输出)
 - [决策 37 — MemoryBuilder JSON 强制模式 + 换行拆分](#决策-37--memorybuilder-json-强制模式--换行拆分)
 - [决策 38 — 记忆模块统一入口 + 文件名 category + --- 分隔符](#决策-38--记忆模块统一入口--文件名-category----分隔符)
+- [决策 39 — Chroma in-memory delete(where=) 不可靠：delete_collection 替代方案](#决策-39--chroma-in-memory-deletewhere-不可靠delete_collection-替代方案)
 
 ---
 
@@ -876,3 +877,26 @@
 - 暴露子模块让调用方自己组装 —— 耦合度高，调用方需了解内部模块关系
 - 每行独立文件 —— 同时间戳文件名冲突，需错开时间戳（脆弱）
 - 整段存一条不拆分 —— RAG 检索粒度太粗
+
+---
+
+### 决策 39 — Chroma in-memory `delete(where=)` 不可靠：`delete_collection` 替代方案
+
+**背景：** 测试发现 ChromaDB v1.5.9 in-memory 模式下 `col.delete(where={"source_file": "..."})` 间歇性不匹配（返回成功但实际 0 条删除），导致 `/ragreload` 全量重载后偶发重复条目。经检索确认这是 Chroma 自身已知问题（[#4275](https://github.com/chroma-core/chroma/issues/4275) 删除后查询结果异常 v1.0.0+；[#5367](https://github.com/chroma-core/chroma/issues/5367) `query()` where filter 不匹配但 `get()` 正常）。项目路径规范化（`Path.resolve()` + `str().replace("\\", "/")`）两端一致，排除自身 bug。
+
+**决策：**
+- 全量 `/ragreload`（无参数）：先调 `ChromaStore.delete_collection()` 原子删除整个 collection，再遍历所有 `.md` 文件重新入库。彻底绕过 `delete(where=...)` 的 metadata 匹配问题
+- 单文件 `/ragreload <keyword>`：保留现有 `_load_one()` 逻辑（`remove` + `add`），接受间歇性不匹配——单文件场景影响范围极小，不值得引入 collection 重建
+- `ChromaStore.delete_collection(name)` 封装 `self._client.delete_collection(name)`，try/except 静默处理 collection 不存在的情况
+
+**理由：**
+- `delete_collection` 是 Chroma 的原子操作，不依赖 metadata filter，可靠性远高于 `delete(where=...)`
+- 全量重载本身就遍历所有文件，drop 后重建的总工作量与逐文件 `remove` + `add` 相当
+- 单文件重载走 `delete_collection` 会清掉所有其他文件的数据，不可行；但单文件场景下 `where` 漏删只影响一个文件，且下次全量重载会自动修正
+- 这是 Chroma 上游 bug，等待修复不现实（#4275 从 v1.0.0 到 v1.5.9 未修）
+
+**曾考虑的替代方案：**
+- 等待 Chroma 官方修复 —— #4275 跨越 5+ 个大版本未修，不可依赖
+- 切换到持久化模式 —— 持久化模式同样用 DuckDB，bug 可能存在；且内存模式是设计决策 3 的约定
+- 用 `col.get(where=...)` + `col.delete(ids=[...])` 替代 —— `get(where=...)` 同样有 metadata 匹配问题（#5367）
+- 全量和单文件统一用 `delete_collection` —— 单文件场景 drop 整个 collection 代价不可接受

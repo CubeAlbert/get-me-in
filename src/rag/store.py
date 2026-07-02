@@ -114,6 +114,21 @@ class ChromaStore:
         except Exception:
             pass
 
+    def delete_collection(self, collection: str) -> None:
+        """删除整个 collection。
+
+        用于全量重载场景，原子性 drop 后重建，避免依赖 in-memory 模式
+        下 ``delete(where=...)`` 的 metadata 匹配 bug。
+
+        Args:
+            collection: 要删除的 collection 名。
+        """
+        try:
+            self._client.delete_collection(collection)
+            logger.info("ChromaStore.delete_collection: '%s'", collection)
+        except Exception:
+            pass
+
     def delete_by_filter(self, where: dict, collection: str) -> int:
         """按 metadata 条件删除 chunk，返回删除条数。
 

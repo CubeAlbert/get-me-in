@@ -135,13 +135,19 @@ class RagLoader:
     # ------------------------------------------------------------------
 
     def _reload_full(self) -> str:
-        """全量重载，走状态机。"""
+        """全量重载，走状态机。
+
+        先 drop collection 再全量重建，避免 in-memory 模式下
+        ``delete(where=...)`` 的 metadata 匹配不可靠问题。
+        """
         if not self._lock.acquire(blocking=False):
             return "加载中，请稍后重试"
         try:
             self._state = LoaderState.LOADING
             self._error_msg = None
 
+            self._store.delete_collection("references")
+            self._store.delete_collection("memories")
             count = self._load_all()
             if getattr(config, "CHROMA_PERSIST_DIR", None):
                 self._write_timestamp()
