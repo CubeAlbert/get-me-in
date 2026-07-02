@@ -25,7 +25,7 @@
   - `src/llm/` 完成适配层封装，至少支持一个后端（Claude API 或 OpenAI）
   - `src/cli/app.py` 实现基本对话循环（`input()` + `rich` 渲染 Markdown 输出 + `$EDITOR` 长文本输入）
   - `src/prompts/loader.py` 完成：`get(**kwargs)` 拼接 `general_agent/` + 替换占位符；`get_raw(name, **kwargs)` 加载指定文件跳过拼接
-  - `data/prompts/` 下 `general_agent/` 已创建 7 个模板文件（`01_role.md` ~ `07_reserved.md`），`memory_compressor.md` 已创建占位文件
+  - `data/prompts/` 下 `general_agent/` 已创建 7 个模板文件（`01_role.md` ~ `07_reserved.md`），`memory/builder.md` 已创建 MemoryBuilder 系统提示词
   - `main.py` 能启动并完成一轮对话
 - **前置依赖：** 无
 
@@ -53,9 +53,9 @@
   - `src/memory/store.py` 同步文件系统读写 + 事件机制（`on_write` / `on_delete`）
   - `src/memory/indexer.py` MemoryIndexer 监听事件 → RAG 索引
   - `src/memory/retriever.py` MemoryRetriever 语义检索（`rag.search(filter=...)`）
-  - `src/memory/builder.py` MemoryBuilder LLM 从对话构建记忆（`data/prompts/memory/builder.md`）
+  - `src/memory/builder.py` MemoryBuilder：对话 JSON → `chat_flash(response_format=json_object)` → `\n` 拆分，每行一条 Memory
   - `src/memory/__init__.py` Facade：`build_memories()` + sync/async 控制
-  - `data/memories/<agent>/` 目录结构就绪，一文件一条记忆（`yyyyMMddHHmmss.fff.md`）
+  - 一文件一条记忆（`yyyyMMddHHmmss.fff.md`），目录由 `write_memory()` 自动创建
   - 端到端：构建记忆 → 写入 → 索引 → 检索 链路验证通过
 - **前置依赖：** 里程碑 1（LLM）+ 里程碑 2（RAG）
 

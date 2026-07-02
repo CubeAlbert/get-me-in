@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** 任务 7 — MemoryBuilder + 提示词 (`src/memory/builder.py`)
+**当前任务：** 任务 8 — Facade (`src/memory/__init__.py`)
 
-**当前子任务：** 讨论并完善 `data/prompts/memory/builder.md` 系统提示词
+**当前子任务：** 实现 `build_memories()` 统一入口，支持 sync/async 模式
 
 **当前阻塞：** 无
 
-**下一步：** 与用户讨论 MemoryBuilder 提示词设计：输入格式（对话历史）、输出格式（`---` 分隔的记忆条目）、构建规则（提取关键信息而非简单压缩），确认后编写代码
+**下一步：** 创建 `src/memory/__init__.py`，实现 `build_memories(conversation, agent, llm, store, sync_mode=False)`：sync 调 builder → store.write_memory() 返回列表；async 开 daemon 线程返回 None
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -47,3 +47,4 @@
 34. Message 为通用基础设施（`src/message.py`）：7 字段（id/timestamp/role/message/event_type/event_payload/thinking），统一覆盖用户输入、系统指令、工具调用、工具结果和 LLM 回复；role 保留用于消息来源控制，event_type 区分消息语义，thinking 未来由 SHOW_THINKING flag 控制展示
 35. MemoryStore 格式化工具抽出到 `src/utils/formatters.py`：`timestamp_to_filename(time)` + `memory_to_markdown(agent, memory)` 作为公共函数，Store 不持有格式化逻辑
 36. Memory 类别重构：`category` 字段（"fact" / "preference"），builder.md 输出 `{"facts": "<string>", "preferences": "<string>"}` 严格 JSON，废弃 entities/events 合并入 facts
+37. MemoryBuilder：`responses_format={"type": "json_object"}` 强制 JSON，LLM 输出按 `\n` 拆分每行一条 Memory，不依赖 Chunker

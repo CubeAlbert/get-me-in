@@ -160,9 +160,10 @@
 
 ### 7. MemoryBuilder + 提示词 (`src/memory/builder.py`)
 
-- ⬜ 完善 `data/prompts/memory/builder.md` 系统提示词（输入格式 + 输出格式 + 构建规则）
-- ⬜ `MemoryBuilder.__init__(llm: LLMClient)`：加载 `builder.md` 提示词
-- ⬜ `build(conversation: list[Message], agent: str) -> list[Memory]`：对话 → Markdown → LLM → `---` 分隔输出 → Chunker 切分 → 注入 `id`/`time`/`agent` → 返回 Memory 列表
+- ✅ 完善 `data/prompts/memory/builder.md` 系统提示词（facts/preferences 两分类，换行分隔，严格 JSON 输出）
+- ✅ `MemoryBuilder.__init__(llm: LLMClient)`：加载 `builder.md` 提示词
+- ✅ `build(conversation, agent) -> list[Memory]`：对话 → JSON 序列化 → flash LLM (`response_format=json_object`) → `json.loads()` → `\n` 拆分 → 注入 `id`/`time`/`agent`/`category` → Memory 列表
+- ✅ 添加 `time.time()` 耗时 debug 日志
 
 ### 8. Facade (`src/memory/__init__.py`)
 

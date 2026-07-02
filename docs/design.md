@@ -522,7 +522,7 @@ Store 与 RAG 完全隔离。
 | `store.py` | 同步文件系统读写。`write_memory()`：生成时间戳文件名 → front-matter 格式化 → 写文件 → 发射事件。`delete_memory()`：删文件 → 发射事件。不提供读方法，不持队列/线程 |
 | `indexer.py` | `MemoryIndexer`：监听 Store 事件，`_on_write` → `rag.load(file_path)`，`_on_delete` → `rag.delete(where={"source_file": file_path})`。构造即绑定，无公开方法 |
 | `retriever.py` | `MemoryRetriever`：封装 `rag.search(filter={"agent": ...})`，`Chunk` → `Memory` 转换后返回 |
-| `builder.py` | `MemoryBuilder`：加载 `data/prompts/memory/builder.md` 系统提示词 → 对话作为用户消息 → LLM 输出 `{"facts": "<string>", "preferences": "<string>"}` 严格 JSON → `json.loads()` 解析 → 注入 `id`/`time`/`agent`/`category` → `list[Memory]` |
+| `builder.py` | `MemoryBuilder`：加载 `data/prompts/memory/builder.md` 系统提示词 → 对话序列化为 JSON → `chat_flash(response_format=json_object)` 强制 JSON → `json.loads()` 解析 `{"facts": "...", "preferences": "..."}` → 按 `\n` 拆分行，每行一条 Memory → 注入 `id`/`time`/`agent`/`category` → `list[Memory]` |
 | `__init__.py` | Facade：`build_memories()` 统一入口，支持 sync/async 模式 |
 
 **文件组织：**

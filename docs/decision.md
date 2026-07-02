@@ -44,6 +44,7 @@
 - [决策 34 — Message 通用消息模型：7 字段 + 模块分离](#决策-34--message-通用消息模型7-字段--模块分离)
 - [决策 35 — MemoryStore 格式化逻辑抽出到 utils/formatters.py](#决策-35--memorystore-格式化逻辑抽出到-utilsformatterspy)
 - [决策 36 — Memory 类别重构：fact/preference 两分类 + builder 严格 JSON 输出](#决策-36--memory-类别重构factpreference-两分类--builder-严格-json-输出)
+- [决策 37 — MemoryBuilder JSON 强制模式 + 换行拆分](#决策-37--memorybuilder-json-强制模式--换行拆分)
 
 ---
 
@@ -832,3 +833,23 @@
 - 4 分类（facts/preferences/entities/events）—— entities 和 events 与 facts 边界模糊，增加 LLM 分类负担
 - 数组输出 `{"facts": [], "preferences": []}` —— 不可控，LLM 可能生成过多条目
 - 保留 `---` 分隔的自由 Markdown —— 解析脆弱，需依赖 Chunker，且无法区分类别
+
+### 决策 37 — MemoryBuilder JSON 强制模式 + 换行拆分
+
+**背景：** 实现了 `MemoryBuilder` 后，用户要求 LLM 输出强制 JSON 以确保格式可靠，同时要求每条简短陈述独立成为一条 Memory（而非整个 facts/preferences 字符串作为一条）。
+
+**决策：**
+- `build()` 调用 `chat_flash()` 时传入 `response_format={"type": "json_object"}`，OpenAI SDK 强制模型输出合法 JSON
+- `json.loads()` 解析后，`facts` 和 `preferences` 字符串按 `\n` 拆分为多行，每行一条 Memory（过滤空行）
+- Builder 不再依赖 Chunker —— 文本拆分逻辑内聚在 `build()` 中
+- 每条 Memory 独立存储，独立检索
+
+**理由：**
+- `response_format` 比仅依赖提示词更可靠，消除非法 JSON 的风险
+- 换行拆分符合新版 `builder.md` 的语义（每条一个简短陈述），一条一文件粒度更细，RAG 检索更精准
+- 去掉 Chunker 依赖后 Builder 链路更短、更可控
+- flash tier 足够处理结构化提取，不需 pro tier
+
+**曾考虑的替代方案：**
+- 仅提示词约束 JSON 格式 —— 偶发非法 JSON，解析脆弱
+- 整段 content 存为一条 Memory —— 粒度太粗，检索时无法精准定位单条事实/偏好
