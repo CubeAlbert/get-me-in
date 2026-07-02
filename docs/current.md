@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** 任务 5 — MemoryRetriever (`src/memory/retriever.py`)
+**当前任务：** 任务 6 — 目录 + 文件准备
 
-**当前子任务：** 实现 `search(query, agent=None, top_k=5) -> list[Memory]`，封装 RAG 语义检索
+**当前子任务：** 创建 `data/memories/` 及 5 个 Agent 子目录
 
 **当前阻塞：** 无
 
-**下一步：** 创建 `src/memory/retriever.py`，实现 `MemoryRetriever.search()`：内部调 `rag.search(filter={"agent": agent})` → `chunk_to_memory()` 转换，RAG 未就绪时抛出 `RuntimeError`
+**下一步：** 创建 `data/memories/` 根目录及 `main/`、`resume/`、`learning/`、`interview/`、`job_search/` 子目录，各目录放 `.gitkeep` 占位
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen

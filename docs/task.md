@@ -150,8 +150,9 @@
 
 ### 5. MemoryRetriever (`src/memory/retriever.py`)
 
-- ⬜ `search(query, agent=None, top_k=5) -> list[Memory]`：内部调 `rag.search(filter={"agent": agent})` → `chunk_to_memory()`
-- ⬜ RAG 未就绪时抛出 `RuntimeError`
+- ✅ `search(query, agent=None, top_k=5) -> list[Memory]`：内部调 `rag.search(filter={"agent": agent})` → `chunk_to_memory()`
+- ✅ RAG 未就绪时 `is_ready()` 前置检查，抛出 `RuntimeError`
+- ✅ 单 Agent 检索 + 跨 Agent 全量检索 验证通过
 
 ### 6. 目录 + 文件准备
 
