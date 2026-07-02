@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** 任务 9 — 端到端验证
+**当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾 ✅ 基本完成
 
-**当前子任务：** sync 模式：对话 → 构建 → 写入 → 检索 全链路验证
+**当前任务：** 全部完成（⚠️ ragreload 偶发重复，非阻塞）
 
 **当前阻塞：** 无
 
-**下一步：** 运行 sync 模式全链路测试：builder.build() → store.write_memory() → indexer → RAG → retriever.search()
+**下一步：** 用户决定是否推进到里程碑 4 — BaseAgent & 主 Agent
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen

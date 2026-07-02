@@ -75,7 +75,7 @@ class MemoryStore:
 
         logger.info("记忆已写入: %s", file_path)
         self._emit_write(
-            MemoryWrittenEvent(agent=agent, memory=memory, file_path=str(file_path))
+            MemoryWrittenEvent(agent=agent, memory=memory, file_path=str(file_path).replace("\\", "/"))
         )
         return str(file_path)
 
@@ -91,19 +91,19 @@ class MemoryStore:
         Returns:
             删除成功返回 ``True``；文件不存在或异常返回 ``False`` 并记日志。
         """
-        path = Path(file_path)
+        path = Path(file_path).resolve()
         try:
             path.unlink()
         except FileNotFoundError:
-            logger.warning("删除记忆时文件不存在: %s", file_path)
+            logger.warning("删除记忆时文件不存在: %s", path)
             return False
         except Exception:
-            logger.exception("删除记忆失败: %s", file_path)
+            logger.exception("删除记忆失败: %s", path)
             return False
 
-        logger.info("记忆已删除: %s", file_path)
+        logger.info("记忆已删除: %s", path)
         self._emit_delete(
-            MemoryDeletedEvent(agent=agent, file_path=str(file_path))
+            MemoryDeletedEvent(agent=agent, file_path=str(path).replace("\\", "/"))
         )
         return True
 

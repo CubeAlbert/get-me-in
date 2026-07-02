@@ -215,10 +215,12 @@ class RagLoader:
 
     def _load_one(self, path: Path, collection: str, extra_meta: dict) -> None:
         """读取文件 → chunk → remove 旧数据 → add，已在锁内。"""
+        path = path.resolve()
+        path_str = str(path).replace("\\", "/")
         text = path.read_text(encoding="utf-8")
-        meta = {"source_file": str(path), **extra_meta}
+        meta = {"source_file": path_str, **extra_meta}
         chunks = self._chunker.chunk(text, metadata=meta)
-        self._store.remove(str(path), collection=collection)
+        self._store.remove(path_str, collection=collection)
         self._store.add(chunks, collection=collection)
 
     # ------------------------------------------------------------------

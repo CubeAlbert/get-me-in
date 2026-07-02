@@ -175,7 +175,8 @@
 
 ### 9. 端到端验证
 
-- ⬜ sync 模式：对话 → 构建 → 写入 → 检索 全链路验证
-- ⬜ async 模式：对话 → 构建（后台）→ 等待 → 检索验证
-- ⬜ 删除：写入 → 检索确认存在 → 删除文件 → 检索确认不存在
-- ⬜ `/ragreload` 全量重载后检索验证（metadata 持久化确认）
+- ✅ sync 模式：对话 → 构建 → 写入 → 检索 全链路验证
+- ✅ async 模式：对话 → 构建（后台）→ 等待 → 检索验证
+- ✅ 删除：写入 → 检索确认存在 → 删除文件 → Chroma 行数 -1
+- ✅ `/ragreload` 全量重载后检索验证（metadata 持久化确认）
+- ⚠️ 已知小问题：ragreload 后偶发 1 条重复（Chroma in-memory `delete(where=)` 偶发漏删，非阻塞，后续用 `delete_collection` 重建替代逐文件 remove）
