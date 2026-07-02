@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** 任务 6 — 目录 + 文件准备
+**当前任务：** 任务 7 — MemoryBuilder + 提示词 (`src/memory/builder.py`)
 
-**当前子任务：** 创建 `data/memories/` 及 5 个 Agent 子目录
+**当前子任务：** 讨论并完善 `data/prompts/memory/builder.md` 系统提示词
 
 **当前阻塞：** 无
 
-**下一步：** 创建 `data/memories/` 根目录及 `main/`、`resume/`、`learning/`、`interview/`、`job_search/` 子目录，各目录放 `.gitkeep` 占位
+**下一步：** 与用户讨论 MemoryBuilder 提示词设计：输入格式（对话历史）、输出格式（`---` 分隔的记忆条目）、构建规则（提取关键信息而非简单压缩），确认后编写代码
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -46,3 +46,4 @@
 33. 日志使用 Python 标准库 `logging`：`RotatingFileHandler`（10MB × 5）写入 `data/logs/app.log`，`StreamHandler(stderr)` 输出 ERROR+；懒加载初始化（`get_logger()` 首次调用自动配置）；`LOG_LEVEL`（默认 INFO）和 `LOG_DIR`（默认 `data/logs/`）通过环境变量配置
 34. Message 为通用基础设施（`src/message.py`）：7 字段（id/timestamp/role/message/event_type/event_payload/thinking），统一覆盖用户输入、系统指令、工具调用、工具结果和 LLM 回复；role 保留用于消息来源控制，event_type 区分消息语义，thinking 未来由 SHOW_THINKING flag 控制展示
 35. MemoryStore 格式化工具抽出到 `src/utils/formatters.py`：`timestamp_to_filename(time)` + `memory_to_markdown(agent, memory)` 作为公共函数，Store 不持有格式化逻辑
+36. Memory 类别重构：`category` 字段（"fact" / "preference"），builder.md 输出 `{"facts": "<string>", "preferences": "<string>"}` 严格 JSON，废弃 entities/events 合并入 facts

@@ -518,11 +518,11 @@ Store 与 RAG 完全隔离。
 
 | 文件 | 职责 |
 |------|------|
-| `schemas.py` | `Memory(id: uuid, agent: str, time: datetime, content: str)` 及 `MemoryWrittenEvent`、`MemoryDeletedEvent`、`chunk_to_memory()` |
+| `schemas.py` | `Memory(id: uuid, agent: str, time: datetime, content: str, category: str)` 及 `MemoryWrittenEvent`、`MemoryDeletedEvent`、`chunk_to_memory()` |
 | `store.py` | 同步文件系统读写。`write_memory()`：生成时间戳文件名 → front-matter 格式化 → 写文件 → 发射事件。`delete_memory()`：删文件 → 发射事件。不提供读方法，不持队列/线程 |
 | `indexer.py` | `MemoryIndexer`：监听 Store 事件，`_on_write` → `rag.load(file_path)`，`_on_delete` → `rag.delete(where={"source_file": file_path})`。构造即绑定，无公开方法 |
 | `retriever.py` | `MemoryRetriever`：封装 `rag.search(filter={"agent": ...})`，`Chunk` → `Memory` 转换后返回 |
-| `builder.py` | `MemoryBuilder`：加载 `data/prompts/memory/builder.md` 系统提示词 → 对话作为用户消息 → LLM 输出 `---` 分隔的 Markdown → Chunker 切分 → 注入 `id`/`time`/`agent` → `list[Memory]` |
+| `builder.py` | `MemoryBuilder`：加载 `data/prompts/memory/builder.md` 系统提示词 → 对话作为用户消息 → LLM 输出 `{"facts": "<string>", "preferences": "<string>"}` 严格 JSON → `json.loads()` 解析 → 注入 `id`/`time`/`agent`/`category` → `list[Memory]` |
 | `__init__.py` | Facade：`build_memories()` 统一入口，支持 sync/async 模式 |
 
 **文件组织：**
@@ -535,6 +535,7 @@ Store 与 RAG 完全隔离。
 ---
 id: abc123
 agent: resume
+category: fact
 time: 2026-06-30T14:30:00
 ---
 
@@ -546,7 +547,7 @@ time: 2026-06-30T14:30:00
 
 **Chunk ↔ Memory 转换：**
 
-`chunk_to_memory(chunk) -> Memory`：从 Chunk metadata 取 `id`/`agent`/`time`，content 取 Chunk.content。MemoryRetriever 和 MemoryBuilder 共用。
+`chunk_to_memory(chunk) -> Memory`：从 Chunk metadata 取 `id`/`agent`/`time`/`category`，content 取 Chunk.content。MemoryRetriever 和 MemoryBuilder 共用。
 
 **设计决策：**
 - 记忆按 Agent 分目录 —— 每个 Agent 独立管理自己的记忆；跨 Agent 检索走 `MemoryRetriever.search(agent=None)`

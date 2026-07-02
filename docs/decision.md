@@ -43,6 +43,7 @@
 - [决策 33 — 日志系统：标准库 logging + 按大小轮转](#决策-33--日志系统标准库-logging--按大小轮转)
 - [决策 34 — Message 通用消息模型：7 字段 + 模块分离](#决策-34--message-通用消息模型7-字段--模块分离)
 - [决策 35 — MemoryStore 格式化逻辑抽出到 utils/formatters.py](#决策-35--memorystore-格式化逻辑抽出到-utilsformatterspy)
+- [决策 36 — Memory 类别重构：fact/preference 两分类 + builder 严格 JSON 输出](#决策-36--memory-类别重构factpreference-两分类--builder-严格-json-输出)
 
 ---
 
@@ -808,3 +809,26 @@
 **曾考虑的替代方案：**
 - 保留在 Store 作为 `@staticmethod` —— 不解决复用问题，且 static method 暴露为公共 API 容易误导调用方
 - 内联写在 `write_memory()` 中 —— 方法过长，SRP 违规
+
+### 决策 36 — Memory 类别重构：fact/preference 两分类 + builder 严格 JSON 输出
+
+**背景：** 最初设计 Memory 输出为 `---` 分隔的自由 Markdown，Memory 无类别字段。用户重写 `data/prompts/memory/builder.md` 后，决定用结构化 JSON 输出替代自由 Markdown，并为 Memory 引入 `category` 分类。
+
+**决策：**
+- Memory 新增 `category: str` 字段，取值 `"fact"` 或 `"preference"`，默认 `"fact"`
+- `builder.md` 输出严格 JSON：`{"facts": "<string>", "preferences": "<string>"}`，两个字段均为必填，无内容填空字符串
+- 废弃原 4 分类设计（facts/preferences/entities/events），entities 和 events 合并入 facts
+- LLM 每次调用最多产出 2 条 Memory（每字段非空生成一条）
+- `memory_to_markdown()` front-matter 新增 `category`，`chunk_to_memory()` 从 metadata 提取（缺失默认 `"fact"`）
+- Builder 不依赖 Chunker —— 直接 `json.loads()` 解析后构造 Memory 列表
+
+**理由：**
+- 两分类覆盖所有记忆场景：事实（客观、长期）和偏好（主观、程度）
+- 严格 JSON 输出可控、可解析，比自由 Markdown + Chunker 更可靠
+- 每次最多 2 条记忆，输出精简，LLM 不会过度提取
+- front-matter 带 category 后，RAG 检索可按类别过滤 (`filter={"category": "preference"}`)
+
+**曾考虑的替代方案：**
+- 4 分类（facts/preferences/entities/events）—— entities 和 events 与 facts 边界模糊，增加 LLM 分类负担
+- 数组输出 `{"facts": [], "preferences": []}` —— 不可控，LLM 可能生成过多条目
+- 保留 `---` 分隔的自由 Markdown —— 解析脆弱，需依赖 Chunker，且无法区分类别

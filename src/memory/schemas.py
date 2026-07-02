@@ -29,12 +29,14 @@ class Memory:
 
     Attributes:
         content: 记忆正文，纯 Markdown 文本。
+        category: 记忆类别（``"fact"`` 或 ``"preference"``）。
         agent: 所属 Agent 名称（如 ``"main"``、``"resume"``）。
         time: 记忆创建时间。
         id: uuid4 hex 字符串，全局唯一标识。
     """
 
     content: str
+    category: str = "fact"
     agent: str = ""
     time: datetime = field(default_factory=datetime.now)
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
@@ -112,5 +114,6 @@ def chunk_to_memory(chunk: Chunk) -> Memory:
         id=memory_id,
         agent=agent,
         time=time,
+        category=meta.get("category", "fact"),
         content=chunk.content,
     )

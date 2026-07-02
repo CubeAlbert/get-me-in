@@ -128,7 +128,7 @@
 
 ### 2. 记忆数据结构 (`src/memory/schemas.py`)
 
-- ✅ `Memory` 数据类：`id: str` (uuid) + `agent: str` + `time: datetime` + `content: str` — 实现在 `src/memory/schemas.py`
+- ✅ `Memory` 数据类：`id: str` (uuid) + `agent: str` + `time: datetime` + `content: str` + `category: str` ("fact"/"preference") — 实现在 `src/memory/schemas.py`
 - ✅ `Message` 数据类：7 字段（id/timestamp/role/message/event_type/event_payload/thinking）— 抽出为通用基础设施 `src/message.py`
 - ✅ 事件数据类：`MemoryWrittenEvent(agent, memory, file_path)`、`MemoryDeletedEvent(agent, file_path)` — 实现在 `src/memory/schemas.py`
 - ✅ `chunk_to_memory(chunk: Chunk) -> Memory` 转换函数 — 实现在 `src/memory/schemas.py`
@@ -156,7 +156,7 @@
 
 ### 6. 目录 + 文件准备
 
-- ⬜ 创建 `data/memories/` 及 5 个 Agent 子目录（`main/`、`resume/`、`learning/`、`interview/`、`job_search/`）
+- ⛔ 创建 `data/memories/` 及 5 个 Agent 子目录 — `write_memory()` 自动 `mkdir(parents=True)`，`RagLoader` 目录不存在直接返回 0，无需预建
 
 ### 7. MemoryBuilder + 提示词 (`src/memory/builder.py`)
 

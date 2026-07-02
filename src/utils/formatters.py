@@ -26,6 +26,7 @@ def memory_to_markdown(agent: str, memory) -> str:
         ---
         id: a1b2c3d4...
         agent: resume
+        category: fact
         time: 2026-07-02T15:30:45.123456
         ---
 
@@ -42,6 +43,7 @@ def memory_to_markdown(agent: str, memory) -> str:
         "---",
         f"id: {memory.id}",
         f"agent: {agent}",
+        f"category: {memory.category}",
         f"time: {memory.time.isoformat()}",
         "---",
         "",
