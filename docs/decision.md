@@ -41,6 +41,7 @@
 - [决策 31 — Chunker 通用化 + front-matter 解析](#决策-31--chunker-通用化--front-matter-解析)
 - [决策 32 — MemoryBuilder 替代 Compressor（对话构建而非压缩）](#决策-32--memorybuilder-替代-compressor对话构建而非压缩)
 - [决策 33 — 日志系统：标准库 logging + 按大小轮转](#决策-33--日志系统标准库-logging--按大小轮转)
+- [决策 34 — Message 通用消息模型：7 字段 + 模块分离](#决策-34--message-通用消息模型7-字段--模块分离)
 
 ---
 
@@ -757,3 +758,32 @@
 - `loguru` —— 功能强大但引入额外依赖，当前需求标准库完全覆盖
 - `TimedRotatingFileHandler` 按天轮转 —— CLI 应用使用频率不均，按大小更可预测
 - 仅在 `main.py` 初始化 root logger —— 强依赖启动顺序，`get_logger()` 调用在 import 阶段就会执行，此时 root 可能尚未配置
+
+---
+
+### 决策 34 — Message 通用消息模型：7 字段 + 模块分离
+
+**背景：** M3 任务 2 最初规格 Message 仅有 3 个字段（`role`/`content`/`timestamp`）。讨论后发现 Message 需要承载更多语义：用户输入、系统指令、工具调用、工具结果、LLM 回复，以及 LLM 内部推理过程。同时 `06_output_format.md` 的 JSON Schema（`thinking` + `action`）需要映射到统一的消息模型。
+
+**决策：**
+
+- **Message 7 字段：** `id`（uuid hex）、`timestamp`（datetime）、`role`（user/assistant/system）、`message`（展示文本）、`event_type`（事件类型标识）、`event_payload`（dict | None）、`thinking`（str | None）
+- **`event_type` 区分消息语义：** 候选值包括 `user_input`、`system_input`、`tool_call`、`tool_call_result`、`finish` 等，后续随工具扩展追加
+- **`role` 保留：** `event_type` 不能替代 `role` 做消息来源控制。例如 `tool_call_result` 和 `system_input` 都是 `role="system"`，需靠 `event_type` 区分语义
+- **`message` 为展示文本：** 始终是终端显示内容，与 `action.message` 语义一致
+- **`thinking` 为 LLM 推理：** 对齐 `06_output_format.md` Schema 顶层 `"thinking"`；user 消息恒为 `None`；未来由 `SHOW_THINKING` flag 控制展示（当前不做）
+- **模块位置：** Message 抽出为 `src/message.py`，作为项目级通用基础设施，而非放在 `src/memory/schemas.py` 中
+
+**理由：**
+
+- Message 是整个系统的数据总线（CLI → Agent → LLM → Memory），放在 memory 下会造成其他模块反向依赖 memory
+- `role` + `event_type` 双层语义：role 回答"谁发的"，event_type 回答"这是什么类型的消息"，职责不重叠
+- `thinking` 独立字段避免推理过程混入 `message` 污染展示
+- `event_payload` 用 dict 足够灵活，不需要为每种工具定义具体 TypedDict
+
+**曾考虑的替代方案：**
+
+- Message 放在 `src/memory/schemas.py` —— CLI/LLM/Agent 都需要 import memory 模块，耦合方向不合理
+- 用 `event_type` 替代 `role` —— 无法区分"系统指令"和"工具结果"的消息来源，消息路由时需额外判断
+- `thinking` 混在 `message` 中 —— 展示时需要额外解析剥离，不干净
+- `event_payload` 用具体 TypedDict 类型 —— 工具类型不断扩展，维护成本高

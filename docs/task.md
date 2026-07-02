@@ -128,10 +128,10 @@
 
 ### 2. 记忆数据结构 (`src/memory/schemas.py`)
 
-- ⬜ `Memory` 数据类：`id: str` (uuid) + `agent: str` + `time: datetime` + `content: str`
-- ⬜ `Message` 数据类：`role: str` + `content: str` + `timestamp: datetime`
-- ⬜ 事件数据类：`MemoryWrittenEvent(agent, memory, file_path)`、`MemoryDeletedEvent(agent, file_path)`
-- ⬜ `chunk_to_memory(chunk: Chunk) -> Memory` 转换函数
+- ✅ `Memory` 数据类：`id: str` (uuid) + `agent: str` + `time: datetime` + `content: str` — 实现在 `src/memory/schemas.py`
+- ✅ `Message` 数据类：7 字段（id/timestamp/role/message/event_type/event_payload/thinking）— 抽出为通用基础设施 `src/message.py`
+- ✅ 事件数据类：`MemoryWrittenEvent(agent, memory, file_path)`、`MemoryDeletedEvent(agent, file_path)` — 实现在 `src/memory/schemas.py`
+- ✅ `chunk_to_memory(chunk: Chunk) -> Memory` 转换函数 — 实现在 `src/memory/schemas.py`
 
 ### 3. MemoryStore 文件读写 + 事件 (`src/memory/store.py`)
 

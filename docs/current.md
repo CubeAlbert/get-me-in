@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾
 
-**当前任务：** 任务 2 — 记忆数据结构 (`src/memory/schemas.py`)
+**当前任务：** 任务 3 — MemoryStore 文件读写 + 事件 (`src/memory/store.py`)
 
-**当前子任务：** 实现 Memory / Message / 事件 数据类
+**当前子任务：** 实现 write_memory() / delete_memory() 及事件注册
 
 **当前阻塞：** 无
 
-**下一步：** 创建 `src/memory/schemas.py`，定义 Memory、Message、事件数据类及 chunk_to_memory 转换函数
+**下一步：** 创建 `src/memory/store.py`，实现 MemoryStore 类：write_memory() 写文件+发射 MemoryWritten、delete_memory() 删文件+发射 MemoryDeleted、on_write/on_delete 事件注册
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -45,3 +45,4 @@
 32. MemoryBuilder 替代 Compressor：从对话构建记忆而非简单压缩，async/sync 由 Builder Facade 控制，Store 纯同步
 33. Chunker 强制 front-matter：所有输入文本必须以 `---` KV 块开头，无 front-matter 返回空列表并留 TODO 桩；caller metadata 覆盖 front-matter 同名字段
 34. 日志使用 Python 标准库 `logging`：`RotatingFileHandler`（10MB × 5）写入 `data/logs/app.log`，`StreamHandler(stderr)` 输出 ERROR+；懒加载初始化（`get_logger()` 首次调用自动配置）；`LOG_LEVEL`（默认 INFO）和 `LOG_DIR`（默认 `data/logs/`）通过环境变量配置
+35. Message 为通用基础设施（`src/message.py`）：7 字段（id/timestamp/role/message/event_type/event_payload/thinking），统一覆盖用户输入、系统指令、工具调用、工具结果和 LLM 回复；role 保留用于消息来源控制，event_type 区分消息语义，thinking 未来由 SHOW_THINKING flag 控制展示

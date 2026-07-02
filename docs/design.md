@@ -117,6 +117,7 @@
 get-me-in/
 ├── src/
 │   ├── config.py            # 环境变量集中管理（启动加载 + 校验）
+│   ├── message.py           # 通用消息/事件数据类（横跨 CLI/Agent/LLM/Memory）
 │   ├── main_agent/          # 主 Agent 入口 & 编排逻辑
 │   │   ├── __init__.py
 │   │   ├── orchestrator.py  # 意图识别、Agent 调度
@@ -134,7 +135,7 @@ get-me-in/
 │   │   ├── indexer.py        # MemoryIndexer：监听事件 → RAG 索引
 │   │   ├── retriever.py      # MemoryRetriever：语义检索
 │   │   ├── builder.py        # MemoryBuilder：LLM 从对话构建记忆
-│   │   └── schemas.py        # Memory, Message 等数据结构
+│   │   └── schemas.py        # Memory 数据结构
 │   ├── utils/               # 通用工具
 │   │   └── chunker.py        # 通用文本切分（front-matter + --- 分隔）
 │   ├── logger.py             # 日志模块（横切基础设施）
@@ -515,7 +516,7 @@ Store 与 RAG 完全隔离。
 
 | 文件 | 职责 |
 |------|------|
-| `schemas.py` | `Memory(id: uuid, agent: str, time: datetime, content: str)`、`Message` 等数据结构 |
+| `schemas.py` | `Memory(id: uuid, agent: str, time: datetime, content: str)` 及 `MemoryWrittenEvent`、`MemoryDeletedEvent`、`chunk_to_memory()` |
 | `store.py` | 同步文件系统读写。`write_memory()`：生成时间戳文件名 → front-matter 格式化 → 写文件 → 发射事件。`delete_memory()`：删文件 → 发射事件。不提供读方法，不持队列/线程 |
 | `indexer.py` | `MemoryIndexer`：监听 Store 事件，`_on_write` → `rag.load(file_path)`，`_on_delete` → `rag.delete(where={"source_file": file_path})`。构造即绑定，无公开方法 |
 | `retriever.py` | `MemoryRetriever`：封装 `rag.search(filter={"agent": ...})`，`Chunk` → `Memory` 转换后返回 |
@@ -694,6 +695,53 @@ time: 2026-06-30T14:30:00
 - 懒加载 —— 不强制在 `main.py` 中显式初始化，任意模块 `get_logger(__name__)` 即可
 - stderr 而非 stdout —— 不污染 `rich` 的终端渲染输出
 - 按大小轮转而非按天 —— CLI 应用使用频率不均，按大小更可预测
+
+### 4.12 Message 模块
+
+**用途：** 通用消息 / 事件数据类，统一覆盖用户输入、系统指令、工具调用、工具结果和 LLM 回复。所有模块（CLI、Agent、LLM、Memory）共用此数据结构，是整个系统的数据总线。
+
+**职责：**
+- 定义 `Message` 数据类，作为对话历史和事件流的统一载体
+- 不包含业务逻辑、持久化或网络操作 —— 纯粹的数据结构
+
+**数据结构（`src/message.py`）：**
+
+```
+@dataclass
+class Message:
+    message: str              # 展示文本（终端显示）
+    event_type: str           # 事件类型：user_input / system_input / tool_call / tool_call_result / finish / ...
+    role: str = "user"        # 发送者角色：user / assistant / system
+    timestamp: datetime       # 消息时间戳
+    id: str                   # uuid4 hex，唯一标识
+    event_payload: dict|None  # 结构化载荷（工具名、参数、结果等）
+    thinking: str|None        # LLM 内部推理；user 消息恒为 None
+```
+
+**字段语义：**
+
+| 字段 | 含义 | 示例 |
+|------|------|------|
+| `message` | 始终是终端展示文本，与 `action.message` 语义一致 | "正在搜索相关面试题..." |
+| `event_type` | 区分消息语义，非穷举列表，随工具扩展追加 | `user_input`、`tool_call`、`finish` |
+| `role` | "谁发的"——消息来源控制，不可被 event_type 替代 | system 角色下既有 `system_input` 也有 `tool_call_result` |
+| `thinking` | LLM 推理过程，对齐 `06_output_format.md` 顶层 `"thinking"` | user 消息恒为 `None` |
+| `event_payload` | `dict | None`，承载工具调用、参数、结果等结构化数据 | `{"tool": "search", "args": {...}}` |
+
+**与 `06_output_format.md` Schema 的映射：**
+
+```
+Schema:  { "thinking": "...", "action": { "id": "...", "tool": "...", "message": "...", "args": {} } }
+           ─────────────        ─────────────────────────────────────────────────────────
+           → Message.thinking    → Message.id    → Message.event_type  → Message.message  → Message.event_payload
+```
+
+**设计决策：**
+- **模块级独立** — 放在 `src/message.py`，与 config/logger 同为项目级基础设施。放在 memory 下会导致 CLI/Agent/LLM 反向依赖 memory 模块
+- **role 保留** — `event_type` 不能替代 `role` 做消息来源控制，二者职责不同：role 回答"谁发的"，event_type 回答"什么类型"
+- **thinking 独立字段** — 不混入 `message`，避免污染展示文本；未来由 `SHOW_THINKING` flag 控制是否展示（当前不做）
+- **event_payload 用 dict** — 足够灵活承载任意结构化载荷，不需要为每种工具定义具体 TypedDict
+- **event_type 非穷举** — 当前候选值为 `user_input`、`system_input`、`tool_call`、`tool_call_result`、`finish`，后续随工具扩展追加新类型
 
 ## 5. 参考资料与约定
 
