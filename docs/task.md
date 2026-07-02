@@ -143,9 +143,10 @@
 
 ### 4. MemoryIndexer (`src/memory/indexer.py`)
 
-- ⬜ `__init__(store)`：注册 `on_write` / `on_delete` 回调
-- ⬜ `_on_write(event)` → `rag.load(file_path)`
-- ⬜ `_on_delete(event)` → `rag.delete(where={"source_file": file_path})`
+- ✅ `__init__(store)`：注册 `on_write` / `on_delete` 回调
+- ✅ `_on_write(event)` → `rag.load_file(file_path)` 增量索引
+- ✅ `_on_delete(event)` → `rag.delete(where={"source_file": file_path})` 移除索引
+- ✅ RAG facade 新增 `load_file()` 公开函数
 
 ### 5. MemoryRetriever (`src/memory/retriever.py`)
 

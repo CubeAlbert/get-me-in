@@ -1,7 +1,7 @@
 """RAG 模块入口 — 管理单例与装配。
 
 用法:
-    from src.rag import start, search, load, is_ready
+    from src.rag import start, search, load, load_file, is_ready
 
     start()  # 程序入口调用一次，后台加载模型+数据，不阻塞
 
@@ -9,6 +9,7 @@
         results = search("排序算法", collection="references")
     info = load("cs_fundamentals")  # 匹配重载
     info = load()                    # 全量重载
+    load_file(Path("data/memories/main/20260702143000.000.md"))  # 增量索引
 """
 
 import os
@@ -19,6 +20,7 @@ os.environ["TQDM_DISABLE"] = "1"
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 import threading
+from pathlib import Path
 
 from src.logger import get_logger
 from src.utils.chunker import Chunk
@@ -119,3 +121,21 @@ def load(target: str | None = None) -> str:
     """
     _ensure_init()
     return _loader.reload(target)  # type: ignore[union-attr]
+
+
+def load_file(path: str | Path) -> None:
+    """增量加载单个文件到 RAG 索引（MemoryIndexer 回调用）。
+
+    底层调用 ``RagLoader.load_file()``，内部 remove 旧 chunk → chunk → add。
+    MemoryStore 写入/删除文件后，由 MemoryIndexer 通过此函数同步索引。
+
+    Args:
+        path: 要索引的文件路径（绝对路径）。
+
+    Raises:
+        RuntimeError: RAG 处于 ERROR 状态。
+    """
+    _ensure_init()
+    if _loader.state == LoaderState.ERROR:  # type: ignore[union-attr]
+        raise RuntimeError(f"RAG 加载失败，无法索引文件: {_loader.error}")  # type: ignore[union-attr]
+    _loader.load_file(Path(path))  # type: ignore[union-attr]
