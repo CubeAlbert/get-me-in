@@ -137,7 +137,8 @@ get-me-in/
 │   │   ├── builder.py        # MemoryBuilder：LLM 从对话构建记忆
 │   │   └── schemas.py        # Memory 数据结构
 │   ├── utils/               # 通用工具
-│   │   └── chunker.py        # 通用文本切分（front-matter + --- 分隔）
+│   │   ├── chunker.py        # 通用文本切分（front-matter + --- 分隔）
+│   │   └── formatters.py     # 通用格式化（时间戳文件名 + front-matter 拼装）
 │   ├── logger.py             # 日志模块（横切基础设施）
 │   ├── llm/                 # LLM 调用封装
 │   │   ├── __init__.py
@@ -285,6 +286,7 @@ get-me-in/
 | `HF_ENDPOINT` | HuggingFace 镜像（国内用户建议 `https://hf-mirror.com`） | 无（缺失时走官方站 huggingface.co） |
 | `LOG_LEVEL` | 日志级别（DEBUG / INFO / WARNING / ERROR） | `INFO` |
 | `LOG_DIR` | 日志文件目录 | `data/logs/` |
+| `MEMORIES_BASE_DIR` | 记忆存储根目录（按 Agent 分子目录，一文件一条记忆） | `data/memories/` |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
 
@@ -507,8 +509,8 @@ Store 与 RAG 完全隔离。
 | 接口 | 位置 | 说明 |
 |------|------|------|
 | `build_memories(conversation, agent, llm, store, sync_mode=False) -> list[Memory] \| None` | `memory/__init__.py` | Facade，构建记忆 + 保存。`sync_mode=True` 同步返回 Memory 列表；`False` 后台线程执行，返回 `None` |
-| `MemoryStore.write_memory(agent, memory) -> None` | `store.py` | 写文件（同步），发 `MemoryWritten` 事件 |
-| `MemoryStore.delete_memory(agent, file_path) -> None` | `store.py` | 删文件（同步），发 `MemoryDeleted` 事件。删除由用户驱动，不提供更新 |
+| `MemoryStore.write_memory(agent, memory) -> str \| None` | `store.py` | 写文件（同步），发 `MemoryWritten` 事件。返回文件路径；失败返回 `None` 并记日志 |
+| `MemoryStore.delete_memory(agent, file_path) -> bool` | `store.py` | 删文件（同步），发 `MemoryDeleted` 事件。成功返回 `True`；文件不存在或异常返回 `False` 并记日志。删除由用户驱动，不提供更新 |
 | `MemoryRetriever.search(query, agent=None, top_k=5) -> list[Memory]` | `retriever.py` | 语义检索。`agent=None` 跨 Agent 全量检索 |
 | `MemoryStore.on_write(callback)` / `on_delete(callback)` | `store.py` | 注册事件监听器 |
 

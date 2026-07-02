@@ -42,6 +42,7 @@
 - [决策 32 — MemoryBuilder 替代 Compressor（对话构建而非压缩）](#决策-32--memorybuilder-替代-compressor对话构建而非压缩)
 - [决策 33 — 日志系统：标准库 logging + 按大小轮转](#决策-33--日志系统标准库-logging--按大小轮转)
 - [决策 34 — Message 通用消息模型：7 字段 + 模块分离](#决策-34--message-通用消息模型7-字段--模块分离)
+- [决策 35 — MemoryStore 格式化逻辑抽出到 utils/formatters.py](#决策-35--memorystore-格式化逻辑抽出到-utilsformatterspy)
 
 ---
 
@@ -787,3 +788,23 @@
 - 用 `event_type` 替代 `role` —— 无法区分"系统指令"和"工具结果"的消息来源，消息路由时需额外判断
 - `thinking` 混在 `message` 中 —— 展示时需要额外解析剥离，不干净
 - `event_payload` 用具体 TypedDict 类型 —— 工具类型不断扩展，维护成本高
+
+---
+
+### 决策 35 — MemoryStore 格式化逻辑抽出到 utils/formatters.py
+
+**背景：** 实现 `MemoryStore` 时，`write_memory()` 内部需要两个 pure 函数：将 `datetime` 转为 `yyyyMMddHHmmss.fff.md` 文件名、将 `Memory` 对象拼装为 front-matter Markdown。最初计划将这两个函数作为 `MemoryStore` 的 `@staticmethod`，但 static method 内聚性差，且这两个函数是通用工具，未来可能被 MemoryBuilder 或 Chunker 复用。
+
+**决策：**
+- 创建 `src/utils/formatters.py`，包含两个函数：`timestamp_to_filename(time: datetime) -> str` 和 `memory_to_markdown(agent: str, memory: Memory) -> str`
+- `MemoryStore` 不持有格式化逻辑，直接 `from src.utils.formatters import ...` 调用
+- 函数保持纯函数风格（无状态、无副作用），职责范围限定为格式化
+
+**理由：**
+- 格式化逻辑是通用工具，不属于 Store 的职责范围，抽出后 `src/utils/` 下 `chunker.py` + `formatters.py` 形成工具集
+- Store 类更轻量，只关心文件读写和事件发射
+- 纯函数天然可复用，MemoryBuilder 后续也可能用到
+
+**曾考虑的替代方案：**
+- 保留在 Store 作为 `@staticmethod` —— 不解决复用问题，且 static method 暴露为公共 API 容易误导调用方
+- 内联写在 `write_memory()` 中 —— 方法过长，SRP 违规

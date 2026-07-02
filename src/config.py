@@ -44,6 +44,7 @@ _VAR_SPECS: list[tuple[str, bool, str | None]] = [
     ("HF_ENDPOINT",        False, None),
     ("LOG_LEVEL",          False, "INFO"),
     ("LOG_DIR",            False, "data/logs/"),
+    ("MEMORIES_BASE_DIR",  False, "data/memories/"),
 ]
 
 _missing: list[str] = []

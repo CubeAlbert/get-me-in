@@ -133,12 +133,13 @@
 - ✅ 事件数据类：`MemoryWrittenEvent(agent, memory, file_path)`、`MemoryDeletedEvent(agent, file_path)` — 实现在 `src/memory/schemas.py`
 - ✅ `chunk_to_memory(chunk: Chunk) -> Memory` 转换函数 — 实现在 `src/memory/schemas.py`
 
-### 3. MemoryStore 文件读写 + 事件 (`src/memory/store.py`)
+### 3. MemoryStore 文件读写 + 事件 (`src/memory/store.py`) + 格式化工具 (`src/utils/formatters.py`)
 
-- ⬜ `write_memory(agent, memory) -> None`：取 `memory.time` 生成时间戳文件名 → 格式化 front-matter + 正文 → 创建目录 → 写文件 → 发射 `MemoryWritten`
-- ⬜ `delete_memory(agent, file_path) -> None`：删文件 → 发射 `MemoryDeleted`
-- ⬜ `on_write(callback)` / `on_delete(callback)` 事件注册 + `_emit(event)` 发射
-- ⬜ 失败仅记日志，不抛异常
+- ✅ `write_memory(agent, memory) -> str | None`：取 `memory.time` 生成时间戳文件名 → 格式化 front-matter + 正文 → 创建目录 → 写文件 → 发射 `MemoryWritten`
+- ✅ `delete_memory(agent, file_path) -> bool`：删文件 → 发射 `MemoryDeleted`
+- ✅ `on_write(callback)` / `on_delete(callback)` 事件注册 + `_emit_write` / `_emit_delete` 发射
+- ✅ 失败仅记日志，不抛异常
+- ✅ 格式化工具 `src/utils/formatters.py`（`timestamp_to_filename` + `memory_to_markdown`）从 Store 抽出
 
 ### 4. MemoryIndexer (`src/memory/indexer.py`)
 
