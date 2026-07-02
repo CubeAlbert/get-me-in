@@ -45,6 +45,7 @@
 - [决策 35 — MemoryStore 格式化逻辑抽出到 utils/formatters.py](#决策-35--memorystore-格式化逻辑抽出到-utilsformatterspy)
 - [决策 36 — Memory 类别重构：fact/preference 两分类 + builder 严格 JSON 输出](#决策-36--memory-类别重构factpreference-两分类--builder-严格-json-输出)
 - [决策 37 — MemoryBuilder JSON 强制模式 + 换行拆分](#决策-37--memorybuilder-json-强制模式--换行拆分)
+- [决策 38 — 记忆模块统一入口 + 文件名 category + --- 分隔符](#决策-38--记忆模块统一入口--文件名-category----分隔符)
 
 ---
 
@@ -846,10 +847,32 @@
 
 **理由：**
 - `response_format` 比仅依赖提示词更可靠，消除非法 JSON 的风险
-- 换行拆分符合新版 `builder.md` 的语义（每条一个简短陈述），一条一文件粒度更细，RAG 检索更精准
-- 去掉 Chunker 依赖后 Builder 链路更短、更可控
+- 换行拆分符合新版 `builder.md` 的语义（每条一个简短陈述），`\n\n---\n\n` 拼接后由 Chunker 切分，每条独立 RAG 可检索
 - flash tier 足够处理结构化提取，不需 pro tier
 
 **曾考虑的替代方案：**
 - 仅提示词约束 JSON 格式 —— 偶发非法 JSON，解析脆弱
 - 整段 content 存为一条 Memory —— 粒度太粗，检索时无法精准定位单条事实/偏好
+- 每行存为独立文件 —— 同时间戳文件名冲突，需 `category` 字段区分
+
+### 决策 38 — 记忆模块统一入口 + 文件名 category + --- 分隔符
+
+**背景：** 实现了 MemoryBuilder、MemoryIndexer、MemoryRetriever 后，需要统一的对外接口。同时发现同一 LLM 调用产出的 facts 和 preferences 共享时间戳导致文件名冲突，且每行独立存文件粒度太细。
+
+**决策：**
+- `src/memory/__init__.py` 作为唯一公开入口，暴露 `init()`、`build_memories()`、`search_memories()`、`delete_memory()` 四个函数
+- 内部双检锁懒加载单例 MemoryStore / MemoryIndexer / MemoryRetriever（类 RAG 模块的 `_ensure_init` 模式）
+- 文件名格式改为 `yyyyMMddHHmmss.fff.<category>.md`，不同 category 不冲突
+- Builder 内部：LLM 返回的多行文本按 `\n` 拆分后，用 `\n\n---\n\n` 拼接为一个 content，一 category 一个文件
+- Chunker 解析文件时剥离 front-matter 后按 `---` 切分，每条事实/偏好独立成为 RAG chunk
+
+**理由：**
+- 统一入口降低调用方认知负担，不需要 import 子模块
+- filename 加 category 解决同时间戳冲突，不需要错开时间戳（更干净）
+- `---` 分隔符复用现有 Chunker，不用单独写拆分逻辑，且一条一 chunk 检索粒度最细
+- 外部 API 与 RAG 模块风格一致（`init`/`search`/`delete`）
+
+**曾考虑的替代方案：**
+- 暴露子模块让调用方自己组装 —— 耦合度高，调用方需了解内部模块关系
+- 每行独立文件 —— 同时间戳文件名冲突，需错开时间戳（脆弱）
+- 整段存一条不拆分 —— RAG 检索粒度太粗

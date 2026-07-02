@@ -508,11 +508,10 @@ Store 与 RAG 完全隔离。
 
 | 接口 | 位置 | 说明 |
 |------|------|------|
-| `build_memories(conversation, agent, llm, store, sync_mode=False) -> list[Memory] \| None` | `memory/__init__.py` | Facade，构建记忆 + 保存。`sync_mode=True` 同步返回 Memory 列表；`False` 后台线程执行，返回 `None` |
-| `MemoryStore.write_memory(agent, memory) -> str \| None` | `store.py` | 写文件（同步），发 `MemoryWritten` 事件。返回文件路径；失败返回 `None` 并记日志 |
-| `MemoryStore.delete_memory(agent, file_path) -> bool` | `store.py` | 删文件（同步），发 `MemoryDeleted` 事件。成功返回 `True`；文件不存在或异常返回 `False` 并记日志。删除由用户驱动，不提供更新 |
-| `MemoryRetriever.search(query, agent=None, top_k=5) -> list[Memory]` | `retriever.py` | 语义检索。`agent=None` 跨 Agent 全量检索 |
-| `MemoryStore.on_write(callback)` / `on_delete(callback)` | `store.py` | 注册事件监听器 |
+| `init()` | `memory/__init__.py` | 懒加载单例 Store + Indexer + Retriever（可选，首次调用自动初始化） |
+| `build_memories(conversation, agent, llm, sync_mode=True) -> list[Memory] \| None` | `memory/__init__.py` | Facade，构建记忆 + 保存 + 索引。`sync_mode=True` 同步返回 Memory 列表；`False` 后台线程执行，返回 `None` |
+| `search_memories(query, agent=None, top_k=5) -> list[Memory]` | `memory/__init__.py` | 语义检索。`agent=None` 跨 Agent 全量检索 |
+| `delete_memory(agent, file_path) -> bool` | `memory/__init__.py` | 删文件 + 移除 RAG 索引。成功返回 `True` |
 
 **内部结构：**
 
@@ -523,13 +522,13 @@ Store 与 RAG 完全隔离。
 | `indexer.py` | `MemoryIndexer`：监听 Store 事件，`_on_write` → `rag.load(file_path)`，`_on_delete` → `rag.delete(where={"source_file": file_path})`。构造即绑定，无公开方法 |
 | `retriever.py` | `MemoryRetriever`：封装 `rag.search(filter={"agent": ...})`，`Chunk` → `Memory` 转换后返回 |
 | `builder.py` | `MemoryBuilder`：加载 `data/prompts/memory/builder.md` 系统提示词 → 对话序列化为 JSON → `chat_flash(response_format=json_object)` 强制 JSON → `json.loads()` 解析 `{"facts": "...", "preferences": "..."}` → 按 `\n` 拆分行，每行一条 Memory → 注入 `id`/`time`/`agent`/`category` → `list[Memory]` |
-| `__init__.py` | Facade：`build_memories()` 统一入口，支持 sync/async 模式 |
+| `__init__.py` | Facade：`init()` + `build_memories()` + `search_memories()` + `delete_memory()` 四大公开函数，内部双检锁懒加载单例 Store/Indexer/Retriever |
 
 **文件组织：**
 
-一条 Memory 一个文件：`data/memories/<agent>/<yyyyMMddHHmmss.fff>.md`
+一条 Memory 一个文件：`data/memories/<agent>/<yyyyMMddHHmmss.fff>.<category>.md`（category 在文件名中避免 facts/preferences 同时间戳冲突）
 
-文件格式为 front-matter (简单 KV，`---` 包裹) + 正文：
+文件格式为 front-matter (简单 KV，`---` 包裹) + 正文（多条事实/偏好以 `\n\n---\n\n` 分隔，Chunker 按 `---` 切分为独立 chunk）：
 
 ```
 ---

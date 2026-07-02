@@ -80,34 +80,25 @@ class MemoryBuilder:
             logger.error("MemoryBuilder: LLM 输出非法 JSON: %.200s", response)
             return []
 
-        facts = str(data.get("facts", "")).strip()
-        prefs = str(data.get("preferences", "")).strip()
+        facts_raw = str(data.get("facts", "")).strip()
+        prefs_raw = str(data.get("preferences", "")).strip()
         now = datetime.now()
 
         memories: list[Memory] = []
-        for line in facts.split("\n"):
-            line = line.strip()
-            if line:
-                memories.append(Memory(
-                    content=line,
-                    category="fact",
-                    agent=agent,
-                    time=now,
-                ))
-        for line in prefs.split("\n"):
-            line = line.strip()
-            if line:
-                memories.append(Memory(
-                    content=line,
-                    category="preference",
-                    agent=agent,
-                    time=now,
-                ))
-
-        logger.info(
-            "MemoryBuilder: agent=%s → %d 条记忆 (fact=%d pref=%d)",
-            agent, len(memories),
-            len([m for m in memories if m.category == "fact"]),
-            len([m for m in memories if m.category == "preference"]),
-        )
+        if facts_raw:
+            items = [line.strip() for line in facts_raw.split("\n") if line.strip()]
+            memories.append(Memory(
+                content="\n\n---\n\n".join(items),
+                category="fact",
+                agent=agent,
+                time=now,
+            ))
+        if prefs_raw:
+            items = [line.strip() for line in prefs_raw.split("\n") if line.strip()]
+            memories.append(Memory(
+                content="\n\n---\n\n".join(items),
+                category="preference",
+                agent=agent,
+                time=now,
+            ))
         return memories

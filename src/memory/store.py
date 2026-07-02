@@ -63,7 +63,7 @@ class MemoryStore:
         Returns:
             写入文件的绝对路径字符串；失败时返回 ``None`` 并记日志。
         """
-        file_path = self.base_dir / agent / timestamp_to_filename(memory.time)
+        file_path = self.base_dir / agent / timestamp_to_filename(memory.time, memory.category)
         text = memory_to_markdown(agent, memory)
 
         try:

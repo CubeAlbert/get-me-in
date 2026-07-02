@@ -53,9 +53,9 @@
   - `src/memory/store.py` 同步文件系统读写 + 事件机制（`on_write` / `on_delete`）
   - `src/memory/indexer.py` MemoryIndexer 监听事件 → RAG 索引
   - `src/memory/retriever.py` MemoryRetriever 语义检索（`rag.search(filter=...)`）
-  - `src/memory/builder.py` MemoryBuilder：对话 JSON → `chat_flash(response_format=json_object)` → `\n` 拆分，每行一条 Memory
-  - `src/memory/__init__.py` Facade：`build_memories()` + sync/async 控制
-  - 一文件一条记忆（`yyyyMMddHHmmss.fff.md`），目录由 `write_memory()` 自动创建
+  - `src/memory/builder.py` MemoryBuilder：对话 JSON → `chat_flash(response_format=json_object)` → `\n` 拆分 → `\n\n---\n\n` 拼接，Chunker 按 `---` 切分独立索引
+  - `src/memory/__init__.py` Facade：`init()` + `build_memories()` + `search_memories()` + `delete_memory()` 四大公开函数，类 RAG 统一入口
+  - 一文件一条记忆（`yyyyMMddHHmmss.fff.<category>.md`），category 在文件名避免冲突，目录由 `write_memory()` 自动创建
   - 端到端：构建记忆 → 写入 → 索引 → 检索 链路验证通过
 - **前置依赖：** 里程碑 1（LLM）+ 里程碑 2（RAG）
 

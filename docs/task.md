@@ -162,12 +162,16 @@
 
 - ✅ 完善 `data/prompts/memory/builder.md` 系统提示词（facts/preferences 两分类，换行分隔，严格 JSON 输出）
 - ✅ `MemoryBuilder.__init__(llm: LLMClient)`：加载 `builder.md` 提示词
-- ✅ `build(conversation, agent) -> list[Memory]`：对话 → JSON 序列化 → flash LLM (`response_format=json_object`) → `json.loads()` → `\n` 拆分 → 注入 `id`/`time`/`agent`/`category` → Memory 列表
+- ✅ `build(conversation, agent) -> list[Memory]`：对话 → JSON 序列化 → flash LLM (`response_format=json_object`) → `json.loads()` → `\n` 拆分 → `\n\n---\n\n` 拼接 → 注入 `id`/`time`/`agent`/`category` → Memory 列表
 - ✅ 添加 `time.time()` 耗时 debug 日志
+- ✅ `timestamp_to_filename()` 加 `category` 参数避免同时间戳冲突
 
 ### 8. Facade (`src/memory/__init__.py`)
 
-- ⬜ `build_memories(conversation, agent, llm, store, sync_mode=False) -> list[Memory] | None`：sync 模式调 `builder.build()` → `store.write_memory()` 返回列表；async 模式开 daemon 线程执行后返回 `None`
+- ✅ `init()`：懒加载单例 Store + Indexer + Retriever（类 RAG `_ensure_init` 模式）
+- ✅ `build_memories(conversation, agent, llm, sync_mode)`：sync 模式调 builder → store.write_memory() 返回列表；async 开 daemon 线程返回 None
+- ✅ `search_memories(query, agent, top_k)`：包装 MemoryRetriever.search()
+- ✅ `delete_memory(agent, file_path)`：包装 Store.delete_memory()
 
 ### 9. 端到端验证
 

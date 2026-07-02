@@ -10,12 +10,14 @@
 from datetime import datetime
 
 
-def timestamp_to_filename(time: datetime) -> str:
-    """根据 datetime 生成记忆文件名。
+def timestamp_to_filename(time: datetime, category: str = "fact") -> str:
+    """根据 datetime 和 category 生成记忆文件名。
 
-    格式：``yyyyMMddHHmmss.fff.md``，毫秒保留 3 位。
+    格式：``yyyyMMddHHmmss.fff.<category>.md``，毫秒保留 3 位。
+    category 不同则文件名不同，避免 facts 和 preferences 同时间戳冲突。
     """
-    return time.strftime("%Y%m%d%H%M%S.") + f"{time.microsecond // 1000:03d}.md"
+    ts = time.strftime("%Y%m%d%H%M%S.") + f"{time.microsecond // 1000:03d}"
+    return f"{ts}.{category}.md"
 
 
 def memory_to_markdown(agent: str, memory) -> str:
