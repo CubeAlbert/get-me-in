@@ -47,6 +47,20 @@
 - [决策 37 — MemoryBuilder JSON 强制模式 + 换行拆分](#决策-37--memorybuilder-json-强制模式--换行拆分)
 - [决策 38 — 记忆模块统一入口 + 文件名 category + --- 分隔符](#决策-38--记忆模块统一入口--文件名-category----分隔符)
 - [决策 39 — Chroma in-memory delete(where=) 不可靠：delete_collection 替代方案](#决策-39--chroma-in-memory-deletewhere-不可靠delete_collection-替代方案)
+- [决策 40 — Agent Loop 对话历史管理](#决策-40--agent-loop-对话历史管理)
+- [决策 41 — 工具结果注入方式](#决策-41--工具结果注入方式)
+- [决策 42 — Agent Loop 终止条件](#决策-42--agent-loop-终止条件)
+- [决策 43 — Tool 装饰器 + input_schema 设计](#决策-43--tool-装饰器--input_schema-设计)
+- [决策 44 — event_payload → 函数入参映射](#决策-44--event_payload--函数入参映射)
+- [决策 45 — 工具可见性控制](#决策-45--工具可见性控制)
+- [决策 46 — 工具错误处理](#决策-46--工具错误处理)
+- [决策 47 — ToolRegistry 全局注册表](#决策-47--toolregistry-全局注册表)
+- [决策 48 — process() 接口：Message → Response](#决策-48--process-接口message--response)
+- [决策 49 — 意图路由：纯 LLM 驱动](#决策-49--意图路由纯-llm-驱动)
+- [决策 50 — CLI 交互库选型：questionary](#决策-50--cli-交互库选型questionary)
+- [决策 51 — Agent 切换机制：App.switch_agent()](#决策-51--agent-切换机制appswitch_agent)
+- [决策 52 — M4 子 Agent 实现：面试问答 Agent](#决策-52--m4-子-agent-实现面试问答-agent)
+- [决策 53 — AgentRegistry 设计](#决策-53--agentregistry-设计)
 
 ---
 
@@ -900,3 +914,250 @@
 - 切换到持久化模式 —— 持久化模式同样用 DuckDB，bug 可能存在；且内存模式是设计决策 3 的约定
 - 用 `col.get(where=...)` + `col.delete(ids=[...])` 替代 —— `get(where=...)` 同样有 metadata 匹配问题（#5367）
 - 全量和单文件统一用 `delete_collection` —— 单文件场景 drop 整个 collection 代价不可接受
+
+---
+
+### 决策 40 — Agent Loop 对话历史管理
+
+**背景：** M4 需要设计 Agent Loop 的对话历史结构。当前 `LLMHandler` 用 `list[dict]`（OpenAI 原生格式），但 M3 已定义了 `Message` 数据类（7 字段，覆盖所有消息类型）。需要在裸 dict 和自定义类型之间选择。
+
+**决策：** Agent Loop 内部用 `list[Message]` 管理对话历史。调 LLM 时转换：`[{"role": m.role, "content": json.dumps(dataclasses.asdict(m))} for m in messages]`。完整序列化，不裁剪，不因 event_type 改变结构。
+
+**理由：**
+- `Message` 已在所有模块（CLI/Agent/LLM/Memory）共用，保持一致
+- 完整序列化不变形 → LLM 供应商的缓存命中策略能正常工作
+- 比 `ConversationContext` 轻量，比裸 dict 类型安全
+
+**曾考虑的替代方案：**
+- 裸 `list[dict]` —— 简单但失去类型安全，`event_payload`/`thinking` 等字段无处存放
+- `ConversationContext` 封装类 —— 过度抽象，当前只有一个 LLM 后端
+- 裁剪序列化（按 event_type 过滤字段）—— 破坏缓存命中率
+
+---
+
+### 决策 41 — 工具结果注入方式
+
+**背景：** Agent Loop 中 LLM 选工具 → 执行 → 结果需喂回 LLM 继续推理。项目使用自定义 JSON 输出格式（非 OpenAI 原生 function calling），`role: "tool"` 需要配套 `tool_call_id` 配对，增加不必要复杂度。
+
+**决策：** 工具结果以 `role: "user"` 注入对话历史，`event_type: "tool_call_result"` 区分语义。不引入 OpenAI 原生 tool_call_id 配对。
+
+**理由：**
+- 我们没有用 OpenAI 的 native function calling（`tool_choice` 参数），LLM 是纯文本推理选工具
+- `role` 只管消息来源控制，`event_type` 负责语义区分，各司其职
+- 简单，兼容任意 OpenAI-compatible 后端
+
+**曾考虑的替代方案：**
+- `role: "tool"` + `tool_call_id` —— 需按 OpenAI tool call 协议维护配对，额外复杂度无实际收益
+
+---
+
+### 决策 42 — Agent Loop 终止条件
+
+**背景：** Agent Loop 需要明确的终止/挂起条件，防止无限循环。
+
+**决策：** 三个终止条件：
+- `finish` — LLM 自主判断任务完成，正常退出
+- `ask_user` — LLM 需要用户输入，挂起等 CLI `input()`
+- `max_rounds` — 安全阀，由 `AGENT_MAX_ROUNDS` 环境变量控制，默认值后续定
+
+**理由：**
+- `finish`/`ask_user` 是 LLM 自主决策，逻辑由系统提示词控制，代码层只需 > 0 的硬上限
+- 环境变量化避免硬编码，部署时可调整
+
+**曾考虑的替代方案：**
+- 不加 max_rounds —— 网络异常或 LLM 幻觉可能导致死循环
+- 更多终止条件（错误终止、超时终止）—— 当前阶段不需要，后续按需添加
+
+---
+
+### 决策 43 — Tool 装饰器 + input_schema 设计
+
+**背景：** M4 需要工具注册机制。MCP 协议使用完整 JSON Schema（含 type/required），但 Python 的 type hints 已包含类型信息，手写 type 是冗余，且给了一致性出错窗口。
+
+**决策：** 用 `@tool` 装饰器注册工具。`input_schema` 只写 LLM 真正需要的 —— 参数描述和默认值：
+```python
+@tool(
+    purpose="...", use_when="...", do_not_use_when="...",
+    expected_output="...",
+    input_schema={"path": {"description": "文件路径"}, "line_from": {"description": "起始行号", "default": 1}},
+)
+def read_content(path: str, line_from: int = 1, line_to: int | None = None) -> Message: ...
+```
+`type` 从 type hint 自动推断，`required` 从是否有默认值自动推断，均在装饰器阶段（`inspect.signature`）完成。
+
+**理由：**
+- 比 MCP 的完整 JSON Schema 少写一半，不手写 type 和 required，消除冗余和一致性风险
+- `input_schema` 是 LLM 看到的 ground truth，type hint 只是代码层的类型检查
+- 装饰器阶段一次性完成推断，运行时无需重复计算
+
+**曾考虑的替代方案：**
+- 完整 JSON Schema（MCP 方案）—— type/required 冗余，手写和 type hint 存在一致性风险
+- `Annotated[str, "文件路径"]` —— 每个参数都包一层，签名变长，未选择
+
+---
+
+### 决策 44 — event_payload → 函数入参映射
+
+**背景：** LLM 返回 JSON `action.args` → 解析为 `event_payload: dict` → 需要映射到 Python 函数调用的入参。
+
+**决策：** 直接 `**kwargs` 解包，不做额外映射层。
+```python
+tool = self._tools[action["tool"]]
+result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1)
+```
+`event_payload` = `action.args`，key 名由 `input_schema` 的 key 保证与函数参数名一致。
+
+**理由：** Python 原生能力足够，不需要参数名转换层。
+
+**曾考虑的替代方案：** 无。
+
+---
+
+### 决策 45 — 工具可见性控制
+
+**背景：** 不同 Agent 需要不同的工具集。主 Agent 有 `dispatch_*` 工具，子 Agent 不应看到这些。
+
+**决策：** `@tool` 加 `agent` 参数：
+- `agent=None`（默认）→ 所有 Agent 可用
+- `agent=["main", "resume"]` → 仅指定 Agent 可用
+
+全局加载所有 tool（`ToolRegistry`），Agent 构建 system prompt 时只收集有权限的 tool（`to_xml()` 过滤），调用时再加一道门禁检查。
+
+**理由：** 加载和过滤分离 —— 全局注册避免分散管理，过滤在提示词生成时集中处理，门禁是最后防线。
+
+**曾考虑的替代方案：**
+- 每个 Agent 声明自己要加载的工具模块 —— 分散，改动时多处更新
+
+---
+
+### 决策 46 — 工具错误处理
+
+**背景：** 工具执行可能失败（LLM 参数理解错误、文件不存在等），错误信息需要让 LLM 有能力自我纠正。
+
+**决策：** 工具抛异常 → Agent Loop 捕获 → 构造 `Message(event_type="tool_call_result", message="[Error] ...")` → 喂回 LLM。错误消息需携带足够上下文（如 LLM 参数错误时附带 `arguments_schema`）。原则：**给够上下文让 LLM 有能力自修复**。具体包装策略后续迭代。
+
+**理由：** LLM 看到错误 + 工具定义后可以重试或改方式，比简单抛异常终止 loop 更鲁棒。
+
+**曾考虑的替代方案：**
+- 直接抛异常终止 loop —— 过于粗暴，LLM 长上下文下偶尔参数偏差是正常现象
+
+---
+
+### 决策 47 — ToolRegistry 全局注册表
+
+**背景：** 工具注册后需要被 Agent 发现。`BaseAgent` 遍历 `dir(self)` 太重，且职责不应在 Agent 上。
+
+**决策：** `ToolRegistry` 全局注册表：
+- `@tool` 装饰器构建 Tool → `ToolRegistry.register(tool)`
+- `BaseAgent.__init__` 调 `ToolRegistry.get_for(agent_name)` 按 agent 过滤拉取
+- `extra_tools` 参数额外注入，不进全局 Registry
+
+**理由：** 注册和发现解耦，`BaseAgent` 不关心工具来源。
+
+**曾考虑的替代方案：**
+- `BaseAgent` 遍历 `dir(self)` 扫描标记方法 —— 太重，职责混乱
+- 每个 Agent 手动注册工具列表 —— 容易遗漏
+
+---
+
+### 决策 48 — process() 接口：Message → Response
+
+**背景：** M1 的 `Handler.process(str) -> str` 只返回文本。引入 questionary 后，handler 需要告诉 App 渲染选项列表、等待审批确认、正常回复。`str` 不够用。
+
+**决策：** `process(input: Message) -> Response`。`Response` 是 CLI 指令层，不进对话历史：
+- `finish` — 渲染 markdown，本轮结束
+- `select` — 渲染 questionary.select（最后一项固定"自定义输入"），用户选择 → Message → agent loop 继续
+- `confirm` — 渲染 questionary.confirm，y → 执行工具，n → 跳过
+
+**理由：** `Response` 语义独立于 `Message`，CLI 指令和对话数据分层清晰。`select` 绑定"返回给 LLM 什么"，`confirm` 绑定"操作是否执行"。
+
+**曾考虑的替代方案：**
+- 复用 `Message` 作为 CLI 指令 —— 语义混淆，CLI 指令不应出现在对话历史中
+
+---
+
+### 决策 49 — 意图路由：纯 LLM 驱动
+
+**背景：** 设计文档提到 `Router.classify()`，但决策 15 已定调度 = 工具。需要确认是否还需要独立 Router。
+
+**决策：** 纯 LLM 驱动，不做独立 Router。主 Agent 的 LLM 通过 `dispatch_*` 工具选择调度。`src/main_agent/router.py` 不需要。
+
+**理由：** LLM 原生能力足够做意图识别，独立 Router 增加维护成本且边界情况弱。
+
+**曾考虑的替代方案：**
+- 独立 Router（关键词/规则）—— 快但边界弱，需要持续维护
+- 混合方案 —— 复杂度高，V1 不必要
+
+---
+
+### 决策 50 — CLI 交互库选型：questionary
+
+**背景：** M4 需要 CLI 提供选项列表和审批确认能力。选项包括 `questionary`、`InquirerPy`、rich 自带 Prompt。
+
+**决策：** 使用 `questionary`。`select` 覆盖选项列表（最后一项"🔧 自定义输入..."），`confirm` 覆盖工具审批。
+
+**理由：**
+- API 最简洁（`select()` + `confirm()` 两个函数覆盖所有场景）
+- 基于 prompt_toolkit，生态成熟，Windows 兼容性好
+- 一个依赖，`uv add questionary` 一句话
+
+**曾考虑的替代方案：**
+- `InquirerPy` — 功能更全但更重
+- Rich 自带 `Prompt.ask()` — 只有文本输入，无选择菜单
+- 自绘 —— 重复造轮子
+
+---
+
+### 决策 51 — Agent 切换机制：App.switch_agent()
+
+**背景：** 主 Agent dispatch 子 Agent 后，CLI 的 handler 需要切换。原设计用 `Response(type="switch_agent")`，但切换不应是 CLI 指令而应是 App 层操作，且需要带 pre_prompt/result_prompt 上下文。
+
+**决策：** `App.switch_agent(name, pre_prompt)` 封装"切 handler + 喂 prompt + 立即跑一轮 process"：
+- 主 Agent 的 `dispatch_*` 工具 → `App.switch_agent(target, pre_prompt)`
+- 子 Agent 的 `return` 工具 → `App.switch_agent("main", result_prompt)`
+- 子 Agent 不允许切到其他子 Agent
+
+**理由：**
+- `switch_agent` 是 App 层能力，不是 Response type，避免语义混淆
+- `pre_prompt` 让主 Agent 事先整理任务描述，用户不需要再发一遍
+- `result_prompt` 带回结果摘要，主 Agent 收到后无缝继续
+
+**曾考虑的替代方案：**
+- `Response(type="switch_agent")` — 混淆了 CLI 指令和 handler 切换
+- 全局 foreground agent 变量 —— 隐式状态，调用链不清晰
+
+---
+
+### 决策 52 — M4 子 Agent 实现：面试问答 Agent
+
+**背景：** 计划要求"初期子 Agent 可为桩实现"。但桩无法验证 agent loop + tool + dispatch + return 全链路。
+
+**决策：** M4 做一个真实子 Agent — **面试问答 Agent（interview）**：
+- 持有 RAG search 工具（从 `data/reference/interview_questions/` 检索题目）
+- 问 → 答 → 评价 → 下一题 → `return` 退出
+- 验证 tool 注册 + agent loop + dispatch + return 全链路
+
+**理由：** 简历 Agent 较复杂，先去实现一个简单的面试问答 Agent 端到端验证管线。只需要一个 RAG 工具。
+
+**曾考虑的替代方案：**
+- 桩实现（返回固定文本）—— 只验证 dispatch 管线，agent loop 和 tool 系统未覆盖
+- 完整简历 Agent —— M4 范围过大
+
+---
+
+### 决策 53 — AgentRegistry 设计
+
+**背景：** 主 Agent 需要持有子 Agent 注册表以完成 dispatch。设计文档提到但未细化。
+
+**决策：** 最简设计：
+```python
+class AgentRegistry:
+    _agents: dict[str, BaseAgent] = {}
+    def register(self, name, agent): ...
+    def get(self, name) -> BaseAgent: ...
+```
+主 Agent 特权持有，App 通过它做 handler 切换。未来需要 metadata 再加。
+
+**理由：** dict 够用，不需要过度设计。
+
+**曾考虑的替代方案：** 无。

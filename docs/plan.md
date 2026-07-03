@@ -61,14 +61,19 @@
 
 ### 里程碑 4 —— BaseAgent & 主 Agent
 
-- **预期产出：** Agent 基类和可调度子 Agent 的主 Agent
+- **预期产出：** Agent 基类、Tool 系统、主 Agent、面试问答子 Agent
 - **验收标准：**
-  - `src/agents/base.py` 定义 Agent 基类：对话循环、意图识别、工具调用、记忆读写便利方法（`self.write_memory()`、`self.get_recent_memories()`、`self.query_cross_agent()`）
-  - `src/main_agent/orchestrator.py` 实现主循环和 Agent 调度（`AgentRegistry`）
-  - `src/main_agent/router.py` 实现意图分类
-  - 主 Agent 能根据用户意图路由到对应的子 Agent（初期子 Agent 可为桩实现）
-  - `general_agent_prompt` 强制拼接生效
-- **前置依赖：** 里程碑 1（提示词）+ 里程碑 3（记忆）
+  - `src/response.py` — `Response` dataclass（`finish` / `select` / `confirm`）
+  - `src/cli/app.py` — `while` 循环按 `Response.type` 分支；`App.switch_agent()` 方法；questionary 集成
+  - `src/tools/registry.py` — `Tool` dataclass + `@tool` 装饰器 + `ToolRegistry`
+  - `src/agents/base.py` — `BaseAgent`：Agent Loop（JSON 解析 → 工具调度 → 结果喂回）、`list[Message]` 对话历史、`finish`/`ask_user`/`max_rounds` 终止、`process(Message) -> Response`、`write_memory()`
+  - `src/main_agent/agent.py` — `MainAgent(BaseAgent)`：14 个占位符值 + `AgentRegistry` + `dispatch_*` 工具 + `provide_choices` / 审批 gate
+  - `src/agents/interview/` — `InterviewAgent(BaseAgent)`：RAG search 工具 + 问→答→评价 loop + `return` 退回
+  - `main.py` — 组装全链路（`MainAgent` + `InterviewAgent` + `AgentRegistry` + `ToolRegistry` → `App`）
+  - `AGENT_MAX_ROUNDS` 环境变量
+  - `uv add questionary`
+  - 端到端验证：主 Agent dispatch → 面试 Agent 接管 → 问答交互 → `return` 退回主 Agent
+- **前置依赖：** 里程碑 1（提示词 + LLM）+ 里程碑 2（RAG）+ 里程碑 3（记忆 + config）
 
 ### 里程碑 5 —— 简历 Agent
 

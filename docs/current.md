@@ -1,12 +1,14 @@
 # 当前状态
 
-**当前阶段：** 阶段 3 — M3: 记忆模块 + RAG 收尾 ✅ 基本完成
+**当前阶段：** 阶段 4 — M4: BaseAgent & 主 Agent
 
-**当前任务：** 全部完成 ✅
+**当前任务：** 1. CLI + Response 升级
+
+**当前子任务：** ⬜ `Response` dataclass
 
 **当前阻塞：** 无
 
-**下一步：** 用户决定是否推进到里程碑 4 — BaseAgent & 主 Agent
+**下一步：** 创建 `src/response.py`，实现 `Response` 数据类（`type`/`message`/`choices`）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -48,3 +50,17 @@
 37. MemoryBuilder：`response_format={"type": "json_object"}` 强制 JSON，LLM 输出按 `\n` 拆分 → `\n\n---\n\n` 拼接 → Chunker 切分独立索引
 38. 记忆模块统一入口：`src/memory/__init__.py` 四大公开函数（`init`/`build_memories`/`search_memories`/`delete_memory`），类 RAG 单例懒加载；文件名加 `category` 防冲突；`---` 分隔符实现一文件多条独立检索
 39. Chroma in-memory `delete(where=...)` 不可靠（社区已知 bug：#4275/#5367）：全量 `/ragreload` 改用 `delete_collection` 原子删除后重建，单文件重载保留 `remove` + `add`（接受间歇性）
+40. Agent Loop 用 `list[Message]` 管理对话历史，调 LLM 时完整序列化不裁剪（保证 LLM 缓存命中率）
+41. 工具结果用 `role: "user"` 注入，`event_type: "tool_call_result"` 区分语义，不引入 OpenAI 原生 tool_call_id
+42. Agent Loop 终止条件：`finish` / `ask_user` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量）
+43. 工具用 `@tool` 装饰器注册，`input_schema` 扁平化（只写 description/default），type/required 自动推断
+44. 工具 handler 返回 `Message`，`event_payload` → `**kwargs` 直接映射到函数入参
+45. `Tool.agent` 字段控制可见性：None=通用，list=指定 Agent；全局加载 + 提示词过滤 + 调用门禁
+46. 工具错误带上下文喂回 LLM 让其自修复（如附带 `arguments_schema`），原则：给够上下文让 LLM 有能力自修复
+47. `ToolRegistry` 全局管理工具，`BaseAgent` 不扫描 `dir(self)`，直接从 Registry 按 agent 过滤拉取
+48. `process(input: Message) -> Response`；Response 是 CLI 指令层，不进对话历史；三种 type：`finish` / `select` / `confirm`
+49. 意图路由纯 LLM 驱动，不做独立 Router；`provide_choices` 工具动态列出能力 + 用户选择
+50. CLI 交互用 `questionary`，`select` 绑定"返回给 LLM"，`confirm` 绑定"操作审批"
+51. Agent 切换由 `App.switch_agent(name, pre_prompt)` 封装：切 handler + 喂 prompt + 立即跑一轮；子 Agent `return` 退回主 Agent；子 Agent 不允许切到其他子 Agent
+52. M4 做一个真实子 Agent（面试问答），验证 tool 注册 + agent loop + dispatch + return 全链路
+53. `AgentRegistry` 主 Agent 特权持有，App 通过它做 handler 切换

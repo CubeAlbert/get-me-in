@@ -180,3 +180,51 @@
 - ✅ 删除：写入 → 检索确认存在 → 删除文件 → Chroma 行数 -1
 - ✅ `/ragreload` 全量重载后检索验证（metadata 持久化确认）
 - ✅ Chroma in-memory `delete(where=)` 漏删已修复：全量 `/ragreload` 用 `delete_collection` 原子删除后重建；单文件重载保留 `remove` + `add`（接受间歇性不匹配，见决策 39）
+
+## 阶段 4 —— M4: BaseAgent & 主 Agent
+
+### 1. CLI + Response 升级 (`src/cli/` + `src/response.py`)
+
+- ⬜ `Response` dataclass：`type`（`finish` / `select` / `confirm`）+ `message` + `choices`
+- ⬜ `Handler` 协议升级：`process(Message) -> Response`
+- ⬜ 删除 `LLMHandler`
+- ⬜ `App` 升级：`while` 循环按 `Response.type` 分支（`finish` → rich / `select` → questionary / `confirm` → questionary）
+- ⬜ `App.switch_agent(name, pre_prompt)` 方法
+- ⬜ `uv add questionary`
+
+### 2. Tool 系统 (`src/tools/registry.py`)
+
+- ⬜ `Tool` dataclass：name / purpose / use_when / do_not_use_when / arguments_schema / expected_output / handler / agent + `to_xml()`
+- ⬜ `@tool` 装饰器：`input_schema` 扁平化 → `inspect.signature` 自动补齐 type/required → 构建 Tool → 注册至 `ToolRegistry`
+- ⬜ `ToolRegistry`：全局注册表，`get_for(agent_name)` 按 agent 过滤
+
+### 3. BaseAgent (`src/agents/base.py`)
+
+- ⬜ Agent loop：解析 LLM JSON `{thinking, action}` → 调工具 → 工具结果（`role: "user"` + `event_type: "tool_call_result"`）喂回 LLM → 循环
+- ⬜ 对话历史管理：`list[Message]` → `to_openai()` 完整序列化
+- ⬜ 终止条件：`finish` / `ask_user` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量）
+- ⬜ 工具调度：`self._tools` + 审批门禁（`Response(type="confirm")`）
+- ⬜ `process(input: Message) -> Response` 接口
+- ⬜ `write_memory()` 便利方法
+
+### 4. 主 Agent (`src/main_agent/agent.py`)
+
+- ⬜ `MainAgent(BaseAgent)`：14 个占位符值 + `AgentRegistry` + `dispatch_*` 工具
+- ⬜ `AgentRegistry`：register / get / list
+- ⬜ `dispatch_*` 工具：内部调 `App.switch_agent(target, pre_prompt)`
+- ⬜ `provide_choices` → `Response(type="select")`；审批 gate → `Response(type="confirm")`
+
+### 5. 入口集成 (`main.py` + `src/config.py`)
+
+- ⬜ 组装 `MainAgent` + `AgentRegistry` + `ToolRegistry`，注入 `App`
+- ⬜ `AGENT_MAX_ROUNDS` 环境变量
+
+### 6. 面试问答 Agent (`src/agents/interview/`)
+
+- ⬜ `InterviewAgent(BaseAgent)`：问 → 答 → 评价 → 下一题 loop
+- ⬜ RAG search 工具：`@tool search_questions(query)` → 检索 `data/reference/interview_questions/`
+- ⬜ `return` 退回主 Agent（通过 `App.switch_agent("main", result_prompt)`）
+
+### 7. 端到端验证
+
+- ⬜ 主 Agent dispatch → 面试 Agent 接管 → 问答交互 → `return` 退回主 Agent 全链路

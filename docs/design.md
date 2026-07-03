@@ -201,21 +201,33 @@ get-me-in/
 
 ### 4.0 Handler 协议
 
-**用途：** 定义 CLI 层与业务逻辑层之间的桥接接口。CLI 不直接调用 LLM 或 Agent，而是调用注入的 `Handler`，由 Handler 负责具体的输入处理逻辑。这是一个抽象协议，初期用桩实现（`DemoHandler`）验证 I/O 管线，后续主 Agent 实现同一协议后无缝替换。
+**用途：** 定义 CLI 层与业务逻辑层之间的桥接接口。CLI 不直接调用 LLM 或 Agent，而是调用注入的 `Handler`，由 Handler 负责具体的输入处理逻辑。M1 用 `LLMHandler` 验证端到端管线，M4 由 `BaseAgent` 实现同一协议。
 
 **职责：**
-- 定义 `process(user_input: str) -> str` 抽象方法
-- 提供 `DemoHandler` 桩实现用于测试渲染（输入 1→纯文本、2→markdown、3→选项列表）
+- 定义 `process(input: Message) -> Response` 抽象方法
+- CLI 层不关心处理细节，只根据 `Response.type` 做不同渲染
 
 **关键接口：**
-- `Handler.process(user_input: str) -> str` —— 处理用户输入，返回响应文本
+- `Handler.process(input: Message) -> Response` —— 处理用户输入 Message，返回 CLI 指令
 
-**位置：** `src/cli/handler.py`
+**`Response` 数据类（`src/response.py`）：**
+- `type: str` — `"finish"` / `"select"` / `"confirm"`
+- `message: str` — 展示文本（markdown）
+- `choices: list[str] | None` — `select` 时用，最后一项固定"🔧 自定义输入..."
+
+| type | 触发 | App 行为 | 返回给 LLM |
+|------|------|---------|------------|
+| `finish` | LLM 调 `finish` | `rich` 渲染 markdown | 无 |
+| `select` | LLM 调 `provide_choices` | `questionary.select` | 用户选择 → Message → agent loop |
+| `confirm` | 工具审批 gate | `questionary.confirm` | y → 执行；n → 跳过 |
+
+**位置：** `src/cli/handler.py` + `src/response.py`
 
 **设计决策：**
-- Handler 作为抽象协议而不是写死在 CLI 中 —— CLI 不关心谁在处理输入，后续主 Agent 只需实现 `process()` 接口即可接入
-- M1 阶段用 `DemoHandler` 桩 —— 此时 Agent 层尚未构建，桩实现足够验证 I/O 管线
-- 返回值是纯文本 —— 渲染由 CLI 层的 `rich` 负责
+- `Response` 是 CLI 指令层，不进对话历史 —— 与 `Message` 语义分离
+- `select` 绑定"返回给 LLM 什么"，`confirm` 绑定"操作是否执行"
+- M1 用 `LLMHandler`，M4 由 `BaseAgent` 替换 —— `Handler` 协议是稳定的桥接点
+- 交互库选择 `questionary`（`select` + `confirm`）
 
 ### 4.1 提示词模块
 
@@ -560,33 +572,45 @@ time: 2026-06-30T14:30:00
 
 ### 4.6 主 Agent（编排器）
 
-**用途：** 系统的入口 Agent。与所有 Agent 共享相同的基础能力（对话循环、意图识别、工具调用、记忆读写），唯一区别是主 Agent 持有 `AgentRegistry`，可以调度子 Agent。子 Agent 不允许持有或调度其他 Agent。
+**用途：** 系统的入口 Agent。与所有 Agent 共享相同的基础能力（对话循环、工具调用、记忆读写），唯一区别是主 Agent 持有 `AgentRegistry`，可以调度子 Agent。子 Agent 不允许持有或调度其他 Agent。
 
 **所有 Agent 的通用能力（由 `base.py` 定义）：**
-- 维护对话循环
-- 意图识别与分发
-- 工具调用（RAG、记忆读写、其他工具）
-- 记忆读写便利方法：`self.write_memory(memory)` / `self.get_recent_memories(limit)` / `self.query_cross_agent(query, agents, limit)`，内部自动传入 `self.name`
-- 任务完成后将结果写入记忆模块
+- 维护对话循环（LLM JSON → 工具调度 → 结果喂回 → 循环）
+- 工具调用（`ToolRegistry.get_for(name)` 拉取工具集）
+- 记忆写入：`self.write_memory(memory)`
+- `process(input: Message) -> Response` 统一接口
 
 **主 Agent 额外特权：**
 - 持有 `AgentRegistry`，根据意图调度子 Agent
-- 调度子 Agent 不依赖独立提示词，而是定义为工具（如 `dispatch_resume`），通过 `{{ADDITION_TOOLS}}` 注入主 Agent 的工具列表。LLM 通过标准工具选择流程（`04_tools.md` + `06_output_format.md`）完成意图识别和调度
+- 调度子 Agent 定义为工具（如 `dispatch_interview`），通过 `{{ADDITION_TOOLS}}` 注入主 Agent 的工具列表。LLM 通过标准工具选择流程（`04_tools.md` + `06_output_format.md`）完成意图识别和调度
+- `provide_choices` 工具：LLM 向用户列出选项（如子 Agent 列表）
+- 意图路由纯 LLM 驱动，不做独立 `Router`
+
+**`AgentRegistry`：**
+```python
+class AgentRegistry:
+    _agents: dict[str, BaseAgent] = {}
+    def register(self, name, agent): ...
+    def get(self, name) -> BaseAgent: ...
+    def list(self) -> list[str]: ...
+```
+
+**Agent 切换：`App.switch_agent(name, pre_prompt)`：**
+- 主 Agent 的 `dispatch_*` 工具 → `App.switch_agent(target, pre_prompt)`，将主 Agent 整理好的任务描述注入子 Agent
+- 子 Agent 的 `return` 工具 → `App.switch_agent("main", result_prompt)`，带回结果摘要
+- 子 Agent 不允许切到其他子 Agent
 
 **关键接口 / 公开 API：**
-- `Orchestrator.run(user_input: str) -> str` —— 主循环入口，接收用户输入，返回 Agent 响应
-- `Orchestrator.dispatch(intent: Intent) -> AgentResult` —— 根据意图调度子 Agent
-- `Router.classify(user_input: str) -> Intent` —— 意图分类
+- `BaseAgent.process(input: Message) -> Response` —— 统一入口
+- `App.switch_agent(name, pre_prompt)` —— Agent 切换
 
-**内部结构：**
-- `Orchestrator` 持有 `Router`（意图识别）、`MemoryStore`（记忆读写）和 `AgentRegistry`（子 Agent 注册表）
-- 子 Agent 实例通过 `AgentRegistry` 获取
-- 每次对话轮次结束后，将本轮交互写入记忆模块
+**位置：** `src/main_agent/agent.py` + `src/agents/base.py`
 
 **设计决策：**
-- 所有 Agent 共享相同的基础能力，而非只有主 Agent 拥有编排逻辑 —— 每个 Agent 独立管理自己的对话和工具调用
-- 主 Agent 的唯一特权是 Agent 调度 —— 子 Agent 不允许再持有子 Agent，保持两级结构
-- 意图路由在主 Agent 内完成 —— 主 Agent 拥有全局上下文，适合做调度决策
+- 所有 Agent 共享相同的基础能力 —— 每个 Agent 独立管理自己的对话和工具调用
+- 主 Agent 的唯一特权是 Agent 调度 + `AgentRegistry` —— 子 Agent 不允许持有或调度其他 Agent，保持两级结构
+- 意图路由纯 LLM 驱动 —— 调度 = 工具，不做独立 Router（`src/main_agent/router.py` 不需要）
+- 记忆方法：`write_memory()` 作为 BaseAgent 便利方法；`query_cross_agent()` 后续封装为 tool；`get_recent_memories()` 废弃不做
 
 ### 4.7 简历 Agent
 
@@ -744,6 +768,99 @@ Schema:  { "thinking": "...", "action": { "id": "...", "tool": "...", "message":
 - **thinking 独立字段** — 不混入 `message`，避免污染展示文本；未来由 `SHOW_THINKING` flag 控制是否展示（当前不做）
 - **event_payload 用 dict** — 足够灵活承载任意结构化载荷，不需要为每种工具定义具体 TypedDict
 - **event_type 非穷举** — 当前候选值为 `user_input`、`system_input`、`tool_call`、`tool_call_result`、`finish`，后续随工具扩展追加新类型
+
+### 4.13 Tool 系统
+
+**用途：** 定义 Agent 可用的工具。工具注册、LLM 描述生成、可见性控制、调用调度统一管理。
+
+**职责：**
+- 提供 `@tool` 装饰器注册工具
+- `Tool` dataclass 持有元数据并渲染 `04_tools.md` 格式的 XML
+- `ToolRegistry` 全局管理，按 Agent 过滤
+
+**`Tool` dataclass（`src/tools/registry.py`）：**
+```python
+@dataclass
+class Tool:
+    name: str              # fn.__name__
+    purpose: str
+    use_when: str
+    do_not_use_when: str
+    arguments_schema: str  # input_schema 自动补全后的 JSON
+    expected_output: str
+    handler: Callable      # 原函数
+    agent: list[str] | None  # None = 通用
+
+    def to_xml(self) -> str:  # 渲染为 04_tools.md 格式
+```
+
+**`@tool` 装饰器：**
+- `input_schema` 扁平化：`{参数名: {description, default}}`，只写 LLM 需要的
+- 装饰器阶段自动补齐：`type`（从 type hint）、`required`（从默认值有无）
+- 构建 `Tool` → `ToolRegistry.register(tool)`
+
+```python
+@tool(
+    purpose="读取文件指定行范围",
+    use_when="需要查看文件内容时",
+    do_not_use_when="文件不存在或路径无效时",
+    expected_output="返回指定行范围的文本内容",
+    input_schema={
+        "path": {"description": "文件路径"},
+        "line_from": {"description": "起始行号", "default": 1},
+    },
+    agent=["main"],  # 可选，None = 所有 Agent 可用
+)
+def read_content(path: str, line_from: int = 1) -> Message: ...
+```
+
+**`ToolRegistry`：**
+```python
+class ToolRegistry:
+    _tools: dict[str, Tool] = {}
+    @classmethod
+    def register(cls, tool): ...        # @tool 装饰器调用
+    @classmethod
+    def get_for(cls, agent_name): ...   # 按 agent 过滤，返回可用工具
+```
+
+**调用流程：**
+1. `BaseAgent.__init__` 调 `ToolRegistry.get_for(self.name)` → `self._tools`
+2. 构建 system prompt 时过滤后的 tool 调用 `to_xml()` → 注入 `{{ADDITION_TOOLS}}`
+3. Agent Loop 中 LLM 返回 `action.tool` + `action.args` → `tool.handler(**action.args)` → `Message`
+4. 调用前门禁检查：当前 Agent 是否在白名单
+
+**设计决策：**
+- `input_schema` 不写 `type` 和 `required` —— 从 type hint 自动推断，消除冗余和一致性风险
+- 全局注册 + agent 过滤 —— 加载和发现解耦
+- `to_xml()` 对齐 `04_tools.md` 模板 —— LLM 看到标准 XML 格式
+- `extra_tools` 参数不进全局 Registry —— 实例级工具注入
+- 错误处理：工具异常 → error Message（带 `arguments_schema` 等上下文）→ 喂回 LLM 自修复
+
+**位置：** `src/tools/registry.py`
+
+### 4.14 面试问答 Agent
+
+**用途：** M4 的验证性子 Agent。从 RAG 检索面试题，与用户进行问→答→评价的交互循环，验证 tool 注册 + agent loop + dispatch + return 全链路。
+
+**职责：**
+- 从 `data/reference/interview_questions/` 检索题目
+- 提问 → 用户回答 → LLM 评价 → 下一题循环
+- `return` 退回主 Agent
+
+**关键接口 / 公开 API：**
+- 继承 `BaseAgent`，实现 `process(Message) -> Response`
+- `@tool search_questions(query)` — RAG 检索工具
+
+**内部结构：**
+- `InterviewAgent(BaseAgent)`：持有 RAG search 工具
+- Loop：检索题目 → 展示 → 接收回答 → 评价 → 下一题或 `return`
+
+**位置：** `src/agents/interview/`
+
+**设计决策：**
+- 作为 M4 唯一的真实子 Agent，复杂度最低 —— 只需要一个 RAG 工具
+- 简历、学习等 Agent 在 M5+ 实现
 
 ## 5. 参考资料与约定
 
