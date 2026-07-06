@@ -72,3 +72,5 @@
 59. System prompt 不走 Message 结构，以纯文本 `{"role": "system", "content": "..."}` 注入 OpenAI messages，`_history` 只存对话消息
 60. 06_output / 07_input prompt 分工：06 定义 LLM 输出 schema（flat JSON，role=assistant，event_type∈{tool_call,finish}），07 定义输入 schema（role=user，event_type∈{user_input,tool_call_result,system_message}），字段互不越界
 61. `Message.to_json()` / `Message.from_llm_reply()` 统一序列化/反序列化入口，消除多处重复的 `dataclasses.asdict()` + `json.dumps()` 调用
+62. 移除 `04_tools.md` 中硬编码的预定义工具（`ask_user`/`finish`/`return`），所有工具由 `ToolRegistry` 通过 `{{ADDITION_TOOLS}}` 注入
+63. `Message.event_type` 为唯一 required 字段，`message` 默认 `""`，构造最小消息只需 `Message(event_type=EventType.USER_INPUT)`

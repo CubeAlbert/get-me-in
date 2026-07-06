@@ -69,6 +69,8 @@
 - [决策 59 — System prompt 隔离](#决策-59--system-prompt-隔离)
 - [决策 60 — 06_output / 07_input prompt 分工](#决策-60--06_output--07_input-prompt-分工)
 - [决策 61 — Message.to_json() / from_llm_reply() 统一序列化](#决策-61--messageto_json--from_llm_reply-统一序列化)
+- [决策 62 — 移除 04_tools.md 硬编码预定义工具](#决策-62--移除-04_toolsmd-硬编码预定义工具)
+- [决策 63 — message 默认 "" + event_type 唯一 required](#决策-63--message-默认--event_type-唯一-required)
 
 ---
 
@@ -1346,3 +1348,38 @@ class AgentRegistry:
 **曾考虑的替代方案：**
 - 保留 `Handler._parse_llm_reply()` 独立实现 —— 代码重复，BaseAgent 和 LLMHandler 都需各自维护解析逻辑
 - 用 `dataclasses.asdict()` 的 `dict_factory` 参数定制序列化 —— 与 `default=str` 等价但更隐晦
+
+---
+
+### 决策 62 — 移除 04_tools.md 硬编码预定义工具
+
+**背景：** `04_tools.md` 此前硬编码了 `ask_user`、`finish`、`return` 三个预定义工具，独立于 `ToolRegistry`。随着 `event_type` 枚举化，`finish` 不再是工具调用而是事件类型（LLM 通过 `event_type="finish"` 结束对话），`ask_user` 和 `return` 也不再作为独立工具存在。硬编码工具与 `{{ADDITION_TOOLS}}` 注入的真实工具并存，LLM 可能混淆。
+
+**决策：** 移除 `04_tools.md` 中所有硬编码的 `<Tool>` 定义，仅保留 `<Tools>{{ADDITION_TOOLS}}</Tools>` 空壳。所有可用工具由 `ToolRegistry` 通过 `{{ADDITION_TOOLS}}` 占位符动态注入。
+
+**理由：**
+- `finish` 已改为 `event_type` 枚举值，不再作为工具
+- `ask_user` 和 `return` 设计上已废弃（agent loop 通过 `finish` + message 即可覆盖交互和退出场景）
+- 单一工具来源（`ToolRegistry`）避免 LLM 看到两套工具列表不一致
+
+**曾考虑的替代方案：**
+- 保留 `ask_user` 和 `return` 为注册工具 —— 与 `finish` 语义重叠，增加 LLM 选择负担
+
+---
+
+### 决策 63 — message 默认 "" + event_type 唯一 required
+
+**背景：** `Message` 此前有两个 required 字段 `message` 和 `event_type`。在实际使用中，`tool_call_result` 消息的 `message` 通常为空（工具 stdout 可选），强制填写增加了不必要的样板代码。
+
+**决策：**
+- `message` 默认值改为 `""`（空字符串）
+- `event_type` 保持为唯一 required 字段
+- 字段顺序调整为 `event_type` 在前（required）→ `message` 在后（有默认值），符合 dataclass 规范
+
+**理由：**
+- `Message(event_type=EventType.USER_INPUT)` 即可构造最小消息，减少样板
+- `tool_call_result` 场景天然无需 message，默认 `""` 语义合理
+- 仍然可以在需要时显式传 `message="..."` 覆盖
+
+**曾考虑的替代方案：**
+- 保持 `message` required —— `tool_call_result` 每处构造都需手动 `message=""`，增加样板

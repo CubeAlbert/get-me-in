@@ -180,7 +180,8 @@ get-me-in/
 │       │   ├── 04_tools.md
 │       │   ├── 05_communtion_style.md
 │       │   ├── 06_output_format.md
-│       │   └── 07_reserved.md
+│       │   ├── 07_input_format.md
+│       │   └── 08_reserved.md
 │       ├── PLACEHOLDER.md    # 占位符清单（14 个 per-Agent 占位符，不参与拼接）
 │       ├── memory/
 │       │   └── builder.md    # MemoryBuilder 系统提示词
@@ -605,9 +606,10 @@ class AgentRegistry:
     def list(self) -> list[str]: ...
 ```
 
-**Agent 切换：`App.switch_agent(name, pre_prompt)`：**
-- 主 Agent 的 `dispatch_*` 工具 → `App.switch_agent(target, pre_prompt)`，将主 Agent 整理好的任务描述注入子 Agent
-- 子 Agent 的 `return` 工具 → `App.switch_agent("main", result_prompt)`，带回结果摘要
+**Agent 切换：通过 `@tool` 封装的 `switch_agent` 实现：**
+- `switch_to_subagent(agent_name)` — 主 Agent 通过 tool_call 调度子 Agent，切换 handler + 注入 pre_prompt
+- `switch_to_mainagent()` — 子 Agent 通过 tool_call 退回主 Agent，带回结果摘要
+- 底层共用一个 `switch_agent` 方法，两个 `@tool` 封装为 LLM 可调用的独立工具
 - 子 Agent 不允许切到其他子 Agent
 
 **关键接口 / 公开 API：**
@@ -745,39 +747,59 @@ class AgentRegistry:
 ```
 @dataclass
 class Message:
-    message: str              # 展示文本（终端显示）
-    event_type: str           # 事件类型：user_input / system_input / tool_call / tool_call_result / finish / ...
-    role: str = "user"        # 发送者角色：user / assistant / system
-    timestamp: datetime       # 消息时间戳
-    id: str                   # uuid4 hex，唯一标识
-    event_payload: dict|None  # 结构化载荷（工具名、参数、结果等）
-    thinking: str|None        # LLM 内部推理；user 消息恒为 None
+    event_type: EventType      # EventType(StrEnum)，唯一 required 字段
+    message: str = ""          # 展示文本（终端显示），默认空字符串
+    id: str                    # uuid4 hex，唯一标识（auto）
+    role: str = "user"         # 发送者角色：user / assistant / system
+    timestamp: datetime        # 消息时间戳（auto）
+    tool: str | None = None    # 工具名，仅 tool_call / tool_call_result 时填写
+    tool_call_id: str | None   # 关联 tool_call 消息的 id，仅 tool_call_result 时填写
+    event_payload: dict|None   # 结构化载荷（工具参数或调用结果）
+    thinking: str|None = None  # LLM 内部推理；role="user" 时恒为 None
+```
+
+**事件类型枚举：**
+
+```
+class EventType(StrEnum):
+    USER_INPUT = "user_input"            # 用户输入（输入侧）
+    TOOL_CALL = "tool_call"              # 工具调用（输出侧）
+    TOOL_CALL_RESULT = "tool_call_result" # 工具调用结果（输入侧）
+    FINISH = "finish"                     # 对话结束（输出侧）
+    SYSTEM_MESSAGE = "system_message"     # 系统提示/错误恢复（输入侧）
 ```
 
 **字段语义：**
 
 | 字段 | 含义 | 示例 |
 |------|------|------|
-| `message` | 始终是终端展示文本，与 `action.message` 语义一致 | "正在搜索相关面试题..." |
-| `event_type` | 区分消息语义，非穷举列表，随工具扩展追加 | `user_input`、`tool_call`、`finish` |
-| `role` | "谁发的"——消息来源控制，不可被 event_type 替代 | system 角色下既有 `system_input` 也有 `tool_call_result` |
-| `thinking` | LLM 推理过程，对齐 `06_output_format.md` 顶层 `"thinking"` | user 消息恒为 `None` |
-| `event_payload` | `dict | None`，承载工具调用、参数、结果等结构化数据 | `{"tool": "search", "args": {...}}` |
+| `event_type` | 事件类型，`EventType` 枚举值 | `EventType.USER_INPUT`、`EventType.TOOL_CALL` |
+| `message` | 终端展示文本，默认 `""` | `tool_call_result` 时通常为空 |
+| `role` | "谁发的"——消息来源控制 | user 下既有 `user_input` 也有 `tool_call_result` |
+| `tool` | 工具名，串联调用链 | `"get_current_datetime"` |
+| `tool_call_id` | 对应 `tool_call` 消息的 `id` | `"550e8400-e29b-41d4-a716-446655440000"` |
+| `event_payload` | `dict | None`：`tool_call` 时为参数，`tool_call_result` 时为结果 | `{"datetime": "2026-07-06 19:30:00 +0800"}` |
+| `thinking` | LLM 推理过程，对齐 `06_output_format.md` | user 消息恒为 `None` |
 
-**与 `06_output_format.md` Schema 的映射：**
+**与 prompt 的映射：**
 
-```
-Schema:  { "thinking": "...", "action": { "id": "...", "tool": "...", "message": "...", "args": {} } }
-           ─────────────        ─────────────────────────────────────────────────────────
-           → Message.thinking    → Message.id    → Message.event_type  → Message.message  → Message.event_payload
-```
+- **输出侧（`06_output_format.md`）**：LLM 输出扁平 JSON → `Message.from_llm_reply()` 反序列化。`role` 固定 `"assistant"`，`event_type∈{tool_call, finish}`。
+- **输入侧（`07_input_format.md`）**：对话历史经 `Message.to_json()` 序列化 → 注入 `{"role": "user", "content": ...}`。`role` 固定 `"user"`，`event_type∈{user_input, tool_call_result, system_message}`。
+
+**序列化/反序列化：**
+
+- `Message.to_json()` — `dataclasses.asdict()` + `json.dumps(default=str)`，处理 datetime 等非 JSON 类型
+- `Message.from_llm_reply(reply)` — 静态方法，按扁平 JSON schema 解析；required 字段 `[]` 取值，optional 字段 `.get()` 默认 `None`
 
 **设计决策：**
-- **模块级独立** — 放在 `src/message.py`，与 config/logger 同为项目级基础设施。放在 memory 下会导致 CLI/Agent/LLM 反向依赖 memory 模块
-- **role 保留** — `event_type` 不能替代 `role` 做消息来源控制，二者职责不同：role 回答"谁发的"，event_type 回答"什么类型"
-- **thinking 独立字段** — 不混入 `message`，避免污染展示文本；未来由 `SHOW_THINKING` flag 控制是否展示（当前不做）
-- **event_payload 用 dict** — 足够灵活承载任意结构化载荷，不需要为每种工具定义具体 TypedDict
-- **event_type 非穷举** — 当前候选值为 `user_input`、`system_input`、`tool_call`、`tool_call_result`、`finish`，后续随工具扩展追加新类型
+- **模块级独立** — 放在 `src/message.py`，与 config/logger 同为项目级基础设施
+- **`EventType(StrEnum)` 枚举化** — `StrEnum` 继承 `str`，JSON 序列化后为字符串，与 LLM 交互无摩擦；代码中禁用裸字符串
+- **`message` 默认 `""`** — `event_type` 是唯一 required 字段，`tool_call_result` 场景无需强制填 message
+- **`tool` / `tool_call_id` 一级字段** — 比嵌套在 `event_payload` 内部更易于检索和追踪
+- **输入/输出分文件** — `06_output_format.md`（输出 schema）+ `07_input_format.md`（输入 schema），字段互不越界，LLM 清楚区分
+- **role 保留** — `event_type` 不能替代 `role`：role 回答"谁发的"，event_type 回答"什么类型"
+- **thinking 独立字段** — 不混入 `message`，由 `SHOW_THINKING` flag 控制是否展示
+- **event_payload 用 dict** — 足够灵活承载任意结构化载荷
 
 ### 4.13 Tool 系统
 
@@ -837,7 +859,7 @@ class ToolRegistry:
 **调用流程：**
 1. `BaseAgent.__init__` 调 `ToolRegistry.get_for(self.name)` → `self._tools`
 2. 构建 system prompt 时过滤后的 tool 调用 `to_xml()` → 注入 `{{ADDITION_TOOLS}}`
-3. Agent Loop 中 LLM 返回 `action.tool` + `action.args` → `tool.handler(**action.args)` → `Message`
+3. Agent Loop 中 LLM 返回扁平 JSON（`tool` + `event_payload`）→ `tool.handler(**event_payload)` 返回纯数据 → 调用方包装为 `tool_call_result` Message（含 tool/tool_call_id/event_payload）
 4. 调用前门禁检查：当前 Agent 是否在白名单
 
 **设计决策：**
@@ -845,7 +867,7 @@ class ToolRegistry:
 - 全局注册 + agent 过滤 —— 加载和发现解耦
 - `to_xml()` 对齐 `04_tools.md` 模板 —— LLM 看到标准 XML 格式
 - `extra_tools` 参数不进全局 Registry —— 实例级工具注入
-- 错误处理：工具异常 → error Message（带 `arguments_schema` 等上下文）→ 喂回 LLM 自修复
+- 错误处理：工具异常 → `event_payload={"error": str(e)}` 的 `tool_call_result` Message → 喂回 LLM 自修复
 
 **位置：** `src/tools/registry.py`
 
