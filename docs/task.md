@@ -189,7 +189,6 @@
 - ✅ `Handler` 协议升级：`process(Message) -> Response` + `_parse_llm_reply()` 静态方法
 - ✅ `App` 升级：`Message` 包装输入 + `Response` 解包渲染 + `thinking` 展示
 - ⛔ 删除 `LLMHandler` — LLMHandler 改为临时桩适配新协议，待 MainAgent 就绪后替换
-- ⬜ `App.switch_agent(name, pre_prompt)` 方法
 - ⬜ `uv add questionary`
 - 📌 `config.py` 环境变量支持 bool 类型（当前 `SHOW_THINKING` 用字符串比较）
 - 📌 `_parse_llm_reply()` JSON 解析失败时自动重试 LLM（带错误上下文）
@@ -200,6 +199,7 @@
 - ⬜ `Tool` dataclass：name / purpose / use_when / do_not_use_when / arguments_schema / expected_output / handler / agent + `to_xml()`
 - ⬜ `@tool` 装饰器：`input_schema` 扁平化 → `inspect.signature` 自动补齐 type/required → 构建 Tool → 注册至 `ToolRegistry`
 - ⬜ `ToolRegistry`：全局注册表，`get_for(agent_name)` 按 agent 过滤
+- ⬜ `App.switch_agent(name, pre_prompt)` 方法 — dispatch 工具的 App 层消费者，Tool 系统就绪后实现
 
 ### 3. BaseAgent (`src/agents/base.py`)
 

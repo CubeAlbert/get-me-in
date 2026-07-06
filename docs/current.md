@@ -4,11 +4,11 @@
 
 **当前任务：** 1. CLI + Response 升级
 
-**当前子任务：** ⬜ `App.switch_agent(name, pre_prompt)` 方法
+**当前子任务：** ⬜ `uv add questionary`
 
 **当前阻塞：** 无
 
-**下一步：** 实现 `App.switch_agent(name, pre_prompt)`：切 handler + 喂 prompt + 立即跑一轮 process
+**下一步：** 安装 `questionary` 依赖（`uv add questionary`），为 `Response(type="select/confirm")` 做准备
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
