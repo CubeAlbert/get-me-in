@@ -50,6 +50,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **新文件先列方法清单** — 每次准备新建代码文件之前，先告知用户该文件计划提供哪些功能/方法/类，让用户确认后再创建文件
 - **非交互模块测试后提供 Notebook 代码** — 每次新模块测试完毕后，如果是非交互式功能（如 RAG 各组件），提供给用户一段可在 Jupyter Notebook 中运行的代码块，让用户自行验证；不要仅提供命令行测试结果
 - **日志用 `get_logger(__name__)`** — 禁止 `print()` 调试；各模块通过 `from src.logger import get_logger` + `logger = get_logger(__name__)` 获取 logger；失败记日志不抛异常（防御性编程）
+- **禁止 Bash + Python 读写文件** — 永远不要用 `python -c "..."` 或 `sed`/`awk` 等命令读取或修改项目文件，必须使用当前环境提供的 Read/Edit/Write/Glob/Grep 等专用工具
 - **current.md 新增决策时同步更新 decision.md** — `docs/current.md` 的"重要决策"每新增一条编号，必须同步在 `docs/decision.md` 追加完整决策条目（背景/决策/理由/曾考虑的替代方案），两边的编号体系保持一致
 
 ## Doc Files
