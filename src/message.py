@@ -5,7 +5,7 @@
 用法:
     from src.message import Message
 
-    msg = Message(message="你好", event_type=EventType.USER_INPUT, role="user")
+    msg = Message(event_type=EventType.USER_INPUT, message="你好")
 """
 
 import json
@@ -39,8 +39,8 @@ class Message:
     """对话中的一条消息 / 事件。
 
     Attributes:
-        message: 展示文本 — 终端显示给用户的内容。
-        event_type: 事件类型标识（如 ``"user_input"``、``"tool_call"``、``"finish"`` 等）。
+        event_type: 事件类型标识，见 ``EventType`` 枚举。
+        message: 展示文本 — 终端显示给用户的内容。默认 ``""``。
         id: uuid4 hex 字符串，消息唯一标识。
         role: 发送者角色：``"user"`` / ``"assistant"`` / ``"system"``。默认 ``"user"``。
         timestamp: 消息时间戳，默认当前时间。
@@ -50,8 +50,8 @@ class Message:
         thinking: LLM 内部推理过程；role 为 ``"user"`` 时恒为 ``None``。
     """
 
-    message: str
     event_type: EventType
+    message: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     role: str = "user"
     timestamp: datetime = field(default_factory=datetime.now)
