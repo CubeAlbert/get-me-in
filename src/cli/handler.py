@@ -4,13 +4,17 @@ CLI 不直接调用 LLM 或 Agent，而是调用注入的 Handler。
 Handler 负责具体的输入处理逻辑，CLI 只负责 I/O 和渲染。
 
 M1 阶段用 LLMHandler 验证端到端管线（config → LLM → prompts → CLI）；
-后续主 Agent（Orchestrator）实现同一 process() 接口后无缝替换。
+M4 阶段 Handler 协议升级为 ``Message → Response``，LLMHandler 临时适配新协议。
 """
+
+import json
 
 from abc import ABC, abstractmethod
 
 from src.llm.client import LLMClient
+from src.message import Message
 from src.prompts.loader import PromptLoader
+from src.response import Response
 
 
 class Handler(ABC):
@@ -21,16 +25,43 @@ class Handler(ABC):
     """
 
     @abstractmethod
-    def process(self, user_input: str) -> str:
-        """处理用户输入，返回响应文本（markdown 格式）。
+    def process(self, input: Message) -> Response:
+        """处理输入消息，返回 CLI 指令。
 
         Args:
-            user_input: 用户原始输入
+            input: 输入消息（含用户文本、事件类型等）。
 
         Returns:
-            markdown 格式的响应文本，由 CLI 层用 rich 渲染
+            CLI 指令，告诉 App 如何渲染本轮结果。
         """
         ...
+
+    @staticmethod
+    def _parse_llm_reply(reply: str) -> Message:
+        """将 LLM 返回的 JSON 反序列化为 ``Message``。
+
+        按 ``06_output_format.md`` schema 解析：
+        ``thinking`` → ``Message.thinking``\\，
+        ``action.tool`` → ``Message.event_type``\\，
+        ``action.message`` → ``Message.message``\\，
+        ``action.args`` → ``Message.event_payload``\\，
+        ``action.id`` → ``Message.id``。
+
+        Args:
+            reply: LLM 返回的原始 JSON 字符串。
+
+        Returns:
+            解析后的 Message，``role`` 固定为 ``"assistant"``。
+        """
+        parsed = json.loads(reply)
+        return Message(
+            role="assistant",
+            id=parsed["action"]["id"],
+            message=parsed["action"]["message"],
+            event_type=parsed["action"]["tool"],
+            event_payload=parsed["action"].get("args", {}),
+            thinking=parsed.get("thinking"),
+        )
 
 
 class LLMHandler(Handler):
@@ -70,9 +101,15 @@ class LLMHandler(Handler):
             {"role": "system", "content": system_prompt}
         ]
 
-    def process(self, user_input: str) -> str:
+    def process(self, input: Message) -> Response:
         """调 LLM 获取回复，维护对话历史。"""
-        self._messages.append({"role": "user", "content": user_input})
+        self._messages.append({"role": "user", "content": input.message})
         reply = self._llm.chat_pro(self._messages)
         self._messages.append({"role": "assistant", "content": reply})
-        return reply
+
+        llm_msg = self._parse_llm_reply(reply)
+        return Response(
+            type="finish",
+            message=llm_msg.message,
+            thinking=llm_msg.thinking,
+        )

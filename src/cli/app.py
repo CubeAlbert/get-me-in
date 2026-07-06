@@ -18,6 +18,8 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from src.cli.handler import Handler
+from src.config import config
+from src.message import Message
 from src.rag import load
 
 
@@ -118,12 +120,16 @@ class App:
                 if not content:
                     self._console.print("[yellow]未输入内容，已取消[/]")
                     continue
-                response = self._handler.process(content)
+                msg = Message(message=content, event_type="user_input")
+                response = self._handler.process(msg)
             else:
-                response = self._handler.process(user_input)
+                msg = Message(message=user_input, event_type="user_input")
+                response = self._handler.process(msg)
 
             self._console.print()
-            self._console.print(Markdown(response))
+            if config.SHOW_THINKING == "true" and response.thinking:
+                self._console.print(Panel(response.thinking, title="思考", border_style="dim"))
+            self._console.print(Markdown(response.message))
             self._console.print()
 
     def _print_welcome(self) -> None:
