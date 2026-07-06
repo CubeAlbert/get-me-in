@@ -7,12 +7,10 @@ M1 阶段用 LLMHandler 验证端到端管线（config → LLM → prompts → C
 M4 阶段 Handler 协议升级为 ``Message → Response``，LLMHandler 临时适配新协议。
 """
 
-import json
-
 from abc import ABC, abstractmethod
 
 from src.llm.client import LLMClient
-from src.message import Message
+from src.message import EventType, Message
 from src.prompts.loader import PromptLoader
 from src.response import Response, ResponseType
 
@@ -40,28 +38,9 @@ class Handler(ABC):
     def _parse_llm_reply(reply: str) -> Message:
         """将 LLM 返回的 JSON 反序列化为 ``Message``。
 
-        按 ``06_output_format.md`` schema 解析：
-        ``thinking`` → ``Message.thinking``\\，
-        ``action.tool`` → ``Message.event_type``\\，
-        ``action.message`` → ``Message.message``\\，
-        ``action.args`` → ``Message.event_payload``\\，
-        ``action.id`` → ``Message.id``。
-
-        Args:
-            reply: LLM 返回的原始 JSON 字符串。
-
-        Returns:
-            解析后的 Message，``role`` 固定为 ``"assistant"``。
+        委托给 ``Message.from_llm_reply``。
         """
-        parsed = json.loads(reply)
-        return Message(
-            role="assistant",
-            id=parsed["action"]["id"],
-            message=parsed["action"]["message"],
-            event_type=parsed["action"]["tool"],
-            event_payload=parsed["action"].get("args", {}),
-            thinking=parsed.get("thinking"),
-        )
+        return Message.from_llm_reply(reply)
 
 
 class LLMHandler(Handler):
@@ -122,10 +101,9 @@ class LLMHandler(Handler):
             self._messages.append({"role": "assistant", "content": reply})
 
             llm_msg = self._parse_llm_reply(reply)
-            tool_name = llm_msg.event_type
 
-            # 终止 / 挂起 — 直接返回
-            if tool_name in ("finish", "ask_user", "return"):
+            # 终止 — LLM 表示无需工具调用
+            if llm_msg.event_type == EventType.FINISH:
                 return Response(
                     type=ResponseType.FINISH,
                     message=llm_msg.message,
@@ -133,17 +111,21 @@ class LLMHandler(Handler):
                 )
 
             # 工具调用
+            tool_name = llm_msg.tool
             if tool_name and tool_name in self._tools:
                 tool = self._tools[tool_name]
                 try:
-                    result = tool.handler(**llm_msg.event_payload)
+                    payload = tool.handler(**llm_msg.event_payload)
                 except Exception as e:
-                    result = Message(
-                        role="user",
-                        event_type="tool_call_result",
-                        message=f"[Error] {tool_name} 执行失败：{e}",
-                    )
-                self._messages.append({"role": "user", "content": result.message})
+                    payload = {"error": str(e)}
+                result = Message(
+                    role="user",
+                    event_type=EventType.TOOL_CALL_RESULT,
+                    tool=tool_name,
+                    tool_call_id=llm_msg.id,
+                    event_payload=payload,
+                )
+                self._messages.append({"role": "user", "content": result.to_json()})
                 continue
 
             # 未知 tool — 让 LLM 知道

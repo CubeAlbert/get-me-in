@@ -5,12 +5,33 @@
 用法:
     from src.message import Message
 
-    msg = Message(message="你好", event_type="user_input", role="user")
+    msg = Message(message="你好", event_type=EventType.USER_INPUT, role="user")
 """
 
+import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
+
+
+class EventType(StrEnum):
+    """消息事件类型枚举。"""
+
+    USER_INPUT = "user_input"
+    """用户输入。"""
+
+    TOOL_CALL = "tool_call"
+    """工具调用。"""
+
+    TOOL_CALL_RESULT = "tool_call_result"
+    """工具调用结果。"""
+
+    FINISH = "finish"
+    """当前没有工具需要调用，展示结果给用户。"""
+
+    SYSTEM_MESSAGE = "system_message"
+    """系统提示消息（一般用于错误恢复或异常处理）。"""
 
 
 @dataclass
@@ -20,17 +41,49 @@ class Message:
     Attributes:
         message: 展示文本 — 终端显示给用户的内容。
         event_type: 事件类型标识（如 ``"user_input"``、``"tool_call"``、``"finish"`` 等）。
+        id: uuid4 hex 字符串，消息唯一标识。
         role: 发送者角色：``"user"`` / ``"assistant"`` / ``"system"``。默认 ``"user"``。
         timestamp: 消息时间戳，默认当前时间。
-        id: uuid4 hex 字符串，消息唯一标识。
-        event_payload: 结构化载荷（工具名、参数、结果等），无载荷时为 ``None``。
+        tool: 调用的工具名，未调用工具时为 ``None``。
+        tool_call_id: 对应 ``tool_call`` 消息的 ``id``，仅 ``tool_call_result`` 时填写，其余为 ``None``。
+        event_payload: 结构化载荷。``tool_call`` 时为工具参数；``tool_call_result`` 时为工具调用结果。无载荷时为 ``None``。
         thinking: LLM 内部推理过程；role 为 ``"user"`` 时恒为 ``None``。
     """
 
     message: str
-    event_type: str
+    event_type: EventType
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
     role: str = "user"
     timestamp: datetime = field(default_factory=datetime.now)
-    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    tool: str | None = None
+    tool_call_id: str | None = None
     event_payload: dict | None = None
     thinking: str | None = None
+
+    def to_json(self) -> str:
+        """序列化为 JSON 字符串，用于注入 LLM 对话历史。"""
+        import dataclasses
+        return json.dumps(dataclasses.asdict(self), ensure_ascii=False, default=str)
+
+    @staticmethod
+    def from_llm_reply(reply: str) -> "Message":
+        """从 LLM 返回的 JSON 构建 Message。
+
+        按 ``06_output_format.md`` 扁平 schema 解析。
+
+        Args:
+            reply: LLM 返回的原始 JSON 字符串。
+
+        Returns:
+            解析后的 Message，``role`` 固定为 ``"assistant"``。
+        """
+        parsed = json.loads(reply)
+        return Message(
+            role="assistant",
+            id=parsed["id"],
+            message=parsed["message"],
+            event_type=parsed["event_type"],
+            thinking=parsed["thinking"],
+            tool=parsed.get("tool"),
+            event_payload=parsed.get("event_payload"),
+        )

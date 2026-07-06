@@ -4,7 +4,6 @@
 遗漏任何一个 Python 会在 import 时报 ``TypeError``，防止漏填提示词。
 """
 
-import dataclasses
 import json
 
 from abc import abstractmethod
@@ -13,15 +12,12 @@ from src.cli.handler import Handler
 from src.config import config
 from src.llm.client import LLMClient
 from src.logger import get_logger
-from src.message import Message
+from src.message import EventType, Message
 from src.prompts.loader import PromptLoader
 from src.response import Response, ResponseType
 from src.tools.registry import ConfirmMode, Tool, ToolRegistry
 
 logger = get_logger(__name__)
-
-# 硬编码在 04_tools.md 中，不走 ToolRegistry 但 agent loop 需要识别
-_TERMINAL_TOOLS = frozenset({"finish", "ask_user", "return"})
 
 
 class BaseAgent(Handler):
@@ -138,9 +134,8 @@ class BaseAgent(Handler):
 
         self._llm = llm
         self._output_format = prompts.get_raw("general_agent/06_output_format")
-        self._history: list[Message] = [
-            Message(role="system", message=system_prompt, event_type="system_prompt")
-        ]
+        self._system_prompt = system_prompt
+        self._history: list[Message] = []
         self._max_rounds = int(config.AGENT_MAX_ROUNDS)
 
         logger.debug(
@@ -155,28 +150,31 @@ class BaseAgent(Handler):
     def _to_openai(self) -> list[dict]:
         """将 ``_history`` 转换为 OpenAI API 格式。
 
-        每个 Message 完整序列化为 JSON，结构不变 → LLM 缓存命中。
+        system prompt 为纯文本，对话消息序列化为 Message JSON。
         """
-        return [
-            {"role": m.role, "content": json.dumps(dataclasses.asdict(m))}
-            for m in self._history
-        ]
+        messages = [{"role": "system", "content": self._system_prompt}]
+        for m in self._history:
+            messages.append({"role": m.role, "content": m.to_json()})
+        return messages
 
-    def _execute_tool(self, tool_name: str, payload: dict) -> Message:
-        """执行工具并返回结果 Message。
+    def _execute_tool(self, tool_name: str, payload: dict, tool_call_id: str) -> Message:
+        """执行工具并返回 tool_call_result Message。
 
-        异常时记 error 日志刷到 stderr，同时包装为 tool_call_result 喂回 LLM。
+        异常时记 error 日志，包装为 error payload 喂回 LLM。
         """
         tool = self._tools[tool_name]
         try:
-            return tool.handler(**payload)
+            result = tool.handler(**payload)
         except Exception as e:
             logger.error("工具 %s 执行失败: %s", tool_name, e)
-            return Message(
-                role="user",
-                event_type="tool_call_result",
-                message=f"[Error] {tool_name} 执行失败：{e}",
-            )
+            result = {"error": str(e)}
+        return Message(
+            role="user",
+            event_type=EventType.TOOL_CALL_RESULT,
+            tool=tool_name,
+            tool_call_id=tool_call_id,
+            event_payload=result,
+        )
 
     def _should_confirm(self, tool: Tool) -> bool:
         """判断工具是否需要审批。不暴露给 LLM。"""
@@ -190,14 +188,14 @@ class BaseAgent(Handler):
         """Agent 主循环。
 
         用户输入 → LLM 推理 → 解析 JSON → 调工具/返回结果 → 循环，
-        正常退出由 LLM 调 ``finish`` / ``ask_user`` / ``return`` 触发。
-        达到 ``_max_rounds`` 仍未返回终止工具时安全阀强制结束。
+        正常退出由 LLM 返回 ``event_type: "finish"`` 触发。
+        达到 ``_max_rounds`` 仍未 finish 时安全阀强制结束。
         """
         self._history.append(
             Message(
                 role="user",
                 message=input.message,
-                event_type=input.event_type or "user_input",
+                event_type=EventType.USER_INPUT,
             )
         )
 
@@ -212,7 +210,7 @@ class BaseAgent(Handler):
                 self._history.append(
                     Message(
                         role="user",
-                        event_type="json_format_reminder",
+                        event_type=EventType.SYSTEM_MESSAGE,
                         message=self._output_format,
                     )
                 )

@@ -63,6 +63,12 @@
 - [决策 53 — AgentRegistry 设计](#决策-53--agentregistry-设计)
 - [决策 54 — 工具审批模式：ConfirmMode 枚举](#决策-54--工具审批模式confirmmode-枚举)
 - [决策 55 — Agent Loop 中间进度回传：Response(type="progress")](#决策-55--agent-loop-中间进度回传responsetypeprogress)
+- [决策 56 — Message.event_type 枚举化：EventType(StrEnum)](#决策-56--messageeventtype-枚举化eventtypestrenum)
+- [决策 57 — Message 新增 tool / tool_call_id 一级字段](#决策-57--message-新增-tool--tool_call_id-一级字段)
+- [决策 58 — 工具 handler 返回纯数据](#决策-58--工具-handler-返回纯数据)
+- [决策 59 — System prompt 隔离](#决策-59--system-prompt-隔离)
+- [决策 60 — 06_output / 07_input prompt 分工](#决策-60--06_output--07_input-prompt-分工)
+- [决策 61 — Message.to_json() / from_llm_reply() 统一序列化](#决策-61--messageto_json--from_llm_reply-统一序列化)
 
 ---
 
@@ -1218,3 +1224,125 @@ class AgentRegistry:
 - `process()` 改为 generator（`yield Response`）—— 改变协议签名为 async，违反决策 2（同步代码）
 - 让 App 在另一个线程轮询 —— 过度复杂，单线程同步 loop 更可控
 - 暴露给 LLM —— 安全风险，LLM 可能尝试说服用户绕过审批
+
+---
+
+### 决策 56 — Message.event_type 枚举化：EventType(StrEnum)
+
+**背景：** `Message.event_type` 此前为 `str` 类型，代码中散布裸字符串（如 `"user_input"`、`"tool_call_result"` 等），拼写错误只能在运行时暴露，且各模块各自理解 event_type 语义，缺乏统一约束。
+
+**决策：** 定义 `EventType(StrEnum)` 枚举，包含 5 个值：
+- `USER_INPUT` — 用户输入
+- `TOOL_CALL` — 工具调用（LLM 输出）
+- `TOOL_CALL_RESULT` — 工具调用结果
+- `FINISH` — 对话结束
+- `SYSTEM_MESSAGE` — 系统提示/错误恢复
+
+`Message.event_type` 类型改为 `EventType`。所有模块代码中使用 `EventType.USER_INPUT` 等枚举值，不再使用裸字符串。
+
+**理由：**
+- `StrEnum` 继承 `str`，`EventType.FINISH == "finish"` 为 `True`，JSON 序列化后为 `"finish"` 字符串，与 LLM 交互无摩擦
+- IDE 自动补全 + 静态类型检查，拼写错误在编写阶段暴露
+- 集中管理事件类型语义，新增/废弃类型有统一入口
+
+**曾考虑的替代方案：**
+- 保持 `str` 类型 + 常量 —— 同样解决拼写问题，但无类型约束
+- 使用 `Enum`（非 `StrEnum`）—— `json.dumps()` 输出 `"EventType.FINISH"` 而非 `"finish"`，需额外序列化逻辑
+
+---
+
+### 决策 57 — Message 新增 tool / tool_call_id 一级字段
+
+**背景：** 此前 `Message` 字段不含工具名和工具调用关联信息。`tool_call_result` 的场景下，工具名放在 `event_payload` 内部，工具调用关联 ID 不存在（仅通过对话顺序隐式关联）。随着 `EventType` 枚举明确化，`event_type` 不再承担"这是哪个工具"的语义，需要独立字段承载。
+
+**决策：**
+- `Message` 新增 `tool: str | None = None` — 工具名，仅 `tool_call` 和 `tool_call_result` 时填写
+- `Message` 新增 `tool_call_id: str | None = None` — 关联的 `tool_call` 消息的 `id`，仅 `tool_call_result` 时填写
+- `event_payload` 不再嵌套 `tool` / `tool_call_id`，仅承载纯载荷数据（`tool_call` 时为工具参数，`tool_call_result` 时为调用结果）
+
+**理由：**
+- 一级字段比嵌套字典更易于检索和序列化
+- `tool_call_id` 显式关联使链式追踪成为可能（tool_call → tool_call_result 的因果链）
+- 分离关注点：`tool` 回答"哪个工具"，`event_payload` 回答"什么数据"
+
+**曾考虑的替代方案：**
+- 放在 `event_payload` 内部 —— 增加嵌套层级，查询不便
+- 不设 `tool_call_id`，靠 `id` 顺序匹配 —— 并发或复杂对话时不可靠
+
+---
+
+### 决策 58 — 工具 handler 返回纯数据
+
+**背景：** 此前 `@tool` 装饰的工具 handler（如 `get_current_datetime()`）直接返回 `Message` 对象，handler 内部自行包装 `event_type`、`role` 等字段。这导致 handler 感知了协议层细节，且不同 handler 的包装方式可能不一致。
+
+**决策：** Handler 返回纯数据（`str` / `dict`），由调用方（`BaseAgent._execute_tool()` / `LLMHandler.process()`）统一包装为 `Message(event_type="tool_call_result", tool=..., tool_call_id=..., event_payload=...)`。
+
+**理由：**
+- Handler 只关心业务逻辑，不关心协议格式
+- 统一包装点确保所有工具结果格式一致
+- 测试 handler 时只需验证返回值数据，无需构造完整 Message
+
+**曾考虑的替代方案：**
+- Handler 返回 `Message`（旧方案）—— handler 需感知 Message 结构，跨 handler 格式不一致风险高
+- Handler 返回 `tuple[str, dict]` —— 多返回值增加调用复杂度，不如统一 `dict`
+
+---
+
+### 决策 59 — System prompt 隔离
+
+**背景：** 此前 `BaseAgent._history` 第一条是 `Message(role="system", message=system_prompt, event_type="system_prompt")`，将 system prompt 作为 Message 存储。但 system prompt 的结构与其他 Message 不同：它是纯文本注入 OpenAI `{"role": "system", "content": "..."}`，不走 Message JSON 序列化。且 `event_type="system_prompt"` 不在 `EventType` 枚举中。
+
+**决策：**
+- System prompt 作为独立字符串 `self._system_prompt` 存储，不混入 `_history`
+- `_to_openai()` 构建 messages 数组时，先放入 `{"role": "system", "content": self._system_prompt}`，再追加 `_history` 中各 Message 的 `to_json()`
+- `_history` 只存对话消息（user/assistant 角色）
+
+**理由：**
+- 语义清晰：system prompt 是静态配置，不是动态消息
+- 序列化一致：Message JSON 格式只在对话消息中使用，system prompt 保持原生
+- 避免 `event_type` 枚举污染
+
+**曾考虑的替代方案：**
+- 新增 `EventType.SYSTEM_PROMPT` —— 增加了枚举值但 system prompt 仍不需要 `id`/`timestamp`/`tool` 等字段
+- System prompt 也用 Message JSON 包装 —— LLM 收到的是两层嵌套 JSON，不必要
+
+---
+
+### 决策 60 — 06_output / 07_input prompt 分工
+
+**背景：** 此前 prompt 中只有 `06_output_format.md` 定义 LLM 输出格式，输入侧没有对应的格式说明。LLM 不明确知道自己收到的消息是什么结构，可能影响理解 `tool_call_result` 的正确解析方式。
+
+**决策：**
+- `06_output_format.md`：定义 LLM 输出 JSON schema，`role="assistant"`，`event_type∈{tool_call, finish}`，含 `tool`/`event_payload`
+- `07_input_format.md`（新建）：定义 LLM 收到的消息 JSON schema，`role="user"`，`event_type∈{user_input, tool_call_result, system_message}`，不含 `tool`/`thinking`
+- 原 `07_reserved.md` 顺延为 `08_reserved.md`
+
+**理由：**
+- 输入/输出泾渭分明，LLM 清楚区分"自己产出的"和"别人喂给它的"
+- 帮助 LLM 正确解析 `tool_call_result` 的结构（`tool_call_id` 链回自己的 `tool_call`）
+- 两个 schema 的字段互不越界，设计自文档化
+
+**曾考虑的替代方案：**
+- 仅在 06 中描述输入结构 —— LLM 不知道 `system_message` 等类型的语义
+- 合并为一个文件 —— 输入/输出混在一起，LLM 容易混淆
+
+---
+
+### 决策 61 — Message.to_json() / from_llm_reply() 统一序列化
+
+**背景：** `BaseAgent._to_openai()` 和 `LLMHandler` 各自用 `json.dumps(dataclasses.asdict(m))` 序列化 Message；`Handler._parse_llm_reply()` 手动解析旧嵌套 schema。多处重复且解析逻辑分散。
+
+**决策：**
+- `Message.to_json()` — 实例方法，`dataclasses.asdict()` + `json.dumps(default=str)` 统一序列化
+- `Message.from_llm_reply(reply: str)` — 静态方法，按扁平 JSON schema 反序列化，required 字段用 `[]`（缺失即 crash），optional 字段用 `.get()`（默认 `None`）
+- `Handler._parse_llm_reply()` 简化为一行委托 `Message.from_llm_reply()`
+- `BaseAgent._to_openai()` 改用 `Message.to_json()`
+
+**理由：**
+- 序列化/反序列化是 Message 的固有行为，放在类内部最合理
+- 未来 schema 变更只需改一处
+- `default=str` 处理 `datetime` 等非 JSON 原生类型
+
+**曾考虑的替代方案：**
+- 保留 `Handler._parse_llm_reply()` 独立实现 —— 代码重复，BaseAgent 和 LLMHandler 都需各自维护解析逻辑
+- 用 `dataclasses.asdict()` 的 `dict_factory` 参数定制序列化 —— 与 `default=str` 等价但更隐晦

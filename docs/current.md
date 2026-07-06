@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无
 
-**下一步：** 实现 `process()` 中 7a-7d 工具调度逻辑（终止判断 / 审批门禁 / 执行工具 / 未知工具）
+**下一步：** 实现 `process()` 中 7a-7d 工具调度逻辑（event_type="finish" 终止 / 审批门禁 / 执行工具 → tool_call_result / 未知工具 → system_message）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -66,3 +66,9 @@
 53. `AgentRegistry` 主 Agent 特权持有，App 通过它做 handler 切换
 54. `ConfirmMode` 枚举（NEVER/ALWAYS/CONFIG）控制工具审批行为，不暴露给 LLM；全局 `TOOL_CONFIRM_ENABLED` 环境变量留后
 55. Agent loop 中途吐 progress 给 CLI：`Response(type="progress")` + `Message.internal_continue()` 推进，App 层循环渲染不等待用户输入
+56. `Message.event_type` 使用 `EventType(StrEnum)` 枚举，5 种值（user_input/tool_call/tool_call_result/finish/system_message），代码中禁用裸字符串
+57. `Message` 新增 `tool`（工具名）和 `tool_call_id`（关联 tool_call 的 id）一级字段，`event_type=tool_call_result` 时填写
+58. 工具 handler 返回纯数据（str/dict），由调用方包装为 `tool_call_result` Message（含 tool/tool_call_id/event_payload），不再由 handler 自行包装
+59. System prompt 不走 Message 结构，以纯文本 `{"role": "system", "content": "..."}` 注入 OpenAI messages，`_history` 只存对话消息
+60. 06_output / 07_input prompt 分工：06 定义 LLM 输出 schema（flat JSON，role=assistant，event_type∈{tool_call,finish}），07 定义输入 schema（role=user，event_type∈{user_input,tool_call_result,system_message}），字段互不越界
+61. `Message.to_json()` / `Message.from_llm_reply()` 统一序列化/反序列化入口，消除多处重复的 `dataclasses.asdict()` + `json.dumps()` 调用

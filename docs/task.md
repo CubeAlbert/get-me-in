@@ -201,13 +201,13 @@
 
 ### 3. BaseAgent (`src/agents/base.py`)
 
-- 🔄 Agent loop：解析 LLM JSON `{thinking, action}` → 调工具 → 工具结果（`role: "user"` + `event_type: "tool_call_result"`）喂回 LLM → 循环（框架就绪，7a-7d 工具调度待实现）
-- ✅ 对话历史管理：`list[Message]` → `_to_openai()` 完整序列化（`dataclasses.asdict(m)` → JSON）
-- ✅ 终止条件：`finish` / `ask_user` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量，默认 10）
+- 🔄 Agent loop：解析 LLM JSON（扁平 schema）→ 调工具 → 结果包装为 `tool_call_result` Message 喂回 LLM → 循环（框架就绪，7a-7d 工具调度待实现）
+- ✅ 对话历史管理：`list[Message]` → `Message.to_json()` 序列化，system prompt 独立存储不混入 history
+- ✅ 终止条件：`event_type="finish"` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量，默认 10）
 - 🔄 工具调度：`self._tools` + 审批门禁（`_should_confirm()` 就绪，7b confirm return 待实现）
 - 🔄 `process(input: Message) -> Response` 接口（实现中，7a-7d 注释占位）
 - ⬜ `write_memory()` 便利方法
-- ✅ `_parse_llm_reply()` JSON 解析失败时自动重试 LLM（注入 `06_output_format.md` 模板 → `json_format_reminder`）
+- ✅ LLM JSON 解析：`Message.from_llm_reply()` 静态方法统一反序列化，解析失败注入 `system_message` 让 LLM 自修复
 
 ### 4. 主 Agent (`src/main_agent/agent.py`)
 

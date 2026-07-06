@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-from src.message import Message
 from src.tools.registry import ConfirmMode, tool
 
 
@@ -13,9 +12,5 @@ from src.tools.registry import ConfirmMode, tool
     expected_output="YYYY-MM-DD HH:mm:ss ±HHMM 格式的带时区日期时间字符串",
     confirm_mode=ConfirmMode.NEVER,
 )
-def get_current_datetime() -> Message:
-    return Message(
-        role="user",
-        event_type="tool_call_result",
-        message=datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z"),
-    )
+def get_current_datetime() -> str:
+    return datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")

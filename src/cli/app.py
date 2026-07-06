@@ -21,7 +21,7 @@ from rich.panel import Panel
 
 from src.cli.handler import Handler
 from src.config import config
-from src.message import Message
+from src.message import EventType, Message
 from src.rag import load
 
 
@@ -151,10 +151,10 @@ class App:
                 if not content:
                     self._console.print("[yellow]未输入内容，已取消[/]")
                     continue
-                msg = Message(message=content, event_type="user_input")
+                msg = Message(message=content, event_type=EventType.USER_INPUT)
                 response = self._process_with_spinner(msg)
             else:
-                msg = Message(message=user_input, event_type="user_input")
+                msg = Message(message=user_input, event_type=EventType.USER_INPUT)
                 response = self._process_with_spinner(msg)
 
             self._console.print()
