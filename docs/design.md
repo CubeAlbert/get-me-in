@@ -305,10 +305,12 @@ get-me-in/
 | `LOG_DIR` | 日志文件目录 | `data/logs/` |
 | `MEMORIES_BASE_DIR` | 记忆存储根目录（按 Agent 分子目录，一文件一条记忆） | `data/memories/` |
 | `SHOW_THINKING` | 是否展示 LLM 推理过程（`"true"` / `"false"`） | `false` |
+| `AGENT_MAX_ROUNDS` | Agent 最大工具调用轮数 | `10` |
+| `TOOL_CONFIRM_ENABLED` | 工具审批全局开关（`"true"` / `"false"`） | `true` |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
 
-`_VAR_SPECS` 第 4 列 `is_bool`：设为 `True` 时，取值自动转为 `bool`（`"true"`/`"1"` → `True`，其余 → `False`）。`SimpleNamespace` 接受弱类型，``config.SHOW_THINKING`` 为 ``bool``，其他变量为 ``str``。
+`_VAR_SPECS` 第 4 列 `is_bool`：设为 `True` 时，取值自动转为 `bool`（`"true"`/`"1"` → `True`，其余 → `False`）。`SimpleNamespace` 接受弱类型，``config.SHOW_THINKING`` 和 ``config.TOOL_CONFIRM_ENABLED`` 为 ``bool``，其他变量为 ``str``。
 
 **关键接口 / 公开 API：**
 
