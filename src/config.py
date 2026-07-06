@@ -29,29 +29,29 @@ from src.logger import get_logger
 logger = get_logger(__name__)
 logger.debug(".env 文件已加载")
 
-_VAR_SPECS: list[tuple[str, bool, str | None]] = [
-    ("OPENAI_BASE_URL",   True, None),
-    ("OPENAI_API_KEY",    True,  None),
-    ("LLM_PRO_MODEL",     True, None),
-    ("LLM_FLASH_MODEL",   True, None),
-    ("BI_ENCODER_MODEL",  False, "BAAI/bge-base-zh-v1.5"),
-    ("CROSS_ENCODER_MODEL", False, "BAAI/bge-reranker-v2-m3"),
-    ("EMBED_BATCH_SIZE",  False, "32"),
-    ("CHROMA_PERSIST_DIR",  False, None),
-    ("RETRIEVAL_TOP_K",    False, "10"),
-    ("RERANK_BATCH_SIZE",  False, "32"),
-    ("RERANK_TOP_K",       False, "5"),
-    ("HF_ENDPOINT",        False, None),
-    ("LOG_LEVEL",          False, "INFO"),
-    ("LOG_DIR",            False, "data/logs/"),
-    ("MEMORIES_BASE_DIR",  False, "data/memories/"),
-    ("SHOW_THINKING",      False, "false"),
+_VAR_SPECS: list[tuple[str, bool, str | None, bool]] = [
+    ("OPENAI_BASE_URL",   True, None, False),
+    ("OPENAI_API_KEY",    True,  None, False),
+    ("LLM_PRO_MODEL",     True, None, False),
+    ("LLM_FLASH_MODEL",   True, None, False),
+    ("BI_ENCODER_MODEL",  False, "BAAI/bge-base-zh-v1.5", False),
+    ("CROSS_ENCODER_MODEL", False, "BAAI/bge-reranker-v2-m3", False),
+    ("EMBED_BATCH_SIZE",  False, "32", False),
+    ("CHROMA_PERSIST_DIR",  False, None, False),
+    ("RETRIEVAL_TOP_K",    False, "10", False),
+    ("RERANK_BATCH_SIZE",  False, "32", False),
+    ("RERANK_TOP_K",       False, "5", False),
+    ("HF_ENDPOINT",        False, None, False),
+    ("LOG_LEVEL",          False, "INFO", False),
+    ("LOG_DIR",            False, "data/logs/", False),
+    ("MEMORIES_BASE_DIR",  False, "data/memories/", False),
+    ("SHOW_THINKING",      False, "false", True),
 ]
 
 _missing: list[str] = []
-_values: dict[str, str] = {}
+_values: dict = {}
 
-for _name, _required, _default in _VAR_SPECS:
+for _name, _required, _default, _is_bool in _VAR_SPECS:
     _value = os.environ.get(_name)
     if _value is None and _default is not None:
         _value = _default
@@ -59,6 +59,8 @@ for _name, _required, _default in _VAR_SPECS:
         if _required:
             _missing.append(_name)
     else:
+        if _is_bool:
+            _value = _value.lower() in ("true", "1")
         _values[_name] = _value
 
 logger.debug("环境变量: %s", dict(sorted(_values.items())))

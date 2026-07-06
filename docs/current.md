@@ -4,11 +4,11 @@
 
 **当前任务：** 1. CLI + Response 升级
 
-**当前子任务：** ⬜ `config.py` 环境变量支持 bool 类型
+**当前子任务：** ⬜ CLI 等待动效：LLM 请求期间展示"正在处理 Ns"计数器
 
 **当前阻塞：** 无
 
-**下一步：** `config.py` 加 `_BOOL_VARS` 集合，自动转换 `"true"`/`"false"` 为 `bool`，更新 `app.py` 中 `SHOW_THINKING` 判断
+**下一步：** 在 `LLMHandler.process()` 中加计时线程，LLM 请求期间展示"正在处理 Ns"动效
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen

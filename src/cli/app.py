@@ -127,7 +127,7 @@ class App:
                 response = self._handler.process(msg)
 
             self._console.print()
-            if config.SHOW_THINKING == "true" and response.thinking:
+            if config.SHOW_THINKING and response.thinking:
                 self._console.print(Panel(response.thinking, title="思考", border_style="dim"))
             self._console.print(Markdown(response.message))
             self._console.print()
