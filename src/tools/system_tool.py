@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from src.message import Message
-from src.tools.registry import tool
+from src.tools.registry import ConfirmMode, tool
 
 
 @tool(
@@ -11,6 +11,7 @@ from src.tools.registry import tool
     use_when="需要知道当前时间时",
     do_not_use_when="",
     expected_output="YYYY-MM-DD HH:mm:ss ±HHMM 格式的带时区日期时间字符串",
+    confirm_mode=ConfirmMode.NEVER,
 )
 def get_current_datetime() -> Message:
     return Message(

@@ -64,3 +64,4 @@
 51. Agent 切换由 `App.switch_agent(name, pre_prompt)` 封装：切 handler + 喂 prompt + 立即跑一轮；子 Agent `return` 退回主 Agent；子 Agent 不允许切到其他子 Agent
 52. M4 做一个真实子 Agent（面试问答），验证 tool 注册 + agent loop + dispatch + return 全链路
 53. `AgentRegistry` 主 Agent 特权持有，App 通过它做 handler 切换
+54. `ConfirmMode` 枚举（NEVER/ALWAYS/CONFIG）控制工具审批行为，不暴露给 LLM；全局 `TOOL_CONFIRM_ENABLED` 环境变量留后

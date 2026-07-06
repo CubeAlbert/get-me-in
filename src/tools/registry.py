@@ -1,6 +1,7 @@
 import inspect
 import json
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Callable, get_args, get_origin
 
 
@@ -12,6 +13,14 @@ _PY_TO_JSON_TYPE: dict[type, str] = {
     list: "array",
     dict: "object",
 }
+
+
+class ConfirmMode(StrEnum):
+    """工具审批模式，不暴露给 LLM。"""
+
+    NEVER = "never"  # 无论全局开关，都不审批
+    ALWAYS = "always"  # 无论全局开关，一律审批
+    CONFIG = "config"  # 跟随全局 TOOL_CONFIRM_ENABLED
 
 
 @dataclass
@@ -30,6 +39,7 @@ class Tool:
     expected_output: str
     handler: Callable = field(repr=False)
     agent: list[str] | None = None
+    confirm_mode: ConfirmMode = ConfirmMode.CONFIG
 
     def to_xml(self) -> str:
         """渲染为 ``04_tools.md`` 格式的 XML 块。"""
@@ -97,6 +107,7 @@ def tool(
     expected_output: str,
     input_schema: dict[str, dict] | None = None,
     agent: list[str] | None = None,
+    confirm_mode: ConfirmMode = ConfirmMode.CONFIG,
 ):
     """装饰器：将函数注册为 LLM 可调用工具。
 
@@ -117,6 +128,7 @@ def tool(
             expected_output=expected_output,
             handler=fn,
             agent=agent,
+            confirm_mode=confirm_mode,
         )
         ToolRegistry.register(t)
         return fn

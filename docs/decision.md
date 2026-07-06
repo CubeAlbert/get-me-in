@@ -61,6 +61,7 @@
 - [决策 51 — Agent 切换机制：App.switch_agent()](#决策-51--agent-切换机制appswitch_agent)
 - [决策 52 — M4 子 Agent 实现：面试问答 Agent](#决策-52--m4-子-agent-实现面试问答-agent)
 - [决策 53 — AgentRegistry 设计](#决策-53--agentregistry-设计)
+- [决策 54 — 工具审批模式：ConfirmMode 枚举](#决策-54--工具审批模式confirmmode-枚举)
 
 ---
 
@@ -1161,3 +1162,29 @@ class AgentRegistry:
 **理由：** dict 够用，不需要过度设计。
 
 **曾考虑的替代方案：** 无。
+
+---
+
+### 决策 54 — 工具审批模式：ConfirmMode 枚举
+
+**背景：** BaseAgent 的工具调度需要审批门禁（`Response(type="confirm")`），但不是所有工具都需要审批 —— 像 `get_current_datetime` 这类无副作用只读操作不应阻塞用户。需要一个按工具粒度控制审批的机制。
+
+**决策：**
+- 新增 `ConfirmMode(StrEnum)` 枚举，三个值：
+  - `NEVER` — 无论全局开关，都不审批（如只读查询）
+  - `ALWAYS` — 无论全局开关，一律审批（如删除操作）
+  - `CONFIG`（默认）— 跟随全局 `TOOL_CONFIRM_ENABLED` 环境变量
+- `Tool` dataclass 新增 `confirm_mode: ConfirmMode` 字段，默认 `CONFIG`
+- `@tool` 装饰器新增 `confirm_mode` 参数
+- `confirm_mode` 不进入 `to_xml()`，对 LLM 完全透明
+
+**理由：**
+- 枚举提供类型安全，比裸字符串 `"never"`/`"always"`/`"config"` 更可靠
+- `StrEnum` 继承 `str`，序列化/比较自然，repr 可读
+- 不进 XML 保证了 LLM 不会知道审批策略，无法通过构造特定输出来绕过审批
+- 三级粒度覆盖所有场景：只读无条件免审、危险操作强制审批、常规操作跟随全局策略
+
+**曾考虑的替代方案：**
+- `bool` 字段（`needs_confirm: bool`）—— 只有两态，无法表达"跟随全局"语义
+- 全局白名单/黑名单 —— 配置分散，不如工具自描述
+- 暴露给 LLM —— 安全风险，LLM 可能尝试说服用户绕过审批
