@@ -189,10 +189,9 @@
 - ✅ `Handler` 协议升级：`process(Message) -> Response` + `_parse_llm_reply()` 静态方法
 - ✅ `App` 升级：`Message` 包装输入 + `Response` 解包渲染 + `thinking` 展示
 - ⛔ 删除 `LLMHandler` — LLMHandler 改为临时桩适配新协议，待 MainAgent 就绪后替换
-- ⬜ `uv add questionary`
-- 📌 `config.py` 环境变量支持 bool 类型（当前 `SHOW_THINKING` 用字符串比较）
-- 📌 `_parse_llm_reply()` JSON 解析失败时自动重试 LLM（带错误上下文）
-- 📌 CLI 等待动效：LLM 请求期间展示"正在处理 Ns"计数器
+- ✅ `uv add questionary`
+- ⬜ `config.py` 环境变量支持 bool 类型（当前 `SHOW_THINKING` 用字符串比较）
+- ⬜ CLI 等待动效：LLM 请求期间展示"正在处理 Ns"计数器
 
 ### 2. Tool 系统 (`src/tools/registry.py`)
 
@@ -221,6 +220,7 @@
 
 - ⬜ 组装 `MainAgent` + `AgentRegistry` + `ToolRegistry`，注入 `App`
 - ⬜ `AGENT_MAX_ROUNDS` 环境变量
+- ⬜ `_parse_llm_reply()` JSON 解析失败时自动重试 LLM（带错误上下文）
 
 ### 6. 面试问答 Agent (`src/agents/interview/`)
 

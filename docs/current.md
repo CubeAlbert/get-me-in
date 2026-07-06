@@ -4,11 +4,11 @@
 
 **当前任务：** 1. CLI + Response 升级
 
-**当前子任务：** ⬜ `uv add questionary`
+**当前子任务：** ⬜ `config.py` 环境变量支持 bool 类型
 
 **当前阻塞：** 无
 
-**下一步：** 安装 `questionary` 依赖（`uv add questionary`），为 `Response(type="select/confirm")` 做准备
+**下一步：** `config.py` 加 `_BOOL_VARS` 集合，自动转换 `"true"`/`"false"` 为 `bool`，更新 `app.py` 中 `SHOW_THINKING` 判断
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
