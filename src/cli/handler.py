@@ -65,26 +65,29 @@ class Handler(ABC):
 
 
 class LLMHandler(Handler):
-    """M1 阶段 Handler — 直接调 LLM，无 Agent 逻辑。
+    """M4 过渡阶段 Handler — 调 LLM + 工具执行 loop。
 
     持有 LLMClient 和 PromptLoader，维护对话历史。
+    从 ToolRegistry 拉取已注册工具注入 ADDITION_TOOLS。
     M4 主 Agent 就绪后，本类由 Orchestrator 替换。
 
     占位符值内联在类常量中 —— M1 用通用助手描述，
     后续各 Agent 实现时各自覆盖 _PLACEHOLDER_VALUES。
     """
 
+    _MAX_TOOL_ROUNDS = 5
+
     # M1 demo 占位符值（M4 各 Agent 实现时各自定义）
     _PLACEHOLDER_VALUES: dict[str, str] = {
         "AGENT_NAME": "get-me-in 助手",
-        "AGENT_DESCRIPTION": "AI 求职助手，帮助程序员完成求职全流程（M1 验证阶段，暂不调度子 Agent，直接回答用户问题）",
-        "RESPONSIBILITIES": "- 回答用户关于求职的各类问题\n- 在能力范围内提供建议和指导\n- 诚实告知能力的边界",
+        "AGENT_DESCRIPTION": "AI 求职助手，帮助程序员完成求职全流程（M4 验证阶段，支持工具调用）",
+        "RESPONSIBILITIES": "- 回答用户关于求职的各类问题\n- 在能力范围内提供建议和指导\n- 诚实告知能力的边界\n- 可利用工具查询实时信息",
         "PRIMARY_GOAL": "帮助用户解决求职相关问题，提供有用的信息和建议",
         "SUCCESS_CRITERIONS": "- 用户的问题得到了清晰、有用的回答\n- 回答准确、专业、可操作",
         "PRIORITIES": "1. 准确性 — 不确定时坦诚说明\n2. 可操作性 — 给具体的建议而非泛泛而谈\n3. 简洁 — 不废话",
         "HARD_CONSTRAINTS": "- 严禁编造虚假信息\n- 不确定时必须坦诚说明\n- 不得提供违法或违反平台政策的建议",
         "SOFT_CONSTRAINTS": "- 尽量用中文回答\n- 尽量给出具体可操作的建议\n- 尽量简洁",
-        "ADDITION_TOOLS": "<!-- M1 阶段无额外工具，M4 主 Agent 注入 dispatch_* 工具 -->",
+        "ADDITION_TOOLS": "",  # 由 __init__ 从 ToolRegistry 填充
         "TONE": "专业、友好、务实",
         "VERBOSITY": "简洁，不啰嗦，问什么答什么",
         "EXPLANATION_STYLE": "直接给出结论和建议，必要时简要说明理由",
@@ -93,23 +96,63 @@ class LLMHandler(Handler):
     }
 
     def __init__(self, llm: LLMClient, prompts: PromptLoader) -> None:
-        self._llm = llm
-        self._prompts = prompts
+        import src.tools.system_tool  # noqa: F401 — 触发 @tool 注册
 
-        system_prompt = prompts.get(**self._PLACEHOLDER_VALUES)
+        from src.tools.registry import ToolRegistry
+
+        tools_xml = "\n".join(
+            t.to_xml()
+            for t in ToolRegistry.get_for("main").values()
+        )
+        placeholders = dict(self._PLACEHOLDER_VALUES)
+        placeholders["ADDITION_TOOLS"] = tools_xml
+
+        self._llm = llm
+        self._tools = ToolRegistry.get_for("main")
         self._messages: list[dict] = [
-            {"role": "system", "content": system_prompt}
+            {"role": "system", "content": prompts.get(**placeholders)}
         ]
 
     def process(self, input: Message) -> Response:
-        """调 LLM 获取回复，维护对话历史。"""
+        """调 LLM → 工具执行 loop → 返回最终结果。"""
         self._messages.append({"role": "user", "content": input.message})
-        reply = self._llm.chat_pro(self._messages)
-        self._messages.append({"role": "assistant", "content": reply})
 
-        llm_msg = self._parse_llm_reply(reply)
+        for _ in range(self._MAX_TOOL_ROUNDS):
+            reply = self._llm.chat_pro(self._messages)
+            self._messages.append({"role": "assistant", "content": reply})
+
+            llm_msg = self._parse_llm_reply(reply)
+            tool_name = llm_msg.event_type
+
+            # 终止 / 挂起 — 直接返回
+            if tool_name in ("finish", "ask_user", "return"):
+                return Response(
+                    type="finish",
+                    message=llm_msg.message,
+                    thinking=llm_msg.thinking,
+                )
+
+            # 工具调用
+            if tool_name and tool_name in self._tools:
+                tool = self._tools[tool_name]
+                try:
+                    result = tool.handler(**llm_msg.event_payload)
+                except Exception as e:
+                    result = Message(
+                        role="user",
+                        event_type="tool_call_result",
+                        message=f"[Error] {tool_name} 执行失败：{e}",
+                    )
+                self._messages.append({"role": "user", "content": result.message})
+                continue
+
+            # 未知 tool — 让 LLM 知道
+            self._messages.append(
+                {"role": "user", "content": f"未知工具：{tool_name}，请使用已定义的工具或调用 finish。"}
+            )
+
+        # 达到最大轮数，强制结束
         return Response(
             type="finish",
-            message=llm_msg.message,
-            thinking=llm_msg.thinking,
+            message="已达到最大工具调用轮数，流程终止。",
         )

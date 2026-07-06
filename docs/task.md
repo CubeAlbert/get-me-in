@@ -195,10 +195,9 @@
 
 ### 2. Tool 系统 (`src/tools/registry.py`)
 
-- ⬜ `Tool` dataclass：name / purpose / use_when / do_not_use_when / arguments_schema / expected_output / handler / agent + `to_xml()`
-- ⬜ `@tool` 装饰器：`input_schema` 扁平化 → `inspect.signature` 自动补齐 type/required → 构建 Tool → 注册至 `ToolRegistry`
-- ⬜ `ToolRegistry`：全局注册表，`get_for(agent_name)` 按 agent 过滤
-- ⬜ `App.switch_agent(name, pre_prompt)` 方法 — dispatch 工具的 App 层消费者，Tool 系统就绪后实现
+- ✅ `Tool` dataclass：name / purpose / use_when / do_not_use_when / arguments_schema / expected_output / handler / agent + `to_xml()`
+- ✅ `@tool` 装饰器：`input_schema` 扁平化 → `inspect.signature` 自动补齐 type/required → 构建 Tool → 注册至 `ToolRegistry`
+- ✅ `ToolRegistry`：全局注册表，`get_for(agent_name)` 按 agent 过滤
 
 ### 3. BaseAgent (`src/agents/base.py`)
 
@@ -214,6 +213,7 @@
 - ⬜ `MainAgent(BaseAgent)`：14 个占位符值 + `AgentRegistry` + `dispatch_*` 工具
 - ⬜ `AgentRegistry`：register / get / list
 - ⬜ `dispatch_*` 工具：内部调 `App.switch_agent(target, pre_prompt)`
+- ⬜ `App.switch_agent(name, pre_prompt)` — 切 handler + 喂 prompt + 立即跑一轮
 - ⬜ `provide_choices` → `Response(type="select")`；审批 gate → `Response(type="confirm")`
 
 ### 5. 入口集成 (`main.py` + `src/config.py`)

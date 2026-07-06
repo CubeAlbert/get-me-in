@@ -2,13 +2,13 @@
 
 **当前阶段：** 阶段 4 — M4: BaseAgent & 主 Agent
 
-**当前任务：** 2. Tool 系统
+**当前任务：** 3. BaseAgent
 
-**当前子任务：** ⬜ `Tool` dataclass
+**当前子任务：** ⬜ Agent loop + 对话历史管理
 
 **当前阻塞：** 无
 
-**下一步：** 创建 `src/tools/registry.py`，实现 `Tool` dataclass（name/purpose/use_when 等字段 + `to_xml()` 方法）
+**下一步：** 创建 `src/agents/base.py`，实现 `BaseAgent` 基类（`process(Message) -> Response`、agent loop、JSON 解析、工具调度、对话历史管理）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
