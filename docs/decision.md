@@ -62,6 +62,7 @@
 - [决策 52 — M4 子 Agent 实现：面试问答 Agent](#决策-52--m4-子-agent-实现面试问答-agent)
 - [决策 53 — AgentRegistry 设计](#决策-53--agentregistry-设计)
 - [决策 54 — 工具审批模式：ConfirmMode 枚举](#决策-54--工具审批模式confirmmode-枚举)
+- [决策 55 — Agent Loop 中间进度回传：Response(type="progress")](#决策-55--agent-loop-中间进度回传responsetypeprogress)
 
 ---
 
@@ -1187,4 +1188,33 @@ class AgentRegistry:
 **曾考虑的替代方案：**
 - `bool` 字段（`needs_confirm: bool`）—— 只有两态，无法表达"跟随全局"语义
 - 全局白名单/黑名单 —— 配置分散，不如工具自描述
+- 暴露给 LLM —— 安全风险，LLM 可能尝试说服用户绕过审批
+
+---
+
+### 决策 55 — Agent Loop 中间进度回传：Response(type="progress")
+
+**背景：** Agent loop 内部可能执行多轮工具调用，每轮可能耗时数秒。如果 `process()` 只在最终 `finish` 时返回，用户会看到长时间无反馈的黑屏，不知道后台在做什么。
+
+当前 `process()` 是同步阻塞的一次性调用（`input → loop → finish`），无法在中间步骤向 App 报告进度。
+
+**决策：**
+- `Response` 新增 `type="progress"`，表示 agent loop 有中间步骤已完成、等待继续
+- `Message` 新增静态工厂 `internal_continue()`，生成 `event_type="internal_continue"` 的消息
+- `BaseAgent.process()` 拆分为"追加用户输入"和"继续 loop"两种模式：
+  - `event_type != "internal_continue"` → 追加用户输入到 history → 从 round 0 开始
+  - `event_type == "internal_continue"` → 不追加、从上次 `_round_idx + 1` 继续
+- `_round_idx` 提为实例属性，跨 `process()` 调用持久化
+- 工具执行后不 `continue` 下一轮，而是 `return Response(type="progress")`；App 渲染后立即调 `handler.process(Message.internal_continue())` 推进
+- `finish` / 审批 `confirm` 正常 `return`，App 停在等待用户输入
+
+**理由：**
+- 不改变 `Handler.process()` 的单入口协议，App 无需感知 agent loop 内部状态
+- `internal_continue` 作为事件类型让 `process()` 区分"新用户输入"和"继续推进"
+- 把 `_round_idx` 持久化到实例级别，天然支持跨 `process()` 调用恢复
+
+**曾考虑的替代方案：**
+- stderr 直接输出进度 —— 格式不可控，与 rich 渲染冲突，且无法利用 `thinking` 面板
+- `process()` 改为 generator（`yield Response`）—— 改变协议签名为 async，违反决策 2（同步代码）
+- 让 App 在另一个线程轮询 —— 过度复杂，单线程同步 loop 更可控
 - 暴露给 LLM —— 安全风险，LLM 可能尝试说服用户绕过审批

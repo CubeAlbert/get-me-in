@@ -4,11 +4,11 @@
 
 **当前任务：** 3. BaseAgent
 
-**当前子任务：** ⬜ Agent loop + 对话历史管理
+**当前子任务：** 🔄 Agent loop — 7a-7d 工具调度
 
 **当前阻塞：** 无
 
-**下一步：** 创建 `src/agents/base.py`，实现 `BaseAgent` 基类（`process(Message) -> Response`、agent loop、JSON 解析、工具调度、对话历史管理）
+**下一步：** 实现 `process()` 中 7a-7d 工具调度逻辑（终止判断 / 审批门禁 / 执行工具 / 未知工具）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -65,3 +65,4 @@
 52. M4 做一个真实子 Agent（面试问答），验证 tool 注册 + agent loop + dispatch + return 全链路
 53. `AgentRegistry` 主 Agent 特权持有，App 通过它做 handler 切换
 54. `ConfirmMode` 枚举（NEVER/ALWAYS/CONFIG）控制工具审批行为，不暴露给 LLM；全局 `TOOL_CONFIRM_ENABLED` 环境变量留后
+55. Agent loop 中途吐 progress 给 CLI：`Response(type="progress")` + `Message.internal_continue()` 推进，App 层循环渲染不等待用户输入

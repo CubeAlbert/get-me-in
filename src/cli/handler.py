@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from src.llm.client import LLMClient
 from src.message import Message
 from src.prompts.loader import PromptLoader
-from src.response import Response
+from src.response import Response, ResponseType
 
 
 class Handler(ABC):
@@ -127,7 +127,7 @@ class LLMHandler(Handler):
             # 终止 / 挂起 — 直接返回
             if tool_name in ("finish", "ask_user", "return"):
                 return Response(
-                    type="finish",
+                    type=ResponseType.FINISH,
                     message=llm_msg.message,
                     thinking=llm_msg.thinking,
                 )
@@ -153,6 +153,6 @@ class LLMHandler(Handler):
 
         # 达到最大轮数，强制结束
         return Response(
-            type="finish",
+            type=ResponseType.FINISH,
             message="已达到最大工具调用轮数，流程终止。",
         )

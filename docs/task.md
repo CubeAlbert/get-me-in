@@ -201,12 +201,13 @@
 
 ### 3. BaseAgent (`src/agents/base.py`)
 
-- ⬜ Agent loop：解析 LLM JSON `{thinking, action}` → 调工具 → 工具结果（`role: "user"` + `event_type: "tool_call_result"`）喂回 LLM → 循环
-- ⬜ 对话历史管理：`list[Message]` → `to_openai()` 完整序列化
-- ⬜ 终止条件：`finish` / `ask_user` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量）
-- ⬜ 工具调度：`self._tools` + 审批门禁（`Response(type="confirm")`）
-- ⬜ `process(input: Message) -> Response` 接口
+- 🔄 Agent loop：解析 LLM JSON `{thinking, action}` → 调工具 → 工具结果（`role: "user"` + `event_type: "tool_call_result"`）喂回 LLM → 循环（框架就绪，7a-7d 工具调度待实现）
+- ✅ 对话历史管理：`list[Message]` → `_to_openai()` 完整序列化（`dataclasses.asdict(m)` → JSON）
+- ✅ 终止条件：`finish` / `ask_user` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量，默认 10）
+- 🔄 工具调度：`self._tools` + 审批门禁（`_should_confirm()` 就绪，7b confirm return 待实现）
+- 🔄 `process(input: Message) -> Response` 接口（实现中，7a-7d 注释占位）
 - ⬜ `write_memory()` 便利方法
+- ✅ `_parse_llm_reply()` JSON 解析失败时自动重试 LLM（注入 `06_output_format.md` 模板 → `json_format_reminder`）
 
 ### 4. 主 Agent (`src/main_agent/agent.py`)
 
@@ -220,7 +221,6 @@
 
 - ⬜ 组装 `MainAgent` + `AgentRegistry` + `ToolRegistry`，注入 `App`
 - ⬜ `AGENT_MAX_ROUNDS` 环境变量
-- ⬜ `_parse_llm_reply()` JSON 解析失败时自动重试 LLM（带错误上下文）
 
 ### 6. 面试问答 Agent (`src/agents/interview/`)
 
