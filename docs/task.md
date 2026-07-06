@@ -185,7 +185,7 @@
 
 ### 1. CLI + Response 升级 (`src/cli/` + `src/response.py`)
 
-- ⬜ `Response` dataclass：`type`（`finish` / `select` / `confirm`）+ `message` + `choices`
+- ✅ `Response` dataclass：`type`（`finish` / `select` / `confirm`）+ `message` + `choices` + `thinking`
 - ⬜ `Handler` 协议升级：`process(Message) -> Response`
 - ⬜ 删除 `LLMHandler`
 - ⬜ `App` 升级：`while` 循环按 `Response.type` 分支（`finish` → rich / `select` → questionary / `confirm` → questionary）
