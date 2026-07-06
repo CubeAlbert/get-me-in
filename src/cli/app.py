@@ -12,6 +12,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -87,6 +89,35 @@ class App:
         self._console = Console(force_terminal=True)
         self._editor = _resolve_editor()
 
+    def _process_with_spinner(self, msg: Message) -> Response:
+        """后台调 handler.process()，主线程显示等待动效。
+
+        格式: ``. 处理中 0.0s`` → ``.. 处理中 0.5s`` → ``... 处理中 1.0s``，
+        每 0.1s 刷新，``\\r`` 单行覆盖。
+        """
+        result = None
+        done = threading.Event()
+        start = time.time()
+
+        def _run() -> None:
+            nonlocal result
+            result = self._handler.process(msg)
+            done.set()
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+
+        while not done.is_set():
+            elapsed = time.time() - start
+            dots = "." * (int(elapsed * 2) % 3 + 1)
+            sys.stderr.write(f"\r{dots:<3} 处理中 {elapsed:.1f}s  ")
+            sys.stderr.flush()
+            done.wait(0.1)
+
+        sys.stderr.write("\r" + " " * 24 + "\r")
+        sys.stderr.flush()
+        return result
+
     def run(self) -> None:
         """启动对话循环。"""
         _ensure_utf8()
@@ -121,10 +152,10 @@ class App:
                     self._console.print("[yellow]未输入内容，已取消[/]")
                     continue
                 msg = Message(message=content, event_type="user_input")
-                response = self._handler.process(msg)
+                response = self._process_with_spinner(msg)
             else:
                 msg = Message(message=user_input, event_type="user_input")
-                response = self._handler.process(msg)
+                response = self._process_with_spinner(msg)
 
             self._console.print()
             if config.SHOW_THINKING and response.thinking:

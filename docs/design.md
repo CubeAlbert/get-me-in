@@ -209,11 +209,16 @@ get-me-in/
 
 **关键接口：**
 - `Handler.process(input: Message) -> Response` —— 处理用户输入 Message，返回 CLI 指令
+- `Handler._parse_llm_reply(reply: str) -> Message` —— 静态方法，将 LLM 返回的 JSON（`06_output_format.md` schema）反序列化为 `Message`。子类可复用或覆盖（未来可在此加入重试逻辑）
+
+**CLI 等待动效：**
+- `App._process_with_spinner(msg)` 将 `handler.process()` 放入后台线程，主线程以 `\r` 单行覆盖展示 `.` / `..` / `...` + 计时（`{dots:<3} 处理中 N.Ns`），LLM 返回后擦除
 
 **`Response` 数据类（`src/response.py`）：**
 - `type: str` — `"finish"` / `"select"` / `"confirm"`
 - `message: str` — 展示文本（markdown）
 - `choices: list[str] | None` — `select` 时用，最后一项固定"🔧 自定义输入..."
+- `thinking: str | None` — LLM 推理过程，由 `SHOW_THINKING` 环境变量控制是否渲染
 
 | type | 触发 | App 行为 | 返回给 LLM |
 |------|------|---------|------------|
@@ -299,8 +304,11 @@ get-me-in/
 | `LOG_LEVEL` | 日志级别（DEBUG / INFO / WARNING / ERROR） | `INFO` |
 | `LOG_DIR` | 日志文件目录 | `data/logs/` |
 | `MEMORIES_BASE_DIR` | 记忆存储根目录（按 Agent 分子目录，一文件一条记忆） | `data/memories/` |
+| `SHOW_THINKING` | 是否展示 LLM 推理过程（`"true"` / `"false"`） | `false` |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
+
+`_VAR_SPECS` 第 4 列 `is_bool`：设为 `True` 时，取值自动转为 `bool`（`"true"`/`"1"` → `True`，其余 → `False`）。`SimpleNamespace` 接受弱类型，``config.SHOW_THINKING`` 为 ``bool``，其他变量为 ``str``。
 
 **关键接口 / 公开 API：**
 

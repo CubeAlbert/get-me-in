@@ -191,7 +191,7 @@
 - ⛔ 删除 `LLMHandler` — LLMHandler 改为临时桩适配新协议，待 MainAgent 就绪后替换
 - ✅ `uv add questionary`
 - ✅ `config.py` 环境变量支持 bool 类型（`_VAR_SPECS` 第 4 列 `is_bool`，循环内自动转换）
-- ⬜ CLI 等待动效：LLM 请求期间展示"正在处理 Ns"计数器
+- ✅ CLI 等待动效：LLM 请求期间展示 `.`/`..`/`...` + 计时（`\r` 单行覆盖）
 
 ### 2. Tool 系统 (`src/tools/registry.py`)
 
