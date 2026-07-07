@@ -86,10 +86,17 @@ class App:
     负责：接收输入 → 委托 Handler → rich 渲染输出。
     """
 
+    _COMMANDS = ["/exit", "/edit", "/ragreload"]
+
     def __init__(self, handler: Handler) -> None:
         self._handler = handler
         self._console = Console(force_terminal=True)
         self._editor = _resolve_editor()
+
+    @staticmethod
+    def _complete_commands() -> list[str]:
+        """返回所有可用命令列表，由 questionary 按输入做前缀匹配。"""
+        return App._COMMANDS
 
     def _process_with_spinner(self, request: Request) -> Response:
         """后台调 handler.process()，主线程显示等待动效。
@@ -127,14 +134,22 @@ class App:
         内层循环：agent loop，阻塞用户输入，按 ResponseType 分支：
           - FINISH   → 渲染，回外层
           - PROGRESS → 渲染，自动 CONTINUE
-          - CONFIRM  → questionary.confirm，通过则 CONFIRM_APPROVED，拒绝则回外层
+          - CONFIRM  → questionary.select，通过则 CONFIRM_APPROVED，拒绝则回外层
         """
         _ensure_utf8()
         self._print_welcome()
 
         while True:
             try:
-                user_input = input("> ").strip()
+                user_input = questionary.autocomplete(
+                    "",
+                    choices=self._complete_commands,
+                    qmark=">",
+                ).ask()
+                if user_input is None:  # Ctrl+C
+                    self._console.print("\n[dim]再见！[/]")
+                    break
+                user_input = user_input.strip()
             except (EOFError, KeyboardInterrupt):
                 self._console.print("\n[dim]再见！[/]")
                 break
