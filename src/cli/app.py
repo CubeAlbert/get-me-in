@@ -24,7 +24,7 @@ from src.cli.handler import Handler
 from src.config import config
 from src.rag import load
 from src.request import Request, RequestType
-from src.response import Response, ResponseType
+from src.response import ConfirmChoice, Response, ResponseType
 
 
 def _ensure_utf8() -> None:
@@ -185,10 +185,11 @@ class App:
 
                 if response.type == ResponseType.CONFIRM:
                     self._console.print()
-                    confirmed = questionary.confirm(
-                        f"⚠️  {response.message}", default=False
+                    choice = questionary.select(
+                        f"⚠️  {response.message}",
+                        choices=[ConfirmChoice.APPROVE, ConfirmChoice.REJECT],
                     ).ask()
-                    if confirmed:
+                    if choice == ConfirmChoice.APPROVE:
                         request = Request(type=RequestType.CONFIRM_APPROVED)
                         continue
                     else:

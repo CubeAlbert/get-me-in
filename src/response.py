@@ -29,6 +29,12 @@ class ResponseType(StrEnum):
     PROGRESS = "progress"  # 中间进度，App 渲染后自动继续 agent loop
 
 
+class ConfirmChoice(StrEnum):
+    """App 层审批确认选项。"""
+    APPROVE = "✅ 执行"
+    REJECT = "❌ 取消"
+
+
 @dataclass
 class Response:
     """Agent → CLI 指令，告诉 App 如何渲染本轮结果。
