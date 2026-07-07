@@ -6,10 +6,10 @@
 为每个非空字段构造 Memory 对象。
 
 用法:
-    from src.llm import LLMClient
+    from src.llm import get_client
     from src.memory.builder import MemoryBuilder
 
-    llm = LLMClient()
+    llm = get_client()
     builder = MemoryBuilder(llm)
     memories = builder.build(conversation, agent="main")
     for m in memories:

@@ -79,6 +79,8 @@
 - [决策 69 — 审批 UI：questionary.select + ConfirmChoice 枚举](#决策-69--审批-uiquestionaryselect--confirmchoice-枚举)
 - [决策 70 — LLMClient.web_search() 两轮 native function calling](#决策-70--llmclientweb_search-两轮-native-function-calling)
 - [决策 71 — WORKING_DIR 环境变量 + get_working_dir() 工具](#决策-71--working_dir-环境变量--get_working_dir-工具)
+- [决策 72 — MainAgent 重新定位为路由 Agent](#决策-72--mainagent-重新定位为路由-agent)
+- [决策 73 — LLMClient 线程安全单例](#决策-73--llmclient-线程安全单例)
 
 ---
 
@@ -1549,3 +1551,44 @@ class AgentRegistry:
 **曾考虑的替代方案：**
 - 硬编码 `data/temp/` —— 不够灵活
 - 让 LLM 自行选择路径 —— 可能写出项目外的文件
+
+### 决策 72 — MainAgent 重新定位为路由 Agent
+
+**背景：** MainAgent 最初定位为通用"求职助手"，既回答问题又调度子 Agent。随着架构细化，需要明确职责边界，避免路由 Agent 越界执行子 Agent 的专业任务。
+
+**决策：**
+- MainAgent 重新定位为"程序员求职助手路由Agent"
+- 唯一职责：识别意图 → 分类 → 选择子Agent → 切换入口
+- 硬约束明确禁止：不生成简历内容、不提供学习方案、不执行面试模拟、不搜索或分析职位
+- 如果用户请求属于子Agent能力范围，必须切换Agent
+- 如果无法判断用户需求，必须向用户提问，而不是猜测
+
+**理由：**
+- Hub-and-Spoke 架构要求主 Agent 作为纯调度中心，不应与子 Agent 职责重叠
+- 明确的职责边界让 LLM 行为可预测，减少"万能型"Agent 的幻觉风险
+- 专业化分工：路由归主 Agent，执行归子 Agent
+
+**曾考虑的替代方案：**
+- 主 Agent 既路由又执行 —— 职责模糊，容易跳过子 Agent 直接回答，破坏架构
+- 主 Agent 完全透明路由（不告知用户切换）—— 用户体验差，不理解为什么要"换人"
+
+### 决策 73 — LLMClient 线程安全单例
+
+**背景：** `LLMClient` 在 5 处被独立实例化（`main.py`、`src/memory/__init__.py`、`src/memory/builder.py`、`src/tools/web_tool.py`），重复创建 OpenAI client 实例浪费连接池资源，且多个实例之间无共享状态。
+
+**决策：**
+- `src/llm/__init__.py` 提供 `get_client()` 函数，双检锁（DCL）懒加载单例
+- 所有调用方统一使用 `from src.llm import get_client` + `get_client()`
+- 线程安全：`threading.Lock` 保护初始化临界区
+- `LLMClient` 类本身保持不变，单例仅体现在 `__init__.py` 层面
+
+**理由：**
+- 项目使用 `threading` 做后台加载（RAG 初始化、Memory async 模式），需要线程安全
+- 双检锁模式与项目现有 RAG/Memory 模块单例风格一致
+- OpenAI client 内部管理 HTTP 连接池，单一实例更高效
+- 调用方代码更简洁：`get_client()` vs `LLMClient()`
+
+**曾考虑的替代方案：**
+- 每个调用方独立实例化 —— 当前做法，浪费连接池资源
+- `LLMClient` 自身做 `__new__` 单例 —— 侵入类自身，测试不友好，且与项目模块级单例惯例不一致
+- 通过依赖注入传递 —— M4 阶段尚未建立全局 DI 容器，过度设计

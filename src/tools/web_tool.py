@@ -1,17 +1,7 @@
 """Web 搜索工具 — 通过 LLM 内置搜索能力查询网络信息。"""
 
-from src.llm.client import LLMClient
+from src.llm import get_client
 from src.tools.registry import tool
-
-_client: LLMClient | None = None
-
-
-def _get_client() -> LLMClient:
-    """懒加载 LLMClient 单例。"""
-    global _client
-    if _client is None:
-        _client = LLMClient()
-    return _client
 
 
 @tool(
@@ -24,4 +14,4 @@ def _get_client() -> LLMClient:
     },
 )
 def web_search(query: str) -> str:
-    return _get_client().web_search(query)
+    return get_client().web_search(query)

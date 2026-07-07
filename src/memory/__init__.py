@@ -1,10 +1,10 @@
 """记忆模块入口 — 统一 Facade，管理单例与装配。
 
 用法:
-    from src.llm import LLMClient
+    from src.llm import get_client
     from src.memory import build_memories, search_memories, delete_memory
 
-    llm = LLMClient()
+    llm = get_client()
 
     # 从对话构建记忆（sync/async）
     memories = build_memories(conversation, agent="main", llm=llm)

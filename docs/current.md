@@ -82,3 +82,5 @@
 69. 审批确认 UI 用 `questionary.select` + `ConfirmChoice(StrEnum)`（`"✅ 执行"` / `"❌ 取消"`）替代 `questionary.confirm`，避免终端 `??` 兼容问题，枚举保证选项字符串不写错
 70. `LLMClient.web_search(query)` 两轮 OpenAI native function calling：Round 1 强制 `tool_choice=web_search` 触发搜索，Round 2 喂回 tool_call + tool_result 让模型整理答案；两轮均关闭 thinking
 71. `WORKING_DIR` 环境变量（默认 `data/temp/`），`get_working_dir()` 工具自动创建目录并返回绝对路径，用于 Agent 文件读写
+72. MainAgent 重新定位为"程序员求职助手路由Agent"：只负责意图识别和路由，不执行任何子Agent的领域任务；硬约束明确禁止生成简历、提供学习方案、执行面试模拟、搜索分析职位
+73. `LLMClient` 使用 `src/llm/__init__.py` 模块级 `get_client()` 双检锁线程安全单例，消除 5 处重复实例化，与 RAG/Memory 模块单例风格一致
