@@ -3,8 +3,7 @@
 CLI 不直接调用 LLM 或 Agent，而是调用注入的 Handler。
 Handler 负责具体的输入处理逻辑，CLI 只负责 I/O 和渲染。
 
-M1 阶段用 LLMHandler 验证端到端管线（config → LLM → prompts → CLI）；
-M4 阶段 Handler 协议升级为 ``Message → Response``，LLMHandler 临时适配新协议。
+M4 阶段 Handler 协议升级为 ``Request → Response``。
 """
 
 from abc import ABC, abstractmethod
@@ -12,6 +11,7 @@ from abc import ABC, abstractmethod
 from src.llm.client import LLMClient
 from src.message import EventType, Message
 from src.prompts.loader import PromptLoader
+from src.request import Request, RequestType
 from src.response import Response, ResponseType
 
 
@@ -23,11 +23,11 @@ class Handler(ABC):
     """
 
     @abstractmethod
-    def process(self, input: Message) -> Response:
-        """处理输入消息，返回 CLI 指令。
+    def process(self, input: Request) -> Response:
+        """处理输入，返回 CLI 指令。
 
         Args:
-            input: 输入消息（含用户文本、事件类型等）。
+            input: App → Agent 请求（用户输入 / 自动继续 / 审批确认）。
 
         Returns:
             CLI 指令，告诉 App 如何渲染本轮结果。
@@ -92,7 +92,7 @@ class LLMHandler(Handler):
             {"role": "system", "content": prompts.get(**placeholders)}
         ]
 
-    def process(self, input: Message) -> Response:
+    def process(self, input: Request) -> Response:
         """调 LLM → 工具执行 loop → 返回最终结果。"""
         self._messages.append({"role": "user", "content": input.message})
 

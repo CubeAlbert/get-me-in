@@ -15,14 +15,16 @@ import tempfile
 import threading
 import time
 
+import questionary
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
 from src.cli.handler import Handler
 from src.config import config
-from src.message import EventType, Message
 from src.rag import load
+from src.request import Request, RequestType
+from src.response import Response, ResponseType
 
 
 def _ensure_utf8() -> None:
@@ -89,7 +91,7 @@ class App:
         self._console = Console(force_terminal=True)
         self._editor = _resolve_editor()
 
-    def _process_with_spinner(self, msg: Message) -> Response:
+    def _process_with_spinner(self, request: Request) -> Response:
         """后台调 handler.process()，主线程显示等待动效。
 
         格式: ``. 处理中 0.0s`` → ``.. 处理中 0.5s`` → ``... 处理中 1.0s``，
@@ -101,7 +103,7 @@ class App:
 
         def _run() -> None:
             nonlocal result
-            result = self._handler.process(msg)
+            result = self._handler.process(request)
             done.set()
 
         t = threading.Thread(target=_run, daemon=True)
@@ -119,7 +121,14 @@ class App:
         return result
 
     def run(self) -> None:
-        """启动对话循环。"""
+        """启动对话循环。
+
+        外层循环：等用户输入。
+        内层循环：agent loop，阻塞用户输入，按 ResponseType 分支：
+          - FINISH   → 渲染，回外层
+          - PROGRESS → 渲染，自动 CONTINUE
+          - CONFIRM  → questionary.confirm，通过则 CONFIRM_APPROVED，拒绝则回外层
+        """
         _ensure_utf8()
         self._print_welcome()
 
@@ -151,17 +160,40 @@ class App:
                 if not content:
                     self._console.print("[yellow]未输入内容，已取消[/]")
                     continue
-                msg = Message(message=content, event_type=EventType.USER_INPUT)
-                response = self._process_with_spinner(msg)
+                request = Request(type=RequestType.USER_INPUT, message=content)
             else:
-                msg = Message(message=user_input, event_type=EventType.USER_INPUT)
-                response = self._process_with_spinner(msg)
+                request = Request(type=RequestType.USER_INPUT, message=user_input)
 
-            self._console.print()
-            if config.SHOW_THINKING and response.thinking:
-                self._console.print(Panel(response.thinking, title="思考", border_style="dim"))
-            self._console.print(Markdown(response.message))
-            self._console.print()
+            # ── 内层 agent loop ──
+            while True:
+                response = self._process_with_spinner(request)
+
+                if response.type == ResponseType.FINISH:
+                    self._console.print()
+                    if config.SHOW_THINKING and response.thinking:
+                        self._console.print(Panel(response.thinking, title="思考", border_style="dim"))
+                    self._console.print(Markdown(response.message))
+                    self._console.print()
+                    break
+
+                if response.type == ResponseType.PROGRESS:
+                    self._console.print()
+                    if response.message:
+                        self._console.print(f"[dim]🔄 {response.message}[/]")
+                    request = Request(type=RequestType.CONTINUE)
+                    continue
+
+                if response.type == ResponseType.CONFIRM:
+                    self._console.print()
+                    confirmed = questionary.confirm(
+                        f"⚠️  {response.message}", default=False
+                    ).ask()
+                    if confirmed:
+                        request = Request(type=RequestType.CONFIRM_APPROVED)
+                        continue
+                    else:
+                        self._console.print("[dim]已取消[/]")
+                        break
 
     def _print_welcome(self) -> None:
         self._console.print()

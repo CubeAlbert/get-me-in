@@ -14,6 +14,7 @@ from src.llm.client import LLMClient
 from src.logger import get_logger
 from src.message import EventType, Message
 from src.prompts.loader import PromptLoader
+from src.request import Request, RequestType
 from src.response import Response, ResponseType
 from src.tools.registry import ConfirmMode, Tool, ToolRegistry
 
@@ -137,6 +138,8 @@ class BaseAgent(Handler):
         self._system_prompt = system_prompt
         self._history: list[Message] = []
         self._max_rounds = int(config.AGENT_MAX_ROUNDS)
+        self._pending_tool: tuple[str, dict, str] | None = None
+        self._round_counter = 0
 
         logger.debug(
             "%s 初始化 — %d 个工具, max_rounds=%d",
@@ -160,14 +163,20 @@ class BaseAgent(Handler):
     def _execute_tool(self, tool_name: str, payload: dict, tool_call_id: str) -> Message:
         """执行工具并返回 tool_call_result Message。
 
-        异常时记 error 日志，包装为 error payload 喂回 LLM。
+        异常时附带工具定义（arguments_schema + expected_output），
+        让 LLM 有足够上下文自修复调用参数。
         """
         tool = self._tools[tool_name]
         try:
             result = tool.handler(**payload)
         except Exception as e:
             logger.error("工具 %s 执行失败: %s", tool_name, e)
-            result = {"error": str(e)}
+            result = {
+                "error": str(e),
+                "tool": tool_name,
+                "arguments_schema": tool.arguments_schema,
+                "expected_output": tool.expected_output,
+            }
         return Message(
             role="user",
             event_type=EventType.TOOL_CALL_RESULT,
@@ -184,29 +193,43 @@ class BaseAgent(Handler):
             return True
         return bool(config.TOOL_CONFIRM_ENABLED)
 
-    def process(self, input: Message) -> Response:
-        """Agent 主循环。
+    def process(self, input: Request) -> Response:
+        """Agent 主循环（单步执行，由 App 层驱动循环）。
 
-        用户输入 → LLM 推理 → 解析 JSON → 调工具/返回结果 → 循环，
+        每次调用只做一步：处理输入 → LLM 推理 → 分发 → 返回。
+        工具执行暂停时返回 PROGRESS/CONFIRM，App 喂回 CONTINUE/CONFIRM_APPROVED 恢复。
+
         正常退出由 LLM 返回 ``event_type: "finish"`` 触发。
         达到 ``_max_rounds`` 仍未 finish 时安全阀强制结束。
         """
-        self._history.append(
-            Message(
-                role="user",
-                message=input.message,
-                event_type=EventType.USER_INPUT,
+        # ── Step 1: 按 RequestType 处理输入 ──
+        if input.type == RequestType.USER_INPUT:
+            self._pending_tool = None
+            self._round_counter = 0
+            self._history.append(
+                Message(
+                    role="user",
+                    message=input.message,
+                    event_type=EventType.USER_INPUT,
+                )
             )
-        )
+        elif input.type in (RequestType.CONTINUE, RequestType.CONFIRM_APPROVED):
+            # 执行挂起的工具 → 结果喂回 history
+            tool_name, payload, tool_call_id = self._pending_tool
+            result_msg = self._execute_tool(tool_name, payload, tool_call_id)
+            self._history.append(result_msg)
+            self._pending_tool = None
 
-        for round_idx in range(self._max_rounds):
+        # ── Step 2: LLM 推理 + 分发（内层 while 仅用于错误恢复）──
+        while self._round_counter < self._max_rounds:
+            self._round_counter += 1
             reply = self._llm.chat_pro(self._to_openai(), **self._pro_params)
 
             # JSON 解析，失败时注入 output_format 让 LLM 自修复
             try:
                 llm_msg = self._parse_llm_reply(reply)
             except (json.JSONDecodeError, KeyError, TypeError) as e:
-                logger.warning("JSON 解析失败 (round %d): %s", round_idx + 1, e)
+                logger.warning("JSON parse error (round %d): %s", self._round_counter, e)
                 self._history.append(
                     Message(
                         role="user",
@@ -218,14 +241,51 @@ class BaseAgent(Handler):
 
             self._history.append(llm_msg)
 
-            # ── 工具调度 (7a–7d) ──
-            # 7a. tool_name ∈ {finish, ask_user, return} → return Response(type=ResponseType.FINISH)
-            # 7b. tool_name 已注册 + 需审批 → return Response(type=ResponseType.CONFIRM)
-            # 7c. tool_name 已注册 + 无需审批 → 执行 → _history <tool_call_result> → continue
-            # 7d. tool_name 未知 → _history <system_error> → LLM 下轮自修正
-            _ = llm_msg  # 临时占位
+            # ── 事件分发 ──
+            # FINISH → 退出
+            if llm_msg.event_type == EventType.FINISH:
+                return Response(
+                    type=ResponseType.FINISH,
+                    message=llm_msg.message,
+                    thinking=llm_msg.thinking,
+                )
 
-        # 安全阀 — 循环跑完未正常退出
+            # TOOL_CALL → 工具调度 (7b–7d)
+            tool_name = llm_msg.tool or ""
+
+            # 7b. 未知工具 → system_message（附可用工具列表）→ LLM 下轮自修正
+            if tool_name not in self._tools:
+                available = ", ".join(self._tools.keys())
+                self._history.append(
+                    Message(
+                        role="user",
+                        event_type=EventType.SYSTEM_MESSAGE,
+                        message=f"未知工具：{tool_name}。可用工具：{available}",
+                    )
+                )
+                continue
+
+            tool = self._tools[tool_name]
+            payload = llm_msg.event_payload or {}
+            self._pending_tool = (tool_name, payload, llm_msg.id)
+
+            # 7c. 需审批 → 暂停，等 App 收集用户确认
+            if self._should_confirm(tool):
+                return Response(
+                    type=ResponseType.CONFIRM,
+                    message=f"即将执行工具: {tool_name}",
+                    sub_type=EventType.TOOL_CALL,
+                )
+
+            # 7d. 无需审批 → 返回 PROGRESS，App 渲染后自动继续
+            return Response(
+                type=ResponseType.PROGRESS,
+                message=llm_msg.message,
+                thinking=llm_msg.thinking,
+                sub_type=EventType.TOOL_CALL,
+            )
+
+        # 安全阀 — 达到最大轮数
         logger.warning("%s 达到最大轮数 %d，强制终止", self._get_agent_name(), self._max_rounds)
         return Response(
             type=ResponseType.FINISH,

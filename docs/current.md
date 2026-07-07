@@ -4,11 +4,11 @@
 
 **当前任务：** 3. BaseAgent
 
-**当前子任务：** 🔄 Agent loop — 7a-7d 工具调度
+**当前子任务：** ⬜ BaseAgent — `write_memory()` 便利方法
 
 **当前阻塞：** 无
 
-**下一步：** 实现 `process()` 中 7a-7d 工具调度逻辑（event_type="finish" 终止 / 审批门禁 / 执行工具 → tool_call_result / 未知工具 → system_message）
+**下一步：** 在 BaseAgent 中实现 `write_memory()`，封装记忆模块的 `build_memories()` 调用，让 Agent 能便捷地将对话上下文固化为记忆
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -74,3 +74,7 @@
 61. `Message.to_json()` / `Message.from_llm_reply()` 统一序列化/反序列化入口，消除多处重复的 `dataclasses.asdict()` + `json.dumps()` 调用
 62. 移除 `04_tools.md` 中硬编码的预定义工具（`ask_user`/`finish`/`return`），所有工具由 `ToolRegistry` 通过 `{{ADDITION_TOOLS}}` 注入
 63. `Message.event_type` 为唯一 required 字段，`message` 默认 `""`，构造最小消息只需 `Message(event_type=EventType.USER_INPUT)`
+64. Agent loop 上移至 App 层：`BaseAgent.process()` 从内部 `for` 循环改为单步执行，循环由 `App.run()` 内层 while 驱动；`process()` 每次调用只做一步（LLM → 分发 → 返回），工具执行暂停时返回 PROGRESS/CONFIRM
+65. 新增 `Request` 类型（对称 `Response`）：`RequestType(USER_INPUT/CONTINUE/CONFIRM_APPROVED)` 作为 App→Agent 输入协议；`Handler.process()` 签名从 `Message → Response` 改为 `Request → Response`
+66. 用户拒绝工具审批 → App 直接退出内层循环，不调用 `process()`，等待用户下一次主动输入
+67. 工具错误处理增强：未知工具时 system_message 附完整可用工具列表；工具执行失败时 error payload 附带 `arguments_schema` + `expected_output`，让 LLM 有足够上下文自修复调用参数

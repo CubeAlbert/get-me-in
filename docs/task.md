@@ -201,13 +201,14 @@
 
 ### 3. BaseAgent (`src/agents/base.py`)
 
-- 🔄 Agent loop：解析 LLM JSON（扁平 schema）→ 调工具 → 结果包装为 `tool_call_result` Message 喂回 LLM → 循环（框架就绪，7a-7d 工具调度待实现）
+- ✅ Agent loop：解析 LLM JSON（扁平 schema）→ 调工具 → 结果包装为 `tool_call_result` Message 喂回 LLM → 循环
 - ✅ 对话历史管理：`list[Message]` → `Message.to_json()` 序列化，system prompt 独立存储不混入 history
 - ✅ 终止条件：`event_type="finish"` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量，默认 10）
-- 🔄 工具调度：`self._tools` + 审批门禁（`_should_confirm()` 就绪，7b confirm return 待实现）
-- 🔄 `process(input: Message) -> Response` 接口（实现中，7a-7d 注释占位）
+- ✅ 工具调度：7b 未知工具（附工具列表）/ 7c 审批门禁（CONFIRM）/ 7d 自动执行（PROGRESS）；流程由 App 层内循环驱动
+- ✅ `process(Request) -> Response` 接口：单步执行 + `_pending_tool` 断点恢复，`_round_counter` 安全阀
 - ⬜ `write_memory()` 便利方法
 - ✅ LLM JSON 解析：`Message.from_llm_reply()` 静态方法统一反序列化，解析失败注入 `system_message` 让 LLM 自修复
+- ✅ 工具错误处理：执行失败时附带 `arguments_schema` + `expected_output` 让 LLM 自修复调用参数
 
 ### 4. 主 Agent (`src/main_agent/agent.py`)
 

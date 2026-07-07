@@ -71,6 +71,10 @@
 - [决策 61 — Message.to_json() / from_llm_reply() 统一序列化](#决策-61--messageto_json--from_llm_reply-统一序列化)
 - [决策 62 — 移除 04_tools.md 硬编码预定义工具](#决策-62--移除-04_toolsmd-硬编码预定义工具)
 - [决策 63 — message 默认 "" + event_type 唯一 required](#决策-63--message-默认--event_type-唯一-required)
+- [决策 64 — Agent Loop 上移至 App 层 + process() 单步执行](#决策-64--agent-loop-上移至-app-层--process-单步执行)
+- [决策 65 — Request 类型（对称 Response）作为 App → Agent 输入协议](#决策-65--request-类型对称-response-作为-app--agent-输入协议)
+- [决策 66 — 用户拒绝审批 → 退出内层循环，不调 process()](#决策-66--用户拒绝审批--退出内层循环不调-process)
+- [决策 67 — 工具错误上下文增强：工具列表 + 参数 schema](#决策-67--工具错误上下文增强工具列表--参数-schema)
 
 ---
 
@@ -1383,3 +1387,85 @@ class AgentRegistry:
 
 **曾考虑的替代方案：**
 - 保持 `message` required —— `tool_call_result` 每处构造都需手动 `message=""`，增加样板
+
+---
+
+### 决策 64 — Agent Loop 上移至 App 层 + process() 单步执行
+
+**背景：** 原 `BaseAgent.process()` 内部 `for` 循环一次性跑到底，LLM 的每次 TOOL_CALL 对用户不可见。用户需要看到工具调用的中间进度，且审批门禁需要暂停循环等待用户确认。
+
+**决策：**
+- `process()` 从内部 `for` 循环改为单步执行：每次调用只做一步（处理输入 → LLM → 分发 → 返回）
+- Agent loop 循环由 `App.run()` 内层 `while True` 驱动
+- 工具执行暂停时返回 `Response(PROGRESS)` 或 `Response(CONFIRM)`，App 渲染后喂回 `Request(CONTINUE)` 或 `Request(CONFIRM_APPROVED)` 恢复
+- 新增实例状态 `_pending_tool: tuple[tool_name, payload, tool_call_id]` 跨 `process()` 调用保存断点
+- 内层 `while self._round_counter < self._max_rounds` 仅用于错误恢复（JSON 解析失败、未知工具），正常路径一次退出
+
+**理由：**
+- App 层可见工具调用的中间过程（PROGRESS 渲染工具名 + message），不再黑屏等待
+- 审批暂停时 App 弹 `questionary.confirm`，用户确认/拒绝后继续或退出
+- 保持 `process()` 同步单入口，App 无需感知 Agent 内部状态机
+- `_pending_tool` 断点简单直接，不需要 generator/coroutine
+
+**曾考虑的替代方案：**
+- `process()` 改为 generator（`yield Response`）—— 改变协议为异步，违反决策 2
+- 保留内部循环 + stderr 输出进度 —— 格式不可控，与 rich 渲染冲突
+- `process()` 内部回调 App —— 反向依赖，破坏 Handler 协议
+
+---
+
+### 决策 65 — Request 类型（对称 Response）作为 App → Agent 输入协议
+
+**背景：** 原 `Handler.process()` 入参为 `Message`，但 Agent loop 上移后需要区分三种不同的调用场景：用户新输入、PROGRESS 后自动继续、审批通过后恢复执行。复用 `Message` 会导致语义混淆（CONTINUE 不是真正的"消息"）。
+
+**决策：**
+- 新增 `src/request.py`，定义 `Request` dataclass + `RequestType(StrEnum)`
+- `RequestType` 三个值：`USER_INPUT`（用户输入了文本）、`CONTINUE`（自动继续执行）、`CONFIRM_APPROVED`（用户确认了工具执行）
+- `Handler.process()` 签名从 `process(Message) -> Response` 改为 `process(Request) -> Response`
+- `Request` 和 `Response` 对称：都是 App ↔ Agent 协议层，都不进对话历史
+
+**理由：**
+- `Request` 语义独立于 `Message`，不会把"继续执行"这种控制信号混入对话
+- 对称设计：App 用 `Request` 告诉 Agent 做什么，Agent 用 `Response` 告诉 App 渲染什么
+- 没有 `CONFIRM_REJECTED`：用户拒绝时 App 不调 `process()`，直接退出内层循环等用户主动输入
+
+**曾考虑的替代方案：**
+- 复用 `Message` 作为入参，新增 `event_type="internal_continue"` —— 混淆了对话数据和协议控制，且需要新增 EventType
+- 用多个方法（`process_input` / `process_continue` / `process_confirm`）—— 增加 Handler 接口复杂度
+
+---
+
+### 决策 66 — 用户拒绝审批 → 退出内层循环，不调 process()
+
+**背景：** 工具需要审批时，`process()` 返回 `Response(CONFIRM)`，App 弹 `questionary.confirm`。用户拒绝后有两种选择：构造一个"拒绝"结果喂回 LLM，或直接退出等待用户重新输入。
+
+**决策：** 用户拒绝审批 → App 直接 `break` 退出内层循环，不调用 `process()`。不构造任何消息告知 LLM 审批被拒绝。下一次用户主动输入时才重新 `process(USER_INPUT)`。
+
+**理由：**
+- LLM 不需要知道审批被拒绝 —— 工具没执行，对话状态没变，下次 LLM 调用时 history 里自然没有 tool_call_result
+- 用户拒绝通常意味着想换个方向，直接等新输入比让 LLM 基于"被拒绝了"继续推理更自然
+- 简化协议：不需要 `CONFIRM_REJECTED` RequestType
+
+**曾考虑的替代方案：**
+- 构造 `Request(CONFIRM_REJECTED)` → process() 注入 system_message → LLM 继续 —— 多余，用户拒绝后 LLM 无上下文继续
+- `process()` 内部处理审批（阻塞等 stdin）—— 破坏依赖注入，App 层失去对 I/O 的控制
+
+---
+
+### 决策 67 — 工具错误上下文增强：工具列表 + 参数 schema
+
+**背景：** 原工具调度在遇到未知工具或执行失败时，给 LLM 的错误信息较简略（仅 `"未知工具：xxx"` 或 `{"error": "..."}`），LLM 缺少足够信息自修正。
+
+**决策：**
+- 未知工具 → system_message 附带完整可用工具名列表：`"未知工具：xxx。可用工具：tool_a, tool_b, ..."`
+- 工具执行失败 → error payload 附带 `arguments_schema` + `expected_output`，让 LLM 对照检查参数是否正确
+- 原则延续决策 46：**给够上下文让 LLM 有能力自修复**
+
+**理由：**
+- 工具列表让 LLM 一眼看到正确选项，不需要从 system prompt 里翻
+- `arguments_schema` 是工具的真实参数定义，LLM 可以对照找出哪里不对（拼写、缺失 required、类型错误）
+- 与决策 46 一脉相承：错误恢复靠信息量，不靠复杂逻辑
+
+**曾考虑的替代方案：**
+- 仅告知"未知工具"不列可用工具 —— LLM 需重新解析 system prompt 中的工具列表，浪费一轮
+- 仅返回 error string —— LLM 不知道参数哪里错了，只能猜
