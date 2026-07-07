@@ -1,8 +1,8 @@
 <OutputFormat>
 
-<ResponseType>
+<OutputType>
 JSON
-</ResponseType>
+</OutputType>
 
 <Schema>
 {

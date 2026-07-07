@@ -191,6 +191,24 @@ class BaseAgent(Handler):
             event_payload=result,
         )
 
+    @staticmethod
+    def _format_tool_message(
+        tool_name: str,
+        payload: dict,
+        model_msg: str,
+        *,
+        confirm: bool,
+    ) -> str:
+        """格式化工具调用消息，包含模型回复文本、工具名和参数。"""
+        params_str = json.dumps(payload, ensure_ascii=False)
+        tool_info = f"🔧 {tool_name} {params_str}"
+        if confirm:
+            tool_info = f"即将执行: {tool_name}\n参数: {params_str}"
+
+        if model_msg:
+            return f"{model_msg}\n{tool_info}"
+        return tool_info
+
     def _should_confirm(self, tool: Tool) -> bool:
         """判断工具是否需要审批。不暴露给 LLM。"""
         if tool.confirm_mode == ConfirmMode.NEVER:
@@ -297,7 +315,9 @@ class BaseAgent(Handler):
                 logger.debug("[%s] TOOL_CALL %s → CONFIRM", agent_name, tool_name)
                 return Response(
                     type=ResponseType.CONFIRM,
-                    message=f"即将执行工具: {tool_name}",
+                    message=self._format_tool_message(
+                        tool_name, payload, llm_msg.message, confirm=True
+                    ),
                     sub_type=EventType.TOOL_CALL,
                 )
 
@@ -305,7 +325,9 @@ class BaseAgent(Handler):
             logger.debug("[%s] TOOL_CALL %s → PROGRESS", agent_name, tool_name)
             return Response(
                 type=ResponseType.PROGRESS,
-                message=llm_msg.message,
+                message=self._format_tool_message(
+                    tool_name, payload, llm_msg.message, confirm=False
+                ),
                 thinking=llm_msg.thinking,
                 sub_type=EventType.TOOL_CALL,
             )

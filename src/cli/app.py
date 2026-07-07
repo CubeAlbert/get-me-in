@@ -188,6 +188,7 @@ class App:
                     choice = questionary.select(
                         f"⚠️  {response.message}",
                         choices=[ConfirmChoice.APPROVE, ConfirmChoice.REJECT],
+                        qmark="",
                     ).ask()
                     if choice == ConfirmChoice.APPROVE:
                         request = Request(type=RequestType.CONFIRM_APPROVED)

@@ -1,8 +1,8 @@
 <InputFormat>
 
-<ResponseType>
+<InputType>
 JSON — 对话历史中每条消息均为一个 JSON 对象
-</ResponseType>
+</InputType>
 
 <Schema>
 {
