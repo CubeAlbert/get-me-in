@@ -148,6 +148,12 @@ class BaseAgent(Handler):
             self._max_rounds,
         )
 
+    # ── debug ───────────────────────────────────────────────
+
+    def debug_system_prompt(self) -> str:
+        """返回完整系统提示词（含已注入的工具列表），供调试使用。"""
+        return self._system_prompt
+
     # ── process — agent loop ──────────────────────────────
 
     def _to_openai(self) -> list[dict]:
@@ -202,8 +208,11 @@ class BaseAgent(Handler):
         正常退出由 LLM 返回 ``event_type: "finish"`` 触发。
         达到 ``_max_rounds`` 仍未 finish 时安全阀强制结束。
         """
+        agent_name = self._get_agent_name()
+
         # ── Step 1: 按 RequestType 处理输入 ──
         if input.type == RequestType.USER_INPUT:
+            logger.debug("[%s] USER_INPUT: %s", agent_name, input.message[:80])
             self._pending_tool = None
             self._round_counter = 0
             self._history.append(
@@ -216,6 +225,7 @@ class BaseAgent(Handler):
         elif input.type in (RequestType.CONTINUE, RequestType.CONFIRM_APPROVED):
             # 执行挂起的工具 → 结果喂回 history
             tool_name, payload, tool_call_id = self._pending_tool
+            logger.debug("[%s] 执行挂起工具: %s", agent_name, tool_name)
             result_msg = self._execute_tool(tool_name, payload, tool_call_id)
             self._history.append(result_msg)
             self._pending_tool = None
@@ -223,13 +233,22 @@ class BaseAgent(Handler):
         # ── Step 2: LLM 推理 + 分发（内层 while 仅用于错误恢复）──
         while self._round_counter < self._max_rounds:
             self._round_counter += 1
+            logger.debug(
+                "[%s] LLM round %d/%d, history=%d msgs",
+                agent_name,
+                self._round_counter,
+                self._max_rounds,
+                len(self._history),
+            )
             reply = self._llm.chat_pro(self._to_openai(), **self._pro_params)
 
             # JSON 解析，失败时注入 output_format 让 LLM 自修复
             try:
                 llm_msg = self._parse_llm_reply(reply)
             except (json.JSONDecodeError, KeyError, TypeError) as e:
-                logger.warning("JSON parse error (round %d): %s", self._round_counter, e)
+                logger.warning(
+                    "[%s] JSON parse error (round %d): %s", agent_name, self._round_counter, e
+                )
                 self._history.append(
                     Message(
                         role="user",
@@ -244,6 +263,7 @@ class BaseAgent(Handler):
             # ── 事件分发 ──
             # FINISH → 退出
             if llm_msg.event_type == EventType.FINISH:
+                logger.debug("[%s] FINISH, round=%d", agent_name, self._round_counter)
                 return Response(
                     type=ResponseType.FINISH,
                     message=llm_msg.message,
@@ -255,6 +275,9 @@ class BaseAgent(Handler):
 
             # 7b. 未知工具 → system_message（附可用工具列表）→ LLM 下轮自修正
             if tool_name not in self._tools:
+                logger.warning(
+                    "[%s] 未知工具: %s, 可用: %s", agent_name, tool_name, ", ".join(self._tools.keys())
+                )
                 available = ", ".join(self._tools.keys())
                 self._history.append(
                     Message(
@@ -271,6 +294,7 @@ class BaseAgent(Handler):
 
             # 7c. 需审批 → 暂停，等 App 收集用户确认
             if self._should_confirm(tool):
+                logger.debug("[%s] TOOL_CALL %s → CONFIRM", agent_name, tool_name)
                 return Response(
                     type=ResponseType.CONFIRM,
                     message=f"即将执行工具: {tool_name}",
@@ -278,6 +302,7 @@ class BaseAgent(Handler):
                 )
 
             # 7d. 无需审批 → 返回 PROGRESS，App 渲染后自动继续
+            logger.debug("[%s] TOOL_CALL %s → PROGRESS", agent_name, tool_name)
             return Response(
                 type=ResponseType.PROGRESS,
                 message=llm_msg.message,
@@ -286,7 +311,7 @@ class BaseAgent(Handler):
             )
 
         # 安全阀 — 达到最大轮数
-        logger.warning("%s 达到最大轮数 %d，强制终止", self._get_agent_name(), self._max_rounds)
+        logger.warning("[%s] 达到最大轮数 %d，强制终止", agent_name, self._max_rounds)
         return Response(
             type=ResponseType.FINISH,
             message="已达到最大工具调用轮数，流程终止。",

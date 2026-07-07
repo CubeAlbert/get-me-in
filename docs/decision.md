@@ -75,6 +75,10 @@
 - [决策 65 — Request 类型（对称 Response）作为 App → Agent 输入协议](#决策-65--request-类型对称-response-作为-app--agent-输入协议)
 - [决策 66 — 用户拒绝审批 → 退出内层循环，不调 process()](#决策-66--用户拒绝审批--退出内层循环不调-process)
 - [决策 67 — 工具错误上下文增强：工具列表 + 参数 schema](#决策-67--工具错误上下文增强工具列表--参数-schema)
+- [决策 68 — MainAgent 位置：src/agents/main_agent.py](#决策-68--mainagent-位置srcagentsmain_agentpy)
+- [决策 69 — 审批 UI：questionary.select + ConfirmChoice 枚举](#决策-69--审批-uiquestionaryselect--confirmchoice-枚举)
+- [决策 70 — LLMClient.web_search() 两轮 native function calling](#决策-70--llmclientweb_search-两轮-native-function-calling)
+- [决策 71 — WORKING_DIR 环境变量 + get_working_dir() 工具](#决策-71--working_dir-环境变量--get_working_dir-工具)
 
 ---
 
@@ -1469,3 +1473,79 @@ class AgentRegistry:
 **曾考虑的替代方案：**
 - 仅告知"未知工具"不列可用工具 —— LLM 需重新解析 system prompt 中的工具列表，浪费一轮
 - 仅返回 error string —— LLM 不知道参数哪里错了，只能猜
+
+---
+
+### 决策 68 — MainAgent 位置：`src/agents/main_agent.py`
+
+**背景：** 设计文档原计划 `src/main_agent/` 独立目录放置主 Agent。实现时用户指出 Agent 应统一放在 `src/agents/` 下。
+
+**决策：** `MainAgent` 放在 `src/agents/main_agent.py`，与 `BaseAgent` 同目录。`src/main_agent/` 目录不创建。
+
+**理由：**
+- 所有 Agent 统一管理，简化项目结构
+- `BaseAgent` 和 `MainAgent` 在同一目录，import 路径更短
+- 未来子 Agent 也放在 `src/agents/` 下（如 `interview/`），一致的目录约定
+
+**曾考虑的替代方案：**
+- 独立 `src/main_agent/` 目录 —— 增加目录层级，与其他 Agent 位置不一致
+
+---
+
+### 决策 69 — 审批 UI：questionary.select + ConfirmChoice 枚举
+
+**背景：** 审批确认使用 `questionary.confirm`，在某些终端渲染为 `??` 而非正常的 `? (y/N)`，用户体验差。
+
+**决策：** 替换为 `questionary.select` + `ConfirmChoice(StrEnum)` 枚举：
+- `ConfirmChoice.APPROVE = "✅ 执行"` / `ConfirmChoice.REJECT = "❌ 取消"`
+- App 中比较用枚举值而非裸字符串
+
+**理由：**
+- `select` 比 `confirm` 渲染更稳定，在不同终端一致
+- 枚举保证选项字符串不写错，类型安全
+- emoji 提升视觉辨识度
+
+**曾考虑的替代方案：**
+- 保持 `questionary.confirm` 换终端 —— 治标不治本
+- 裸字符串比较 `"✅ 执行"` —— 拼写错误风险
+
+---
+
+### 决策 70 — LLMClient.web_search() 两轮 native function calling
+
+**背景：** 需要为 Agent 提供网络搜索能力。DeepSeek API 支持内置 `web_search` 工具，通过 OpenAI 兼容的 function calling 协议调用。
+
+**决策：** `LLMClient.web_search(query)` 实现为两轮对话：
+- Round 1：发 system prompt + user query + `web_search` 工具定义 + `tool_choice` 强制选 `web_search`，模型返回 `tool_calls`
+- Round 2：喂回 assistant 的 `tool_calls` + `role: "tool"` 结果（`"Provide the result"`），模型整理后返回答案
+- 两轮均 `extra_body={"thinking": {"type": "disabled"}}` 关闭推理
+- System prompt 将模型定位为"纯搜索工具"而非"拥有工具能力的助手"
+
+**理由：**
+- 复用 OpenAI SDK 原生 `tools` / `tool_choice` 参数，无需额外 HTTP 调用
+- 两轮协议是 DeepSeek web_search 的标准调用方式
+- 关闭 thinking 节省 token、加快响应
+
+**曾考虑的替代方案：**
+- 用 `WebSearch` / `WebFetch` 工具做真实 HTTP 请求 —— 需要额外的搜索 API key 和服务
+- 一轮调用直接返回搜索结果 —— DeepSeek 需要两轮 tool_call 协议
+
+---
+
+### 决策 71 — WORKING_DIR 环境变量 + get_working_dir() 工具
+
+**背景：** Agent 可能需要在磁盘上读写临时文件，需要一个统一的工作目录。
+
+**决策：**
+- 新增 `WORKING_DIR` 环境变量，默认 `data/temp/`，通过 `config.py` 管理
+- `get_working_dir()` 工具：`Path.resolve()` 返回绝对路径，自动 `mkdir(parents=True, exist_ok=True)`
+- `data/temp/` 加入 `.gitignore`
+
+**理由：**
+- 统一工作目录避免文件散落各处
+- 默认值开箱即用，环境变量支持部署时自定义
+- 自动创建目录避免 LLM 因目录不存在而调用失败
+
+**曾考虑的替代方案：**
+- 硬编码 `data/temp/` —— 不够灵活
+- 让 LLM 自行选择路径 —— 可能写出项目外的文件

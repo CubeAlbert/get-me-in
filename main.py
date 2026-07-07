@@ -8,6 +8,7 @@ from src.prompts.loader import PromptLoader
 from src.cli.app import App
 from src.rag import start
 import src.tools.system_tool  # noqa: F401 — 触发 @tool 注册
+import src.tools.web_tool     # noqa: F401 — 触发 @tool 注册
 
 logger = get_logger(__name__)
 

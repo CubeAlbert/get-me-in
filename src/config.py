@@ -48,6 +48,7 @@ _VAR_SPECS: list[tuple[str, bool, str | None, bool]] = [
     ("SHOW_THINKING",      False, "false", True),
     ("AGENT_MAX_ROUNDS",       False, "10", False),
     ("TOOL_CONFIRM_ENABLED",   False, "true", True),
+    ("WORKING_DIR",            False, "data/temp/", False),
 ]
 
 _missing: list[str] = []

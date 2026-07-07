@@ -210,18 +210,21 @@
 - ✅ LLM JSON 解析：`Message.from_llm_reply()` 静态方法统一反序列化，解析失败注入 `system_message` 让 LLM 自修复
 - ✅ 工具错误处理：执行失败时附带 `arguments_schema` + `expected_output` 让 LLM 自修复调用参数
 
-### 4. 主 Agent (`src/main_agent/agent.py`)
+### 4. 主 Agent (`src/agents/main_agent.py`)
 
-- ⬜ `MainAgent(BaseAgent)`：14 个占位符值 + `AgentRegistry` + `dispatch_*` 工具
+- ✅ `MainAgent(BaseAgent)`：14 个占位符值实现，继承 BaseAgent 全能力，已替换 LLMHandler 作为 main.py 入口
 - ⬜ `AgentRegistry`：register / get / list
 - ⬜ `dispatch_*` 工具：内部调 `App.switch_agent(target, pre_prompt)`
 - ⬜ `App.switch_agent(name, pre_prompt)` — 切 handler + 喂 prompt + 立即跑一轮
-- ⬜ `provide_choices` → `Response(type="select")`；审批 gate → `Response(type="confirm")`
+- ✅ 审批 gate：`BaseAgent._should_confirm()` + `ConfirmChoice` 枚举 + `questionary.select` 渲染
+- ⬜ `provide_choices` → `Response(type="select")`
 
 ### 5. 入口集成 (`main.py` + `src/config.py`)
 
-- ⬜ 组装 `MainAgent` + `AgentRegistry` + `ToolRegistry`，注入 `App`
-- ⬜ `AGENT_MAX_ROUNDS` 环境变量
+- ✅ 组装 `MainAgent` 注入 `App`（`MainAgent(llm, prompts)` 替换 `LLMHandler`）
+- ✅ `AGENT_MAX_ROUNDS` 环境变量
+- ✅ 工具注册导入：`system_tool`（`get_current_datetime` + `get_working_dir`）+ `web_tool`（`web_search`）
+- ✅ `WORKING_DIR` 环境变量（默认 `data/temp/`）
 
 ### 6. 面试问答 Agent (`src/agents/interview/`)
 

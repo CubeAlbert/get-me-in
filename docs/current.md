@@ -78,3 +78,7 @@
 65. 新增 `Request` 类型（对称 `Response`）：`RequestType(USER_INPUT/CONTINUE/CONFIRM_APPROVED)` 作为 App→Agent 输入协议；`Handler.process()` 签名从 `Message → Response` 改为 `Request → Response`
 66. 用户拒绝工具审批 → App 直接退出内层循环，不调用 `process()`，等待用户下一次主动输入
 67. 工具错误处理增强：未知工具时 system_message 附完整可用工具列表；工具执行失败时 error payload 附带 `arguments_schema` + `expected_output`，让 LLM 有足够上下文自修复调用参数
+68. `MainAgent` 放在 `src/agents/main_agent.py`（而非独立 `src/main_agent/` 目录），与 BaseAgent 同目录，简化项目结构
+69. 审批确认 UI 用 `questionary.select` + `ConfirmChoice(StrEnum)`（`"✅ 执行"` / `"❌ 取消"`）替代 `questionary.confirm`，避免终端 `??` 兼容问题，枚举保证选项字符串不写错
+70. `LLMClient.web_search(query)` 两轮 OpenAI native function calling：Round 1 强制 `tool_choice=web_search` 触发搜索，Round 2 喂回 tool_call + tool_result 让模型整理答案；两轮均关闭 thinking
+71. `WORKING_DIR` 环境变量（默认 `data/temp/`），`get_working_dir()` 工具自动创建目录并返回绝对路径，用于 Agent 文件读写
