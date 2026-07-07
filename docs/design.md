@@ -118,10 +118,11 @@ get-me-in/
 ├── src/
 │   ├── config.py            # 环境变量集中管理（启动加载 + 校验）
 │   ├── message.py           # 通用消息/事件数据类（横跨 CLI/Agent/LLM/Memory）
+│   ├── request.py           # App → Agent 输入协议（对称 Response，不进对话历史）
+│   ├── response.py          # Agent → CLI 输出协议（不进对话历史）
 │   ├── main_agent/          # 主 Agent 入口 & 编排逻辑
 │   │   ├── __init__.py
-│   │   ├── orchestrator.py  # 意图识别、Agent 调度
-│   │   └── router.py        # 意图 → Agent 映射
+│   │   └── orchestrator.py  # 意图识别、Agent 调度（纯 LLM 驱动，无独立 Router）
 │   ├── agents/              # 子 Agent 实现
 │   │   ├── __init__.py
 │   │   ├── base.py          # Agent 基类（对话循环、意图识别、工具调用、记忆读写）
@@ -149,6 +150,9 @@ get-me-in/
 │   │   ├── store.py         # Chroma 封装（collection 增删查）
 │   │   ├── loader.py        # 启动加载 + 增量加载（threading 后台）
 │   │   └── reranker.py      # 重排
+│   ├── tools/               # Tool 系统
+│   │   ├── __init__.py
+│   │   └── registry.py      # Tool dataclass + @tool 装饰器 + ToolRegistry
 │   ├── prompts/             # 提示词加载器
 │   │   ├── __init__.py
 │   │   └── loader.py        # 模板加载 & 变量替换
@@ -200,40 +204,64 @@ get-me-in/
 
 ## 4. 模块设计
 
-### 4.0 Handler 协议
+### 4.0 Handler 协议 & App 交互循环
 
 **用途：** 定义 CLI 层与业务逻辑层之间的桥接接口。CLI 不直接调用 LLM 或 Agent，而是调用注入的 `Handler`，由 Handler 负责具体的输入处理逻辑。M1 用 `LLMHandler` 验证端到端管线，M4 由 `BaseAgent` 实现同一协议。
 
 **职责：**
-- 定义 `process(input: Message) -> Response` 抽象方法
+- 定义 `process(input: Request) -> Response` 抽象方法
 - CLI 层不关心处理细节，只根据 `Response.type` 做不同渲染
 
-**关键接口：**
-- `Handler.process(input: Message) -> Response` —— 处理用户输入 Message，返回 CLI 指令
-- `Handler._parse_llm_reply(reply: str) -> Message` —— 静态方法，将 LLM 返回的 JSON（`06_output_format.md` schema）反序列化为 `Message`。子类可复用或覆盖（未来可在此加入重试逻辑）
-
-**CLI 等待动效：**
-- `App._process_with_spinner(msg)` 将 `handler.process()` 放入后台线程，主线程以 `\r` 单行覆盖展示 `.` / `..` / `...` + 计时（`{dots:<3} 处理中 N.Ns`），LLM 返回后擦除
+**`Request` 数据类（`src/request.py`，对称 `Response`）：**
+- `type: RequestType` — `USER_INPUT` / `CONTINUE` / `CONFIRM_APPROVED`
+- `message: str = ""` — 用户输入文本，仅 `USER_INPUT` 时填写
+- `Request` 是 App → Agent 协议层，不进对话历史
 
 **`Response` 数据类（`src/response.py`）：**
-- `type: str` — `"finish"` / `"select"` / `"confirm"`
+- `type: ResponseType` — `FINISH` / `SELECT` / `CONFIRM` / `PROGRESS`
 - `message: str` — 展示文本（markdown）
-- `choices: list[str] | None` — `select` 时用，最后一项固定"🔧 自定义输入..."
+- `choices: list[str] | None` — `SELECT` 时用，最后一项固定"🔧 自定义输入..."
 - `thinking: str | None` — LLM 推理过程，由 `SHOW_THINKING` 环境变量控制是否渲染
+- `sub_type: str = ""` — 对应 `Message.event_type`，用于 App 判断继续/终止逻辑
 
-| type | 触发 | App 行为 | 返回给 LLM |
-|------|------|---------|------------|
-| `finish` | LLM 调 `finish` | `rich` 渲染 markdown | 无 |
-| `select` | LLM 调 `provide_choices` | `questionary.select` | 用户选择 → Message → agent loop |
-| `confirm` | 工具审批 gate | `questionary.confirm` | y → 执行；n → 跳过 |
+| type | 触发 | App 行为 | 返回给 Agent |
+|------|------|---------|-------------|
+| `FINISH` | LLM 返回 `event_type="finish"` | 渲染 markdown，退出内层循环 | 无（等用户下一轮输入） |
+| `PROGRESS` | LLM 返回 TOOL_CALL，工具无需审批 | 渲染进度消息，立即构造 `Request(CONTINUE)` | `Request(CONTINUE)` → 执行工具 |
+| `CONFIRM` | LLM 返回 TOOL_CALL，工具需审批 | `questionary.confirm` | y → `Request(CONFIRM_APPROVED)`；n → 退出内层循环 |
+| `SELECT` | LLM 调 `provide_choices` | `questionary.select` | 用户选择 → `Request(USER_INPUT)` |
 
-**位置：** `src/cli/handler.py` + `src/response.py`
+**App 双循环结构：**
+
+```
+外层 while input():                    ← 等用户输入（正常 CLI 交互）
+    request = Request(USER_INPUT, text)
+    内层 while True:                   ← agent loop（阻塞用户输入）
+        response = handler.process(request)
+        FINISH   → render, break
+        PROGRESS → render, request = CONTINUE
+        CONFIRM  → questionary.confirm
+                    confirmed? → request = CONFIRM_APPROVED
+                    rejected?  → break（不等用户说话）
+```
+
+**关键接口：**
+- `Handler.process(input: Request) -> Response` —— 处理用户输入，返回 CLI 指令
+- `Handler._parse_llm_reply(reply: str) -> Message` —— 静态方法，将 LLM 返回的 JSON（`06_output_format.md` schema）反序列化为 `Message`。子类可复用或覆盖
+
+**CLI 等待动效：**
+- `App._process_with_spinner(request)` 将 `handler.process()` 放入后台线程，主线程以 `\r` 单行覆盖展示 `.` / `..` / `...` + 计时（`{dots:<3} 处理中 N.Ns`），LLM 返回后擦除
+
+**位置：** `src/cli/handler.py` + `src/response.py` + `src/request.py`
 
 **设计决策：**
-- `Response` 是 CLI 指令层，不进对话历史 —— 与 `Message` 语义分离
-- `select` 绑定"返回给 LLM 什么"，`confirm` 绑定"操作是否执行"
-- M1 用 `LLMHandler`，M4 由 `BaseAgent` 替换 —— `Handler` 协议是稳定的桥接点
+- `Request` 和 `Response` 对称：都是 App ↔ Agent 协议层，都不进对话历史
+- `Response` 是 CLI 指令层 —— 与 `Message` 语义分离
+- Agent loop 上移至 App 内层 while —— `process()` 单步执行，每次只做一步（处理输入 → LLM → 分发 → 返回），工具暂停时返回 PROGRESS/CONFIRM
+- `_pending_tool` 断点恢复 —— `process()` 跨调用保存 (tool_name, payload, tool_call_id)，CONTINUE/CONFIRM_APPROVED 时恢复执行
+- 用户拒绝审批 → 退出内层循环，不调 `process()`，等用户主动输入
 - 交互库选择 `questionary`（`select` + `confirm`）
+- M1 用 `LLMHandler`，M4 由 `BaseAgent` 替换 —— `Handler` 协议是稳定的桥接点
 
 ### 4.1 提示词模块
 
@@ -586,10 +614,11 @@ time: 2026-06-30T14:30:00
 **用途：** 系统的入口 Agent。与所有 Agent 共享相同的基础能力（对话循环、工具调用、记忆读写），唯一区别是主 Agent 持有 `AgentRegistry`，可以调度子 Agent。子 Agent 不允许持有或调度其他 Agent。
 
 **所有 Agent 的通用能力（由 `base.py` 定义）：**
-- 维护对话循环（LLM JSON → 工具调度 → 结果喂回 → 循环）
-- 工具调用（`ToolRegistry.get_for(name)` 拉取工具集）
-- 记忆写入：`self.write_memory(memory)`
-- `process(input: Message) -> Response` 统一接口
+- 维护对话循环（LLM JSON → 工具调度 → 结果喂回 → 循环，单步执行，由 App 层驱动循环）
+- 工具调用（`ToolRegistry.get_for(name)` 拉取工具集，7b 未知工具附列表 / 7c 审批门禁 / 7d 自动执行）
+- `_pending_tool` 断点恢复：跨 `process()` 调用保存挂起的工具调用
+- `_round_counter` + `_max_rounds` 安全阀
+- `process(input: Request) -> Response` 统一接口
 
 **主 Agent 额外特权：**
 - 持有 `AgentRegistry`，根据意图调度子 Agent
@@ -613,16 +642,17 @@ class AgentRegistry:
 - 子 Agent 不允许切到其他子 Agent
 
 **关键接口 / 公开 API：**
-- `BaseAgent.process(input: Message) -> Response` —— 统一入口
-- `App.switch_agent(name, pre_prompt)` —— Agent 切换
+- `BaseAgent.process(input: Request) -> Response` —— 统一入口（单步执行）
+- `App.switch_agent(name, pre_prompt)` —— Agent 切换（待实现）
 
 **位置：** `src/main_agent/agent.py` + `src/agents/base.py`
 
 **设计决策：**
 - 所有 Agent 共享相同的基础能力 —— 每个 Agent 独立管理自己的对话和工具调用
+- Agent loop 上移至 App 层 —— `process()` 单步执行，每次只做一步（处理输入 → LLM → 分发 → 返回），工具暂停返回 PROGRESS/CONFIRM，由 App 内层 while 驱动循环
 - 主 Agent 的唯一特权是 Agent 调度 + `AgentRegistry` —— 子 Agent 不允许持有或调度其他 Agent，保持两级结构
 - 意图路由纯 LLM 驱动 —— 调度 = 工具，不做独立 Router（`src/main_agent/router.py` 不需要）
-- 记忆方法：`write_memory()` 作为 BaseAgent 便利方法；`query_cross_agent()` 后续封装为 tool；`get_recent_memories()` 废弃不做
+- `write_memory()` 作为 BaseAgent 便利方法（待实现）；`query_cross_agent()` 后续封装为 tool；`get_recent_memories()` 废弃不做
 
 ### 4.7 简历 Agent
 
@@ -867,7 +897,7 @@ class ToolRegistry:
 - 全局注册 + agent 过滤 —— 加载和发现解耦
 - `to_xml()` 对齐 `04_tools.md` 模板 —— LLM 看到标准 XML 格式
 - `extra_tools` 参数不进全局 Registry —— 实例级工具注入
-- 错误处理：工具异常 → `event_payload={"error": str(e)}` 的 `tool_call_result` Message → 喂回 LLM 自修复
+- 工具错误自修复：未知工具 → system_message 附完整可用工具列表；执行失败 → error payload 附带 `arguments_schema` + `expected_output`，LLM 对照检查参数 → 自修复
 
 **位置：** `src/tools/registry.py`
 
@@ -881,7 +911,7 @@ class ToolRegistry:
 - `return` 退回主 Agent
 
 **关键接口 / 公开 API：**
-- 继承 `BaseAgent`，实现 `process(Message) -> Response`
+- 继承 `BaseAgent`，实现 `process(Request) -> Response`
 - `@tool search_questions(query)` — RAG 检索工具
 
 **内部结构：**
