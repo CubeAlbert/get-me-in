@@ -62,6 +62,17 @@ class LLMClient:
             api_key=config.OPENAI_API_KEY,
         )
 
+    @staticmethod
+    def _thinking_extra_body() -> dict:
+        """根据 LLM_THINKING_ENABLED 返回 thinking 控制指令。
+
+        False → ``{"thinking": {"type": "disabled"}}``
+        True（默认）→ ``{}``（走 provider 默认行为）
+        """
+        if not config.LLM_THINKING_ENABLED:
+            return {"thinking": {"type": "disabled"}}
+        return {}
+
     def chat_pro(self, messages: list[dict], **kwargs) -> str:
         """调用 pro tier 模型，返回回复文本。
 
@@ -73,6 +84,7 @@ class LLMClient:
             模型回复文本
         """
         kwargs.setdefault("model", config.LLM_PRO_MODEL)
+        kwargs.setdefault("extra_body", self._thinking_extra_body())
         logger.debug("LLM pro 调用: model=%s, messages=%d", kwargs["model"], len(messages))
         response = self._client.chat.completions.create(
             messages=messages,
@@ -91,6 +103,7 @@ class LLMClient:
             模型回复文本
         """
         kwargs.setdefault("model", config.LLM_FLASH_MODEL)
+        kwargs.setdefault("extra_body", self._thinking_extra_body())
         logger.debug("LLM flash 调用: model=%s, messages=%d", kwargs["model"], len(messages))
         response = self._client.chat.completions.create(
             messages=messages,

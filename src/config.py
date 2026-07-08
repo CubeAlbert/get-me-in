@@ -49,6 +49,7 @@ _VAR_SPECS: list[tuple[str, bool, str | None, bool]] = [
     ("AGENT_MAX_ROUNDS",       False, "10", False),
     ("TOOL_CONFIRM_ENABLED",   False, "true", True),
     ("WORKING_DIR",            False, "data/temp/", False),
+    ("LLM_THINKING_ENABLED",  False, "true", True),
 ]
 
 _missing: list[str] = []
@@ -81,7 +82,7 @@ if _missing:
 # huggingface_hub）能读取到 HF_ENDPOINT 等配置（这些库不通过本模块获取配置，
 # 而是直接读 os.environ）
 for _name, _value in _values.items():
-    os.environ.setdefault(_name, _value)
+    os.environ.setdefault(_name, str(_value))
 
 logger.debug("环境变量校验通过，共 %d 项", len(_values))
 

@@ -67,6 +67,7 @@ class MemoryBuilder:
                     {"role": "user", "content": conv_json},
                 ],
                 response_format={"type": "json_object"},
+                extra_body={"thinking": {"type": "disabled"}},
             )
         except Exception:
             logger.exception("MemoryBuilder: LLM 调用失败")
