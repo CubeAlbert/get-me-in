@@ -319,14 +319,14 @@ get-me-in/
 - 检查所有必填环境变量是否存在，缺失时打印清晰的错误信息并退出
 - 将配置值挂在模块属性上，其他模块通过 `from src.config import config` 获取
 
-**必填变量：**
+**环境变量：**
 
 | 变量 | 用途 | 默认值 |
 |------|------|--------|
-| `OPENAI_BASE_URL` | API 地址 | `https://api.openai.com/v1` |
+| `OPENAI_BASE_URL` | API 地址 | 无（必填） |
 | `OPENAI_API_KEY` | API 密钥 | 无（必填） |
-| `LLM_PRO_MODEL` | pro tier 模型名 | `gpt-4o` |
-| `LLM_FLASH_MODEL` | flash tier 模型名 | `gpt-4o-mini` |
+| `LLM_PRO_MODEL` | pro tier 模型名 | 无（必填） |
+| `LLM_FLASH_MODEL` | flash tier 模型名 | 无（必填） |
 | `BI_ENCODER_MODEL` | RAG 召回（bi-encoder） | `BAAI/bge-base-zh-v1.5` |
 | `CROSS_ENCODER_MODEL` | RAG 重排（cross-encoder） | `BAAI/bge-reranker-v2-m3` |
 | `EMBED_BATCH_SIZE` | Embedding 批处理大小 | `32` |
@@ -341,10 +341,12 @@ get-me-in/
 | `SHOW_THINKING` | 是否展示 LLM 推理过程（`"true"` / `"false"`） | `false` |
 | `AGENT_MAX_ROUNDS` | Agent 最大工具调用轮数 | `10` |
 | `TOOL_CONFIRM_ENABLED` | 工具审批全局开关（`"true"` / `"false"`） | `true` |
+| `WORKING_DIR` | Agent 工作目录（临时文件） | `data/temp/` |
+| `LLM_THINKING_ENABLED` | LLM 思考模式开关（`"true"` / `"false"`） | `true` |
 
 有默认值的环境变量缺失时不报错，自动使用默认值。无默认值的必填变量（如 `OPENAI_API_KEY`）缺失时列出所有缺失项并 `sys.exit(1)`。
 
-`_VAR_SPECS` 第 4 列 `is_bool`：设为 `True` 时，取值自动转为 `bool`（`"true"`/`"1"` → `True`，其余 → `False`）。`SimpleNamespace` 接受弱类型，``config.SHOW_THINKING`` 和 ``config.TOOL_CONFIRM_ENABLED`` 为 ``bool``，其他变量为 ``str``。
+`_VAR_SPECS` 第 4 列 `is_bool`：设为 `True` 时，取值自动转为 `bool`（`"true"`/`"1"` → `True`，其余 → `False`）。`SimpleNamespace` 接受弱类型，``config.SHOW_THINKING``、``config.TOOL_CONFIRM_ENABLED`` 和 ``config.LLM_THINKING_ENABLED`` 为 ``bool``，其他变量为 ``str``。
 
 **关键接口 / 公开 API：**
 

@@ -83,6 +83,7 @@
 - [决策 73 — LLMClient 线程安全单例](#决策-73--llmclient-线程安全单例)
 - [决策 74 — 退出清理统一入口：Lifecycle 模块](#决策-74--退出清理统一入口lifecycle-模块)
 - [决策 75 — BaseAgent LLM 调用默认强制 JSON 输出](#决策-75--baseagent-llm-调用默认强制-json-输出)
+- [决策 76 — LLM Thinking 可配置开关](#决策-76--llm-thinking-可配置开关)
 
 ---
 
@@ -1650,3 +1651,36 @@ class AgentRegistry:
 - 每个调用点手动传 `response_format` — 重复代码，容易遗漏
 - 不强制 JSON，依赖 LLM 自觉遵守 prompt — 实践表明不可靠，增加重试成本
 - 仅在 `chat_pro` 中 hardcode — 剥夺子类自定义能力
+
+---
+
+## 决策 76 — LLM Thinking 可配置开关
+
+**背景：**
+- commit `21205f2` 引入了 `LLM_THINKING_ENABLED` 环境变量和对应的 `extra_body` 注入逻辑
+- 某些 LLM API provider（如 DeepSeek）在 `chat.completions` 响应中包含 `thinking`/`reasoning_content` 字段
+- 这些推理内容在上游被计入 output tokens 计费，但本项目自身通过 `SHOW_THINKING` flag 控制是否展示给用户
+- 需要一种方式让用户完全关闭 provider 端的 thinking，以节省 token 消耗和响应延迟
+- `web_search()` 场景不需要推理能力，应固定关闭
+
+**决策：**
+- 新增 `LLM_THINKING_ENABLED` 环境变量（bool 类型，`is_bool=True`，默认 `"true"`）
+- `LLMClient` 新增静态方法 `_thinking_extra_body()`，根据配置返回 `extra_body` dict：
+  - `False` → `{"thinking": {"type": "disabled"}}`
+  - `True`（默认）→ `{}`（走 provider 默认行为，不做任何干预）
+- `chat_pro()` 和 `chat_flash()` 通过 `kwargs.setdefault("extra_body", self._thinking_extra_body())` 注入，调用方可覆盖
+- `web_search()` 两轮调用均固定设置 `extra_body={"thinking": {"type": "disabled"}}`，不受全局开关影响
+- Agent 层无感知 — thinking 控制完全在 `LLMClient` 管道层完成
+
+**理由：**
+- `extra_body` 是 OpenAI SDK 的扩展入口（`chat.completions.create(extra_body=...)`），兼容不同 provider 的 thinking 控制语法（DeepSeek、OpenAI o-series 等）
+- 默认启用（`true`）保持 provider 原生体验，用户可按需关闭以节省 token 和延迟
+- `web_search()` 固定关闭：搜索场景只需结果整理，不需要深度推理，额外的 thinking tokens 是纯粹浪费
+- 环境变量 + config 模块统一管理，与项目现有配置风格一致（决策 12）
+- 调用方可传 `extra_body` 覆盖默认值（`setdefault` 不覆盖已存在的 key）
+
+**曾考虑的替代方案：**
+- 硬编码禁用 — 剥夺用户选择权，且某些 provider 可能不支持该指令
+- 在 Agent 层（`BaseAgent`）控制 — 违背参数分层管理原则（决策 13），thinking 是 LLM API 管道层的事，Agent 不应关心
+- 仅控制 `chat_pro` — flash tier 同样可能因 thinking 增加延迟
+- `web_search()` 跟随全局开关 — 搜索场景 thinking 无价值，不如固定关闭

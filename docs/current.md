@@ -86,3 +86,4 @@
 73. `LLMClient` 使用 `src/llm/__init__.py` 模块级 `get_client()` 双检锁线程安全单例，消除 5 处重复实例化，与 RAG/Memory 模块单例风格一致
 74. 退出清理统一入口：新建 `src/lifecycle.py`，`register_shutdown(hook, name)` 注册 → `shutdown()` 逆序执行；memory 模块注册 `_shutdown_wait_pending` 等待 daemon 线程完成
 75. BaseAgent LLM 调用默认 `response_format={"type": "json_object"}`：通过 `_pro_params` / `_flash_params` 类变量注入，子类可覆盖；memory builder 同样强制 JSON 模式
+76. LLM thinking 可配置：`LLM_THINKING_ENABLED` 环境变量（bool，默认 `true`），通过 `LLMClient._thinking_extra_body()` 注入 `extra_body` 控制 provider thinking 行为；`False` → `{"thinking": {"type": "disabled"}}`；`web_search()` 固定禁用
