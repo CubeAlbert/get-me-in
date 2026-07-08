@@ -206,7 +206,7 @@
 - ✅ 终止条件：`event_type="finish"` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量，默认 10）
 - ✅ 工具调度：7b 未知工具（附工具列表）/ 7c 审批门禁（CONFIRM）/ 7d 自动执行（PROGRESS）；流程由 App 层内循环驱动
 - ✅ `process(Request) -> Response` 接口：单步执行 + `_pending_tool` 断点恢复，`_round_counter` 安全阀
-- ⬜ `write_memory()` 便利方法
+- ✅ `write_memory()` 便利方法
 - ✅ LLM JSON 解析：`Message.from_llm_reply()` 静态方法统一反序列化，解析失败注入 `system_message` 让 LLM 自修复
 - ✅ 工具错误处理：执行失败时附带 `arguments_schema` + `expected_output` 让 LLM 自修复调用参数
 

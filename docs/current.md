@@ -4,11 +4,11 @@
 
 **当前任务：** 3. BaseAgent
 
-**当前子任务：** ⬜ BaseAgent — `write_memory()` 便利方法
+**当前子任务：** ⬜ AgentRegistry — register / get / list
 
 **当前阻塞：** 无
 
-**下一步：** 在 BaseAgent 中实现 `write_memory()`，封装记忆模块的 `build_memories()` 调用，让 Agent 能便捷地将对话上下文固化为记忆
+**下一步：** 实现 `AgentRegistry`，注册子 Agent → 主 Agent 持有 → App 通过它做 handler 切换
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -84,3 +84,5 @@
 71. `WORKING_DIR` 环境变量（默认 `data/temp/`），`get_working_dir()` 工具自动创建目录并返回绝对路径，用于 Agent 文件读写
 72. MainAgent 重新定位为"程序员求职助手路由Agent"：只负责意图识别和路由，不执行任何子Agent的领域任务；硬约束明确禁止生成简历、提供学习方案、执行面试模拟、搜索分析职位
 73. `LLMClient` 使用 `src/llm/__init__.py` 模块级 `get_client()` 双检锁线程安全单例，消除 5 处重复实例化，与 RAG/Memory 模块单例风格一致
+74. 退出清理统一入口：新建 `src/lifecycle.py`，`register_shutdown(hook, name)` 注册 → `shutdown()` 逆序执行；memory 模块注册 `_shutdown_wait_pending` 等待 daemon 线程完成
+75. BaseAgent LLM 调用默认 `response_format={"type": "json_object"}`：通过 `_pro_params` / `_flash_params` 类变量注入，子类可覆盖；memory builder 同样强制 JSON 模式

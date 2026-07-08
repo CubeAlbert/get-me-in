@@ -30,6 +30,10 @@ def main() -> None:
     logger.info("进入主循环")
     app.run()
 
+    from src.lifecycle import shutdown
+    shutdown()
+    logger.info("get-me-in 退出")
+
 
 if __name__ == "__main__":
     main()

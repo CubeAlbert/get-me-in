@@ -29,6 +29,10 @@
   - [4.9 面试 Agent](#49-面试-agent)
   - [4.10 岗位搜索 Agent](#410-岗位搜索-agent)
   - [4.11 日志模块](#411-日志模块)
+  - [4.12 Message 模块](#412-message-模块)
+  - [4.13 Tool 系统](#413-tool-系统)
+  - [4.14 面试问答 Agent](#414-面试问答-agent)
+  - [4.15 Lifecycle 模块](#415-lifecycle-模块)
 - [5. 参考资料与约定](#5-参考资料与约定)
 
 ---
@@ -141,6 +145,7 @@ get-me-in/
 │   │   ├── chunker.py        # 通用文本切分（front-matter + --- 分隔）
 │   │   └── formatters.py     # 通用格式化（时间戳文件名 + front-matter 拼装）
 │   ├── logger.py             # 日志模块（横切基础设施）
+│   ├── lifecycle.py          # 进程生命周期管理（统一退出清理入口）
 │   ├── llm/                 # LLM 调用封装
 │   │   ├── __init__.py
 │   │   └── client.py         # 双 tier（pro / flash）统一调用
@@ -385,8 +390,8 @@ Agent 基类持有 `LLMClient` 引用，通过类属性 `_pro_params` / `_flash_
 
 ```python
 class BaseAgent:
-    _pro_params: dict = {}    # 子类按需覆盖，如 {"temperature": 0.3, "top_p": 0.9}
-    _flash_params: dict = {}  # 子类按需覆盖，如 {"temperature": 0.0}
+    _pro_params: dict = {"response_format": {"type": "json_object"}}   # 子类按需覆盖
+    _flash_params: dict = {"response_format": {"type": "json_object"}} # 子类按需覆盖
 
     def __init__(self, llm_client: LLMClient, ...):
         self._llm = llm_client
@@ -652,7 +657,7 @@ class AgentRegistry:
 - Agent loop 上移至 App 层 —— `process()` 单步执行，每次只做一步（处理输入 → LLM → 分发 → 返回），工具暂停返回 PROGRESS/CONFIRM，由 App 内层 while 驱动循环
 - 主 Agent 的唯一特权是 Agent 调度 + `AgentRegistry` —— 子 Agent 不允许持有或调度其他 Agent，保持两级结构
 - 意图路由纯 LLM 驱动 —— 调度 = 工具，不做独立 Router（`src/main_agent/router.py` 不需要）
-- `write_memory()` 作为 BaseAgent 便利方法（待实现）；`query_cross_agent()` 后续封装为 tool；`get_recent_memories()` 废弃不做
+- `write_memory()` 作为 BaseAgent 便利方法，封装 `build_memories()`，默认异步（daemon 线程）；`query_cross_agent()` 后续封装为 tool；`get_recent_memories()` 废弃不做
 
 ### 4.7 简历 Agent
 
@@ -923,6 +928,35 @@ class ToolRegistry:
 **设计决策：**
 - 作为 M4 唯一的真实子 Agent，复杂度最低 —— 只需要一个 RAG 工具
 - 简历、学习等 Agent 在 M5+ 实现
+
+### 4.15 Lifecycle 模块
+
+**用途：** 进程生命周期管理，提供统一的退出清理入口。各模块通过 `register_shutdown()` 注册清理 hook，`shutdown()` 在进程退出前按注册逆序执行所有 hook。
+
+**职责：**
+- 提供 `register_shutdown(hook, *, name)` — 注册一个无参清理函数，同一 name 可重复注册
+- 提供 `shutdown()` — 逆序执行所有已注册 hook，单个 hook 异常被捕获并记日志，不影响后续 hook 执行
+- 与具体模块解耦 —— lifecycle 不感知 hook 内部逻辑
+
+**当前注册的 hook：**
+
+| name | 注册方 | 职责 |
+|------|--------|------|
+| `memory` | `src/memory/__init__.py` `_ensure_init()` | 等待所有 async `build_memories` daemon 线程完成 |
+
+**调用方：** `main.py` 在 `app.run()` 返回后调用 `lifecycle.shutdown()`，不感知各模块内部清理细节。
+
+**关键接口 / 公开 API：**
+- `register_shutdown(hook, *, name="") -> None` — 注册退出清理 hook
+- `shutdown() -> None` — 执行所有 hook，应在进程退出前调用一次
+
+**位置：** `src/lifecycle.py`
+
+**设计决策：**
+- 松耦合 —— main.py 只调 `lifecycle.shutdown()`，不感知各模块清理细节；新模块只需一行 `register_shutdown()` 即可加入清理流程
+- 逆序执行 —— 后注册的先清理，符合依赖关系（如 memory 依赖 RAG，RAG 先注册，memory 后注册，清理时 memory 先退出）
+- 防御性 —— 单个 hook 异常不阻止其他 hook 执行，日志记录异常详情
+- daemon 线程保持 —— `shutdown()` 提供优雅退出路径，不改变线程性质，强制杀进程不会被卡住
 
 ## 5. 参考资料与约定
 

@@ -81,6 +81,8 @@
 - [决策 71 — WORKING_DIR 环境变量 + get_working_dir() 工具](#决策-71--working_dir-环境变量--get_working_dir-工具)
 - [决策 72 — MainAgent 重新定位为路由 Agent](#决策-72--mainagent-重新定位为路由-agent)
 - [决策 73 — LLMClient 线程安全单例](#决策-73--llmclient-线程安全单例)
+- [决策 74 — 退出清理统一入口：Lifecycle 模块](#决策-74--退出清理统一入口lifecycle-模块)
+- [决策 75 — BaseAgent LLM 调用默认强制 JSON 输出](#决策-75--baseagent-llm-调用默认强制-json-输出)
 
 ---
 
@@ -1592,3 +1594,59 @@ class AgentRegistry:
 - 每个调用方独立实例化 —— 当前做法，浪费连接池资源
 - `LLMClient` 自身做 `__new__` 单例 —— 侵入类自身，测试不友好，且与项目模块级单例惯例不一致
 - 通过依赖注入传递 —— M4 阶段尚未建立全局 DI 容器，过度设计
+
+---
+
+## 决策 74 — 退出清理统一入口：Lifecycle 模块
+
+**背景：**
+- M4 阶段实现了 `build_memories(async_mode)` 后台记忆固化，使用 daemon 线程
+- daemon 线程在进程退出时被直接杀死，中间产生的记忆永久丢失
+- 需要进程退出前显式等待后台线程完成
+- 未来其他模块（RAG、临时文件清理等）也需要退出清理钩子
+- 各模块自行管理退出逻辑会导致 main.py 感知过多内部细节
+
+**决策：**
+- 新建 `src/lifecycle.py` 作为进程生命周期管理模块
+- `register_shutdown(hook, *, name)` — 各模块在初始化时注册无参清理函数
+- `shutdown()` — 进程退出前调用，按注册逆序执行所有 hook
+- 单个 hook 异常被捕获并记日志，不影响后续 hook 执行
+- memory 模块在 `_ensure_init()` 中自动注册 `_shutdown_wait_pending`
+
+**理由：**
+- 松耦合：main.py 只调 `lifecycle.shutdown()`，不感知各模块内部清理细节
+- 可扩展：以后任何模块需要退出清理，一行 `register_shutdown()` 即可
+- 防御性：单个 hook 异常不会阻止其他 hook 执行
+- daemon 线程保持不变，`shutdown()` 只提供优雅退出路径，强制杀进程不会被卡住
+
+**曾考虑的替代方案：**
+- 各模块暴露独立 `shutdown_*()` 让 main.py 逐个调用 — main.py 与各模块强耦合
+- 线程改为非 daemon — 进程会卡住直到所有线程完成，用户体验差
+- 仅 memory 模块内建 `shutdown()` — 单点方案，不可扩展
+
+---
+
+## 决策 75 — BaseAgent LLM 调用默认强制 JSON 输出
+
+**背景：**
+- Agent LLM 输出格式由 `general_agent/06_output_format.md` 定义为 flat JSON schema
+- `process()` 中通过 `_parse_llm_reply()` 解析 JSON，失败时注入 output_format 让 LLM 自修复
+- 不强制 JSON 模式时 LLM 可能输出 markdown 包裹的 JSON，增加解析失败概率
+- MemoryBuilder 已固定使用 `response_format={"type": "json_object"}`
+
+**决策：**
+- `BaseAgent._pro_params` 默认值 `{"response_format": {"type": "json_object"}}`
+- `BaseAgent._flash_params` 同样设置，供子类 flash tier 调用使用
+- 通过 `**self._pro_params` 注入 `chat_pro()` 调用，无需每个调用点手动传参
+- 子类可通过覆盖类变量自定义参数
+
+**理由：**
+- 输出格式已明确定义为 JSON，强制模式消除 LLM 擅自包裹 markdown 的可能性
+- 减少 JSON 解析失败 → system_message 注入 → 重试的浪费
+- 类变量 + `**kwargs` 透传模式与项目现有设计一致（决策 12）
+- 子类如需调整（如某些 LLM 不支持）只需覆盖类变量
+
+**曾考虑的替代方案：**
+- 每个调用点手动传 `response_format` — 重复代码，容易遗漏
+- 不强制 JSON，依赖 LLM 自觉遵守 prompt — 实践表明不可靠，增加重试成本
+- 仅在 `chat_pro` 中 hardcode — 剥夺子类自定义能力

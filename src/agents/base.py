@@ -27,8 +27,8 @@ class BaseAgent(Handler):
     子类按需覆盖 ``_pro_params`` / ``_flash_params``（LLM 参数默认值）。
     """
 
-    _pro_params: dict = {}
-    _flash_params: dict = {}
+    _pro_params: dict = {"response_format": {"type": "json_object"}}
+    _flash_params: dict = {"response_format": {"type": "json_object"}}
 
     # ── 14 个抽象方法：子类必须全部实现 ──────────────────────
 
@@ -338,3 +338,36 @@ class BaseAgent(Handler):
             type=ResponseType.FINISH,
             message="已达到最大工具调用轮数，流程终止。",
         )
+
+    # ── memory ─────────────────────────────────────────────
+
+    def write_memory(
+        self,
+        conversation: list[Message] | None = None,
+        sync_mode: bool = False,
+    ):
+        """将对话上下文固化为长期记忆。
+
+        封装 ``src.memory.build_memories()``，默认使用当前 Agent 的对话历史。
+        默认异步执行（daemon 线程），不阻塞 agent loop。
+
+        Args:
+            conversation: 要提取记忆的 Message 列表，默认 ``self._history``。
+            sync_mode: True 同步执行并返回 Memory 列表；False daemon 线程后台执行返回 None。
+
+        Returns:
+            sync_mode=True 时返回 ``list[Memory]``（可能为空）；sync_mode=False 返回 None。
+        """
+        from src.memory import build_memories
+
+        conv = conversation if conversation is not None else self._history
+        agent = self._get_agent_name()
+
+        if not conv:
+            logger.warning("[%s] write_memory: 对话历史为空，跳过", agent)
+            return [] if sync_mode else None
+
+        logger.info(
+            "[%s] write_memory: %d 条消息, sync=%s", agent, len(conv), sync_mode
+        )
+        return build_memories(conv, agent=agent, llm=self._llm, sync_mode=sync_mode)

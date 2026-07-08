@@ -34,6 +34,9 @@ _indexer: MemoryIndexer | None = None
 _retriever: MemoryRetriever | None = None
 _init_lock = threading.Lock()
 
+_pending_threads: set[threading.Thread] = set()
+_pending_lock = threading.Lock()
+
 
 def _ensure_init() -> None:
     """线程安全的懒加载初始化，仅执行一次。"""
@@ -46,6 +49,8 @@ def _ensure_init() -> None:
         _store = MemoryStore()
         _indexer = MemoryIndexer(_store)
         _retriever = MemoryRetriever()
+        from src.lifecycle import register_shutdown
+        register_shutdown(hook=_shutdown_wait_pending, name="memory")
         logger.info("memory: 单例初始化完成（Store + Indexer + Retriever）")
 
 
@@ -79,12 +84,21 @@ def build_memories(
         return _build_sync(conversation, agent, llm)
 
     logger.info("build_memories: async 模式，启动 daemon 线程")
+
+    def _run():
+        try:
+            _build_sync(conversation, agent, llm)
+        finally:
+            with _pending_lock:
+                _pending_threads.discard(t)
+
     t = threading.Thread(
-        target=_build_sync,
-        args=(conversation, agent, llm),
+        target=_run,
         daemon=True,
-        name="memory-builder",
+        name=f"memory-builder-{agent}",
     )
+    with _pending_lock:
+        _pending_threads.add(t)
     t.start()
     return None
 
@@ -120,6 +134,22 @@ def delete_memory(agent: str, file_path: str) -> bool:
     """
     _ensure_init()
     return _store.delete_memory(agent, file_path)  # type: ignore[union-attr]
+
+
+def _shutdown_wait_pending(timeout: float = 10) -> None:
+    """等待所有后台记忆固化线程完成。注册为 lifecycle shutdown hook。"""
+    with _pending_lock:
+        threads = list(_pending_threads)
+
+    if not threads:
+        return
+
+    logger.info("memory: 等待 %d 个后台记忆固化线程完成...", len(threads))
+    for t in threads:
+        t.join(timeout)
+        if t.is_alive():
+            logger.warning("memory: 线程 %s 超时未完成", t.name)
+    logger.info("memory: 后台线程等待完成")
 
 
 def _build_sync(
