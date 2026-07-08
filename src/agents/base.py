@@ -140,6 +140,7 @@ class BaseAgent(Handler):
         self._max_rounds = int(config.AGENT_MAX_ROUNDS)
         self._pending_tool: tuple[str, dict, str] | None = None
         self._round_counter = 0
+        self._format_injected = False
 
         logger.debug(
             "%s 初始化 — %d 个工具, max_rounds=%d",
@@ -249,6 +250,7 @@ class BaseAgent(Handler):
             self._pending_tool = None
 
         # ── Step 2: LLM 推理 + 分发（内层 while 仅用于错误恢复）──
+        self._format_injected = False
         while self._round_counter < self._max_rounds:
             self._round_counter += 1
             logger.debug(
@@ -267,13 +269,17 @@ class BaseAgent(Handler):
                 logger.warning(
                     "[%s] JSON parse error (round %d): %s", agent_name, self._round_counter, e
                 )
-                self._history.append(
-                    Message(
-                        role="user",
-                        event_type=EventType.SYSTEM_MESSAGE,
-                        message=self._output_format,
+                logger.debug("[%s] 原始回复:\n%s", agent_name, reply)
+                if not self._format_injected:
+                    self._history.append(
+                        Message(
+                            role="user",
+                            event_type=EventType.SYSTEM_MESSAGE,
+                            message=self._output_format,
+                        )
                     )
-                )
+                    self._format_injected = True
+                    logger.debug("[%s] 已注入 output_format 提示", agent_name)
                 continue
 
             self._history.append(llm_msg)

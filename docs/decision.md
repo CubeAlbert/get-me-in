@@ -84,6 +84,7 @@
 - [决策 74 — 退出清理统一入口：Lifecycle 模块](#决策-74--退出清理统一入口lifecycle-模块)
 - [决策 75 — BaseAgent LLM 调用默认强制 JSON 输出](#决策-75--baseagent-llm-调用默认强制-json-输出)
 - [决策 76 — LLM Thinking 可配置开关](#决策-76--llm-thinking-可配置开关)
+- [决策 77 — JSON 解析增强：json-repair + 换行转义 + 提示注入节制](#决策-77--json-解析增强json-repair--换行转义--提示注入节制)
 
 ---
 
@@ -1684,3 +1685,34 @@ class AgentRegistry:
 - 在 Agent 层（`BaseAgent`）控制 — 违背参数分层管理原则（决策 13），thinking 是 LLM API 管道层的事，Agent 不应关心
 - 仅控制 `chat_pro` — flash tier 同样可能因 thinking 增加延迟
 - `web_search()` 跟随全局开关 — 搜索场景 thinking 无价值，不如固定关闭
+
+---
+
+## 决策 77 — JSON 解析增强：json-repair + 换行转义 + 提示注入节制
+
+**背景：**
+- LLM 输出中包含多行文本时，`message` 字段内的物理换行未被转义为 `\n`，导致 `json.loads()` 解析失败（报错后 LLM 重试浪费 token 和轮数）
+- 原方案自研了一个状态机 `_repair_newlines()` 修复 JSON 字符串内的裸换行，但只能处理换行问题，无法覆盖其他 LLM 常见 JSON 错误（尾部逗号、引号等）
+- `thinking` 字段使用 `parsed["thinking"]` 强制取值，某些 LLM 不输出 `thinking` 时导致 `KeyError`，而 JSON schema 中 `thinking` 本应为可选
+- JSON 解析失败时每轮都注入 `output_format` 提示，LLM 连续失败时 history 被同一段提示反复填充
+
+**决策：**
+- 引入 `json-repair` 库（PyPI: `json-repair==0.61.2`，零依赖），替换自研 `_repair_newlines()` 状态机
+- `Message.from_llm_reply()` 直接使用 `json_repair.loads(reply)`，一次调用覆盖未转义换行、尾部逗号、单引号、缺失引号等 LLM 常见 JSON 错误
+- `06_output_format.md` `<Requirements>` 新增约束：JSON 字符串内不得包含物理换行，必须转义为 `\n`
+- `thinking` 字段从 `parsed["thinking"]`（强制）改为 `parsed.get("thinking")`（容错）
+- `BaseAgent.process()` 新增 `_format_injected` 标记：每次 `process()` 调用的错误恢复循环中仅首次 parse 失败注入 `output_format` 提示，后续失败只 `continue` 重试
+- parse 失败时 `logger.debug` 打印原始 LLM 回复，便于定位
+
+**理由：**
+- `json-repair` 专为 LLM 畸形 JSON 设计，覆盖场景远超自研状态机，且持续维护（GitHub 1k+ stars）
+- 单个 `json_repair.loads()` 替代 try/except + 修复 + 重试三段逻辑，代码量减少
+- `06_output_format.md` 约束从源头减少换行问题，`json_repair` 作为容错兜底，双重保障
+- `thinking` 可选化匹配实际 LLM 行为（部分模型不输出此字段），与 `tool`/`event_payload` 处理一致
+- 提示注入节制避免 history 膨胀：同一轮 `process()` 中 LLM 连续 parse 失败时，重复注入 output_format 无益
+
+**曾考虑的替代方案：**
+- 仅强化 prompt 约束，不做代码容错 — LLM 不能 100% 遵守，生产环境需要防御性解析
+- 仅自研状态机（`_repair_newlines`）— 只覆盖换行问题，尾部逗号、引号等仍需额外处理
+- `demjson3` / `json5` — 侧重非标准 JSON 语法（注释、尾部逗号），不是专门的 LLM 修复方案
+- parse 失败每次注入更短提示而非跳过 — 用户明确要求"只提示一次，不要一直塞入提示"

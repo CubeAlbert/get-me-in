@@ -70,20 +70,23 @@ class Message:
         """从 LLM 返回的 JSON 构建 Message。
 
         按 ``06_output_format.md`` 扁平 schema 解析。
+        ``json_repair`` 自动修复 LLM 常见格式错误（未转义换行、尾部逗号等）。
 
         Args:
             reply: LLM 返回的原始 JSON 字符串。
 
         Returns:
             解析后的 Message，``role`` 固定为 ``"assistant"``。
+
         """
-        parsed = json.loads(reply)
+        import json_repair
+        parsed = json_repair.loads(reply)
         return Message(
             role="assistant",
             id=parsed["id"],
             message=parsed["message"],
             event_type=parsed["event_type"],
-            thinking=parsed["thinking"],
+            thinking=parsed.get("thinking"),
             tool=parsed.get("tool"),
             event_payload=parsed.get("event_payload"),
         )
