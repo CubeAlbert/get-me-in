@@ -213,10 +213,21 @@
 ### 4. 主 Agent (`src/agents/main_agent.py`)
 
 - ✅ `MainAgent(BaseAgent)`：14 个占位符值实现，继承 BaseAgent 全能力，已替换 LLMHandler 作为 main.py 入口
-- ⬜ `AgentRegistry`：register / get / list
-- ⬜ `dispatch_*` 工具：内部调 `App.switch_agent(target, pre_prompt)`
-- ⬜ `App.switch_agent(name, pre_prompt)` — 切 handler + 喂 prompt + 立即跑一轮
 - ✅ 审批 gate：`BaseAgent._should_confirm()` + `ConfirmChoice` 枚举 + `questionary.select` 渲染
+- ⬜ 模板文件重排序 — `05_communtion_style.md` → `06`，`06_output_format.md` → `07`，`07_input_format.md` → `08`，`08_reserved.md` → `09`
+- ⬜ 新增 `data/prompts/general_agent/05_sub_agents.md` — 内容仅 `{{SUB_AGENTS_LIST}}`
+- ⬜ `data/prompts/PLACEHOLDER.md` 新增 `{{SUB_AGENTS_LIST}}` 条目
+- ⬜ `AgentRegistry`（`src/agents/registry.py`）— 全局单例（`get_agent_registry()`），SubAgentDescriptor + register/get/list/list_agents_prompt
+- ⬜ `BaseAgent` 新增 `_get_sub_agents_list()` 方法（默认 `""`），placeholders 加 `SUB_AGENTS_LIST`
+- ⬜ `MainAgent._get_sub_agents_list()` 覆盖 — 调用 `get_agent_registry().list_agents_prompt()`
+- ⬜ `Response` 新增 `switch_agent` / `switch_context` 字段 — FINISH + switch 表示切换
+- ⬜ `switch_to_subagent` tool — 仅 MainAgent 可见，handler 返回 `_SwitchTarget` 标记
+- ⬜ `switch_to_mainagent` tool — 所有子 Agent 自动注入，handler 返回 `_SwitchTarget` 标记
+- ⬜ `BaseAgent._execute_tool()` 检测 switch 标记 — 不包装 tool_call_result，设 `_pending_switch`
+- ⬜ `BaseAgent.process()` 检测 `_pending_switch` — 返回 `Response(FINISH, switch_agent=..., switch_context=...)`
+- ⬜ `App.switch_agent(name, pre_prompt)` — 切 handler + 注入上下文 + 启动新 agent loop
+- ⬜ App 内层循环检测 `FINISH + switch_agent` — 调 `switch_agent()` 后 `continue`，不退出循环
+- ⬜ `/exit_sub` CLI 命令 — App 层拦截，主 Agent 前台时报错，子 Agent 时等价 `switch_to_mainagent("用户主动退出")`
 - ⬜ `provide_choices` → `Response(type="select")`
 
 ### 5. 入口集成 (`main.py` + `src/config.py`)

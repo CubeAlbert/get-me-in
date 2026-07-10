@@ -1173,18 +1173,17 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 **背景：** 主 Agent 需要持有子 Agent 注册表以完成 dispatch。设计文档提到但未细化。
 
-**决策：** 最简设计：
-```python
-class AgentRegistry:
-    _agents: dict[str, BaseAgent] = {}
-    def register(self, name, agent): ...
-    def get(self, name) -> BaseAgent: ...
-```
-主 Agent 特权持有，App 通过它做 handler 切换。未来需要 metadata 再加。
+**决策：**
+- `AgentRegistry` 放在 `src/agents/registry.py`，**全局单例**（`get_agent_registry()` 双检锁），与 ToolRegistry 对称
+- `register(name, agent)` 存入实例的同时，从 `agent._get_*()` 抽取元数据构建 `SubAgentDescriptor`
+- `SubAgentDescriptor` 字段：`name` / `display_name` / `description` / `responsibilities` / `hard_constraints`（聚焦路由决策）
+- `list_agents_prompt()` 遍历 descriptor，生成格式化列表，通过 `{{SUB_AGENTS_LIST}}` 占位符注入主 Agent system prompt
+- "仅 MainAgent 使用"的约束不在数据结构层 → 通过 `switch_to_subagent` tool 的 `agent=["main"]` 可见性控制
+- 新子 Agent 注册一步到位：`register("resume", ResumeAgent(...))` → prompt + tool schema 自动更新
 
-**理由：** dict 够用，不需要过度设计。
+**理由：** 与 ToolRegistry 设计理念一致，全局单例降低耦合，SubAgentDescriptor 分离元数据与实例利于 prompt 生成。
 
-**曾考虑的替代方案：** 无。
+**曾考虑的替代方案：** 仅 dict 包装（`register/get/list`）—— 够用但不支持 prompt 自动生成和 tool schema 枚举值动态更新。
 
 ---
 
@@ -1716,3 +1715,82 @@ class AgentRegistry:
 - 仅自研状态机（`_repair_newlines`）— 只覆盖换行问题，尾部逗号、引号等仍需额外处理
 - `demjson3` / `json5` — 侧重非标准 JSON 语法（注释、尾部逗号），不是专门的 LLM 修复方案
 - parse 失败每次注入更短提示而非跳过 — 用户明确要求"只提示一次，不要一直塞入提示"
+
+---
+
+## 决策 78 — Agent 切换机制：Tool-based 异步工具调用模型
+
+**背景：** 主 Agent 需要调度子 Agent 执行专业任务（如面试模拟），并在子任务完成后收回控制权。切换时需要携带上下文（用户目标、历史背景等），子 Agent 完成工作后需要将总结带回主 Agent，使主 Agent 能继续决策。需要设计一个保证主 Agent 上下文完整性、子 Agent 无状态的切换机制。
+
+**决策：**
+- 切换封装为 `@tool`，LLM 通过标准 tool_call 携带 `sub_agent` + `context`
+- 整个子 Agent 会话建模为一次"异步工具调用"：
+  - 主 Agent `_history` 中保留 `tool_call: switch_to_subagent(...)` （待完成）
+  - 子 Agent 多轮交互不进主 Agent 历史
+  - 子 Agent 退出时，向主 Agent `_history` 注入 `tool_call_result(summary)` 完成闭环
+- 两个 switch tool：
+  - `switch_to_subagent(sub_agent, context)` — 仅 MainAgent 可见
+  - `switch_to_mainagent(summary)` — 所有子 Agent 自动注入
+- 子 Agent 之间不允许互调
+- `/exit_sub` CLI 命令在 App 层拦截：主 Agent 前台时报错，子 Agent 时等价 `switch_to_mainagent("用户主动退出")`
+- 不新增 `EventType` 或 `ResponseType`：切换通过 `Response(type="finish", switch_agent=..., switch_context=...)` 表示
+- 切换信号流：tool handler 返回 `_SwitchTarget` → `BaseAgent._execute_tool()` 检测 → `BaseAgent.process()` 返回 FINISH + switch → App 内层循环检测 → `App.switch_agent()`
+- `AgentRegistry` 放在 `src/agents/registry.py`，仅 MainAgent 持有，App 通过它做 handler 切换
+
+**理由：**
+- Tool-based 复用了 LLM 已熟练掌握的 function calling 路径，有 `input_schema` 描述参数、有 `use_when` 约束条件，LLM 不需要学习新输出格式
+- 异步调用模型保证主 Agent 始终持有完整上下文（含子 Agent 的总结），子 Agent 无持久状态
+- 不新增 EventType 避免了枚举承载"控制流"和"对话事件"两种职责
+- 子 Agent 无状态设计简化了实现和调试
+
+**曾考虑的替代方案：**
+- Option B（新增 `SWITCH_SUB` EventType）— 需要修改 LLM 输出 schema、Message 解析、BaseAgent 分发、App 循环四个地方，且让 EventType 枚举承担双重职责
+- 在主 Agent 中注入子 Agent 全部对话 — 历史膨胀严重，cache miss，LLM 可能混淆两段对话
+
+---
+
+## 决策 79 — `/exit_sub` 主 Agent 前台时报错
+
+**背景：** `/exit_sub` 仅在子 Agent 会话中有意义。在主 Agent 前台时用户误输入，需要明确的错误反馈。后续可考虑动态隐藏命令，但当前阶段以简单明确为优先。
+
+**决策：** 主 Agent 前台时 `/exit_sub` 直接报错 `"当前已是主Agent，/exit_sub 仅在子Agent会话中可用"`，不做隐藏处理。实现用 `isinstance(handler, MainAgent)` 判断，无需修改其他地方。
+
+**理由：**
+- `isinstance` 单行判断，实现代价极低
+- 错误消息明确告知用户当前状态
+- 后续如需动态显示/隐藏可以在此基础上迭代
+
+**曾考虑的替代方案：**
+- 动态过滤 help 命令列表 — 当前阶段过度设计，改了 App help 渲染逻辑
+- 静默忽略 — 用户不知道命令为什么没生效
+
+---
+
+## 决策 80 — 子 Agent 列表 prompt 注入：{{SUB_AGENTS_LIST}} 占位符 + 模板重排
+
+**背景：** 主 Agent 的 system prompt 需要动态注入子 Agent 列表（名称、描述、职责、约束），让 LLM 知道有哪些子 Agent 可用、何时该切换。此内容对子 Agent 无意义（子 Agent 不能调度其他 Agent）。
+
+**决策：**
+- 新增 `{{SUB_AGENTS_LIST}}` 占位符，与 `{{ADDITION_TOOLS}}` 同模式：`PromptLoader.get(**placeholders)` 替换
+- `BaseAgent._get_sub_agents_list()` 默认返回 `""`（子 Agent 不感知）
+- `MainAgent` 覆盖为 `get_agent_registry().list_agents_prompt()`
+- 模板文件重排序：新文件 `05_sub_agents.md`（仅含 `{{SUB_AGENTS_LIST}}`），原 05~08 顺延为 06~09
+
+```
+04_tools.md               — 工具定义（含 switch_to_subagent）
+05_sub_agents.md          — 可切换子 Agent 列表（新增）
+06_communtion_style.md    — 沟通风格（原 05）
+07_output_format.md       — 输出格式（原 06）
+08_input_format.md        — 输入格式（原 07）
+09_reserved.md            — 保留（原 08）
+```
+
+**理由：**
+- 04（工具）定义"你可以切换"，05（子 Agent 列表）定义"可以切到谁"，逻辑顺序自然
+- 占位符模式与 `{{ADDITION_TOOLS}}` 一致，不引入新机制
+- `BaseAgent` 默认 `""` 确保子 Agent prompt 中无冗余内容
+- 扩展只需 `register()` 一步，prompt 自动更新
+
+**曾考虑的替代方案：**
+- 放在 09 末尾 — 与工具定义距离太远，LLM 看到 switch_to_subagent 时尚不知道有哪些目标
+- 放入 `01_role.md` 作为 `{{RESPONSIBILITIES}}` 的一部分 — 职责描述和子 Agent 清单混在一起，维护困难

@@ -2,13 +2,15 @@
 
 **当前阶段：** 阶段 4 — M4: BaseAgent & 主 Agent
 
-**当前任务：** 3. BaseAgent
+**当前任务：** 4. 主 Agent — Agent 切换机制
 
-**当前子任务：** ⬜ AgentRegistry — register / get / list
+**当前子任务：** ⬜ AgentRegistry (`src/agents/registry.py`) — 全局单例 + SubAgentDescriptor + list_agents_prompt()
 
 **当前阻塞：** 无
 
-**下一步：** 实现 `AgentRegistry`，注册子 Agent → 主 Agent 持有 → App 通过它做 handler 切换
+**下一步：** 模板文件重排序（05→09 顺延）→ 新增占位符 `{{SUB_AGENTS_LIST}}` → 实现 AgentRegistry 单例 → Response 新增 switch 字段 → switch tool → BaseAgent 标记检测 → App.switch_agent() → /exit_sub
+
+**设计文档：** `docs/m4-agent-switch-design.md`（临时，完成后并入 design.md + decision.md）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
