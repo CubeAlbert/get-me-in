@@ -218,9 +218,9 @@
 - ✅ 新增 `data/prompts/general_agent/05_sub_agents.md` — XML 包裹 `<SubAgents>{{SUB_AGENTS_LIST}}</SubAgents>`
 - ✅ `data/prompts/PLACEHOLDER.md` 新增 `{{SUB_AGENTS_LIST}}` 条目
 - ✅ `docs/design.md` 目录树 + 模板表格同步更新
-- ⬜ `AgentRegistry`（`src/agents/registry.py`）— 全局单例（`get_agent_registry()`），SubAgentDescriptor + register/get/list/list_agents_prompt
-- ⬜ `BaseAgent` 新增 `_get_sub_agents_list()` 方法（默认 `""`），placeholders 加 `SUB_AGENTS_LIST`
-- ⬜ `MainAgent._get_sub_agents_list()` 覆盖 — 调用 `get_agent_registry().list_agents_prompt()`
+- ✅ `AgentRegistry`（`src/agents/registry.py`）— 全局单例（`get_agent_registry()`），SubAgentDescriptor + register/get/list/list_agents_prompt
+- ✅ `BaseAgent` 新增 `_get_sub_agents_list()` 方法（默认 `""`），placeholders 加 `SUB_AGENTS_LIST`
+- ✅ `MainAgent._get_sub_agents_list()` 覆盖 — 调用 `get_agent_registry().list_agents_prompt()`
 - ⬜ `Response` 新增 `switch_agent` / `switch_context` 字段 — FINISH + switch 表示切换
 - ⬜ `switch_to_subagent` tool — 仅 MainAgent 可见，handler 返回 `_SwitchTarget` 标记
 - ⬜ `switch_to_mainagent` tool — 所有子 Agent 自动注入，handler 返回 `_SwitchTarget` 标记

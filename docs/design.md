@@ -631,37 +631,65 @@ time: 2026-06-30T14:30:00
 - `process(input: Request) -> Response` 统一接口
 
 **主 Agent 额外特权：**
-- 持有 `AgentRegistry`，根据意图调度子 Agent
-- 调度子 Agent 定义为工具（如 `dispatch_interview`），通过 `{{ADDITION_TOOLS}}` 注入主 Agent 的工具列表。LLM 通过标准工具选择流程（`04_tools.md` + `06_output_format.md`）完成意图识别和调度
+- 通过 `AgentRegistry` 全局单例获取子 Agent 列表，根据意图调度子 Agent
+- `switch_to_subagent(sub_agent, context)` 工具（仅 MainAgent 可见）：LLM 通过标准 tool_call 携带目标 Agent 名和上下文 → tool handler 返回 switch 标记 → BaseAgent 返回 FINISH + switch → App 切换 handler
+- `switch_to_mainagent(summary)` 工具（所有子 Agent 自动注入）：子 Agent 退出并带回总结 → App 切回主 Agent → 向主 Agent `_history` 注入 `tool_call_result` 完成异步调用闭环
+- 子 Agent 会话不进主 Agent 历史（仅 tool_call → ... → tool_call_result），主 Agent 持有全部上下文，子 Agent 无状态
 - `provide_choices` 工具：LLM 向用户列出选项（如子 Agent 列表）
+- `/exit_sub` CLI 命令：App 层拦截，主 Agent 前台时报错，子 Agent 时等价 `switch_to_mainagent("用户主动退出")`
 - 意图路由纯 LLM 驱动，不做独立 `Router`
 
-**`AgentRegistry`：**
+**`AgentRegistry`（`src/agents/registry.py`，全局单例）：**
 ```python
 class AgentRegistry:
+    _descriptors: dict[str, SubAgentDescriptor] = {}
     _agents: dict[str, BaseAgent] = {}
-    def register(self, name, agent): ...
-    def get(self, name) -> BaseAgent: ...
-    def list(self) -> list[str]: ...
+    def register(self, name, agent): ...        # 存入 + 构建 SubAgentDescriptor
+    def get(self, name) -> BaseAgent: ...       # App.switch_agent() 用
+    def list(self) -> list[str]: ...            # tool schema 的 choices 用
+    def list_agents_prompt(self) -> str: ...    # → {{SUB_AGENTS_LIST}}
 ```
 
-**Agent 切换：通过 `@tool` 封装的 `switch_agent` 实现：**
-- `switch_to_subagent(agent_name)` — 主 Agent 通过 tool_call 调度子 Agent，切换 handler + 注入 pre_prompt
-- `switch_to_mainagent()` — 子 Agent 通过 tool_call 退回主 Agent，带回结果摘要
-- 底层共用一个 `switch_agent` 方法，两个 `@tool` 封装为 LLM 可调用的独立工具
-- 子 Agent 不允许切到其他子 Agent
+**`SubAgentDescriptor`：**
+```python
+@dataclass
+class SubAgentDescriptor:
+    name: str              # registry key
+    display_name: str      # _get_agent_name()
+    description: str       # _get_agent_description()
+    responsibilities: str  # _get_responsibilities()
+    hard_constraints: str  # _get_hard_constraints()
+    # 不含 tone/verbosity/style —— 路由决策不需要沟通风格
+```
+
+与 `ToolRegistry` 对称：ToolRegistry 用 `@tool` 装饰器 + `to_xml()` → `{{ADDITION_TOOLS}}`，AgentRegistry 用 `register()` + `to_xml()` → `{{SUB_AGENTS_LIST}}`。
+
+**Agent 切换流程：**
+1. 主 Agent LLM 输出 `tool_call: switch_to_subagent(learning, "...")` → handler 返回 `_SwitchTarget` 标记
+2. `BaseAgent._execute_tool()` 检测标记 → 不包装 `tool_call_result`，设 `_pending_switch`
+3. `process()` 返回 `Response(type="finish", switch_agent="learning", switch_context="...")`
+4. App 内层循环检测 `FINISH + switch_agent` → `switch_agent(name, context)` → `continue`
+5. 子 Agent 接管，从头开始自己的 `_history`
+6. 子 Agent 调 `switch_to_mainagent(summary)` → 同样流程切回
+7. 主 Agent `_history` 注入 `tool_call_result(summary)`，`process(CONTINUE)` 继续
 
 **关键接口 / 公开 API：**
 - `BaseAgent.process(input: Request) -> Response` —— 统一入口（单步执行）
 - `App.switch_agent(name, pre_prompt)` —— Agent 切换（待实现）
+- `get_agent_registry()` —— 获取 AgentRegistry 全局单例
+- `Response.switch_agent` / `Response.switch_context` —— FINISH + switch 表示切换
 
-**位置：** `src/main_agent/agent.py` + `src/agents/base.py`
+**位置：** `src/agents/main_agent.py` + `src/agents/registry.py` + `src/agents/base.py`
 
 **设计决策：**
 - 所有 Agent 共享相同的基础能力 —— 每个 Agent 独立管理自己的对话和工具调用
 - Agent loop 上移至 App 层 —— `process()` 单步执行，每次只做一步（处理输入 → LLM → 分发 → 返回），工具暂停返回 PROGRESS/CONFIRM，由 App 内层 while 驱动循环
-- 主 Agent 的唯一特权是 Agent 调度 + `AgentRegistry` —— 子 Agent 不允许持有或调度其他 Agent，保持两级结构
+- 主 Agent 的唯一特权是 Agent 调度 + `AgentRegistry` —— 约束通过 `switch_to_subagent` tool 的 `agent=["main"]` 可见性实现，子 Agent 不允许持有或调度其他 Agent，保持两级结构
 - 意图路由纯 LLM 驱动 —— 调度 = 工具，不做独立 Router（`src/main_agent/router.py` 不需要）
+- `AgentRegistry` 全局单例（`get_agent_registry()`，双检锁），与 `ToolRegistry` 对称；子 Agent 通过 `SubAgentDescriptor` 抽取元数据，`list_agents_prompt()` 生成 prompt → `{{SUB_AGENTS_LIST}}` 占位符注入
+- Agent 切换建模为异步工具调用 —— tool_call（switch_to_subagent）→ 子 Agent 多轮会话 → tool_call_result（switch_to_mainagent 的 summary），主 Agent 持有全部上下文，子 Agent 无状态
+- 不新增 `ResponseType` —— 切换通过 `Response(type="finish", switch_agent=..., switch_context=...)` 表示
+- `/exit_sub` CLI 命令在 App 层拦截，主 Agent 前台时报错
 - `write_memory()` 作为 BaseAgent 便利方法，封装 `build_memories()`，默认异步（daemon 线程）；`query_cross_agent()` 后续封装为 tool；`get_recent_memories()` 废弃不做
 
 ### 4.7 简历 Agent

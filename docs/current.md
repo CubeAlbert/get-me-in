@@ -4,11 +4,11 @@
 
 **当前任务：** 4. 主 Agent — Agent 切换机制
 
-**当前子任务：** ⬜ AgentRegistry (`src/agents/registry.py`) — 全局单例 + SubAgentDescriptor + list_agents_prompt()
+**当前子任务：** ⬜ Response 新增 `switch_agent` / `switch_context` 字段
 
 **当前阻塞：** 无
 
-**下一步：** 模板文件重排序（05→09 顺延）→ 新增占位符 `{{SUB_AGENTS_LIST}}` → 实现 AgentRegistry 单例 → Response 新增 switch 字段 → switch tool → BaseAgent 标记检测 → App.switch_agent() → /exit_sub
+**下一步：** 修改 `src/response.py` 增加 switch 字段 → 实现 switch tool → BaseAgent 标记检测 → App.switch_agent() → /exit_sub
 
 **设计文档：** `docs/m4-agent-switch-design.md`（临时，完成后并入 design.md + decision.md）
 

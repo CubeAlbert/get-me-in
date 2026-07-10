@@ -25,7 +25,7 @@
   - `src/llm/` 完成适配层封装，至少支持一个后端（Claude API 或 OpenAI）
   - `src/cli/app.py` 实现基本对话循环（`input()` + `rich` 渲染 Markdown 输出 + `$EDITOR` 长文本输入）
   - `src/prompts/loader.py` 完成：`get(**kwargs)` 拼接 `general_agent/` + 替换占位符；`get_raw(name, **kwargs)` 加载指定文件跳过拼接
-  - `data/prompts/` 下 `general_agent/` 已创建 7 个模板文件（`01_role.md` ~ `07_reserved.md`），`memory/builder.md` 已创建 MemoryBuilder 系统提示词
+  - `data/prompts/` 下 `general_agent/` 已创建 9 个模板文件（`01_role.md` ~ `09_reserved.md`），`memory/builder.md` 已创建 MemoryBuilder 系统提示词
   - `main.py` 能启动并完成一轮对话
 - **前置依赖：** 无
 
@@ -62,15 +62,16 @@
 ### 里程碑 4 —— BaseAgent & 主 Agent
 
 - **预期产出：** Agent 基类、Tool 系统、Request/Response 协议、主 Agent、面试问答子 Agent
-- **进度：** M4-1（CLI + Response 升级）✅；M4-2（Tool 系统）✅；M4-3（BaseAgent）✅（loop/调度/断点恢复）；M4-4（主 Agent）⬜；M4-5（集成）⬜
+- **进度：** M4-1（CLI + Response 升级）✅；M4-2（Tool 系统）✅；M4-3（BaseAgent）✅；M4-4（主 Agent）🔄（AgentRegistry + 模板就绪，switch 机制待实现）；M4-5（入口集成）🔄（MainAgent 已注入 App）
 - **验收标准：**
   - `src/response.py` — ✅ `Response` dataclass（`finish` / `select` / `confirm` / `progress`）+ `thinking`
   - `src/request.py` — ✅ `Request` dataclass + `RequestType`（`USER_INPUT` / `CONTINUE` / `CONFIRM_APPROVED`）
   - `src/tools/registry.py` — ✅ `Tool` dataclass + `@tool` 装饰器 + `ToolRegistry`
   - `src/cli/handler.py` — ✅ `Handler` 协议升级：`process(Request) -> Response` + `_parse_llm_reply()`；`LLMHandler` 临时桩适配；CLI 等待动效
   - `src/cli/app.py` — ✅ `Request` 包装输入 + `Response` 解包渲染 + `thinking` 展示；✅ 双循环（外层等输入 / 内层 agent loop）；✅ questionary 集成（PROGRESS/CONFIRM/FINISH 分支）；⬜ `App.switch_agent()` 方法
-  - `src/agents/base.py` — ✅ Agent Loop（单步执行 + `_pending_tool` 断点恢复 + `_round_counter` 安全阀）；✅ `list[Message]` 对话历史；✅ 事件分发（FINISH/TOOL_CALL）；✅ 工具调度 7b-7d（未知工具/审批门禁/自动执行）；✅ `process(Request) -> Response`；⬜ `write_memory()` 便利方法
-  - `src/main_agent/agent.py` — ⬜ `MainAgent(BaseAgent)`：14 个占位符值 + `AgentRegistry` + `dispatch_*` 工具
+  - `src/agents/base.py` — ✅ Agent Loop（单步执行 + `_pending_tool` 断点恢复 + `_round_counter` 安全阀）；✅ `list[Message]` 对话历史；✅ 事件分发（FINISH/TOOL_CALL）；✅ 工具调度 7b-7d（未知工具/审批门禁/自动执行）；✅ `process(Request) -> Response`；✅ `_get_sub_agents_list()` → `{{SUB_AGENTS_LIST}}` 占位符
+  - `src/agents/main_agent.py` — 🔄 `MainAgent(BaseAgent)`：✅ 14 个占位符值 + ✅ `_get_sub_agents_list()` 覆盖；⬜ Agent 切换机制（switch tool + Response + App.switch_agent）
+  - `src/agents/registry.py` — ✅ `AgentRegistry` 全局单例（`get_agent_registry()`）+ `SubAgentDescriptor` + `list_agents_prompt()`
   - `src/agents/interview/` — ⬜ `InterviewAgent(BaseAgent)`：RAG search 工具 + 问→答→评价 loop + `return` 退回
   - `main.py` — ⬜ 组装全链路（`MainAgent` + `InterviewAgent` + `AgentRegistry` + `ToolRegistry` → `App`）
   - `AGENT_MAX_ROUNDS` 环境变量 — ✅

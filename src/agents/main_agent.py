@@ -5,6 +5,7 @@ agent loop、工具调度、断点恢复全部由基类承接。
 """
 
 from src.agents.base import BaseAgent
+from src.agents.registry import get_agent_registry
 
 
 class MainAgent(BaseAgent):
@@ -112,3 +113,6 @@ class MainAgent(BaseAgent):
             "- 避免解释自己无法完成任务的内部原因。\n"
             "- 避免讨论Agent、工具、路由机制。"
         )
+
+    def _get_sub_agents_list(self) -> str:
+        return get_agent_registry().list_agents_prompt()

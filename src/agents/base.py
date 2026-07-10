@@ -97,6 +97,10 @@ class BaseAgent(Handler):
         """→ STYLE_AVOIDS"""
         ...
 
+    def _get_sub_agents_list(self) -> str:
+        """→ SUB_AGENTS_LIST（默认空，MainAgent 覆盖）。"""
+        return ""
+
     # ── init ──────────────────────────────────────────────
 
     def __init__(
@@ -125,6 +129,7 @@ class BaseAgent(Handler):
             "HARD_CONSTRAINTS": self._get_hard_constraints(),
             "SOFT_CONSTRAINTS": self._get_soft_constraints(),
             "ADDITION_TOOLS": tools_xml,
+            "SUB_AGENTS_LIST": self._get_sub_agents_list(),
             "TONE": self._get_tone(),
             "VERBOSITY": self._get_verbosity(),
             "EXPLANATION_STYLE": self._get_explanation_style(),
@@ -134,7 +139,7 @@ class BaseAgent(Handler):
         system_prompt = prompts.get(**placeholders)
 
         self._llm = llm
-        self._output_format = prompts.get_raw("general_agent/06_output_format")
+        self._output_format = prompts.get_raw("general_agent/07_output_format")
         self._system_prompt = system_prompt
         self._history: list[Message] = []
         self._max_rounds = int(config.AGENT_MAX_ROUNDS)
