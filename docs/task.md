@@ -214,9 +214,10 @@
 
 - ✅ `MainAgent(BaseAgent)`：14 个占位符值实现，继承 BaseAgent 全能力，已替换 LLMHandler 作为 main.py 入口
 - ✅ 审批 gate：`BaseAgent._should_confirm()` + `ConfirmChoice` 枚举 + `questionary.select` 渲染
-- ⬜ 模板文件重排序 — `05_communtion_style.md` → `06`，`06_output_format.md` → `07`，`07_input_format.md` → `08`，`08_reserved.md` → `09`
-- ⬜ 新增 `data/prompts/general_agent/05_sub_agents.md` — 内容仅 `{{SUB_AGENTS_LIST}}`
-- ⬜ `data/prompts/PLACEHOLDER.md` 新增 `{{SUB_AGENTS_LIST}}` 条目
+- ✅ 模板文件重排序 — `05_communtion_style.md` → `06`，`06_output_format.md` → `07`，`07_input_format.md` → `08`，`08_reserved.md` → `09`
+- ✅ 新增 `data/prompts/general_agent/05_sub_agents.md` — XML 包裹 `<SubAgents>{{SUB_AGENTS_LIST}}</SubAgents>`
+- ✅ `data/prompts/PLACEHOLDER.md` 新增 `{{SUB_AGENTS_LIST}}` 条目
+- ✅ `docs/design.md` 目录树 + 模板表格同步更新
 - ⬜ `AgentRegistry`（`src/agents/registry.py`）— 全局单例（`get_agent_registry()`），SubAgentDescriptor + register/get/list/list_agents_prompt
 - ⬜ `BaseAgent` 新增 `_get_sub_agents_list()` 方法（默认 `""`），placeholders 加 `SUB_AGENTS_LIST`
 - ⬜ `MainAgent._get_sub_agents_list()` 覆盖 — 调用 `get_agent_registry().list_agents_prompt()`

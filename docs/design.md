@@ -187,11 +187,12 @@ get-me-in/
 │       │   ├── 02_mission.md
 │       │   ├── 03_constraint.md
 │       │   ├── 04_tools.md
-│       │   ├── 05_communtion_style.md
-│       │   ├── 06_output_format.md
-│       │   ├── 07_input_format.md
-│       │   └── 08_reserved.md
-│       ├── PLACEHOLDER.md    # 占位符清单（14 个 per-Agent 占位符，不参与拼接）
+│       │   ├── 05_sub_agents.md
+│       │   ├── 06_communtion_style.md
+│       │   ├── 07_output_format.md
+│       │   ├── 08_input_format.md
+│       │   └── 09_reserved.md
+│       ├── PLACEHOLDER.md    # 占位符清单（15 个占位符，不参与拼接）
 │       ├── memory/
 │       │   └── builder.md    # MemoryBuilder 系统提示词
 │       ├── resume_analysis.md
@@ -297,9 +298,11 @@ get-me-in/
 | `02_mission.md` | `{{PRIMARY_GOAL}}`, `{{SUCCESS_CRITERIONS}}`, `{{PRIORITIES}}` | 任务目标 |
 | `03_constraint.md` | `{{HARD_CONSTRAINTS}}`, `{{SOFT_CONSTRAINTS}}` | 约束规则 |
 | `04_tools.md` | `{{ADDITION_TOOLS}}` | 专属工具 |
-| `05_communtion_style.md` | `{{TONE}}`, `{{VERBOSITY}}`, `{{EXPLANATION_STYLE}}`, `{{STYLE_RULES}}`, `{{STYLE_AVOIDS}}` | 沟通风格 |
-| `06_output_format.md` | 无 | 固定 |
-| `07_reserved.md` | 无 | 固定 |
+| `05_sub_agents.md` | `{{SUB_AGENTS_LIST}}` | 可切换子 Agent 列表 |
+| `06_communtion_style.md` | `{{TONE}}`, `{{VERBOSITY}}`, `{{EXPLANATION_STYLE}}`, `{{STYLE_RULES}}`, `{{STYLE_AVOIDS}}` | 沟通风格 |
+| `07_output_format.md` | 无 | 固定 |
+| `08_input_format.md` | 无 | 固定 |
+| `09_reserved.md` | 无 | 固定 |
 
 完整清单及各占位符说明见 `data/prompts/PLACEHOLDER.md`。
 

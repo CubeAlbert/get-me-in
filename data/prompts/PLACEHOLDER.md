@@ -30,9 +30,15 @@
 
 | 占位符 | 用途 |
 |--------|------|
-| `{{ADDITION_TOOLS}}` | 各 Agent 专属工具的 XML 定义，插入在 `ask_user`/`finish` 之后 |
+| `{{ADDITION_TOOLS}}` | 各 Agent 专属工具的 XML 定义 |
 
-## 05_communtion_style.md
+## 05_sub_agents.md
+
+| 占位符 | 用途 |
+|--------|------|
+| `{{SUB_AGENTS_LIST}}` | 可切换的子 Agent 列表（仅主 Agent 有内容，子 Agent 为空） |
+
+## 06_communtion_style.md
 
 | 占位符 | 用途 |
 |--------|------|
@@ -42,14 +48,18 @@
 | `{{STYLE_RULES}}` | 偏好行为 |
 | `{{STYLE_AVOIDS}}` | 应避免的行为 |
 
-## 06_output_format.md
+## 07_output_format.md
 
 无占位符（固定内容，所有 Agent 统一）。
 
-## 07_reserved.md
+## 08_input_format.md
+
+无占位符（固定内容，所有 Agent 统一）。
+
+## 09_reserved.md
 
 无占位符（固定内容）。
 
 ---
 
-共 14 个占位符，全部 per-Agent 定义。
+共 15 个占位符。`{{ADDITION_TOOLS}}` / `{{SUB_AGENTS_LIST}}` 由基础设施动态生成，其余由各 Agent 的 `_get_*` 方法提供。
