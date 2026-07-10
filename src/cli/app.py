@@ -20,8 +20,10 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
+from src.agents.registry import get_agent_registry
 from src.cli.handler import Handler
 from src.config import config
+from src.message import EventType, Message
 from src.rag import load
 from src.request import Request, RequestType
 from src.response import ConfirmChoice, Response, ResponseType
@@ -86,10 +88,12 @@ class App:
     负责：接收输入 → 委托 Handler → rich 渲染输出。
     """
 
-    _COMMANDS = ["/exit", "/edit", "/ragreload"]
+    _COMMANDS = ["/exit", "/edit", "/ragreload", "/exit_sub"]
 
     def __init__(self, handler: Handler) -> None:
         self._handler = handler
+        self._main_agent = handler  # 切回目标，子 Agent 退出时回到这里
+        self._switch_tool_call_id: str | None = None  # main→sub 时的 TOOL_CALL id
         self._console = Console(force_terminal=True)
         self._editor = _resolve_editor()
 
@@ -97,6 +101,18 @@ class App:
     def _complete_commands() -> list[str]:
         """返回所有可用命令列表，由 questionary 按输入做前缀匹配。"""
         return App._COMMANDS
+
+    def _get_handler(self, name: str) -> Handler | None:
+        """按名获取 handler 实例。
+
+        ``"main"`` 返回主 Agent，其他从 AgentRegistry 查找。
+        """
+        if name == "main":
+            return self._main_agent
+        try:
+            return get_agent_registry().get(name)
+        except KeyError:
+            return None
 
     def _process_with_spinner(self, request: Request) -> Response:
         """后台调 handler.process()，主线程显示等待动效。
@@ -169,7 +185,22 @@ class App:
                 self._console.print()
                 continue
 
-            if user_input == "/edit":
+            if user_input == "/exit_sub":
+                if self._handler is self._main_agent:
+                    self._console.print("[red]当前已是主Agent，/exit_sub 仅在子Agent会话中可用[/]")
+                    continue
+                # 通知子 Agent 整理上下文并退出
+                self._handler._history.append(
+                    Message(
+                        role="user",
+                        event_type=EventType.SYSTEM_MESSAGE,
+                        message="用户请求主动退出当前会话。请整理本次会话的关键信息和结论，然后调用 switch_to_mainagent 退出。",
+                    )
+                )
+                request = Request(type=RequestType.CONTINUE)
+                # 掉入内层循环，由子 Agent LLM 处理
+
+            elif user_input == "/edit":
                 self._console.print(f"[dim]启动编辑器: {self._editor} ...[/]")
                 content = _edit_text()
                 if not content:
@@ -184,6 +215,38 @@ class App:
                 response = self._process_with_spinner(request)
 
                 if response.type == ResponseType.FINISH:
+                    # switch 检测：Agent 切换
+                    if response.switch_agent:
+                        if response.switch_agent != "main":
+                            # main → sub: 保存 tool_call_id 供切回时匹配
+                            if response.switch_tool_call_id:
+                                self._switch_tool_call_id = response.switch_tool_call_id
+                        else:
+                            # sub → main: 注入 TOOL_CALL_RESULT 完成异步调用闭环
+                            if self._switch_tool_call_id:
+                                self._main_agent._history.append(
+                                    Message(
+                                        role="user",
+                                        event_type=EventType.TOOL_CALL_RESULT,
+                                        tool="switch_to_subagent",
+                                        tool_call_id=self._switch_tool_call_id,
+                                        event_payload=response.switch_context or "",
+                                    )
+                                )
+                                self._switch_tool_call_id = None
+
+                        new_handler = self._get_handler(response.switch_agent)
+                        if new_handler is None:
+                            self._console.print(f"[red]未知 Agent: {response.switch_agent}[/]")
+                            break
+                        self._handler = new_handler
+                        request = Request(
+                            type=RequestType.USER_INPUT,
+                            message=response.switch_context or "",
+                        )
+                        continue  # 留在内层循环，新 handler 开始工作
+
+                    # 正常 FINISH：渲染并回外层
                     self._console.print()
                     if config.SHOW_THINKING and response.thinking:
                         self._console.print(Panel(response.thinking, title="思考", border_style="dim"))

@@ -221,14 +221,19 @@
 - ✅ `AgentRegistry`（`src/agents/registry.py`）— 全局单例（`get_agent_registry()`），SubAgentDescriptor + register/get/list/list_agents_prompt
 - ✅ `BaseAgent` 新增 `_get_sub_agents_list()` 方法（默认 `""`），placeholders 加 `SUB_AGENTS_LIST`
 - ✅ `MainAgent._get_sub_agents_list()` 覆盖 — 调用 `get_agent_registry().list_agents_prompt()`
-- ⬜ `Response` 新增 `switch_agent` / `switch_context` 字段 — FINISH + switch 表示切换
-- ⬜ `switch_to_subagent` tool — 仅 MainAgent 可见，handler 返回 `_SwitchTarget` 标记
-- ⬜ `switch_to_mainagent` tool — 所有子 Agent 自动注入，handler 返回 `_SwitchTarget` 标记
-- ⬜ `BaseAgent._execute_tool()` 检测 switch 标记 — 不包装 tool_call_result，设 `_pending_switch`
-- ⬜ `BaseAgent.process()` 检测 `_pending_switch` — 返回 `Response(FINISH, switch_agent=..., switch_context=...)`
-- ⬜ `App.switch_agent(name, pre_prompt)` — 切 handler + 注入上下文 + 启动新 agent loop
-- ⬜ App 内层循环检测 `FINISH + switch_agent` — 调 `switch_agent()` 后 `continue`，不退出循环
-- ⬜ `/exit_sub` CLI 命令 — App 层拦截，主 Agent 前台时报错，子 Agent 时等价 `switch_to_mainagent("用户主动退出")`
+- ✅ `Response` 新增 `switch_agent` / `switch_context` / `switch_tool_call_id` — FINISH + switch 表示切换
+- ✅ `switch_to_subagent` tool（`src/tools/switch_tools.py`）— `agent=["main"]`，`confirm_mode=ALWAYS`，`input_schema` 声明参数
+- ✅ `switch_to_mainagent` tool（`src/tools/switch_tools.py`）— `agent=["*"]`（非 main 可见），`confirm_mode=ALWAYS`
+- ✅ `BaseAgent._execute_tool()` 检测 `__switch__` → 返回 `None`，设 `_pending_switch`（含 tool_call_id）
+- ✅ `BaseAgent.process()` 检测 `_pending_switch` → 返回 `Response(FINISH, switch_agent=..., switch_context=..., switch_tool_call_id=...)`
+- ✅ `BaseAgent.process()` CONTINUE 分支守卫 `_pending_tool is not None`（切回时不崩）
+- ✅ `BaseAgent.process()` CONFIRM 拒绝 → 下次 USER_INPUT 的 `event_payload` 携带拒绝信息
+- ✅ `App._get_handler(name)` + FINISH 分支 switch 检测（main→sub 保存 tool_call_id，sub→main 注入 TOOL_CALL_RESULT）
+- ✅ `/exit_sub` CLI 命令 — 子 Agent 时注入 system_message 让其整理上下文 → switch_to_mainagent
+- ✅ `BaseAgent._get_agent_key()` + MainAgent 覆盖 `"main"` + `ToolRegistry.get_for(agent_key=)`
+- ✅ `ToolRegistry` `"*"` sentinel — 匹配所有 `agent_key != "main"` 的 Agent
+- ✅ `JobSearchAgent`（`src/agents/job_search/`）— 测试用子 Agent，14 占位符 + 职位搜索分析
+- ✅ `main.py` — 注册 JobSearchAgent + 导入 switch_tools
 - ⬜ `provide_choices` → `Response(type="select")`
 
 ### 5. 入口集成 (`main.py` + `src/config.py`)

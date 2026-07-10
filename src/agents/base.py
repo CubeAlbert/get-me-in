@@ -34,8 +34,15 @@ class BaseAgent(Handler):
 
     @abstractmethod
     def _get_agent_name(self) -> str:
-        """Agent 标识名，用于工具过滤、记忆归属。"""
+        """Agent 展示名 → ``{{AGENT_NAME}}``，用于 prompt 和记忆归属。"""
         ...
+
+    def _get_agent_key(self) -> str:
+        """Agent 稳定标识 → 用于工具过滤（``ToolRegistry.get_for``）。
+
+        默认同 ``_get_agent_name()``，MainAgent 覆盖为 ``"main"``。
+        """
+        return self._get_agent_name()
 
     @abstractmethod
     def _get_agent_description(self) -> str:
@@ -112,7 +119,7 @@ class BaseAgent(Handler):
         name = self._get_agent_name()
 
         # 从 ToolRegistry 按 agent 过滤拉取工具
-        self._tools = ToolRegistry.get_for(name)
+        self._tools = ToolRegistry.get_for(name, agent_key=self._get_agent_key())
         if extra_tools:
             for t in extra_tools:
                 self._tools[t.name] = t
@@ -144,6 +151,7 @@ class BaseAgent(Handler):
         self._history: list[Message] = []
         self._max_rounds = int(config.AGENT_MAX_ROUNDS)
         self._pending_tool: tuple[str, dict, str] | None = None
+        self._pending_switch: tuple[str, str, str] | None = None
         self._round_counter = 0
         self._format_injected = False
 
@@ -172,11 +180,14 @@ class BaseAgent(Handler):
             messages.append({"role": m.role, "content": m.to_json()})
         return messages
 
-    def _execute_tool(self, tool_name: str, payload: dict, tool_call_id: str) -> Message:
+    def _execute_tool(self, tool_name: str, payload: dict, tool_call_id: str) -> Message | None:
         """执行工具并返回 tool_call_result Message。
 
         异常时附带工具定义（arguments_schema + expected_output），
         让 LLM 有足够上下文自修复调用参数。
+
+        若 handler 返回 ``__switch__`` 标记，设 ``_pending_switch`` 并返回 None，
+        调用方应跳过 tool_call_result 追加并处理切换。
         """
         tool = self._tools[tool_name]
         try:
@@ -189,6 +200,12 @@ class BaseAgent(Handler):
                 "arguments_schema": tool.arguments_schema,
                 "expected_output": tool.expected_output,
             }
+
+        # switch 检测：handler 返回 {"__switch__": True, "target": "...", "context": "..."}
+        if isinstance(result, dict) and result.get("__switch__"):
+            self._pending_switch = (result["target"], result.get("context", ""), tool_call_id)
+            return None
+
         return Message(
             role="user",
             event_type=EventType.TOOL_CALL_RESULT,
@@ -237,6 +254,17 @@ class BaseAgent(Handler):
         # ── Step 1: 按 RequestType 处理输入 ──
         if input.type == RequestType.USER_INPUT:
             logger.debug("[%s] USER_INPUT: %s", agent_name, input.message[:80])
+
+            # 上次 CONFIRM 被用户拒绝 → 随新消息一起告知 LLM
+            rejected_tool = None
+            if self._pending_tool is not None:
+                tool_name, _payload, tool_call_id = self._pending_tool
+                rejected_tool = {
+                    "tool": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "reason": "用户取消了此操作",
+                }
+
             self._pending_tool = None
             self._round_counter = 0
             self._history.append(
@@ -244,15 +272,31 @@ class BaseAgent(Handler):
                     role="user",
                     message=input.message,
                     event_type=EventType.USER_INPUT,
+                    event_payload=rejected_tool,
                 )
             )
         elif input.type in (RequestType.CONTINUE, RequestType.CONFIRM_APPROVED):
-            # 执行挂起的工具 → 结果喂回 history
-            tool_name, payload, tool_call_id = self._pending_tool
-            logger.debug("[%s] 执行挂起工具: %s", agent_name, tool_name)
-            result_msg = self._execute_tool(tool_name, payload, tool_call_id)
-            self._history.append(result_msg)
-            self._pending_tool = None
+            # _pending_tool 为 None → 跳过工具执行（如切回主 Agent 后的 CONTINUE）
+            if self._pending_tool is not None:
+                tool_name, payload, tool_call_id = self._pending_tool
+                logger.debug("[%s] 执行挂起工具: %s", agent_name, tool_name)
+                result_msg = self._execute_tool(tool_name, payload, tool_call_id)
+                self._pending_tool = None
+
+                # switch 检测：handler 返回了 __switch__ 标记
+                if self._pending_switch:
+                    target, context, switch_call_id = self._pending_switch
+                    self._pending_switch = None
+                    return Response(
+                        type=ResponseType.FINISH,
+                        message="",
+                        switch_agent=target,
+                        switch_context=context,
+                        switch_tool_call_id=switch_call_id,
+                    )
+
+                if result_msg is not None:
+                    self._history.append(result_msg)
 
         # ── Step 2: LLM 推理 + 分发（内层 while 仅用于错误恢复）──
         self._format_injected = False

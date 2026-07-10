@@ -54,3 +54,6 @@ class Response:
     sub_type: str = ""
     choices: list[str] | None = None
     thinking: str | None = None
+    switch_agent: str | None = None
+    switch_context: str | None = None
+    switch_tool_call_id: str | None = None

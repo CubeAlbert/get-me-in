@@ -1,12 +1,15 @@
 """get-me-in — AI 求职助手。"""
 
 from src.config import config  # noqa: F401  import 即触发 .env 加载和校验
+from src.agents.job_search import JobSearchAgent
 from src.agents.main_agent import MainAgent
+from src.agents.registry import get_agent_registry
 from src.llm import get_client
 from src.logger import get_logger
 from src.prompts.loader import PromptLoader
 from src.cli.app import App
 from src.rag import start
+import src.tools.switch_tools  # noqa: F401 — 触发 @tool 注册（switch）
 import src.tools.system_tool  # noqa: F401 — 触发 @tool 注册
 import src.tools.web_tool     # noqa: F401 — 触发 @tool 注册
 
@@ -22,6 +25,11 @@ def main() -> None:
 
     prompts = PromptLoader()
     logger.info("提示词加载器初始化完成")
+
+    # 注册子 Agent（必须在 MainAgent 实例化前，使其进入 system prompt）
+    registry = get_agent_registry()
+    registry.register("job_search", JobSearchAgent(llm, prompts))
+    logger.info("JobSearchAgent 已注册")
 
     handler = MainAgent(llm, prompts)
     logger.info("MainAgent 初始化完成")

@@ -114,5 +114,8 @@ class MainAgent(BaseAgent):
             "- 避免讨论Agent、工具、路由机制。"
         )
 
+    def _get_agent_key(self) -> str:
+        return "main"
+
     def _get_sub_agents_list(self) -> str:
         return get_agent_registry().list_agents_prompt()

@@ -4,11 +4,11 @@
 
 **当前任务：** 4. 主 Agent — Agent 切换机制
 
-**当前子任务：** ⬜ Response 新增 `switch_agent` / `switch_context` 字段
+**当前子任务：** ⬜ `provide_choices` → `Response(type="select")`
 
 **当前阻塞：** 无
 
-**下一步：** 修改 `src/response.py` 增加 switch 字段 → 实现 switch tool → BaseAgent 标记检测 → App.switch_agent() → /exit_sub
+**下一步：** 实现 `provide_choices` 工具 → 端到端测试主 Agent dispatch + 子 Agent 切换 + 退回归还完整链路
 
 **设计文档：** `docs/m4-agent-switch-design.md`（临时，完成后并入 design.md + decision.md）
 

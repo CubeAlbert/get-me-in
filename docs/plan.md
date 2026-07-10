@@ -62,13 +62,16 @@
 ### 里程碑 4 —— BaseAgent & 主 Agent
 
 - **预期产出：** Agent 基类、Tool 系统、Request/Response 协议、主 Agent、面试问答子 Agent
-- **进度：** M4-1（CLI + Response 升级）✅；M4-2（Tool 系统）✅；M4-3（BaseAgent）✅；M4-4（主 Agent）🔄（AgentRegistry + 模板就绪，switch 机制待实现）；M4-5（入口集成）🔄（MainAgent 已注入 App）
+- **进度：** M4-1（CLI + Response 升级）✅；M4-2（Tool 系统）✅；M4-3（BaseAgent）✅；M4-4（主 Agent）🔄（AgentRegistry + switch 机制已实现，待端到端验证）；M4-5（入口集成）🔄（MainAgent + JobSearchAgent 已注入 App）
 - **验收标准：**
-  - `src/response.py` — ✅ `Response` dataclass（`finish` / `select` / `confirm` / `progress`）+ `thinking`
+  - `src/response.py` — ✅ `Response` dataclass + `switch_agent`/`switch_context`/`switch_tool_call_id`
   - `src/request.py` — ✅ `Request` dataclass + `RequestType`（`USER_INPUT` / `CONTINUE` / `CONFIRM_APPROVED`）
-  - `src/tools/registry.py` — ✅ `Tool` dataclass + `@tool` 装饰器 + `ToolRegistry`
-  - `src/cli/handler.py` — ✅ `Handler` 协议升级：`process(Request) -> Response` + `_parse_llm_reply()`；`LLMHandler` 临时桩适配；CLI 等待动效
-  - `src/cli/app.py` — ✅ `Request` 包装输入 + `Response` 解包渲染 + `thinking` 展示；✅ 双循环（外层等输入 / 内层 agent loop）；✅ questionary 集成（PROGRESS/CONFIRM/FINISH 分支）；⬜ `App.switch_agent()` 方法
+  - `src/tools/registry.py` — ✅ `Tool` dataclass + `@tool` 装饰器 + `ToolRegistry` + `agent_key` + `"*"` sentinel
+  - `src/tools/switch_tools.py` — ✅ `switch_to_subagent` + `switch_to_mainagent`
+  - `src/cli/app.py` — ✅ 双循环 + questionary + FINISH 分支 switch 检测 + `/exit_sub`
+  - `src/agents/base.py` — ✅ Agent Loop + `_pending_switch` + `_get_agent_key()` + `_get_sub_agents_list()` + CONFIRM 拒绝处理
+  - `src/agents/main_agent.py` — ✅ `MainAgent(BaseAgent)`：14 个占位符值 + `_get_agent_key()` → `"main"` + `_get_sub_agents_list()` 覆盖
+  - `src/agents/registry.py` — ✅ `AgentRegistry` 全局单例 + `SubAgentDescriptor` + `list_agents_prompt()`
   - `src/agents/base.py` — ✅ Agent Loop（单步执行 + `_pending_tool` 断点恢复 + `_round_counter` 安全阀）；✅ `list[Message]` 对话历史；✅ 事件分发（FINISH/TOOL_CALL）；✅ 工具调度 7b-7d（未知工具/审批门禁/自动执行）；✅ `process(Request) -> Response`；✅ `_get_sub_agents_list()` → `{{SUB_AGENTS_LIST}}` 占位符
   - `src/agents/main_agent.py` — 🔄 `MainAgent(BaseAgent)`：✅ 14 个占位符值 + ✅ `_get_sub_agents_list()` 覆盖；⬜ Agent 切换机制（switch tool + Response + App.switch_agent）
   - `src/agents/registry.py` — ✅ `AgentRegistry` 全局单例（`get_agent_registry()`）+ `SubAgentDescriptor` + `list_agents_prompt()`

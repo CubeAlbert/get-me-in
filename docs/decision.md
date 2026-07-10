@@ -85,6 +85,12 @@
 - [决策 75 — BaseAgent LLM 调用默认强制 JSON 输出](#决策-75--baseagent-llm-调用默认强制-json-输出)
 - [决策 76 — LLM Thinking 可配置开关](#决策-76--llm-thinking-可配置开关)
 - [决策 77 — JSON 解析增强：json-repair + 换行转义 + 提示注入节制](#决策-77--json-解析增强json-repair--换行转义--提示注入节制)
+- [决策 78 — Agent 切换机制：Tool-based 异步工具调用模型](#决策-78--agent-切换机制tool-based-异步工具调用模型)
+- [决策 79 — /exit_sub 主 Agent 前台时报错](#决策-79--exit_sub-主-agent-前台时报错)
+- [决策 80 — 子 Agent 列表 prompt 注入：{{SUB_AGENTS_LIST}} 占位符 + 模板重排](#决策-80--子-agent-列表-prompt-注入sub_agents_list-占位符--模板重排)
+- [决策 81 — Agent 稳定标识 _get_agent_key() + ToolRegistry "*" sentinel](#决策-81--agent-稳定标识-_get_agent_key--toolregistry--sentinel)
+- [决策 82 — CONFIRM 拒绝 → 下次 USER_INPUT 携带拒绝信息](#决策-82--confirm-拒绝--下次-user_input-携带拒绝信息)
+- [决策 83 — switch tool 必须声明 input_schema](#决策-83--switch-tool-必须声明-input_schema)
 
 ---
 
@@ -1132,40 +1138,45 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-### 决策 51 — Agent 切换机制：App.switch_agent()
+### 决策 51 — Agent 切换机制：Tool-based 异步调用模型
 
-**背景：** 主 Agent dispatch 子 Agent 后，CLI 的 handler 需要切换。原设计用 `Response(type="switch_agent")`，但切换不应是 CLI 指令而应是 App 层操作，且需要带 pre_prompt/result_prompt 上下文。
+**背景：** 主 Agent dispatch 子 Agent 后，CLI 的 handler 需要切换。原设计用 `Response(type="switch_agent")`，但切换不应是 CLI 指令而应是 App 层操作。
 
-**决策：** `App.switch_agent(name, pre_prompt)` 封装"切 handler + 喂 prompt + 立即跑一轮 process"：
-- 主 Agent 的 `dispatch_*` 工具 → `App.switch_agent(target, pre_prompt)`
-- 子 Agent 的 `return` 工具 → `App.switch_agent("main", result_prompt)`
-- 子 Agent 不允许切到其他子 Agent
+**决策（更新于 M4 实现阶段）：**
+- 切换封装为 `@tool`：`switch_to_subagent`（agent=["main"]）+ `switch_to_mainagent`（agent=["*"]），均 `confirm_mode=ALWAYS`
+- 子 Agent 会话建模为异步 tool_call：tool_call → 子 Agent 多轮 → tool_call_result(summary)
+- 切换信号流：tool handler 返回 `{"__switch__": True, "target": "...", "context": "..."}` → `BaseAgent._execute_tool()` 检测 → 返回 `None` 不包装 tool_call_result → `process()` 设 `_pending_switch` → 返回 `Response(FINISH, switch_agent=..., switch_context=..., switch_tool_call_id=...)`
+- App FINISH 分支检测 `switch_agent`：main→sub 时保存 `_switch_tool_call_id`；sub→main 时向主 Agent `_history` 注入 TOOL_CALL_RESULT 完成闭环
+- 主 Agent `_history` 中 TOOL_CALL 保留（作为待完成的异步调用），子 Agent 会话不可见
+- `/exit_sub` 在 App 层拦截：向子 Agent 注入 system_message 让 LLM 整理上下文 → 调用 switch_to_mainagent
+- 子 Agent 无状态，不持有任何持久上下文
+- 子 Agent 之间不允许互调（`switch_to_subagent` 仅 main 可见）
 
-**理由：**
-- `switch_agent` 是 App 层能力，不是 Response type，避免语义混淆
-- `pre_prompt` 让主 Agent 事先整理任务描述，用户不需要再发一遍
-- `result_prompt` 带回结果摘要，主 Agent 收到后无缝继续
+**理由：** Tool-based 复用 LLM 已掌握的 function calling 路径；不新增 ResponseType（FINISH + switch 字段）；异步调用模型保证主 Agent 持有全部上下文。
 
 **曾考虑的替代方案：**
 - `Response(type="switch_agent")` — 混淆了 CLI 指令和 handler 切换
-- 全局 foreground agent 变量 —— 隐式状态，调用链不清晰
+- 新增 EventType `SWITCH_SUB` — 需要修改 4 处，EventType 承担双重职责
+- `App.switch_agent()` 作为独立方法 — 虽然后续封装为 `_get_handler()` + FINISH 分支，而非独立公开方法
 
 ---
 
-### 决策 52 — M4 子 Agent 实现：面试问答 Agent
+### 决策 52 — M4 测试子 Agent 实现：JobSearchAgent
 
-**背景：** 计划要求"初期子 Agent 可为桩实现"。但桩无法验证 agent loop + tool + dispatch + return 全链路。
+**背景：** 计划要求"初期子 Agent 可为桩实现"，但桩无法验证 agent loop + tool + dispatch + return 全链路。原定面试问答 Agent，但切换机制实现后需要一个快速可用的子 Agent 验证全链路。
 
-**决策：** M4 做一个真实子 Agent — **面试问答 Agent（interview）**：
-- 持有 RAG search 工具（从 `data/reference/interview_questions/` 检索题目）
-- 问 → 答 → 评价 → 下一题 → `return` 退出
-- 验证 tool 注册 + agent loop + dispatch + return 全链路
+**决策：** 实现 **JobSearchAgent**（`src/agents/job_search/agent.py`）作为测试用子 Agent：
+- 14 个占位符填充职位搜索分析场景
+- 可复用现有 `web_search` 工具搜索岗位信息
+- 自动获得 `switch_to_mainagent` 工具（agent=["*"] 可见）
+- 验证流程：main → switch_to_subagent → JobSearchAgent 对话 → switch_to_mainagent → main 收到总结
+- 面试问答 Agent（原 milestone 7）后续按需实现
 
-**理由：** 简历 Agent 较复杂，先去实现一个简单的面试问答 Agent 端到端验证管线。只需要一个 RAG 工具。
+**理由：** 职位搜索分析场景简单（理解需求 → 搜索 → 分析），无需额外工具即可验证全链路。优先验证切换机制，专业子 Agent 后续按里程碑顺序实现。
 
 **曾考虑的替代方案：**
 - 桩实现（返回固定文本）—— 只验证 dispatch 管线，agent loop 和 tool 系统未覆盖
-- 完整简历 Agent —— M4 范围过大
+- 面试问答 Agent 先行 —— 需要 RAG 工具，而切换机制尚未验证，应先验证管线再填充功能
 
 ---
 
@@ -1448,16 +1459,20 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 **背景：** 工具需要审批时，`process()` 返回 `Response(CONFIRM)`，App 弹 `questionary.confirm`。用户拒绝后有两种选择：构造一个"拒绝"结果喂回 LLM，或直接退出等待用户重新输入。
 
-**决策：** 用户拒绝审批 → App 直接 `break` 退出内层循环，不调用 `process()`。不构造任何消息告知 LLM 审批被拒绝。下一次用户主动输入时才重新 `process(USER_INPUT)`。
+**决策：** 用户拒绝审批 → App 直接 `break` 退出内层循环，不调用 `process()`。下一次用户主动输入时，`process(USER_INPUT)` 检测 `_pending_tool` 是否仍存在 → 存在则说明上次被拒绝 → 在 USER_INPUT Message 的 `event_payload` 中注入拒绝信息（`{"tool": ..., "tool_call_id": ..., "reason": "用户取消了此操作"}`），一条消息同时携带用户文本和拒绝信息。
 
 **理由：**
-- LLM 不需要知道审批被拒绝 —— 工具没执行，对话状态没变，下次 LLM 调用时 history 里自然没有 tool_call_result
-- 用户拒绝通常意味着想换个方向，直接等新输入比让 LLM 基于"被拒绝了"继续推理更自然
-- 简化协议：不需要 `CONFIRM_REJECTED` RequestType
+- LLM 在分析用户意图时同时得知上次调用被拒，可以决定重新尝试或调整方向
+- TOOL_CALL 保留在 history 中形成完整调用链：TOOL_CALL → (放弃) → USER_INPUT(拒绝信息)
+- 不新增独立消息，保持对话紧凑
+- App 层逻辑不变，仅在 BaseAgent 收 USER_INPUT 时做守卫
+
+**更新（M4 实现阶段）：** 原决策认为"LLM 不需要知道审批被拒绝"，实现 switch_to_subagent 后发现 LLM 缺少被拒信息时会误以为工具已执行、等待 result。因此增加拒绝信息注入机制。
 
 **曾考虑的替代方案：**
 - 构造 `Request(CONFIRM_REJECTED)` → process() 注入 system_message → LLM 继续 —— 多余，用户拒绝后 LLM 无上下文继续
 - `process()` 内部处理审批（阻塞等 stdin）—— 破坏依赖注入，App 层失去对 I/O 的控制
+- 直接删除 TOOL_CALL —— 丢失上下文，LLM 不知道刚才发生了什么
 
 ---
 
@@ -1794,3 +1809,56 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 - 放在 09 末尾 — 与工具定义距离太远，LLM 看到 switch_to_subagent 时尚不知道有哪些目标
 - 放入 `01_role.md` 作为 `{{RESPONSIBILITIES}}` 的一部分 — 职责描述和子 Agent 清单混在一起，维护困难
+
+---
+
+## 决策 81 — Agent 稳定标识 `_get_agent_key()` 与 ToolRegistry `agent_key` 参数
+
+**背景：** `switch_to_subagent` 需要 `agent=["main"]` 仅对主 Agent 可见，但 `ToolRegistry.get_for()` 使用 `_get_agent_name()`（展示名"程序员求职助手路由Agent"）做匹配，无法用稳定的短标识过滤。同时 `switch_to_mainagent` 需要对所有子 Agent 可见但对 MainAgent 不可见，需要"非 main"语义。
+
+**决策：**
+- `BaseAgent` 新增 `_get_agent_key()` 方法（非抽象），默认返回 `_get_agent_name()`；MainAgent 覆盖为 `"main"`
+- `ToolRegistry.get_for()` 新增 `agent_key` 参数，同时匹配 `agent_name` 和 `agent_key`
+- `"*"` sentinel 别名：`"*" in tool.agent` → 匹配所有 `agent_key != "main"` 的 Agent
+
+**理由：**
+- `agent_key` 与 `agent_name` 职责分离：展示名可随时调整（中英文），key 是稳定的编程标识
+- `"*"` 支持"所有非 main"语义而无需枚举子 Agent 名，扩展时无需改 tool 定义
+
+**曾考虑的替代方案：**
+- `isinstance(handler, MainAgent)` 判断 — ToolRegistry 不应依赖 Agent 具体类型
+- 列出所有子 Agent 名（`agent=["interview", "learning"]`）— 每加一个 Agent 都要更新，容易遗漏
+
+---
+
+## 决策 82 — CONFIRM 拒绝 → 下次 USER_INPUT 携带拒绝信息
+
+**背景：** 用户拒绝工具审批（如拒绝 switch_to_subagent）后，TOOL_CALL 已写入 `_history` 但无 TOOL_CALL_RESULT 闭环。直接删除 TOOL_CALL 会丢失上下文。需要在用户下次输入时告知 LLM 上一条工具调用被拒绝了。
+
+**决策：** 在 `BaseAgent.process()` 的 `USER_INPUT` 分支开头检测 `_pending_tool` 是否仍然存在：
+- 存在 → 用户拒绝了上次 CONFIRM → 在 USER_INPUT Message 的 `event_payload` 中注入 `{"tool": ..., "tool_call_id": ..., "reason": "用户取消了此操作"}`
+- 不存在 → 正常处理，`event_payload` 为 `None`
+
+一条消息同时携带用户文本和拒绝信息，不新增独立消息。
+
+**理由：**
+- LLM 在分析用户意图时同时得知上次调用被拒，可以决定重新尝试或调整方向
+- 不修改 App 层逻辑，仅在 BaseAgent 收 USER_INPUT 时做守卫
+- TOOL_CALL 保留在 history 中形成完整调用链：TOOL_CALL → (放弃) → USER_INPUT(拒绝信息)
+
+**曾考虑的替代方案：**
+- 直接删除 TOOL_CALL — 丢失上下文，LLM 不知道刚才发生了什么
+- 注入独立 TOOL_CALL_RESULT 消息 — 消息数膨胀，且"结果"语义与"被拒绝"不符
+- App 层处理 — App 不应感知 agent history 结构
+
+---
+
+## 决策 83 — switch tool 必须声明 input_schema
+
+**背景：** `@tool` 装饰器通过 `input_schema` 参数声明工具参数，`inspect.signature` 仅用于填充 `type`/`required`。初次实现 `switch_to_subagent` 时未传 `input_schema`，导致 `arguments_schema` 为空 `{}`，LLM 无法得知参数定义。
+
+**决策：** 所有 `@tool` 装饰的工具必须显式提供 `input_schema`，`inspect.signature` 从函数签名补充类型和默认值信息。
+
+**理由：**
+- `input_schema` 是 LLM 了解工具参数的唯一途径，缺失时 LLM 只能猜测参数名
+- `@tool` 设计的本意就是 `input_schema` 声明参数 + 函数签名补充类型，不是自动从签名生成 schema
