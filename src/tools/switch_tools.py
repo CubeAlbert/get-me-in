@@ -1,11 +1,13 @@
 """Agent 切换工具 — switch_to_subagent / switch_to_mainagent。
 
-Handler 返回 ``{"__switch__": True, "target": "...", "context": "..."}``，
+Handler 通过 ``get_bridge().confirm()`` 与用户交互审批，
+返回 ``{"__switch__": True, "target": "...", "context": "..."}``，
 由 ``BaseAgent._execute_tool()`` 检测并设 ``_pending_switch``，
 ``process()`` 返回 ``Response(FINISH, switch_agent=...)`` 由 App 层执行切换。
 """
 
 from src.agents.registry import MAIN_AGENT_KEY
+from src.cli.uibridge import get_bridge
 from src.tools.registry import ConfirmMode, tool
 
 
@@ -19,7 +21,7 @@ from src.tools.registry import ConfirmMode, tool
         "context": {"description": "给子Agent的完整上下文：用户需求、背景、已收集的关键信息等。越详细越好。"},
     },
     agent=[MAIN_AGENT_KEY],
-    confirm_mode=ConfirmMode.ALWAYS,
+    confirm_mode=ConfirmMode.NEVER,
 )
 def switch_to_subagent(agent_name: str, context: str = "") -> dict:
     """切换到子 Agent。
@@ -28,6 +30,9 @@ def switch_to_subagent(agent_name: str, context: str = "") -> dict:
         agent_name: 目标子Agent名称（对应 <SubAgents> 列表中 SubAgent 的 name 属性）。
         context: 给子Agent的完整上下文，包含用户需求、背景、已收集的关键信息。
     """
+    ui = get_bridge()
+    if not ui.confirm(f"即将切换到 {agent_name} 子Agent，是否继续？"):
+        return {"__reject__": True, "reason": "用户取消了切换"}
     return {"__switch__": True, "target": agent_name, "context": context}
 
 
@@ -40,7 +45,7 @@ def switch_to_subagent(agent_name: str, context: str = "") -> dict:
         "summary": {"description": "本次子Agent会话的执行总结：做了什么、结论、关键发现、需要主Agent继续跟进的事项。"},
     },
     agent=["*"],
-    confirm_mode=ConfirmMode.ALWAYS,
+    confirm_mode=ConfirmMode.NEVER,
 )
 def switch_to_mainagent(summary: str) -> dict:
     """退回主 Agent。
@@ -49,4 +54,34 @@ def switch_to_mainagent(summary: str) -> dict:
         summary: 本次子Agent会话的执行总结，包含做了什么、结论、关键发现、
                  以及需要主Agent继续跟进的事项。
     """
+    ui = get_bridge()
+    if not ui.confirm("即将退回主Agent，是否继续？"):
+        return {"__reject__": True, "reason": "用户取消了退回"}
     return {"__switch__": True, "target": MAIN_AGENT_KEY, "context": summary}
+
+
+@tool(
+    purpose="向用户列出选项并等待选择。当你不确定用户意图、需要用户在多个选项中做出选择时使用此工具。",
+    use_when="用户的请求有多种可能的处理方式、你需要用户做出明确选择时。",
+    do_not_use_when="用户意图已经明确、只有一个合理的选项、或用户已经明确指定了方向。",
+    expected_output="用户选中的选项文本，作为 tool_call_result 返回。",
+    input_schema={
+        "question": {"description": "向用户展示的问题/提示文本"},
+        "choices": {"description": "选项列表，每个选项描述一个可选的行动方向"},
+    },
+    agent=None,
+    confirm_mode=ConfirmMode.NEVER,
+)
+def provide_choices(question: str, choices: list[str]) -> dict:
+    """向用户列出选项并等待选择。
+
+    Args:
+        question: 向用户展示的问题/提示文本。
+        choices: 选项列表，每个选项描述一个可选的行动方向。
+
+    Returns:
+        dict with "selected" key containing the user's choice.
+    """
+    ui = get_bridge()
+    selected = ui.select(question, choices)
+    return {"selected": selected}

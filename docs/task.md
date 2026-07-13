@@ -234,7 +234,7 @@
 - ✅ `ToolRegistry` `"*"` sentinel — 匹配所有 `agent_key != "main"` 的 Agent
 - ✅ `JobSearchAgent`（`src/agents/job_search/`）— 测试用子 Agent，14 占位符 + 职位搜索分析
 - ✅ `main.py` — 注册 JobSearchAgent + 导入 switch_tools
-- ⬜ `provide_choices` → `Response(type="select")`
+- ✅ `provide_choices` — 通过 UIBridge 实现，工具 handler 调用 `get_bridge().select()` 直连 CLI，选项末尾自动追加"🔧 自定义输入..."
 
 ### 5. 入口集成 (`main.py` + `src/config.py`)
 

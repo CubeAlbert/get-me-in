@@ -692,6 +692,51 @@ class SubAgentDescriptor:
 - `/exit_sub` CLI 命令在 App 层拦截，主 Agent 前台时报错
 - `write_memory()` 作为 BaseAgent 便利方法，封装 `build_memories()`，默认异步（daemon 线程）；`query_cross_agent()` 后续封装为 tool；`get_recent_memories()` 废弃不做
 
+#### UIBridge — 工具 handler 直连 CLI 交互
+
+`ConfirmMode` 审批体系已被 UIBridge 取代。工具 handler 通过跨线程通信桥直接在后台线程中调用 CLI 前端交互，不再依赖 `process()` 返回特殊 ResponseType。
+
+**UIBridge 接口（`src/cli/uibridge.py`）：**
+```python
+class UIBridge:
+    # Tool Handler 端（后台线程，阻塞调用）
+    def select(self, question: str, choices: list[str]) -> str: ...
+    def confirm(self, message: str) -> bool: ...
+
+    # App 端（主线程，轮询）
+    has_request: bool        # 是否有待处理的 UI 请求
+    action: str              # "select" / "confirm"
+    question: str            # 提示文本
+    choices: list[str]       # 选项（仅 select）
+    def respond(self, result: str | bool) -> None: ...
+```
+
+**注入机制：** 模块级 `_current_bridge` + `get_bridge()`。App 在后台线程中调用 `_set_bridge(bridge)` → handler 通过 `get_bridge()` 获取 → handler 完成后 `_set_bridge(None)` 清理。Bridge 粒度为每次用户输入。
+
+**线程模型：**
+```
+App.run() [主线程]                          BaseAgent.process() [后台线程]
+  _process_with_spinner():                    process() → _execute_tool()
+    while not done:                             handler(**payload)
+      show spinner                                ui = get_bridge()
+      if bridge.has_request:                      choice = ui.select(q, opts)  [BLOCK]
+        render questionary              ←──→     return {"selected": choice}
+        bridge.respond(result)                  ← TOOL_CALL_RESULT
+```
+
+**对现有流程的影响：**
+- `_should_confirm()` 已移除，工具统一走 PROGRESS → CONTINUE 路径
+- `ConfirmMode` enum 保留但不再参与 BaseAgent 调度逻辑
+- `ResponseType.CONFIRM` 不再由 `process()` 返回，`App.run()` 中对应分支已移除
+- CONFIRM 拒绝注入逻辑（USER_INPUT 携带拒绝信息）已移除 — 拒绝由 handler 通过 UIBridge 内部处理
+
+**`__reject__` sentinel：** switch 工具被用户拒绝时，handler 返回 `{"__reject__": True, "reason": "..."}` → `_execute_tool()` 追加 TOOL_CALL_RESULT 关闭调用链 + 设 `_pending_reject` → `process()` 返回 FINISH → App 回外层循环等用户输入。与旧 CONFIRM 拒绝行为一致。
+
+**已迁移到 UIBridge 的工具：**
+- `switch_to_subagent` — `get_bridge().confirm("即将切换到...")`
+- `switch_to_mainagent` — `get_bridge().confirm("即将退回主Agent...")`
+- `provide_choices` — `get_bridge().select(question, choices)`，选项末尾自动追加"🔧 自定义输入..."
+
 ### 4.7 简历 Agent
 
 **用途：** 帮助用户创建、优化、定制简历。根据目标岗位 JD 调整简历内容，提供修改建议。

@@ -33,8 +33,7 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
     内层 while True:                   ← agent loop（阻塞用户输入）
         response = handler.process(request)
         FINISH   → render, break
-        PROGRESS → render, request = CONTINUE
-        CONFIRM  → questionary.select 审批 → CONFIRM_APPROVED / break
+        PROGRESS → render, request = CONTINUE（工具 handler 内可通过 UIBridge 直连 CLI 交互）
 ```
 
 **模块分为两层：**
@@ -47,7 +46,8 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 | 基础设施 | 提示词模块 (`src/prompts/`) | `PromptLoader.get()` 强制拼接 `general_agent/` → 替换 14 个占位符；`get_raw()` 跳过拼接 |
 | 基础设施 | LLM 模块 (`src/llm/`) | `get_client()` 双检锁单例；双 tier（`chat_pro`/`chat_flash`）；`**kwargs` 透传；`_thinking_extra_body()` 控制 provider thinking |
 | 基础设施 | RAG 模块 (`src/rag/`) | Chroma + `sentence_transformers`；`search()`/`load()`/`start()`/`is_ready()` 四个公开 API；bi-encoder 召回 → cross-encoder 重排 |
-| 基础设施 | Tool 系统 (`src/tools/`) | `@tool` 装饰器注册 → `ToolRegistry` 全局管理；`input_schema` 扁平化，type/required 自动推断 |
+| 基础设施 | Tool 系统 (`src/tools/`) | `@tool` 装饰器注册 → `ToolRegistry` 全局管理；`input_schema` 扁平化，type/required 自动推断；handler 通过 `UIBridge`（`src/cli/uibridge.py`）直连 CLI 交互 |
+| 基础设施 | UIBridge (`src/cli/uibridge.py`) | 跨线程通信桥：工具 handler（后台线程）调 `select()`/`confirm()` 阻塞等待，主线程 spinner 循环中轮询并渲染 questionary |
 | 基础设施 | Lifecycle 模块 (`src/lifecycle.py`) | `register_shutdown(hook, name)` → `shutdown()` 逆序执行 |
 | 基础设施 | CLI/App 层 (`src/cli/`) | `App`（I/O + 渲染 + 双循环）+ `Handler`（抽象协议）；`Request`/`Response` 为 App↔Agent 协议层，不进对话历史 |
 | Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}` |
@@ -70,7 +70,7 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 - **Agent 必须实现 14 个抽象方法** — `_get_agent_name` + 13 个占位符方法（`_get_agent_description`、`_get_responsibilities` 等），遗漏 Python 在 import 时 `TypeError`
 - **工具 handler 返回纯数据** — 返回 `str`/`dict`，由调用方（`BaseAgent._execute_tool()`）包装为 `tool_call_result` Message
 - **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（FINISH/PROGRESS/CONFIRM/SELECT）
-- **`ConfirmMode` 控制工具审批** — NEVER（免审）/ALWAYS（强制审）/CONFIG（跟随 `TOOL_CONFIRM_ENABLED`），不暴露给 LLM
+- **工具 handler 通过 UIBridge 直连 CLI 交互** — handler 调 `get_bridge().confirm()`/`select()` 阻塞等待用户响应，替代原 `ConfirmMode` 审批体系；`ConfirmMode` 枚举保留但不再参与 BaseAgent 调度逻辑
 - **`EventType(StrEnum)` 枚举** — 代码中禁止裸字符串，只用 `EventType.USER_INPUT` 等 5 个枚举值
 - **System prompt 不在 `_history` 中** — 单独 `_system_prompt` 字符串，`_to_openai()` 时以 `{"role": "system", "content": "..."}` 注入
 - **设计/计划文件直接删除，不保留废弃内容** — Git 负责版本追溯

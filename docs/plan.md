@@ -61,25 +61,24 @@
 
 ### 里程碑 4 —— BaseAgent & 主 Agent
 
-- **预期产出：** Agent 基类、Tool 系统、Request/Response 协议、主 Agent、面试问答子 Agent
-- **进度：** M4-1（CLI + Response 升级）✅；M4-2（Tool 系统）✅；M4-3（BaseAgent）✅；M4-4（主 Agent）🔄（AgentRegistry + switch 机制已实现，待端到端验证）；M4-5（入口集成）🔄（MainAgent + JobSearchAgent 已注入 App）
+- **预期产出：** Agent 基类、Tool 系统、Request/Response 协议、主 Agent、JobSearchAgent（测试用）、UIBridge 跨线程 CLI 交互
+- **进度：** M4-1（CLI + Response 升级）✅；M4-2（Tool 系统）✅；M4-3（BaseAgent）✅；M4-4（主 Agent + switch 机制 + UIBridge）✅；M4-5（入口集成）✅
 - **验收标准：**
   - `src/response.py` — ✅ `Response` dataclass + `switch_agent`/`switch_context`/`switch_tool_call_id`
   - `src/request.py` — ✅ `Request` dataclass + `RequestType`（`USER_INPUT` / `CONTINUE` / `CONFIRM_APPROVED`）
-  - `src/tools/registry.py` — ✅ `Tool` dataclass + `@tool` 装饰器 + `ToolRegistry` + `agent_key` + `"*"` sentinel
-  - `src/tools/switch_tools.py` — ✅ `switch_to_subagent` + `switch_to_mainagent`
-  - `src/cli/app.py` — ✅ 双循环 + questionary + FINISH 分支 switch 检测 + `/exit_sub`
-  - `src/agents/base.py` — ✅ Agent Loop + `_pending_switch` + `_get_agent_key()` + `_get_sub_agents_list()` + CONFIRM 拒绝处理
-  - `src/agents/main_agent.py` — ✅ `MainAgent(BaseAgent)`：14 个占位符值 + `_get_agent_key()` → `"main"` + `_get_sub_agents_list()` 覆盖
-  - `src/agents/registry.py` — ✅ `AgentRegistry` 全局单例 + `SubAgentDescriptor` + `list_agents_prompt()`
-  - `src/agents/base.py` — ✅ Agent Loop（单步执行 + `_pending_tool` 断点恢复 + `_round_counter` 安全阀）；✅ `list[Message]` 对话历史；✅ 事件分发（FINISH/TOOL_CALL）；✅ 工具调度 7b-7d（未知工具/审批门禁/自动执行）；✅ `process(Request) -> Response`；✅ `_get_sub_agents_list()` → `{{SUB_AGENTS_LIST}}` 占位符
-  - `src/agents/main_agent.py` — 🔄 `MainAgent(BaseAgent)`：✅ 14 个占位符值 + ✅ `_get_sub_agents_list()` 覆盖；⬜ Agent 切换机制（switch tool + Response + App.switch_agent）
-  - `src/agents/registry.py` — ✅ `AgentRegistry` 全局单例（`get_agent_registry()`）+ `SubAgentDescriptor` + `list_agents_prompt()`
-  - `src/agents/interview/` — ⬜ `InterviewAgent(BaseAgent)`：RAG search 工具 + 问→答→评价 loop + `return` 退回
-  - `main.py` — ⬜ 组装全链路（`MainAgent` + `InterviewAgent` + `AgentRegistry` + `ToolRegistry` → `App`）
+  - `src/tools/registry.py` — ✅ `Tool` dataclass + `@tool` 装饰器 + `ToolRegistry` + `agent_key` + `"*"` sentinel + `get_for(..., main_key=)` 参数
+  - `src/tools/switch_tools.py` — ✅ `switch_to_subagent` + `switch_to_mainagent` + `provide_choices`，均通过 UIBridge 直连 CLI 交互
+  - `src/cli/app.py` — ✅ 双循环 + questionary + FINISH 分支 switch 检测 + `/exit_sub` + UIBridge 轮询（`_handle_bridge_request`）+ 自定义输入
+  - `src/cli/uibridge.py` — ✅ `UIBridge` 跨线程通信桥（`select`/`confirm` + `get_bridge()` 模块级注入）
+  - `src/agents/base.py` — ✅ Agent Loop（单步 + `_pending_tool`/`_pending_switch`/`_pending_reject` 三标记 + `_round_counter` 安全阀）+ `_get_agent_key()` + `_get_sub_agents_list()` + `_execute_tool()` 检测 `__switch__`/`__reject__` sentinel + 工具统一 PROGRESS 路径（审批由 handler 通过 UIBridge 内部处理）
+  - `src/agents/main_agent.py` — ✅ 14 占位符 + `_get_agent_key()` → `MAIN_AGENT_KEY` + `_get_sub_agents_list()` 覆盖 + Agent 切换机制
+  - `src/agents/registry.py` — ✅ `AgentRegistry` 全局单例 + `SubAgentDescriptor` + `list_agents_prompt()` + `MAIN_AGENT_KEY` 常量
+  - `src/agents/job_search/` — ✅ `JobSearchAgent(BaseAgent)`：测试用子 Agent，14 占位符 + 职位搜索分析
+  - `src/agents/interview/` — ⬜ `InterviewAgent(BaseAgent)`：RAG search 工具 + 问→答→评价 loop（后置到里程碑 7）
+  - `main.py` — ✅ 组装全链路（`MainAgent` + `JobSearchAgent` + `AgentRegistry` + `ToolRegistry` → `App`）
   - `AGENT_MAX_ROUNDS` 环境变量 — ✅
   - `uv add questionary` — ✅
-  - 端到端验证：主 Agent dispatch → 面试 Agent 接管 → 问答交互 → `return` 退回主 Agent — ⬜
+  - 端到端验证：主 Agent dispatch → JobSearchAgent 接管 → switch_to_mainagent 退回主 Agent → provide_choices 选项交互 — ⬜
 - **前置依赖：** 里程碑 1（提示词 + LLM）+ 里程碑 2（RAG）+ 里程碑 3（记忆 + config）
 
 ### 里程碑 5 —— 简历 Agent

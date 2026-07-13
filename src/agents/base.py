@@ -17,7 +17,7 @@ from src.message import EventType, Message
 from src.prompts.loader import PromptLoader
 from src.request import Request, RequestType
 from src.response import Response, ResponseType
-from src.tools.registry import ConfirmMode, Tool, ToolRegistry
+from src.tools.registry import Tool, ToolRegistry
 
 logger = get_logger(__name__)
 
@@ -153,6 +153,7 @@ class BaseAgent(Handler):
         self._max_rounds = int(config.AGENT_MAX_ROUNDS)
         self._pending_tool: tuple[str, dict, str] | None = None
         self._pending_switch: tuple[str, str, str] | None = None
+        self._pending_reject: bool = False
         self._round_counter = 0
         self._format_injected = False
 
@@ -217,6 +218,10 @@ class BaseAgent(Handler):
             self._pending_switch = (target, result.get("context", ""), tool_call_id)
             return None
 
+        # reject 检测：handler 返回 {"__reject__": True, "reason": "..."}
+        if isinstance(result, dict) and result.get("__reject__"):
+            self._pending_reject = True
+
         return Message(
             role="user",
             event_type=EventType.TOOL_CALL_RESULT,
@@ -243,19 +248,13 @@ class BaseAgent(Handler):
             return f"{model_msg}\n{tool_info}"
         return tool_info
 
-    def _should_confirm(self, tool: Tool) -> bool:
-        """判断工具是否需要审批。不暴露给 LLM。"""
-        if tool.confirm_mode == ConfirmMode.NEVER:
-            return False
-        if tool.confirm_mode == ConfirmMode.ALWAYS:
-            return True
-        return bool(config.TOOL_CONFIRM_ENABLED)
+    # _should_confirm() 已移除 — 工具审批由 handler 通过 UIBridge 自行处理
 
     def process(self, input: Request) -> Response:
         """Agent 主循环（单步执行，由 App 层驱动循环）。
 
         每次调用只做一步：处理输入 → LLM 推理 → 分发 → 返回。
-        工具执行暂停时返回 PROGRESS/CONFIRM，App 喂回 CONTINUE/CONFIRM_APPROVED 恢复。
+        工具执行暂停时返回 PROGRESS，App 喂回 CONTINUE 恢复。
 
         正常退出由 LLM 返回 ``event_type: "finish"`` 触发。
         达到 ``_max_rounds`` 仍未 finish 时安全阀强制结束。
@@ -266,28 +265,19 @@ class BaseAgent(Handler):
         if input.type == RequestType.USER_INPUT:
             logger.debug("[%s] USER_INPUT: %s", agent_name, input.message[:80])
 
-            # 上次 CONFIRM 被用户拒绝 → 随新消息一起告知 LLM
-            rejected_tool = None
-            if self._pending_tool is not None:
-                tool_name, _payload, tool_call_id = self._pending_tool
-                rejected_tool = {
-                    "tool": tool_name,
-                    "tool_call_id": tool_call_id,
-                    "reason": "用户取消了此操作",
-                }
-
+            # 清理残留状态（安全阀或异常中断时可能残留）
             self._pending_tool = None
             self._pending_switch = None
+            self._pending_reject = False
             self._round_counter = 0
             self._history.append(
                 Message(
                     role="user",
                     message=input.message,
                     event_type=EventType.USER_INPUT,
-                    event_payload=rejected_tool,
                 )
             )
-        elif input.type in (RequestType.CONTINUE, RequestType.CONFIRM_APPROVED):
+        elif input.type == RequestType.CONTINUE:
             # _pending_tool 为 None → 跳过工具执行（如切回主 Agent 后的 CONTINUE）
             if self._pending_tool is not None:
                 tool_name, payload, tool_call_id = self._pending_tool
@@ -309,6 +299,11 @@ class BaseAgent(Handler):
 
                 if result_msg is not None:
                     self._history.append(result_msg)
+
+                # reject 检测：handler 返回了 __reject__ 标记，终止循环等用户输入
+                if self._pending_reject:
+                    self._pending_reject = False
+                    return Response(type=ResponseType.FINISH, message="")
 
         # ── Step 2: LLM 推理 + 分发（内层 while 仅用于错误恢复）──
         self._format_injected = False
@@ -377,18 +372,7 @@ class BaseAgent(Handler):
             payload = llm_msg.event_payload or {}
             self._pending_tool = (tool_name, payload, llm_msg.id)
 
-            # 7c. 需审批 → 暂停，等 App 收集用户确认
-            if self._should_confirm(tool):
-                logger.debug("[%s] TOOL_CALL %s → CONFIRM", agent_name, tool_name)
-                return Response(
-                    type=ResponseType.CONFIRM,
-                    message=self._format_tool_message(
-                        tool_name, payload, llm_msg.message, confirm=True
-                    ),
-                    sub_type=EventType.TOOL_CALL,
-                )
-
-            # 7d. 无需审批 → 返回 PROGRESS，App 渲染后自动继续
+            # 7c. 返回 PROGRESS，App 渲染后自动继续执行工具
             logger.debug("[%s] TOOL_CALL %s → PROGRESS", agent_name, tool_name)
             return Response(
                 type=ResponseType.PROGRESS,

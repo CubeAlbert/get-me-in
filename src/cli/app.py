@@ -22,11 +22,15 @@ from rich.panel import Panel
 
 from src.agents.registry import MAIN_AGENT_KEY, get_agent_registry
 from src.cli.handler import Handler
+from src.cli.uibridge import UIBridge, _set_bridge
 from src.config import config
+from src.logger import get_logger
 from src.message import EventType, Message
 from src.rag import load
 from src.request import Request, RequestType
 from src.response import ConfirmChoice, Response, ResponseType
+
+logger = get_logger(__name__)
 
 
 def _ensure_utf8() -> None:
@@ -114,11 +118,13 @@ class App:
         except KeyError:
             return None
 
-    def _process_with_spinner(self, request: Request) -> Response:
-        """后台调 handler.process()，主线程显示等待动效。
+    def _process_with_spinner(self, request: Request, bridge: UIBridge) -> Response:
+        """后台调 handler.process()，主线程显示等待动效并处理 UI 请求。
 
         格式: ``. 处理中 0.0s`` → ``.. 处理中 0.5s`` → ``... 处理中 1.0s``，
         每 0.1s 刷新，``\\r`` 单行覆盖。
+        当工具 handler 通过 UIBridge 发起 UI 请求时，暂停 spinner 并渲染
+        questionary 交互，完成后再恢复 spinner。
         """
         result = None
         done = threading.Event()
@@ -126,22 +132,61 @@ class App:
 
         def _run() -> None:
             nonlocal result
-            result = self._handler.process(request)
+            _set_bridge(bridge)
+            try:
+                result = self._handler.process(request)
+            finally:
+                _set_bridge(None)
             done.set()
 
         t = threading.Thread(target=_run, daemon=True)
         t.start()
 
         while not done.is_set():
-            elapsed = time.time() - start
-            dots = "." * (int(elapsed * 2) % 3 + 1)
-            sys.stderr.write(f"\r{dots:<3} 处理中 {elapsed:.1f}s  ")
-            sys.stderr.flush()
+            # 工具 handler 发起了 UI 请求 → 暂停 spinner，渲染交互
+            if bridge.has_request:
+                sys.stderr.write("\r" + " " * 24 + "\r")
+                sys.stderr.flush()
+                self._handle_bridge_request(bridge)
+            else:
+                elapsed = time.time() - start
+                dots = "." * (int(elapsed * 2) % 3 + 1)
+                sys.stderr.write(f"\r{dots:<3} 处理中 {elapsed:.1f}s  ")
+                sys.stderr.flush()
             done.wait(0.1)
 
         sys.stderr.write("\r" + " " * 24 + "\r")
         sys.stderr.flush()
         return result
+
+    def _handle_bridge_request(self, bridge: UIBridge) -> None:
+        """处理 UIBridge 的 UI 请求（主线程中执行）。"""
+        self._console.print()
+        if bridge.action == "confirm":
+            choice = questionary.select(
+                f"⚠️  {bridge.question}",
+                choices=[ConfirmChoice.APPROVE, ConfirmChoice.REJECT],
+                qmark="",
+            ).ask()
+            bridge.respond(choice == ConfirmChoice.APPROVE)
+        elif bridge.action == "select":
+            choices = list(bridge.choices) + ["🔧 自定义输入..."]
+            choice = questionary.select(
+                bridge.question,
+                choices=choices,
+                qmark="",
+            ).ask()
+            if choice == "🔧 自定义输入...":
+                custom = questionary.text(
+                    "请输入:",
+                    qmark="",
+                ).ask()
+                bridge.respond(custom or "")
+            else:
+                bridge.respond(choice or "")
+        else:
+            logger.warning("UIBridge 未知 action: %s", bridge.action)
+            bridge.respond("")
 
     def run(self) -> None:
         """启动对话循环。
@@ -211,8 +256,9 @@ class App:
                 request = Request(type=RequestType.USER_INPUT, message=user_input)
 
             # ── 内层 agent loop ──
+            bridge = UIBridge()
             while True:
-                response = self._process_with_spinner(request)
+                response = self._process_with_spinner(request, bridge)
 
                 if response.type == ResponseType.FINISH:
                     # switch 检测：Agent 切换
@@ -261,20 +307,6 @@ class App:
                         self._console.print(f"[dim]🔄 {response.message}[/]")
                     request = Request(type=RequestType.CONTINUE)
                     continue
-
-                if response.type == ResponseType.CONFIRM:
-                    self._console.print()
-                    choice = questionary.select(
-                        f"⚠️  {response.message}",
-                        choices=[ConfirmChoice.APPROVE, ConfirmChoice.REJECT],
-                        qmark="",
-                    ).ask()
-                    if choice == ConfirmChoice.APPROVE:
-                        request = Request(type=RequestType.CONFIRM_APPROVED)
-                        continue
-                    else:
-                        self._console.print("[dim]已取消[/]")
-                        break
 
     def _print_welcome(self) -> None:
         self._console.print()

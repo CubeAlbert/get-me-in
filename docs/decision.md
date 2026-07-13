@@ -91,6 +91,9 @@
 - [决策 81 — Agent 稳定标识 _get_agent_key() + ToolRegistry "*" sentinel](#决策-81--agent-稳定标识-_get_agent_key--toolregistry--sentinel)
 - [决策 82 — CONFIRM 拒绝 → 下次 USER_INPUT 携带拒绝信息](#决策-82--confirm-拒绝--下次-user_input-携带拒绝信息)
 - [决策 83 — switch tool 必须声明 input_schema](#决策-83--switch-tool-必须声明-input_schema)
+- [决策 84 — UIBridge：工具 handler 通过跨线程通信桥直连 CLI 交互](#决策-84--uibridge工具-handler-通过跨线程通信桥直连-cli-交互)
+- [决策 85 — `__reject__` sentinel：switch 被拒后终止 agent loop](#决策-85--__reject__-sentinelswitch-被拒后终止-agent-loop)
+- [决策 86 — `MAIN_AGENT_KEY` 常量替换 magic string "main"](#决策-86--main_agent_key-常量替换-magic-string-main)
 
 ---
 
@@ -1862,3 +1865,79 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：**
 - `input_schema` 是 LLM 了解工具参数的唯一途径，缺失时 LLM 只能猜测参数名
 - `@tool` 设计的本意就是 `input_schema` 声明参数 + 函数签名补充类型，不是自动从签名生成 schema
+
+---
+
+### 决策 84 — UIBridge：工具 handler 通过跨线程通信桥直连 CLI 交互
+
+**背景：** M4 工具审批原通过 `ConfirmMode` 枚举 + `_should_confirm()` 机制：`process()` 检测需审批的工具 → 返回 `Response(type="CONFIRM")` → App 渲染 questionary → 用户选择 → `Request(CONFIRM_APPROVED)` → `process()` 执行 handler。每增加一种交互类型（如 select），需要改 `process()`、`App.run()`、`RequestType` 三处，耦合度高。
+
+**决策：**
+- 新增 `src/cli/uibridge.py`：`UIBridge` 类作为工具 handler（后台线程）与 CLI 前端（主线程）的跨线程通信桥
+- `UIBridge.select(question, choices) -> str` 和 `UIBridge.confirm(message) -> bool` 两个交互方法，handler 直接调用，阻塞等待用户响应
+- 模块级 `get_bridge()` 供 handler 获取当前 bridge；`_set_bridge()` 由 App 在后台线程中设置/清除
+- Bridge 粒度为每次用户输入（创建在 App 内层循环前），同一次输入内的多个 tool call 共享同一个 bridge
+- App `_process_with_spinner()` 在 spinner 循环中轮询 `bridge.has_request`，检测到请求时暂停 spinner、渲染 questionary、传回结果
+- `ConfirmMode` 不再参与框架调度逻辑；`_should_confirm()` 移除；所有工具统一走 PROGRESS→CONTINUE 路径
+- `ResponseType.CONFIRM` 分支从 `App.run()` 移除；工具审批由 handler 内部 `get_bridge().confirm()` 完成
+
+**理由：**
+- 交互逻辑集中在 tool handler 内，代码自包含，可读性高
+- 加新交互类型（如文件选择、进度条、文本输入）只需 `UIBridge` 加方法，不改 `process()`/`App.run()`/`RequestType`
+- 消除 `ConfirmMode` 在框架层的调度复杂度，工具自行决定是否需要用户交互
+- 跨线程 Event 同步机制简单可靠，无队列/锁开销
+
+**曾考虑的替代方案：**
+- `RequestType.SELECT_RESPONSE` — 每加交互类型需改三处，扩展性差
+- `ConfirmMode.SELECT` — ConfirmMode 职责膨胀，审批和选择是不同概念
+- 在 `_execute_tool()` 内直接调用 questionary — questionary 必须在主线程运行，后台线程调用会崩溃
+
+---
+
+### 决策 85 — `__reject__` sentinel：switch 被拒后终止 agent loop
+
+**背景：** switch 工具（`switch_to_subagent`、`switch_to_mainagent`）改用 UIBridge 后，handler 内部调 `get_bridge().confirm()`，用户拒绝时原实现返回 `{"rejected": True}` 作为 TOOL_CALL_RESULT。这导致 LLM 收到 tool 结果后继续 agent loop，可能重试 switch 或执行其他动作，与旧 CONFIRM 拒绝行为（→ 退出内层循环等用户输入）不一致。
+
+**决策：**
+- 新增 `__reject__` sentinel，与 `__switch__` 对称：handler 返回 `{"__reject__": True, "reason": "..."}`
+- `_execute_tool()` 检测 `__reject__` → 设 `_pending_reject = True` → 正常返回 TOOL_CALL_RESULT Message（关闭 TOOL_CALL 调用链）
+- `process()` CONTINUE 分支：append TOOL_CALL_RESULT → 检测 `_pending_reject` → 清标记 → 返回 `Response(FINISH, message="")` 
+- App FINISH 分支：无 switch_agent → 渲染空消息 → break 内层循环 → 回外层等用户输入
+- 下次 USER_INPUT 时 LLM 看到完整 TOOL_CALL + TOOL_CALL_RESULT(rejected) 链，正常继续
+
+**理由：**
+- 语义清晰：`__switch__` = 切换 handler，`__reject__` = 终止 loop
+- TOOL_CALL 正常关闭（有 TOOL_CALL_RESULT），不留下悬空 tool_call 污染下次对话
+- 与旧 CONFIRM 拒绝行为一致（取消 → 停止 → 等用户），用户体验不退化
+- 实现最小化：只用 1 个 bool 标记 + 现有 FINISH 路径
+
+**曾考虑的替代方案：**
+- `{"rejected": True}` 作为普通 tool result（无终止）— LLM 可能重试 switch 或执行意外操作
+- 不追加 TOOL_CALL_RESULT，直接 FINISH — 下次 LLM 看到悬空 TOOL_CALL，可能困惑
+- 新增 `ResponseType.REJECTED` — 需改 App 分支，增加复杂度，FINISH 足够表达"本轮结束"
+
+---
+
+### 决策 86 — `MAIN_AGENT_KEY` 常量替换 magic string "main"
+
+**背景：** 字符串 `"main"` 作为主 Agent 标识符分散在 4 个文件 6 处控制流中：`MainAgent._get_agent_key()`、`ToolRegistry._visible()`、`switch_tools` 的 agent/target、`App._get_handler()` 和 FINISH 分支。拼写错误或语义不一致会导致工具不可见或切换失败。
+
+**决策：**
+- 在 `src/agents/registry.py` 定义 `MAIN_AGENT_KEY = "main"`，作为唯一真实来源
+- `MainAgent._get_agent_key()` → `return MAIN_AGENT_KEY`
+- `switch_to_subagent` → `agent=[MAIN_AGENT_KEY]`
+- `switch_to_mainagent` → `target=MAIN_AGENT_KEY`
+- `App._get_handler()` → `name == MAIN_AGENT_KEY`
+- `App.run()` FINISH 分支 → `response.switch_agent != MAIN_AGENT_KEY`
+- `BaseAgent.__init__` → 调用 `ToolRegistry.get_for(..., main_key=MAIN_AGENT_KEY)` 传入
+- **`tools/registry.py` 不直接 import `MAIN_AGENT_KEY`** — 通过 `get_for(..., main_key: str = "main")` 参数接收，保持 infrastructure 层不依赖 agents 层
+
+**理由：**
+- 单一真实来源，修改只需改一处
+- `tools/registry.py` 通过参数接收（而非 import）保持依赖方向正确：agents → tools，不是 tools → agents
+- 拼写错误在 IDE/类型检查阶段暴露，不会出现 `"main"` vs `"Main"` vs `"MAIN"` 的不一致
+
+**曾考虑的替代方案：**
+- 直接用 `"main"` 字面量 — magic string，分散，拼写风险
+- 定义在 `tools/registry.py` — 语义上不属于 tool 系统
+- `tools/registry.py` import `MAIN_AGENT_KEY` — 依赖方向反转，基础设施层不应依赖 Agent 层

@@ -2,15 +2,13 @@
 
 **当前阶段：** 阶段 4 — M4: BaseAgent & 主 Agent
 
-**当前任务：** 4. 主 Agent — Agent 切换机制
+**当前任务：** 7. 端到端验证
 
-**当前子任务：** ⬜ `provide_choices` → `Response(type="select")`
+**当前子任务：** ⬜ 主 Agent dispatch + 子 Agent 切换（UIBridge 审批）+ provide_choices 全链路
 
 **当前阻塞：** 无
 
-**下一步：** 实现 `provide_choices` 工具 → 端到端测试主 Agent dispatch + 子 Agent 切换 + 退回归还完整链路
-
-**设计文档：** `docs/m4-agent-switch-design.md`（临时，完成后并入 design.md + decision.md）
+**下一步：** 启动 `uv run python main.py`，手动验证 main→sub→main 切换 + provide_choices 选择 + reject 终止 loop 三条关键路径
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -90,3 +88,12 @@
 75. BaseAgent LLM 调用默认 `response_format={"type": "json_object"}`：通过 `_pro_params` / `_flash_params` 类变量注入，子类可覆盖；memory builder 同样强制 JSON 模式
 76. LLM thinking 可配置：`LLM_THINKING_ENABLED` 环境变量（bool，默认 `true`），通过 `LLMClient._thinking_extra_body()` 注入 `extra_body` 控制 provider thinking 行为；`False` → `{"thinking": {"type": "disabled"}}`；`web_search()` 固定禁用
 77. JSON 解析增强：引入 `json-repair` 替代自研状态机修复 LLM 畸形 JSON；`thinking` 字段允许 `null`/缺失；`06_output_format.md` 新增换行转义要求；parse error 时每轮 `process()` 仅注入一次 output_format 提示
+78. Agent 切换机制：Tool-based 异步工具调用模型 — 切换封装为 `switch_to_subagent`/`switch_to_mainagent` 两个 @tool，子 Agent 会话建模为异步 tool_call→tool_call_result
+79. `/exit_sub` 主 Agent 前台时报错而非静默切换
+80. 子 Agent 列表 prompt 注入：`{{SUB_AGENTS_LIST}}` 占位符 + 模板重排（新增 05_sub_agents.md）
+81. Agent 稳定标识 `_get_agent_key()` + `ToolRegistry` `"*"` sentinel 控制工具可见性矩阵
+82. CONFIRM 拒绝 → 下次 USER_INPUT 携带拒绝信息（已废弃，由决策 85 替代）
+83. switch tool 必须声明 `input_schema`
+84. **UIBridge 跨线程通信桥** — 工具 handler 通过 `get_bridge().confirm()`/`select()` 直连 CLI 交互，替换 ConfirmMode 审批体系。交互逻辑集中在 handler 内，`process()` 统一返回 PROGRESS。新文件 `src/cli/uibridge.py`
+85. **`__reject__` sentinel** — switch 被用户拒绝后 handler 返回 `{"__reject__": True}`，`_execute_tool()` 追加 TOOL_CALL_RESULT 关闭调用链 + 设 `_pending_reject`，`process()` 返回 FINISH 终止 loop 等用户输入
+86. **`MAIN_AGENT_KEY` 常量** — 在 `src/agents/registry.py` 定义 `MAIN_AGENT_KEY = "main"`，替换 4 文件 6 处 magic string。`tools/registry.py` 通过 `get_for(..., main_key)` 参数接收，保持依赖方向正确
