@@ -31,7 +31,7 @@
 ### 2. 配置模块 (`src/config.py`)
 
 - ✅ 实现 `config.py`：启动时调用 `load_dotenv()`、校验 4 个必填环境变量（缺失则打印清单并 `sys.exit(1)`）、将变量挂到模块属性上
-- ⬜ 其他模块（LLM 等）统一 `from src.config import config` 获取配置，不再直接调用 `os.environ`
+- ✅ 其他模块统一 `from src.config import config` 获取配置，不再直接调用 `os.environ`
 
 ### 3. LLM 适配层 (`src/llm/`)
 
@@ -48,7 +48,7 @@
 ### 5. 提示词模块 (`src/prompts/`)
 
 - ✅ 实现 `loader.py`：`get(**kwargs)` 读取 `general_agent/` 下所有 `.md`（按文件名排序拼接）并替换占位符；`get_raw(name, **kwargs)` 加载 `data/prompts/<name>.md` 跳过拼接
-- ✅ 创建 `data/prompts/general_agent/` 下 7 个模板文件（`01_role.md` ~ `07_reserved.md`）
+- ✅ 创建 `data/prompts/general_agent/` 下 9 个模板文件（`01_role.md` ~ `09_reserved.md`，经 M4 扩展）
 - ✅ 创建 `data/prompts/PLACEHOLDER.md`（14 个 per-Agent 占位符清单）
 - ⛔ 创建 `data/prompts/memory_compressor.md` —— memory_compressor.md 已删除，替代为 `data/prompts/memory/builder.md`
 >> 替代：M3-6 实现 MemoryBuilder 提示词模板
@@ -185,7 +185,7 @@
 
 ### 1. CLI + Response 升级 (`src/cli/` + `src/response.py`)
 
-- ✅ `Response` dataclass：`type`（`finish` / `select` / `confirm`）+ `message` + `choices` + `thinking`
+- ✅ `Response` dataclass：`type`（`finish` / `progress`）+ `message` + `thinking` + `switch_agent`/`switch_context`/`switch_tool_call_id`
 - ✅ `Handler` 协议升级：`process(Message) -> Response` + `_parse_llm_reply()` 静态方法
 - ✅ `App` 升级：`Message` 包装输入 + `Response` 解包渲染 + `thinking` 展示
 - ⛔ 删除 `LLMHandler` — LLMHandler 改为临时桩适配新协议，待 MainAgent 就绪后替换
@@ -204,8 +204,10 @@
 - ✅ Agent loop：解析 LLM JSON（扁平 schema）→ 调工具 → 结果包装为 `tool_call_result` Message 喂回 LLM → 循环
 - ✅ 对话历史管理：`list[Message]` → `Message.to_json()` 序列化，system prompt 独立存储不混入 history
 - ✅ 终止条件：`event_type="finish"` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量，默认 10）
-- ✅ 工具调度：7b 未知工具（附工具列表）/ 7c 审批门禁（CONFIRM）/ 7d 自动执行（PROGRESS）；流程由 App 层内循环驱动
-- ✅ `process(Request) -> Response` 接口：单步执行 + `_pending_tool` 断点恢复，`_round_counter` 安全阀
+- ✅ 工具调度：7b 未知工具（附工具列表）/ 7c PROGRESS 统一路径（审批由 `_should_confirm()` + UIBridge 在 `_execute_tool()` 内部处理）
+- ✅ `process(Request) -> Response` 接口：单步执行 + `_pending_tool`/`_pending_switch`/`_pending_reject` 三标记断点恢复，`_round_counter` 安全阀
+- ✅ `_execute_tool()` 审批门禁：`_should_confirm(tool)` → `get_bridge().confirm()` 弹窗；拒绝 → `__reject__` TOOL_CALL_RESULT + `_pending_reject` → FINISH
+- ✅ `_execute_tool()` 参数兼容：`inspect.signature` 过滤 LLM 传入的未知参数（静默忽略），缺失必填参数返回错误让 LLM 自修复
 - ✅ `write_memory()` 便利方法
 - ✅ LLM JSON 解析：`Message.from_llm_reply()` 静态方法统一反序列化，解析失败注入 `system_message` 让 LLM 自修复
 - ✅ 工具错误处理：执行失败时附带 `arguments_schema` + `expected_output` 让 LLM 自修复调用参数
@@ -213,7 +215,7 @@
 ### 4. 主 Agent (`src/agents/main_agent.py`)
 
 - ✅ `MainAgent(BaseAgent)`：14 个占位符值实现，继承 BaseAgent 全能力，已替换 LLMHandler 作为 main.py 入口
-- ✅ 审批 gate：`BaseAgent._should_confirm()` + `ConfirmChoice` 枚举 + `questionary.select` 渲染
+- ✅ 审批 gate：`_should_confirm()`（ConfirmMode）+ UIBridge `get_bridge().confirm()` 跨线程弹窗，替代原 CONFIRM ResponseType 方案
 - ✅ 模板文件重排序 — `05_communtion_style.md` → `06`，`06_output_format.md` → `07`，`07_input_format.md` → `08`，`08_reserved.md` → `09`
 - ✅ 新增 `data/prompts/general_agent/05_sub_agents.md` — XML 包裹 `<SubAgents>{{SUB_AGENTS_LIST}}</SubAgents>`
 - ✅ `data/prompts/PLACEHOLDER.md` 新增 `{{SUB_AGENTS_LIST}}` 条目
@@ -227,11 +229,14 @@
 - ✅ `BaseAgent._execute_tool()` 检测 `__switch__` → 返回 `None`，设 `_pending_switch`（含 tool_call_id）
 - ✅ `BaseAgent.process()` 检测 `_pending_switch` → 返回 `Response(FINISH, switch_agent=..., switch_context=..., switch_tool_call_id=...)`
 - ✅ `BaseAgent.process()` CONTINUE 分支守卫 `_pending_tool is not None`（切回时不崩）
-- ✅ `BaseAgent.process()` CONFIRM 拒绝 → 下次 USER_INPUT 的 `event_payload` 携带拒绝信息
+- ✅ 审批拒绝处理：`__reject__` sentinel → `_execute_tool()` 追加 TOOL_CALL_RESULT 关闭调用链 + `_pending_reject` → `process()` 返回 FINISH → App 回外层循环等用户输入
 - ✅ `App._get_handler(name)` + FINISH 分支 switch 检测（main→sub 保存 tool_call_id，sub→main 注入 TOOL_CALL_RESULT）
 - ✅ `/exit_sub` CLI 命令 — 子 Agent 时注入 system_message 让其整理上下文 → switch_to_mainagent
-- ✅ `BaseAgent._get_agent_key()` + MainAgent 覆盖 `"main"` + `ToolRegistry.get_for(agent_key=)`
-- ✅ `ToolRegistry` `"*"` sentinel — 匹配所有 `agent_key != "main"` 的 Agent
+- ✅ `BaseAgent._get_agent_key()` + MainAgent 覆盖 `MAIN_AGENT_KEY` + `ToolRegistry.get_for(agent_key=, main_key=)`
+- ✅ `ToolRegistry` `"*"` sentinel — 匹配所有非主 Agent；`main_key` 参数保持依赖方向
+- ✅ `MAIN_AGENT_KEY = "main"` 常量（`src/agents/registry.py`）— 替换 4 文件 6 处 magic string
+- ✅ `src/cli/uibridge.py` — UIBridge 跨线程通信桥（`select`/`confirm` + 模块级 `get_bridge()` 注入）+ App `_handle_bridge_request()` 自定义输入
+- ✅ `ResponseType.CONFIRM` 分支从 `App.run()` 移除；tools 统一走 PROGRESS
 - ✅ `JobSearchAgent`（`src/agents/job_search/`）— 测试用子 Agent，14 占位符 + 职位搜索分析
 - ✅ `main.py` — 注册 JobSearchAgent + 导入 switch_tools
 - ✅ `provide_choices` — 通过 UIBridge 实现，工具 handler 调用 `get_bridge().select()` 直连 CLI，选项末尾自动追加"🔧 自定义输入..."
@@ -247,8 +252,8 @@
 
 - ⬜ `InterviewAgent(BaseAgent)`：问 → 答 → 评价 → 下一题 loop
 - ⬜ RAG search 工具：`@tool search_questions(query)` → 检索 `data/reference/interview_questions/`
-- ⬜ `return` 退回主 Agent（通过 `App.switch_agent("main", result_prompt)`）
+- ⬜ `return` 退回主 Agent（通过 `switch_to_mainagent` 工具，自动注入）
 
 ### 7. 端到端验证
 
-- ⬜ 主 Agent dispatch → 面试 Agent 接管 → 问答交互 → `return` 退回主 Agent 全链路
+- ✅ 主 Agent dispatch → JobSearchAgent 接管 → switch_to_mainagent 退回主 Agent → provide_choices 选项交互 全链路通过

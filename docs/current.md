@@ -1,14 +1,14 @@
 # 当前状态
 
-**当前阶段：** 阶段 4 — M4: BaseAgent & 主 Agent
+**当前阶段：** M4 ✅ → M5: 简历 Agent
 
-**当前任务：** 7. 端到端验证
+**当前任务：** 待定 — 里程碑 5 简历 Agent
 
-**当前子任务：** ⬜ 主 Agent dispatch + 子 Agent 切换（UIBridge 审批）+ provide_choices 全链路
+**当前子任务：** 待规划
 
 **当前阻塞：** 无
 
-**下一步：** 启动 `uv run python main.py`，手动验证 main→sub→main 切换 + provide_choices 选择 + reject 终止 loop 三条关键路径
+**下一步：** 由用户决定 —— 继续 M5（简历 Agent），或 M6（学习 Agent）、M7（面试 Agent）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen

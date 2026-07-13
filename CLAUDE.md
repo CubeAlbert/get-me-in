@@ -52,7 +52,7 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 | 基础设施 | CLI/App 层 (`src/cli/`) | `App`（I/O + 渲染 + 双循环）+ `Handler`（抽象协议）；`Request`/`Response` 为 App↔Agent 协议层，不进对话历史 |
 | Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}` |
 | Agent | MainAgent (`src/agents/main_agent.py`) | 路由 Agent：只做意图识别 + 调度子 Agent，不执行领域任务 |
-| Agent | 子 Agent（resume/learning/interview/job_search） | interview 为 M4 验证用；其余待实现 |
+| Agent | 子 Agent（resume/learning/interview/job_search） | `JobSearchAgent` 为 M4 测试用；其余待实现 |
 | 服务 | 记忆模块 (`src/memory/`) | Facade：`build_memories`/`search_memories`/`delete_memory`；观察者模式（Store → 事件 → Indexer → RAG）解耦；按 Agent 分目录，一文件一条记忆 |
 
 **记忆模块是唯一共享通道：** 所有 Agent 通过记忆模块读写上下文，记忆按 Agent 隔离存储在 `data/memories/<agent>/` 下。跨 Agent 检索通过 `search_memories(query, agent=None)` 走 RAG 语义搜索。
@@ -69,7 +69,7 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 - **提示词与代码分离** — 模板在 `data/prompts/`，`PromptLoader` 加载；Agent 调用 `get()` 自动拼接 `general_agent/`；非 Agent 模块用 `get_raw()`
 - **Agent 必须实现 14 个抽象方法** — `_get_agent_name` + 13 个占位符方法（`_get_agent_description`、`_get_responsibilities` 等），遗漏 Python 在 import 时 `TypeError`
 - **工具 handler 返回纯数据** — 返回 `str`/`dict`，由调用方（`BaseAgent._execute_tool()`）包装为 `tool_call_result` Message
-- **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（FINISH/PROGRESS/CONFIRM/SELECT）
+- **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（实际使用 FINISH/PROGRESS；CONFIRM/SELECT 已废弃）
 - **工具审批由 `ConfirmMode` + UIBridge 共同控制** — `_execute_tool()` 根据 `ConfirmMode`（NEVER/ALWAYS/CONFIG）决定是否调 `get_bridge().confirm()` 弹审批窗；特殊交互（如 `provide_choices` 的 `select()`）由 handler 自行调用 UIBridge
 - **`EventType(StrEnum)` 枚举** — 代码中禁止裸字符串，只用 `EventType.USER_INPUT` 等 5 个枚举值
 - **System prompt 不在 `_history` 中** — 单独 `_system_prompt` 字符串，`_to_openai()` 时以 `{"role": "system", "content": "..."}` 注入
