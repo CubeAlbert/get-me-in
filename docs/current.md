@@ -97,3 +97,4 @@
 84. **UIBridge 跨线程通信桥** — 工具 handler 通过 `get_bridge().confirm()`/`select()` 直连 CLI 交互，替换 ConfirmMode 审批体系。交互逻辑集中在 handler 内，`process()` 统一返回 PROGRESS。新文件 `src/cli/uibridge.py`
 85. **`__reject__` sentinel** — switch 被用户拒绝后 handler 返回 `{"__reject__": True}`，`_execute_tool()` 追加 TOOL_CALL_RESULT 关闭调用链 + 设 `_pending_reject`，`process()` 返回 FINISH 终止 loop 等用户输入
 86. **`MAIN_AGENT_KEY` 常量** — 在 `src/agents/registry.py` 定义 `MAIN_AGENT_KEY = "main"`，替换 4 文件 6 处 magic string。`tools/registry.py` 通过 `get_for(..., main_key)` 参数接收，保持依赖方向正确
+87. **工具调用参数兼容性** — `_execute_tool()` 用 `inspect.signature` 过滤 LLM 传入的未知参数（静默忽略），缺失必填参数时返回带 schema 的错误让 LLM 自修复

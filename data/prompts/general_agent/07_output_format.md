@@ -18,7 +18,7 @@ JSON
     },
     "thinking": {
       "type": "string",
-      "description": "LLM 内部推理过程"
+      "description": "LLM 内部推理过程。event_type 为 finish 时必填，tool_call 时可省略"
     },
     "event_type": {
       "type": "string",
@@ -35,10 +35,10 @@ JSON
     },
     "event_payload": {
       "type": ["object", "null"],
-      "description": "工具参数，event_type 为 finish 时必须为 null"
+      "description": "工具参数。仅需提供已声明的参数，多余参数会被忽略，但必填参数不得缺失。event_type 为 finish 时必须为 null"
     }
   },
-  "required": ["id", "role", "thinking", "event_type", "message"]
+  "required": ["id", "role", "event_type", "message"]
 }
 </Schema>
 <Requirements>

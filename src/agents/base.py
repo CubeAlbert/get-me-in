@@ -4,6 +4,7 @@
 遗漏任何一个 Python 会在 import 时报 ``TypeError``，防止漏填提示词。
 """
 
+import inspect
 import json
 
 from abc import abstractmethod
@@ -208,8 +209,32 @@ class BaseAgent(Handler):
                     event_payload={"__reject__": True, "reason": "用户取消了此操作"},
                 )
 
+        # 参数兼容：过滤 LLM 传入的未知参数，校验必填参数
+        sig = inspect.signature(tool.handler)
+        allowed = set(sig.parameters.keys())
+        filtered = {k: v for k, v in payload.items() if k in allowed}
+        extra = set(payload.keys()) - allowed
+        if extra:
+            logger.debug("工具 %s 忽略未知参数: %s", tool_name, extra)
+
+        missing = {
+            name for name, param in sig.parameters.items()
+            if param.default is inspect.Parameter.empty and name not in filtered
+        }
+        if missing:
+            return Message(
+                role="user",
+                event_type=EventType.TOOL_CALL_RESULT,
+                tool=tool_name,
+                tool_call_id=tool_call_id,
+                event_payload={
+                    "error": f"缺少必填参数: {', '.join(sorted(missing))}",
+                    "arguments_schema": tool.arguments_schema,
+                },
+            )
+
         try:
-            result = tool.handler(**payload)
+            result = tool.handler(**filtered)
         except Exception as e:
             logger.error("工具 %s 执行失败: %s", tool_name, e)
             result = {

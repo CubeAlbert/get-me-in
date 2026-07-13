@@ -94,6 +94,7 @@
 - [决策 84 — UIBridge：工具 handler 通过跨线程通信桥直连 CLI 交互](#决策-84--uibridge工具-handler-通过跨线程通信桥直连-cli-交互)
 - [决策 85 — `__reject__` sentinel：switch 被拒后终止 agent loop](#决策-85--__reject__-sentinelswitch-被拒后终止-agent-loop)
 - [决策 86 — `MAIN_AGENT_KEY` 常量替换 magic string "main"](#决策-86--main_agent_key-常量替换-magic-string-main)
+- [决策 87 — 工具调用参数兼容性：忽略未知参数 + 校验必填](#决策-87--工具调用参数兼容性忽略未知参数--校验必填)
 
 ---
 
@@ -1941,3 +1942,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 直接用 `"main"` 字面量 — magic string，分散，拼写风险
 - 定义在 `tools/registry.py` — 语义上不属于 tool 系统
 - `tools/registry.py` import `MAIN_AGENT_KEY` — 依赖方向反转，基础设施层不应依赖 Agent 层
+
+---
+
+### 决策 87 — 工具调用参数兼容性：忽略未知参数 + 校验必填
+
+**背景：** LLM 偶尔在 tool_call 的 `event_payload` 中传入多余的参数（幻觉），之前 `**payload` 直接解包会导致 `TypeError: unexpected keyword argument`，工具执行失败。同时缺失必填参数时也应提前拦截，避免 handler 内部报错。
+
+**决策：**
+- `_execute_tool()` 在调用 handler 前通过 `inspect.signature(tool.handler)` 提取合法参数名
+- 过滤掉 LLM 传入的未知参数（记 debug 日志），只传合法参数给 handler
+- 校验必填参数（无默认值的参数），缺失时返回带 `arguments_schema` 的 error TOOL_CALL_RESULT，让 LLM 自修复
+- `07_output_format.md` 的 `event_payload` 描述同步更新："仅需提供已声明的参数，多余参数会被忽略，但必填参数不得缺失"
+
+**理由：**
+- 防御性编程：LLM 的 tool_call 参数不能完全信任，框架层过滤比每个 handler 各自处理更可靠
+- 多余参数静默忽略 + 必填参数显式报错，两端兼顾
+- `inspect.signature` 是 Python 标准库，零依赖，handler 签名即参数定义 source of truth
+- 错误附带 `arguments_schema` 让 LLM 有能力自修复（延续决策 46/67 原则）
+
+**曾考虑的替代方案：**
+- 不做过滤（`**payload` 直接解包）— LLM 偶尔传多余参数导致 TypeError 崩溃
+- 每个 handler 内部做 `**kwargs` 捕获 — 散落各处，一致性差
+- 在 `@tool` 装饰器阶段存储参数名列表 — 增加 Tool 字段，不如 inspect 直接读签名
