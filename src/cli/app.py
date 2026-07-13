@@ -230,7 +230,7 @@ class App:
                                         event_type=EventType.TOOL_CALL_RESULT,
                                         tool="switch_to_subagent",
                                         tool_call_id=self._switch_tool_call_id,
-                                        event_payload=response.switch_context or "",
+                                        event_payload={"summary": response.switch_context or ""},
                                     )
                                 )
                                 self._switch_tool_call_id = None
@@ -240,9 +240,10 @@ class App:
                             self._console.print(f"[red]未知 Agent: {response.switch_agent}[/]")
                             break
                         self._handler = new_handler
+                        context = response.switch_context or "请开始处理。"
                         request = Request(
                             type=RequestType.USER_INPUT,
-                            message=response.switch_context or "",
+                            message=context,
                         )
                         continue  # 留在内层循环，新 handler 开始工作
 

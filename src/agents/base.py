@@ -203,7 +203,17 @@ class BaseAgent(Handler):
 
         # switch 检测：handler 返回 {"__switch__": True, "target": "...", "context": "..."}
         if isinstance(result, dict) and result.get("__switch__"):
-            self._pending_switch = (result["target"], result.get("context", ""), tool_call_id)
+            target = result.get("target", "")
+            if not target:
+                logger.warning("switch handler 缺少 target，忽略切换")
+                return Message(
+                    role="user",
+                    event_type=EventType.TOOL_CALL_RESULT,
+                    tool=tool_name,
+                    tool_call_id=tool_call_id,
+                    event_payload={"error": "switch handler 缺少 target 参数"},
+                )
+            self._pending_switch = (target, result.get("context", ""), tool_call_id)
             return None
 
         return Message(
@@ -266,6 +276,7 @@ class BaseAgent(Handler):
                 }
 
             self._pending_tool = None
+            self._pending_switch = None
             self._round_counter = 0
             self._history.append(
                 Message(
