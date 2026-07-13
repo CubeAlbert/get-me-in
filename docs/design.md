@@ -725,17 +725,19 @@ App.run() [主线程]                          BaseAgent.process() [后台线程
 ```
 
 **对现有流程的影响：**
-- `_should_confirm()` 已移除，工具统一走 PROGRESS → CONTINUE 路径
-- `ConfirmMode` enum 保留但不再参与 BaseAgent 调度逻辑
+- `_should_confirm()` 已恢复，在 `_execute_tool()` 中、handler 执行前统一检查 `ConfirmMode`，需审批时通过 UIBridge 弹窗
+- `ConfirmMode` 恢复参与调度：`NEVER` 跳过、`ALWAYS` 强制审批、`CONFIG` 跟随 `TOOL_CONFIRM_ENABLED`
 - `ResponseType.CONFIRM` 不再由 `process()` 返回，`App.run()` 中对应分支已移除
-- CONFIRM 拒绝注入逻辑（USER_INPUT 携带拒绝信息）已移除 — 拒绝由 handler 通过 UIBridge 内部处理
+- 审批拒绝由框架统一处理：`_execute_tool()` 返回 `__reject__` TOOL_CALL_RESULT，`process()` 检测 `_pending_reject` → FINISH
 
-**`__reject__` sentinel：** switch 工具被用户拒绝时，handler 返回 `{"__reject__": True, "reason": "..."}` → `_execute_tool()` 追加 TOOL_CALL_RESULT 关闭调用链 + 设 `_pending_reject` → `process()` 返回 FINISH → App 回外层循环等用户输入。与旧 CONFIRM 拒绝行为一致。
+**UIBridge 的两个使用层次：**
 
-**已迁移到 UIBridge 的工具：**
-- `switch_to_subagent` — `get_bridge().confirm("即将切换到...")`
-- `switch_to_mainagent` — `get_bridge().confirm("即将退回主Agent...")`
-- `provide_choices` — `get_bridge().select(question, choices)`，选项末尾自动追加"🔧 自定义输入..."
+| 层次 | 调用方 | 方式 | 示例 |
+|------|--------|------|------|
+| 框架层 | `_execute_tool()` | `get_bridge().confirm()` 根据 `ConfirmMode` 自动审批 | web_search(CONFIG)、switch_to_subagent(ALWAYS) |
+| 工具层 | 工具 handler | 自行调用 `get_bridge().select()`/`confirm()` 做非审批交互 | provide_choices 调 `select()` 列出选项 |
+
+**`__reject__` sentinel：** 审批被拒时，`_execute_tool()` 追加 `{"__reject__": True}` 的 TOOL_CALL_RESULT 关闭调用链 + 设 `_pending_reject` → `process()` 返回 FINISH → App 回外层循环等用户输入。
 
 ### 4.7 简历 Agent
 

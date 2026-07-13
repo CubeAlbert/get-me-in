@@ -1,9 +1,7 @@
 """Agent 切换工具 — switch_to_subagent / switch_to_mainagent。
 
-Handler 通过 ``get_bridge().confirm()`` 与用户交互审批，
-返回 ``{"__switch__": True, "target": "...", "context": "..."}``，
-由 ``BaseAgent._execute_tool()`` 检测并设 ``_pending_switch``，
-``process()`` 返回 ``Response(FINISH, switch_agent=...)`` 由 App 层执行切换。
+审批由 ``BaseAgent._execute_tool()`` 根据 ``ConfirmMode`` 统一处理（通过 UIBridge 弹窗）。
+Handler 返回 ``{"__switch__": True, ...}`` 或 ``{"__reject__": True, ...}`` sentinel。
 """
 
 from src.agents.registry import MAIN_AGENT_KEY
@@ -21,7 +19,7 @@ from src.tools.registry import ConfirmMode, tool
         "context": {"description": "给子Agent的完整上下文：用户需求、背景、已收集的关键信息等。越详细越好。"},
     },
     agent=[MAIN_AGENT_KEY],
-    confirm_mode=ConfirmMode.NEVER,
+    confirm_mode=ConfirmMode.ALWAYS,
 )
 def switch_to_subagent(agent_name: str, context: str = "") -> dict:
     """切换到子 Agent。
@@ -30,9 +28,6 @@ def switch_to_subagent(agent_name: str, context: str = "") -> dict:
         agent_name: 目标子Agent名称（对应 <SubAgents> 列表中 SubAgent 的 name 属性）。
         context: 给子Agent的完整上下文，包含用户需求、背景、已收集的关键信息。
     """
-    ui = get_bridge()
-    if not ui.confirm(f"即将切换到 {agent_name} 子Agent，是否继续？"):
-        return {"__reject__": True, "reason": "用户取消了切换"}
     return {"__switch__": True, "target": agent_name, "context": context}
 
 
@@ -45,7 +40,7 @@ def switch_to_subagent(agent_name: str, context: str = "") -> dict:
         "summary": {"description": "本次子Agent会话的执行总结：做了什么、结论、关键发现、需要主Agent继续跟进的事项。"},
     },
     agent=["*"],
-    confirm_mode=ConfirmMode.NEVER,
+    confirm_mode=ConfirmMode.ALWAYS,
 )
 def switch_to_mainagent(summary: str) -> dict:
     """退回主 Agent。
@@ -54,9 +49,6 @@ def switch_to_mainagent(summary: str) -> dict:
         summary: 本次子Agent会话的执行总结，包含做了什么、结论、关键发现、
                  以及需要主Agent继续跟进的事项。
     """
-    ui = get_bridge()
-    if not ui.confirm("即将退回主Agent，是否继续？"):
-        return {"__reject__": True, "reason": "用户取消了退回"}
     return {"__switch__": True, "target": MAIN_AGENT_KEY, "context": summary}
 
 

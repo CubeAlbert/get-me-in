@@ -1878,8 +1878,8 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 模块级 `get_bridge()` 供 handler 获取当前 bridge；`_set_bridge()` 由 App 在后台线程中设置/清除
 - Bridge 粒度为每次用户输入（创建在 App 内层循环前），同一次输入内的多个 tool call 共享同一个 bridge
 - App `_process_with_spinner()` 在 spinner 循环中轮询 `bridge.has_request`，检测到请求时暂停 spinner、渲染 questionary、传回结果
-- `ConfirmMode` 不再参与框架调度逻辑；`_should_confirm()` 移除；所有工具统一走 PROGRESS→CONTINUE 路径
-- `ResponseType.CONFIRM` 分支从 `App.run()` 移除；工具审批由 handler 内部 `get_bridge().confirm()` 完成
+- `ConfirmMode` 恢复参与调度：`_should_confirm()` 在 `_execute_tool()` 中、handler 执行前调用；需审批时由框架通过 UIBridge 弹窗，拒绝则返回 `__reject__` TOOL_CALL_RESULT
+- `ResponseType.CONFIRM` 分支从 `App.run()` 移除；审批由框架层统一处理，不再由各 handler 自行调用 `get_bridge().confirm()`
 
 **理由：**
 - 交互逻辑集中在 tool handler 内，代码自包含，可读性高
@@ -1896,11 +1896,11 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ### 决策 85 — `__reject__` sentinel：switch 被拒后终止 agent loop
 
-**背景：** switch 工具（`switch_to_subagent`、`switch_to_mainagent`）改用 UIBridge 后，handler 内部调 `get_bridge().confirm()`，用户拒绝时原实现返回 `{"rejected": True}` 作为 TOOL_CALL_RESULT。这导致 LLM 收到 tool 结果后继续 agent loop，可能重试 switch 或执行其他动作，与旧 CONFIRM 拒绝行为（→ 退出内层循环等用户输入）不一致。
+**背景：** `_should_confirm()` 恢复后，审批由 `_execute_tool()` 在 handler 执行前通过 UIBridge 统一处理。用户拒绝审批时需终止 agent loop 等用户输入，而非让 LLM 继续循环。
 
 **决策：**
-- 新增 `__reject__` sentinel，与 `__switch__` 对称：handler 返回 `{"__reject__": True, "reason": "..."}`
-- `_execute_tool()` 检测 `__reject__` → 设 `_pending_reject = True` → 正常返回 TOOL_CALL_RESULT Message（关闭 TOOL_CALL 调用链）
+- `_execute_tool()` 审批被拒时返回 `__reject__` TOOL_CALL_RESULT：`event_payload={"__reject__": True, "reason": "用户取消了此操作"}`
+- 同步设 `_pending_reject = True` → `process()` 检测 → 返回 FINISH → App 回外层循环
 - `process()` CONTINUE 分支：append TOOL_CALL_RESULT → 检测 `_pending_reject` → 清标记 → 返回 `Response(FINISH, message="")` 
 - App FINISH 分支：无 switch_agent → 渲染空消息 → break 内层循环 → 回外层等用户输入
 - 下次 USER_INPUT 时 LLM 看到完整 TOOL_CALL + TOOL_CALL_RESULT(rejected) 链，正常继续

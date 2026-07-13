@@ -10,6 +10,7 @@ from abc import abstractmethod
 
 from src.cli.handler import Handler
 from src.agents.registry import MAIN_AGENT_KEY
+from src.cli.uibridge import get_bridge
 from src.config import config
 from src.llm.client import LLMClient
 from src.logger import get_logger
@@ -17,7 +18,7 @@ from src.message import EventType, Message
 from src.prompts.loader import PromptLoader
 from src.request import Request, RequestType
 from src.response import Response, ResponseType
-from src.tools.registry import Tool, ToolRegistry
+from src.tools.registry import ConfirmMode, Tool, ToolRegistry
 
 logger = get_logger(__name__)
 
@@ -192,6 +193,21 @@ class BaseAgent(Handler):
         调用方应跳过 tool_call_result 追加并处理切换。
         """
         tool = self._tools[tool_name]
+
+        # 审批门禁：ConfirmMode 控制是否需要用户确认
+        if self._should_confirm(tool):
+            ui = get_bridge()
+            params_str = json.dumps(payload, ensure_ascii=False)
+            if not ui.confirm(f"即将执行 {tool_name}\n参数: {params_str}"):
+                self._pending_reject = True
+                return Message(
+                    role="user",
+                    event_type=EventType.TOOL_CALL_RESULT,
+                    tool=tool_name,
+                    tool_call_id=tool_call_id,
+                    event_payload={"__reject__": True, "reason": "用户取消了此操作"},
+                )
+
         try:
             result = tool.handler(**payload)
         except Exception as e:
@@ -248,7 +264,13 @@ class BaseAgent(Handler):
             return f"{model_msg}\n{tool_info}"
         return tool_info
 
-    # _should_confirm() 已移除 — 工具审批由 handler 通过 UIBridge 自行处理
+    def _should_confirm(self, tool: Tool) -> bool:
+        """判断工具是否需要审批。不暴露给 LLM。"""
+        if tool.confirm_mode == ConfirmMode.NEVER:
+            return False
+        if tool.confirm_mode == ConfirmMode.ALWAYS:
+            return True
+        return bool(config.TOOL_CONFIRM_ENABLED)
 
     def process(self, input: Request) -> Response:
         """Agent 主循环（单步执行，由 App 层驱动循环）。

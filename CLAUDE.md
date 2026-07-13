@@ -70,7 +70,7 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 - **Agent 必须实现 14 个抽象方法** — `_get_agent_name` + 13 个占位符方法（`_get_agent_description`、`_get_responsibilities` 等），遗漏 Python 在 import 时 `TypeError`
 - **工具 handler 返回纯数据** — 返回 `str`/`dict`，由调用方（`BaseAgent._execute_tool()`）包装为 `tool_call_result` Message
 - **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（FINISH/PROGRESS/CONFIRM/SELECT）
-- **工具 handler 通过 UIBridge 直连 CLI 交互** — handler 调 `get_bridge().confirm()`/`select()` 阻塞等待用户响应，替代原 `ConfirmMode` 审批体系；`ConfirmMode` 枚举保留但不再参与 BaseAgent 调度逻辑
+- **工具审批由 `ConfirmMode` + UIBridge 共同控制** — `_execute_tool()` 根据 `ConfirmMode`（NEVER/ALWAYS/CONFIG）决定是否调 `get_bridge().confirm()` 弹审批窗；特殊交互（如 `provide_choices` 的 `select()`）由 handler 自行调用 UIBridge
 - **`EventType(StrEnum)` 枚举** — 代码中禁止裸字符串，只用 `EventType.USER_INPUT` 等 5 个枚举值
 - **System prompt 不在 `_history` 中** — 单独 `_system_prompt` 字符串，`_to_openai()` 时以 `{"role": "system", "content": "..."}` 注入
 - **设计/计划文件直接删除，不保留废弃内容** — Git 负责版本追溯
