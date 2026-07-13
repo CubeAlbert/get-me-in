@@ -9,6 +9,7 @@ import json
 from abc import abstractmethod
 
 from src.cli.handler import Handler
+from src.agents.registry import MAIN_AGENT_KEY
 from src.config import config
 from src.llm.client import LLMClient
 from src.logger import get_logger
@@ -119,7 +120,7 @@ class BaseAgent(Handler):
         name = self._get_agent_name()
 
         # 从 ToolRegistry 按 agent 过滤拉取工具
-        self._tools = ToolRegistry.get_for(name, agent_key=self._get_agent_key())
+        self._tools = ToolRegistry.get_for(name, agent_key=self._get_agent_key(), main_key=MAIN_AGENT_KEY)
         if extra_tools:
             for t in extra_tools:
                 self._tools[t.name] = t

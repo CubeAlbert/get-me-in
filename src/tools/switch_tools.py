@@ -5,6 +5,7 @@ Handler 返回 ``{"__switch__": True, "target": "...", "context": "..."}``，
 ``process()`` 返回 ``Response(FINISH, switch_agent=...)`` 由 App 层执行切换。
 """
 
+from src.agents.registry import MAIN_AGENT_KEY
 from src.tools.registry import ConfirmMode, tool
 
 
@@ -17,7 +18,7 @@ from src.tools.registry import ConfirmMode, tool
         "agent_name": {"description": "目标子Agent名称，必须与 <SubAgents> 中 SubAgent 的 name 属性一致"},
         "context": {"description": "给子Agent的完整上下文：用户需求、背景、已收集的关键信息等。越详细越好。"},
     },
-    agent=["main"],
+    agent=[MAIN_AGENT_KEY],
     confirm_mode=ConfirmMode.ALWAYS,
 )
 def switch_to_subagent(agent_name: str, context: str = "") -> dict:
@@ -48,4 +49,4 @@ def switch_to_mainagent(summary: str) -> dict:
         summary: 本次子Agent会话的执行总结，包含做了什么、结论、关键发现、
                  以及需要主Agent继续跟进的事项。
     """
-    return {"__switch__": True, "target": "main", "context": summary}
+    return {"__switch__": True, "target": MAIN_AGENT_KEY, "context": summary}

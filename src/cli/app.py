@@ -20,7 +20,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
-from src.agents.registry import get_agent_registry
+from src.agents.registry import MAIN_AGENT_KEY, get_agent_registry
 from src.cli.handler import Handler
 from src.config import config
 from src.message import EventType, Message
@@ -107,7 +107,7 @@ class App:
 
         ``"main"`` 返回主 Agent，其他从 AgentRegistry 查找。
         """
-        if name == "main":
+        if name == MAIN_AGENT_KEY:
             return self._main_agent
         try:
             return get_agent_registry().get(name)
@@ -217,7 +217,7 @@ class App:
                 if response.type == ResponseType.FINISH:
                     # switch 检测：Agent 切换
                     if response.switch_agent:
-                        if response.switch_agent != "main":
+                        if response.switch_agent != MAIN_AGENT_KEY:
                             # main → sub: 保存 tool_call_id 供切回时匹配
                             if response.switch_tool_call_id:
                                 self._switch_tool_call_id = response.switch_tool_call_id

@@ -150,12 +150,12 @@ class ToolRegistry:
         cls._tools[tool.name] = tool
 
     @classmethod
-    def get_for(cls, agent_name: str, *, agent_key: str | None = None) -> dict[str, Tool]:
+    def get_for(cls, agent_name: str, *, agent_key: str | None = None, main_key: str = "main") -> dict[str, Tool]:
         def _visible(tool: Tool) -> bool:
             if tool.agent is None:
                 return True
             if "*" in tool.agent:
-                return agent_key != "main"
+                return agent_key != main_key
             if agent_name in tool.agent:
                 return True
             if agent_key is not None and agent_key in tool.agent:
