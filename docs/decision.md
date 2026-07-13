@@ -95,6 +95,12 @@
 - [决策 85 — `__reject__` sentinel：switch 被拒后终止 agent loop](#决策-85--__reject__-sentinelswitch-被拒后终止-agent-loop)
 - [决策 86 — `MAIN_AGENT_KEY` 常量替换 magic string "main"](#决策-86--main_agent_key-常量替换-magic-string-main)
 - [决策 87 — 工具调用参数兼容性：忽略未知参数 + 校验必填](#决策-87--工具调用参数兼容性忽略未知参数--校验必填)
+- [决策 88 — Plan 机制作为通用基础设施](#决策-88--plan-机制作为通用基础设施)
+- [决策 89 — 简历数据模型：结构化 Resume](#决策-89--简历数据模型结构化-resume)
+- [决策 90 — 简历 Agent Plan → Execute 处理模式](#决策-90--简历-agent-plan--execute-处理模式)
+- [决策 91 — 工作区工具按权限边界拆分](#决策-91--工作区工具按权限边界拆分)
+- [决策 92 — RAG 查询拆分为 query_memory 和 query_reference_data](#决策-92--rag-查询拆分为-query_memory-和-query_reference_data)
+- [决策 93 — 简历输入三路径 + LLM 判断](#决策-93--简历输入三路径--llm-判断)
 
 ---
 
@@ -1965,3 +1971,149 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 不做过滤（`**payload` 直接解包）— LLM 偶尔传多余参数导致 TypeError 崩溃
 - 每个 handler 内部做 `**kwargs` 捕获 — 散落各处，一致性差
 - 在 `@tool` 装饰器阶段存储参数名列表 — 增加 Tool 字段，不如 inspect 直接读签名
+
+---
+
+### 决策 88 — Plan 机制作为通用基础设施
+
+**背景：** M5 简历 Agent 需要多步骤执行（Parse → Plan → Execute → Generate），且学习 Agent、面试 Agent 后续也会有类似的多步骤任务需求。需要一套通用的计划/任务管理能力。
+
+**决策：**
+- Plan 放在 `BaseAgent` 层，3 个工具：
+  - `create_plan(items: list[str])` — 创建有序 PlanItem 列表，第一条自动 IN_PROGRESS
+  - `update_plan_status(id, status)` — 标记完成/取消，IN_PROGRESS → COMPLETED/CANCELLED 时自动激活下一条
+  - `cancel_all_plans()` — 所有 PENDING + IN_PROGRESS → CANCELLED
+- 全部免审批（内部操作，非关键路径）
+- LLM 上下文通过 `system_message` 动态注入当前 IN_PROGRESS 的 plan item
+- 生命周期：MainAgent plan 全程存活（dispatch 子 Agent 再切回不丢），子 Agent plan 随 return 丢弃
+- PlanStatus 枚举：`PENDING / IN_PROGRESS / COMPLETED / CANCELLED`
+- 用户干预：LLM 可单项取消（`update_plan_status(id, "cancelled")`）或全量重建（`cancel_all_plans` → `create_plan`）
+- `tool_call_result` 自带当前状态（当前 item、下一项、是否全部完成），无需额外通知 LLM
+
+**理由：**
+- 通用基础设施避免每个子 Agent 各自实现计划管理
+- system_message 动态注入比占位符更灵活，不破坏 LLM 缓存
+- 两种干预粒度覆盖"跳过单项"和"推翻重来"两种场景
+- 子 Agent plan 随 return 丢弃保持子 Agent 无状态原则
+
+**曾考虑的替代方案：**
+- 占位符 `{{ACTIVE_PLAN}}` 注入 — 每次 plan 变化都重建 system prompt，破坏 LLM 缓存
+- `create_plan` 需用户审批 — 内部操作，审批打断 agent loop 不合理
+- 全量重建作为唯一干预方式 — 过于粗暴，"跳过第 3 步"不应要求重建整个计划
+
+---
+
+### 决策 89 — 简历数据模型：结构化 Resume
+
+**背景：** 简历 Agent 需要内部表示来表达简历内容，而非在纯文本上操作。
+
+**决策：**
+- 顶层 `Resume` → `BasicInfo` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo`
+- `BasicInfo`：姓名、性别（男/女）、英文名（可选）、出生日期（年龄 property 反推）、电话、邮箱、GitHub（可选）、教育经历 `list[Education]`、自我评价 `list[str]`（≥3 条）
+- `Education`：学位（本科/研究生/博士生）、学校、专业、起止时间（允许"至今"）
+- `TechStack`：`dict[str, set[str]]`，动态扩展。预定义 4 个枚举 key（编程语言/数据库/开发工具/AI工具），仅编程语言必填
+- `WorkExperience`：公司、起止时间（允许"至今"）、部门、职位、职责 `list[str]`（≥3 条）
+- `ProjectExperience`：项目名、角色、起止时间、概述、技术栈、职责、成果
+- `OtherInfo`：证书/语言能力/爱好，全可选，允许动态扩展
+- LaTeX 模板（`CHN_Template.tex`/`EN_Template.tex`）不下沉为占位符替换，而是作为**样式参考**（preamble、字体、颜色、section 格式）。简历生成时根据数据模型动态构建 LaTeX
+- 模板的固定数量占位符（如 `{-SUMMARY-1-}`~`{-SUMMARY-5-}`）不适合动态数据，改为数据驱动的循环生成
+
+**理由：**
+- 结构化表示能精确操作每个字段（如"修改技能栈"而非"修改简历第 3 段"）
+- 动态 dict 支持用户自定义技能类别（如"框架""中间件"），不限于 4 个预定义 key
+- 模板作为样式参考 + 数据驱动构建，比固定占位符替换更灵活，能处理多段教育/工作/项目
+- 中文模板和英文模板语言不同但占位符结构相同，数据模型通用
+
+**曾考虑的替代方案：**
+- 纯文本操作 — 无法精确定位修改，LLM 容易遗漏或误改
+- 固定占位符替换 — 不支持可变数量的教育/工作/项目经历
+- 模板完全程控生成 — 丢失样式一致性，不如从参考模板提取样式
+
+---
+
+### 决策 90 — 简历 Agent Plan → Execute 处理模式
+
+**背景：** 简历 Agent 的任务复杂度高于简单的问答 —— 需要解析简历、分析差距、逐步修改、最终生成输出。一次 LLM 调用无法完成。
+
+**决策：** 四阶段流程：
+1. **Parse** — 判断输入类型（文件路径 / 直接内容 / 空）→ 读文件或触发对话式构建 → 提取文本 → 结构化解析
+2. **Plan** — `plan_resume_edits` 工具：分析简历 + JD → LLM 生成修改计划 → UIBridge 展示 → 用户确认 → `create_plan(items)`
+3. **Execute** — Agent loop 按 plan 逐项推进，缺失信息时通过 UIBridge 询问用户
+4. **Generate & Output** — 组装 LaTeX → `build_pdf` 编译 → 展示 PDF → 写入记忆模块
+
+- ResumeAgent 内部循环：只要在处理简历就不退回 MainAgent
+- 需要用户输入时通过 UIBridge（非退出 loop 的 ask_user）
+
+**理由：**
+- Plan → Execute 将"决定做什么"和"实际去做"分离，Plan 阶段可展示确认
+- 内部循环保证多轮交互的连贯性（如连续修改多个 section）
+- 复用 Plan 通用基础设施推进执行进度
+
+**曾考虑的替代方案：**
+- 一次性生成 — 复杂简历修改不可能一次 LLM 调用完成
+- 每步退 MainAgent 等用户下一轮输入 — 打断连续性，用户需反复 dispatch
+
+---
+
+### 决策 91 — 工作区工具按权限边界拆分
+
+**背景：** M5 需要文件系统操作工具（读/写/删/编辑/搜索）。需要决定工具粒度：拆分为独立工具还是合并。
+
+**决策：**
+- `workspace_read` — 读文件，免审批
+- `workspace_search` — grep 搜索，免审批
+- `workspace_fs` — write / delete / move（含重命名），默认审批
+- `workspace_edit` — 字符串精确替换，默认审批
+- `read_customer_file` — 读取外部用户文件（txt/md/docx/pdf），内部按扩展名分派解析器，`agent=["*"]` 排除 MainAgent
+- 按权限边界拆分（读/搜索 免审批，写/删/编辑 需审批），而非按操作类型合并
+
+**理由：**
+- 权限边界决定工具边界 —— 同权限的合并，不同权限的拆分
+- `workspace_fs` 合并 write/delete/move：都是文件系统变更操作，审批策略一致
+- `workspace_edit` 独立：语义不同（替换 vs 全量写入），LLM 用例也不同
+- `read_customer_file` 与 `workspace_read` 区分：前者读用户文件（支持 docx/pdf 解析），后者读工作区 Agent 生成的文件
+
+**曾考虑的替代方案：**
+- 全合为一个 `workspace` + action 参数 — schema 臃肿，LLM 选择困难
+- 全部拆分（6 个独立工具）— 太碎，workspace_write/delete/move 无必要分开
+
+---
+
+### 决策 92 — RAG 查询拆分为 query_memory 和 query_reference_data
+
+**背景：** 原有单一的 RAG 查询工具。记忆和参考数据访问权限应不同：MainAgent 可以查记忆但不应直接查参考数据。
+
+**决策：**
+- `query_memory` — 语义检索记忆，MainAgent + 所有子 Agent 可用
+- `query_reference_data` — 语义检索参考数据，仅子 Agent 可用，MainAgent 不可用
+- 两个工具均免审批
+
+**理由：**
+- MainAgent 是路由 Agent（决策 72），不应干预子 Agent 的领域任务（如从参考数据检索面试题）
+- 权限分离让工具可见性矩阵更精细
+
+**曾考虑的替代方案：**
+- 单一 `query_rag` 工具 — 无法区分记忆和参考数据的访问权限
+- MainAgent 也可查参考数据 — 违背路由 Agent 定位
+
+---
+
+### 决策 93 — 简历输入三路径 + LLM 判断
+
+**背景：** 用户可能以多种方式提供简历：给文件路径、粘贴内容、或者没有现成简历需要从零构建。
+
+**决策：**
+- 路径输入 — `read_customer_file` 读文件
+- 内容输入 — dispatch context 携带简历正文
+- 对话式构建 — `start_resume_building` 工具：加载 `data/prompts/resume/collect_info.md` → `create_plan` → agent loop 逐项收集
+- 初期由 LLM 自动判断输入类型，后期演进为 `@path` 语法
+- 从记忆读取简历本次不做，预留规划
+
+**理由：**
+- LLM 判断简单灵活，三种路径差异明显（路径 vs 正文 vs 空），不易误判
+- `@path` 语法对齐 Claude Code 的用户习惯，但初期先跑通 LLM 判断再优化
+- 对话式构建由 Plan 机制保证顺序 + 模板保证内容完整，不由 LLM 自由发挥
+
+**曾考虑的替代方案：**
+- 独立 Router 判断输入类型 — 过度设计，LLM 原生能力足够
+- 对话式构建纯 LLM 自由发挥 — 可能漏问必填字段，用户体验不一致

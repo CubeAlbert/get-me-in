@@ -83,12 +83,17 @@
 
 ### 里程碑 5 —— 简历 Agent
 
-- **预期产出：** 可用的简历分析和定制功能
+- **预期产出：** 通用 Plan 基础设施 + 工作区工具集 + 简历 Agent（分析/定制/对话式构建/LaTeX 输出）
 - **验收标准：**
-  - 解析用户简历（Markdown 输入），提取结构化信息
-  - 根据 JD 定制简历，输出优化建议和修改后的简历
-  - 分析结果和定制后的简历写入记忆模块
-- **前置依赖：** 里程碑 4（BaseAgent）
+  - Plan 机制就绪：BaseAgent 层 `create_plan` / `update_plan_status` / `cancel_all_plans` 3 工具，system_message 动态注入
+  - 工作区工具就绪：`workspace_read/search/fs/edit` + `read_customer_file`（txt/md/docx/pdf）
+  - RAG 查询工具就绪：`query_memory` + `query_reference_data`
+  - 简历数据模型：`Resume` → `BasicInfo` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo`
+  - 三路径输入：文件路径（`read_customer_file`）/ 直接内容（dispatch context）/ 对话式构建（`start_resume_building` + `collect_info.md`）
+  - Plan → Execute 处理：Parse → Plan（`plan_resume_edits` + 用户确认）→ Execute（agent loop 推进 plan）→ Generate（LaTeX 动态构建 + `build_pdf`）
+  - LaTeX 输出：样式参考 `data/resume/template/` + 数据驱动动态构建 + `pdflatex` 编译 PDF
+  - 记忆集成：简历版本写入记忆模块 + 从记忆检索历史简历
+- **前置依赖：** 里程碑 4（BaseAgent + tool 系统 + UIBridge + switch 机制）
 
 ### 里程碑 6 —— 学习 Agent
 

@@ -257,3 +257,41 @@
 ### 7. 端到端验证
 
 - ✅ 主 Agent dispatch → JobSearchAgent 接管 → switch_to_mainagent 退回主 Agent → provide_choices 选项交互 全链路通过
+
+---
+
+## 阶段 5 —— M5: 简历 Agent
+
+### 1. 通用工具实现
+
+- ⬜ **`workspace_read` + `workspace_search`** — 工作区文件读取 + 内容搜索（grep），免审批
+- ⬜ **`workspace_fs`** — 工作区文件系统操作（write / delete / move 含重命名），默认审批
+- ⬜ **`workspace_edit`** — 工作区文件字符串精确替换，默认审批
+- ⬜ **`read_customer_file`** — 外部用户文件读取（免审批，`agent=["*"]` 排除 MainAgent），内部按扩展名分派：txt/md → 直接读，docx → `python-docx`，pdf → `pdfplumber`
+- ⬜ **`query_memory` + `query_reference_data`** — 封装 RAG 检索：`query_memory`（MainAgent + 所有子 Agent 可用），`query_reference_data`（仅子 Agent，MainAgent 不可用）
+
+### 2. Plan 机制
+
+- ⬜ **PlanItem + PlanStatus 数据模型** — `PlanStatus(StrEnum)`（PENDING / IN_PROGRESS / COMPLETED / CANCELLED），`PlanItem` dataclass（id / description / status / order）
+- ⬜ **BaseAgent Plan 内部支持** — `_plan: list[PlanItem]`、`_get_active_plan()`、`_create_plan(items)` / `_update_plan_status(id, status)` / `_cancel_all_plans()` 三个内部方法
+- ⬜ **system_message 动态注入** — `process()` 调 LLM 前，有 IN_PROGRESS plan item 时追加 system_message
+- ⬜ **Plan 工具 handler** — `create_plan` / `update_plan_status` / `cancel_all_plans`（全部免审批），tool_call_result 带当前状态（当前 item / 下一项 / 是否全部完成）
+
+### 3. 数据结构
+
+- ⬜ **Resume 数据模型** — `src/agents/resume/schemas.py`：`BasicInfo` / `Education` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo` / `Resume`
+
+### 4. ResumeAgent 实现
+
+- ⬜ **ResumeAgent(BaseAgent)** — 14 占位符 + 专属工具注册（`copy_template` / `build_pdf` / `start_resume_building` / `plan_resume_edits`）
+- ⬜ **copy_template 工具** — 复制 `data/resume/template/` 下的 LaTeX 模板到工作区，默认审批
+- ⬜ **build_pdf 工具** — `pdflatex -synctex=1 -interaction=nonstopmode`，免审批，环境检测留待编码阶段
+- ⬜ **start_resume_building 工具** — 加载 `collect_info.md` → `create_plan` → agent loop 逐项收集
+- ⬜ **plan_resume_edits 工具** — 分析简历 + JD → LLM 生成修改计划 → UIBridge 确认 → `create_plan`
+- ⬜ **LaTeX 动态构建** — 根据 Resume 数据模型 + 样式参考模板动态生成 LaTeX 源码
+- ⬜ **Agent 注册** — `main.py` 注册 ResumeAgent → AgentRegistry
+
+### 5. 记忆集成
+
+- ⬜ 简历版本写入记忆模块
+- ⬜ 从记忆检索历史简历

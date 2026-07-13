@@ -1,14 +1,14 @@
 # 当前状态
 
-**当前阶段：** M4 ✅ → M5: 简历 Agent
+**当前阶段：** M4 ✅ → M5: 简历 Agent（设计阶段完成）
 
-**当前任务：** 待定 — 里程碑 5 简历 Agent
+**当前任务：** M5 简历 Agent 实现
 
-**当前子任务：** 待规划
+**当前子任务：** Plan 机制实现 → ResumeAgent 实现 → 通用工具实现
 
 **当前阻塞：** 无
 
-**下一步：** 由用户决定 —— 继续 M5（简历 Agent），或 M6（学习 Agent）、M7（面试 Agent）
+**下一步：** 开始实现 Plan 机制（`BaseAgent._plan` + 3 工具），或根据设计文档选择其他优先级
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -98,3 +98,10 @@
 85. **`__reject__` sentinel** — switch 被用户拒绝后 handler 返回 `{"__reject__": True}`，`_execute_tool()` 追加 TOOL_CALL_RESULT 关闭调用链 + 设 `_pending_reject`，`process()` 返回 FINISH 终止 loop 等用户输入
 86. **`MAIN_AGENT_KEY` 常量** — 在 `src/agents/registry.py` 定义 `MAIN_AGENT_KEY = "main"`，替换 4 文件 6 处 magic string。`tools/registry.py` 通过 `get_for(..., main_key)` 参数接收，保持依赖方向正确
 87. **工具调用参数兼容性** — `_execute_tool()` 用 `inspect.signature` 过滤 LLM 传入的未知参数（静默忽略），缺失必填参数时返回带 schema 的错误让 LLM 自修复
+88. **Plan 机制作为通用基础设施** — BaseAgent 层 3 个免审批工具（`create_plan`/`update_plan_status`/`cancel_all_plans`），system_message 动态注入当前 IN_PROGRESS 任务；MainAgent plan 全程存活，子 Agent plan 随 return 丢弃
+89. **简历数据模型** — 结构化 `Resume`（`BasicInfo`/`TechStack`/`WorkExperience`/`ProjectExperience`/`OtherInfo`），`TechStack` 动态 dict 支持扩展；占位符模板留作样式参考，简历由数据驱动动态构建 LaTeX
+90. **简历 Agent Plan → Execute 模式** — 四阶段：Parse（识别输入类型+提取文本）→ Plan（`plan_resume_edits` 生成修改计划+用户确认）→ Execute（agent loop 逐项推进 plan）→ Generate（组装 LaTeX + `build_pdf`）
+91. **工作区工具按权限边界拆分** — `workspace_read`/`workspace_search` 免审批，`workspace_fs`（write/delete/move）/`workspace_edit` 默认审批；`read_customer_file` 作为外部文件读取工具（排除 MainAgent）
+92. **RAG 查询拆分为两个工具** — `query_memory`（MainAgent + 所有子 Agent 可用）和 `query_reference_data`（仅子 Agent，MainAgent 不可用）
+93. **输入方式三路径** — 文件路径（`read_customer_file`）→ 直接内容（dispatch context 传入）→ 对话式构建（`start_resume_building` + `collect_info.md` 模板），初期 LLM 判断，后期 `@path` 语法
+94. **结构化问题模板** — `data/prompts/resume/collect_info.md` + `start_resume_building` 工具（加载模板 → `create_plan`），对话式构建时 LLM 按模板逐项询问，不由 LLM 自由发挥
