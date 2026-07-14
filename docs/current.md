@@ -4,11 +4,13 @@
 
 **当前任务：** 通用工具实现
 
-**当前子任务：** workspace_read/search/fs/edit → read_customer_file → query_memory/query_reference_data
+**当前子任务：** ToolCallException — 统一工具异常类
 
 **当前阻塞：** 无
 
-**下一步：** 实现工作区工具（`workspace_read` + `workspace_search` 免审批先行）
+**下一步：** 完成 ToolCallException 设计 → 实现 `file_reader.py` 底层 → workspace 工具组（read/grep/search_file 免审批先行）
+
+**参考文档：** `docs/file-reader-design.md` — workspace 工具组 + read_customer_file 完整设计
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -111,3 +113,9 @@
 98. **`list[str]` schema 增强** — `_build_arguments_schema` 对 `list[X]` 类型自动生成 `"items": {"type": "X"}`，避免 LLM 猜测数组元素类型
 99. **message=None 走 retry** — LLM 返回 JSON 中 `message` 为 null 时，走与 JSON 解析失败相同的 output_format 注入 + retry 流程
 100. **Sticky plan 阻塞** — `questionary`（prompt_toolkit）与 `rich.Live` 终端控制权冲突，无法实现真正的常显 plan 面板，暂时用每次响应重打印替代
+101. **workspace_fs 拆分为三个独立工具**（write/delete/move）— 三者参数差异大（write 需 content、delete 不需、move 需 src+dst），合并导致 schema 臃肿
+102. **workspace_search 拆分为 grep + search_file** — 内容搜索与文件发现是不同操作，返回结构也不同；LLM 先 search_file 定位文件，再 grep 搜索内容
+103. **workspace_read 结构化输出** — `lines: [[int, str]]`（JSON array-of-arrays），行号保持原始行号不受 offset 影响，供 workspace_edit 精确校验
+104. **workspace_edit 批量编辑 + 倒序处理 + old_content 校验** — replace + insert_after 合并为一个工具，old_content 行号+内容双重匹配，倒序处理避免行号漂移，全量或全不原子性
+105. **read_customer_file 绝对路径 + 统一输出格式** — 所有格式（txt/md/pdf/docx）统一输出 `lines: [[num, str]]`，PDF/DOCX 提取后按 `\n` 拆分；仅支持 .docx 不支持 .doc；不做 OCR
+106. **ToolCallException 统一工具异常** — 替代裸 ValueError/FileNotFoundError，含 message + suggestion 让 LLM 自修复

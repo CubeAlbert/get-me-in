@@ -108,6 +108,12 @@
 - [决策 98 — list[str] schema 自动生成 items 类型](#决策-98--liststr-schema-自动生成-items-类型)
 - [决策 99 — message=None 走 retry 而非静默兜底](#决策-99--messagenone-走-retry-而非静默兜底)
 - [决策 100 — Sticky plan 阻塞：questionary + Live 终端冲突](#决策-100--sticky-plan-阻塞questionary--live-终端冲突)
+- [决策 101 — workspace_fs 拆分为三个独立工具](#决策-101--workspace_fs-拆分为三个独立工具)
+- [决策 102 — workspace_search 拆分为 grep + search_file](#决策-102--workspace_search-拆分为-grep--search_file)
+- [决策 103 — workspace_read 结构化输出：行号 + 内容数组](#决策-103--workspace_read-结构化输出行号--内容数组)
+- [决策 104 — workspace_edit 批量编辑 + 倒序处理 + old_content 校验](#决策-104--workspace_edit-批量编辑--倒序处理--old_content-校验)
+- [决策 105 — read_customer_file 绝对路径 + 统一输出格式](#决策-105--read_customer_file-绝对路径--统一输出格式)
+- [决策 106 — ToolCallException 统一工具异常](#决策-106--toolcallexception-统一工具异常)
 
 ---
 
@@ -2254,3 +2260,96 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 换用 `rich.prompt.Prompt` —— 失去 autocomplete 和 `/` 命令补全
 - 换用 `textual` TUI 框架 —— 引入重依赖 + 大量重构
 - 直接用 ANSI escape 手动管理 scroll region —— 脆弱、跨平台兼容性差
+
+---
+
+### 决策 101 — workspace_fs 拆分为三个独立工具
+
+**背景：** 决策 91 将 write/delete/move 合并为 `workspace_fs` + action 参数。在详细设计中重新评估后，三者参数差异太大（write 需要 content、delete 不需要、move 需要 src+dst），合并会导致 schema 臃肿。
+
+**决策：** 拆分为 `workspace_write` / `workspace_delete` / `workspace_move` 三个独立工具。三者均为 `ConfirmMode.CONFIG`（默认审批），所有 Agent 可见。
+
+**理由：**
+- write 入参 `path + content`，delete 入参 `path`，move 入参 `src + dst` — 合并后 LLM 需理解哪些参数在哪个 action 下有效
+- 独立工具 schema 清晰，LLM 选择准确
+- 三者在审批策略上一致，但在语义上足够不同，值得分开
+
+**曾考虑的替代方案：**
+- 保持合并（决策 91） — schema 臃肿，LLM 选择困难
+
+---
+
+### 决策 102 — workspace_search 拆分为 grep + search_file
+
+**背景：** 决策 91 定义的 `workspace_search` 同时承担内容搜索和文件查找两个职责。两者目的不同：一个搜文件内容，一个按文件名找文件。
+
+**决策：** 拆分为 `workspace_grep`（内容搜索，结构化输出对齐 workspace_read）和 `workspace_search_file`（文件名 glob 匹配，返回路径列表）。两者均为 `ConfirmMode.NEVER`。
+
+**理由：**
+- 内容搜索返回 `{files: [{path, matches: [[num, str]]}]}`，文件名搜索返回 `{files: [str]}` — 结构天然不同
+- 分离后 LLM 使用路径更清晰：先 `search_file` 定位文件，再 `grep` 搜索内容，再 `read` 获取上下文
+
+---
+
+### 决策 103 — workspace_read 结构化输出：行号 + 内容数组
+
+**背景：** `workspace_read` 需要为 `workspace_edit` 提供精确的行号和内容用于校验替换。
+
+**决策：**
+- 返回 `lines: [[int, str]]`（JSON array-of-arrays），行号 1-indexed，保持原始行号不受 offset 影响
+- `offset` 起始行号，`limit` 默认 100 行，`truncated` 标记未读完
+- 编码检测使用 `charset-normalizer`
+
+**理由：**
+- `[[num, str]]` 比 `[{n, c}]` 紧凑，减少 token 消耗
+- 行号不变使 edit 可直接复用
+- `truncated` 引导 LLM 分段读取大文件
+
+---
+
+### 决策 104 — workspace_edit 批量编辑 + 倒序处理 + old_content 校验
+
+**背景：** 对已有文件的修改需要防止 LLM 幻觉导致文件损坏。
+
+**决策：**
+- `replace`（替换当行）和 `insert_after`（行后插入）合并为一个工具
+- 每条 edit 必须提供 `line` + `old_content`（原始行内容），行号 + 内容双重匹配才执行
+- `line=0` 仅限 `insert_after`（插入文件开头），此时不校验 `old_content`
+- 支持批量 edits，所有 edit 引用编辑前的原始行号，系统内部按行号降序处理
+- 任何一条校验失败全量回滚，文件不做任何修改（原子性）
+
+**理由：**
+- old_content 校验防止 LLM 幻觉（行号漂移、内容混淆）
+- 倒序处理避免行号漂移，LLM 不需要自己算偏移
+- 原子性保证文件不被部分破坏
+
+---
+
+### 决策 105 — read_customer_file 绝对路径 + 统一输出格式
+
+**背景：** 用户简历文件可能在系统任意位置，且格式多样（txt/md/pdf/docx）。
+
+**决策：**
+- 必须绝对路径（跨平台适配），无沙箱校验
+- 所有格式统一输出 `{path, format, total_lines, offset, limit, truncated, lines: [[num, str]]}`
+- PDF 用 pdfplumber 提取文本后按 `\n` 拆分为行，DOCX 用 python-docx 同理
+- 仅支持 `.docx`，不支持旧版 `.doc`（二进制 OLE 无纯 Python 方案）
+- 不做 OCR
+
+**理由：**
+- 绝对路径避免 Agent 工作目录不确定性
+- 统一输出让 LLM 无需根据格式猜测返回结构
+- `.doc` 需 LibreOffice 系统依赖，太重
+
+---
+
+### 决策 106 — ToolCallException 统一工具异常
+
+**背景：** 当前工具 handler 直接抛出 `ValueError`/`FileNotFoundError` 等裸异常，LLM 收到的错误信息缺乏结构化的上下文和修复建议。
+
+**决策：** 引入 `src/tools/exceptions.py`，定义 `ToolCallException(Exception)`，包含 `message`（面向 LLM 的错误描述）和 `suggestion`（可选修复建议）。`BaseAgent._execute_tool()` 统一捕获并包装为 tool_call_result 喂回 LLM。所有 workspace 工具和 `read_customer_file` 使用此异常替代原始异常。
+
+**理由：**
+- 给 LLM 足够的上下文自修复（当前架构依赖此机制，见决策 46）
+- 统一的异常类型便于 `_execute_tool()` 区分"预期内的工具错误"和"框架 bug"
+- suggestion 字段给 LLM 明确的修复方向

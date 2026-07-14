@@ -264,10 +264,18 @@
 
 ### 1. 通用工具实现
 
-- ⬜ **`workspace_read` + `workspace_search`** — 工作区文件读取 + 内容搜索（grep），免审批
-- ⬜ **`workspace_fs`** — 工作区文件系统操作（write / delete / move 含重命名），默认审批
-- ⬜ **`workspace_edit`** — 工作区文件字符串精确替换，默认审批
-- ⬜ **`read_customer_file`** — 外部用户文件读取（免审批，`agent=["*"]` 排除 MainAgent），内部按扩展名分派：txt/md → 直接读，docx → `python-docx`，pdf → `pdfplumber`
+- 🔄 **通用工具设计讨论** — `workspace_read` / `workspace_grep` / `workspace_search_file` / `workspace_write` / `workspace_delete` / `workspace_move` / `workspace_edit` / `read_customer_file` / `ToolCallException` 设计完成，详见 `docs/file-reader-design.md`
+- 🔄 **`ToolCallException`** — 统一工具异常类，替代裸 `ValueError`/`FileNotFoundError`，附带 LLM 可理解的上下文和建议
+- ⬜ **`file_reader.py` 底层** — `read_text` / `read_pdf` / `read_docx` / `search_text` 纯函数
+- ⬜ **沙箱校验** — 相对路径 `resolve()` 校验公共函数，复用于所有 workspace 工具
+- ⬜ **`workspace_read`** — 工作区文本文件读取（免审批），`lines: [[num, str]]` 结构化输出
+- ⬜ **`workspace_grep`** — 工作区文件内容搜索（免审批），结构化输出对齐 `workspace_read`
+- ⬜ **`workspace_search_file`** — 工作区文件名搜索（免审批），fnmatch glob，返回相对路径列表
+- ⬜ **`workspace_write`** — 工作区文件新建（默认审批），不覆盖已存在文件，自动建父目录
+- ⬜ **`workspace_delete`** — 工作区文件/空目录删除（默认审批），非空目录报错
+- ⬜ **`workspace_move`** — 工作区文件/目录移动+重命名（默认审批），dst 不覆盖，自动建父目录
+- ⬜ **`workspace_edit`** — 工作区文件精确编辑（默认审批），replace+insert_after 批量操作，倒序处理，old_content 校验
+- ⬜ **`read_customer_file`** — 外部用户文件读取（免审批，`agent=["*"]`），绝对路径，txt/md/pdf/docx 统一结构化输出
 - ⬜ **`query_memory` + `query_reference_data`** — 封装 RAG 检索：`query_memory`（MainAgent + 所有子 Agent 可用），`query_reference_data`（仅子 Agent，MainAgent 不可用）
 
 ### 2. Plan 机制
