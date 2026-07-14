@@ -315,8 +315,15 @@ class App:
                     continue
 
     def _plan_panel(self, plan_items: list) -> Panel | None:
-        """构建计划进度 Panel，plan 为空时返回 None。"""
+        """构建计划进度 Panel，plan 为空或全部完成时返回 None。"""
         if not plan_items:
+            return None
+        # 无进行中或待执行项 → plan 已结束，不显示
+        has_active = any(
+            item.status.value in ("pending", "in_progress")
+            for item in plan_items
+        )
+        if not has_active:
             return None
 
         STATUS_ICONS: dict[str, str] = {
