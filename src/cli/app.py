@@ -19,6 +19,7 @@ import questionary
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.text import Text
 
 from src.agents.registry import MAIN_AGENT_KEY, get_agent_registry
 from src.cli.handler import Handler
@@ -143,7 +144,6 @@ class App:
         t.start()
 
         while not done.is_set():
-            # 工具 handler 发起了 UI 请求 → 暂停 spinner，渲染交互
             if bridge.has_request:
                 sys.stderr.write("\r" + " " * 24 + "\r")
                 sys.stderr.flush()
@@ -195,7 +195,6 @@ class App:
         内层循环：agent loop，阻塞用户输入，按 ResponseType 分支：
           - FINISH   → 渲染，回外层
           - PROGRESS → 渲染，自动 CONTINUE
-          - CONFIRM  → questionary.select，通过则 CONFIRM_APPROVED，拒绝则回外层
         """
         _ensure_utf8()
         self._print_welcome()
@@ -234,7 +233,6 @@ class App:
                 if self._handler is self._main_agent:
                     self._console.print("[red]当前已是主Agent，/exit_sub 仅在子Agent会话中可用[/]")
                     continue
-                # 通知子 Agent 整理上下文并退出
                 self._handler._history.append(
                     Message(
                         role=Role.USER,
@@ -243,7 +241,6 @@ class App:
                     )
                 )
                 request = Request(type=RequestType.CONTINUE)
-                # 掉入内层循环，由子 Agent LLM 处理
 
             elif user_input == "/edit":
                 self._console.print(f"[dim]启动编辑器: {self._editor} ...[/]")
@@ -269,14 +266,11 @@ class App:
                 )
 
                 if response.type == ResponseType.FINISH:
-                    # switch 检测：Agent 切换
                     if response.switch_agent:
                         if response.switch_agent != MAIN_AGENT_KEY:
-                            # main → sub: 保存 tool_call_id 供切回时匹配
                             if response.switch_tool_call_id:
                                 self._switch_tool_call_id = response.switch_tool_call_id
                         else:
-                            # sub → main: 注入 TOOL_CALL_RESULT 完成异步调用闭环
                             if self._switch_tool_call_id:
                                 self._main_agent._history.append(
                                     Message(
@@ -299,7 +293,7 @@ class App:
                             type=RequestType.USER_INPUT,
                             message=context,
                         )
-                        continue  # 留在内层循环，新 handler 开始工作
+                        continue
 
                     # 正常 FINISH：渲染并回外层
                     self._console.print()
@@ -320,13 +314,10 @@ class App:
                     request = Request(type=RequestType.CONTINUE)
                     continue
 
-    def _render_plan(self, plan_items: list) -> None:
-        """渲染计划进度面板。
-
-        仅在 plan 非空时输出 rich.Panel，展示各步骤的状态图标。
-        """
+    def _plan_panel(self, plan_items: list) -> Panel | None:
+        """构建计划进度 Panel，plan 为空时返回 None。"""
         if not plan_items:
-            return
+            return None
 
         STATUS_ICONS: dict[str, str] = {
             "pending": "[ ]",
@@ -337,11 +328,17 @@ class App:
 
         lines: list[str] = []
         for item in sorted(plan_items, key=lambda x: x.order):
-            icon = STATUS_ICONS.get(item.status.value, "❓")
+            icon = STATUS_ICONS.get(item.status.value, "?")
             lines.append(f"{icon} {item.description}")
 
-        body = "\n".join(lines)
-        self._console.print(Panel(body, title="[ Execution Plan ]", border_style="dim"))
+        body = Text("\n".join(lines))
+        return Panel(body, title="[ Execution Plan ]", border_style="dim")
+
+    def _render_plan(self, plan_items: list) -> None:
+        """打印计划进度面板到终端。"""
+        panel = self._plan_panel(plan_items)
+        if panel:
+            self._console.print(panel)
 
     def _print_welcome(self) -> None:
         self._console.print()
