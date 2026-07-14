@@ -60,7 +60,7 @@ class SubAgentDescriptor:
             f"  <Description>{self.description}</Description>\n"
             f"  <Responsibilities>{self.responsibilities}</Responsibilities>\n"
             f"  <HardConstraints>{self.hard_constraints}</HardConstraints>\n"
-            f"</SubAgent>"
+            f"</SubAgent>\n"
         )
 
 

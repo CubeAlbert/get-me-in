@@ -52,7 +52,7 @@ class Tool:
             f"{self.arguments_schema}\n"
             f"</Arguments>\n"
             f"<ExpectedOutput>{self.expected_output}</ExpectedOutput>\n"
-            f"</Tool>"
+            f"</Tool>\n"
         )
 
 
