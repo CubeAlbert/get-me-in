@@ -76,7 +76,7 @@ def _build_arguments_schema(
     fn: Callable,
     input_schema: dict[str, dict],
 ) -> str:
-    """从函数签名自动补全 ``type`` / ``required``，生成 JSON schema 字符串。"""
+    """从函数签名自动补全 ``type`` / ``required`` / ``items``，生成 JSON schema 字符串。"""
     sig = inspect.signature(fn)
     completed: dict[str, dict] = {}
 
@@ -85,7 +85,17 @@ def _build_arguments_schema(
 
         if param_name in sig.parameters:
             p = sig.parameters[param_name]
-            entry["type"] = _type_to_schema(p.annotation) if p.annotation is not inspect.Parameter.empty else "string"
+            if p.annotation is not inspect.Parameter.empty:
+                py_type = p.annotation
+                entry["type"] = _type_to_schema(py_type)
+                # 为 typed array 生成 items 信息，避免 LLM 猜测元素类型
+                origin = get_origin(py_type)
+                if origin is not None and origin is list:
+                    args = get_args(py_type)
+                    if args and args[0] is not type(None):
+                        entry.setdefault("items", {"type": _type_to_schema(args[0])})
+            else:
+                entry["type"] = "string"
             entry["required"] = p.default is inspect.Parameter.empty
         else:
             entry["type"] = param_info.get("type", "string")

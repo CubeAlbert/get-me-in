@@ -9,7 +9,7 @@ M4 阶段 Handler 协议升级为 ``Request → Response``。
 from abc import ABC, abstractmethod
 
 from src.llm.client import LLMClient
-from src.message import EventType, Message
+from src.message import EventType, Message, Role
 from src.prompts.loader import PromptLoader
 from src.request import Request, RequestType
 from src.response import Response, ResponseType
@@ -119,7 +119,7 @@ class LLMHandler(Handler):
                 except Exception as e:
                     payload = {"error": str(e)}
                 result = Message(
-                    role="user",
+                    role=Role.USER,
                     event_type=EventType.TOOL_CALL_RESULT,
                     tool=tool_name,
                     tool_call_id=llm_msg.id,

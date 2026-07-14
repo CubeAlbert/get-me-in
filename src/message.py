@@ -15,6 +15,17 @@ from datetime import datetime
 from enum import StrEnum
 
 
+class Role(StrEnum):
+    """消息发送者角色枚举。"""
+
+    USER = "user"
+    """用户消息。"""
+    SYSTEM = "system"
+    """系统指令 / 提示消息。"""
+    ASSISTANT = "assistant"
+    """LLM 回复消息。"""
+
+
 class EventType(StrEnum):
     """消息事件类型枚举。"""
 
@@ -53,7 +64,7 @@ class Message:
     event_type: EventType
     message: str = ""
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    role: str = "user"
+    role: Role = Role.USER
     timestamp: datetime = field(default_factory=datetime.now)
     tool: str | None = None
     tool_call_id: str | None = None
@@ -82,7 +93,7 @@ class Message:
         import json_repair
         parsed = json_repair.loads(reply)
         return Message(
-            role="assistant",
+            role=Role.ASSISTANT,
             id=parsed["id"],
             message=parsed["message"],
             event_type=parsed["event_type"],

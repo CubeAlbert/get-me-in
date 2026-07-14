@@ -16,8 +16,12 @@
     Response(type=ResponseType.PROGRESS, message="正在调用 get_current_datetime...")
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.agents.plan import PlanItem
 
 
 class ResponseType(StrEnum):
@@ -57,3 +61,4 @@ class Response:
     switch_agent: str | None = None
     switch_context: str | None = None
     switch_tool_call_id: str | None = None
+    plan: list = field(default_factory=list)  # list[PlanItem]，当前计划快照

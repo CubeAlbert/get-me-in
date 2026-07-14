@@ -25,7 +25,7 @@ from src.cli.handler import Handler
 from src.cli.uibridge import UIBridge, _set_bridge
 from src.config import config
 from src.logger import get_logger
-from src.message import EventType, Message
+from src.message import EventType, Message, Role
 from src.rag import load
 from src.request import Request, RequestType
 from src.response import ConfirmChoice, Response, ResponseType
@@ -237,7 +237,7 @@ class App:
                 # 通知子 Agent 整理上下文并退出
                 self._handler._history.append(
                     Message(
-                        role="user",
+                        role=Role.USER,
                         event_type=EventType.SYSTEM_MESSAGE,
                         message="用户请求主动退出当前会话。请整理本次会话的关键信息和结论，然后调用 switch_to_mainagent 退出。",
                     )
@@ -260,6 +260,14 @@ class App:
             while True:
                 response = self._process_with_spinner(request, bridge)
 
+                logger.debug(
+                    "App response — type=%s switch=%s msg_len=%d plan_items=%d",
+                    response.type,
+                    response.switch_agent or "-",
+                    len(response.message or ""),
+                    len(response.plan) if response.plan else 0,
+                )
+
                 if response.type == ResponseType.FINISH:
                     # switch 检测：Agent 切换
                     if response.switch_agent:
@@ -272,7 +280,7 @@ class App:
                             if self._switch_tool_call_id:
                                 self._main_agent._history.append(
                                     Message(
-                                        role="user",
+                                        role=Role.USER,
                                         event_type=EventType.TOOL_CALL_RESULT,
                                         tool="switch_to_subagent",
                                         tool_call_id=self._switch_tool_call_id,
@@ -295,18 +303,45 @@ class App:
 
                     # 正常 FINISH：渲染并回外层
                     self._console.print()
+                    self._render_plan(response.plan)
                     if config.SHOW_THINKING and response.thinking:
                         self._console.print(Panel(response.thinking, title="思考", border_style="dim"))
-                    self._console.print(Markdown(response.message))
+                    msg = response.message or ""
+                    if msg:
+                        self._console.print(Markdown(msg))
                     self._console.print()
                     break
 
                 if response.type == ResponseType.PROGRESS:
                     self._console.print()
+                    self._render_plan(response.plan)
                     if response.message:
                         self._console.print(f"[dim]🔄 {response.message}[/]")
                     request = Request(type=RequestType.CONTINUE)
                     continue
+
+    def _render_plan(self, plan_items: list) -> None:
+        """渲染计划进度面板。
+
+        仅在 plan 非空时输出 rich.Panel，展示各步骤的状态图标。
+        """
+        if not plan_items:
+            return
+
+        STATUS_ICONS: dict[str, str] = {
+            "pending": "[ ]",
+            "in_progress": "[>]",
+            "completed": "[x]",
+            "cancelled": "[~]",
+        }
+
+        lines: list[str] = []
+        for item in sorted(plan_items, key=lambda x: x.order):
+            icon = STATUS_ICONS.get(item.status.value, "❓")
+            lines.append(f"{icon} {item.description}")
+
+        body = "\n".join(lines)
+        self._console.print(Panel(body, title="[ Execution Plan ]", border_style="dim"))
 
     def _print_welcome(self) -> None:
         self._console.print()

@@ -9,6 +9,7 @@ from src.logger import get_logger
 from src.prompts.loader import PromptLoader
 from src.cli.app import App
 from src.rag import start
+import src.tools.plan_tools    # noqa: F401 — 触发 @tool 注册（plan）
 import src.tools.switch_tools  # noqa: F401 — 触发 @tool 注册（switch）
 import src.tools.system_tool  # noqa: F401 — 触发 @tool 注册
 import src.tools.web_tool     # noqa: F401 — 触发 @tool 注册

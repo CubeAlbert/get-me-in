@@ -6,16 +6,18 @@
 
 import inspect
 import json
+import uuid
 
 from abc import abstractmethod
 
+from src.agents.plan import PlanItem, PlanStatus
 from src.cli.handler import Handler
 from src.agents.registry import MAIN_AGENT_KEY
 from src.cli.uibridge import get_bridge
 from src.config import config
 from src.llm.client import LLMClient
 from src.logger import get_logger
-from src.message import EventType, Message
+from src.message import EventType, Message, Role
 from src.prompts.loader import PromptLoader
 from src.request import Request, RequestType
 from src.response import Response, ResponseType
@@ -158,6 +160,8 @@ class BaseAgent(Handler):
         self._pending_reject: bool = False
         self._round_counter = 0
         self._format_injected = False
+        self._plan: list[PlanItem] = []
+        self._last_injected_plan_id: str | None = None
 
         logger.debug(
             "%s 初始化 — %d 个工具, max_rounds=%d",
@@ -171,6 +175,105 @@ class BaseAgent(Handler):
     def debug_system_prompt(self) -> str:
         """返回完整系统提示词（含已注入的工具列表），供调试使用。"""
         return self._system_prompt
+
+    # ── Plan 机制 ────────────────────────────────────────────
+
+    def _get_active_plan(self) -> PlanItem | None:
+        """返回当前 IN_PROGRESS 的计划项，无则返回 None。"""
+        for item in self._plan:
+            if item.status == PlanStatus.IN_PROGRESS:
+                return item
+        return None
+
+    def _get_next_pending(self) -> PlanItem | None:
+        """返回下一个 PENDING 项（按 order 排序），无则返回 None。"""
+        pending = [i for i in self._plan if i.status == PlanStatus.PENDING]
+        if not pending:
+            return None
+        return min(pending, key=lambda x: x.order)
+
+    def _activate_next(self) -> None:
+        """将下一个 PENDING 项设为 IN_PROGRESS。无 PENDING 项时清空注入标记。"""
+        next_item = self._get_next_pending()
+        if next_item:
+            next_item.status = PlanStatus.IN_PROGRESS
+            self._last_injected_plan_id = next_item.id
+        else:
+            self._last_injected_plan_id = None
+
+    def _plan_summary(self) -> dict:
+        """构建当前 plan 的摘要，作为 tool_call_result 返回给 LLM。"""
+        items_data = [
+            {
+                "id": item.id,
+                "description": item.description,
+                "status": item.status.value,
+                "order": item.order,
+            }
+            for item in self._plan
+        ]
+        active = self._get_active_plan()
+        next_item = self._get_next_pending()
+        all_done = (
+            all(i.status in (PlanStatus.COMPLETED, PlanStatus.CANCELLED) for i in self._plan)
+            if self._plan
+            else True
+        )
+        return {
+            "plan": items_data,
+            "current": {"id": active.id, "description": active.description} if active else None,
+            "next": {"id": next_item.id, "description": next_item.description} if next_item else None,
+            "all_completed": all_done,
+        }
+
+    def _create_plan(self, items: list[str]) -> dict:
+        """创建新计划（覆盖旧计划），首项自动激活为 IN_PROGRESS。"""
+        self._plan = [
+            PlanItem(
+                id=uuid.uuid4().hex,
+                description=desc,
+                status=PlanStatus.PENDING,
+                order=i,
+            )
+            for i, desc in enumerate(items)
+        ]
+        self._last_injected_plan_id = None
+        if self._plan:
+            self._plan[0].status = PlanStatus.IN_PROGRESS
+            self._last_injected_plan_id = self._plan[0].id
+        return self._plan_summary()
+
+    def _update_plan_status(self, plan_id: str, status: str) -> dict:
+        """更新指定计划项的状态。完成/取消当前项时自动激活下一项。"""
+        try:
+            new_status = PlanStatus(status)
+        except ValueError:
+            return {"error": f"无效状态: {status}，可选: {[s.value for s in PlanStatus]}"}
+
+        target = None
+        for item in self._plan:
+            if item.id == plan_id:
+                target = item
+                break
+
+        if target is None:
+            return {"error": f"未找到计划项: {plan_id}"}
+
+        was_active = target.status == PlanStatus.IN_PROGRESS
+        target.status = new_status
+
+        if was_active and new_status in (PlanStatus.COMPLETED, PlanStatus.CANCELLED):
+            self._activate_next()
+
+        return self._plan_summary()
+
+    def _cancel_all_plans(self) -> dict:
+        """取消所有未完成的计划项。"""
+        for item in self._plan:
+            if item.status not in (PlanStatus.COMPLETED, PlanStatus.CANCELLED):
+                item.status = PlanStatus.CANCELLED
+        self._last_injected_plan_id = None
+        return self._plan_summary()
 
     # ── process — agent loop ──────────────────────────────
 
@@ -202,7 +305,7 @@ class BaseAgent(Handler):
             if not ui.confirm(f"即将执行 {tool_name}\n参数: {params_str}"):
                 self._pending_reject = True
                 return Message(
-                    role="user",
+                    role=Role.USER,
                     event_type=EventType.TOOL_CALL_RESULT,
                     tool=tool_name,
                     tool_call_id=tool_call_id,
@@ -223,7 +326,7 @@ class BaseAgent(Handler):
         }
         if missing:
             return Message(
-                role="user",
+                role=Role.USER,
                 event_type=EventType.TOOL_CALL_RESULT,
                 tool=tool_name,
                 tool_call_id=tool_call_id,
@@ -234,7 +337,13 @@ class BaseAgent(Handler):
             )
 
         try:
-            result = tool.handler(**filtered)
+            from src.tools.plan_tools import _set_plan_agent
+
+            _set_plan_agent(self)
+            try:
+                result = tool.handler(**filtered)
+            finally:
+                _set_plan_agent(None)
         except Exception as e:
             logger.error("工具 %s 执行失败: %s", tool_name, e)
             result = {
@@ -244,13 +353,20 @@ class BaseAgent(Handler):
                 "expected_output": tool.expected_output,
             }
 
+        logger.debug(
+            "工具 %s 结果 — type=%s preview=%s",
+            tool_name,
+            "error" if isinstance(result, dict) and "error" in result else "ok",
+            json.dumps(result, ensure_ascii=False, default=str)[:200],
+        )
+
         # switch 检测：handler 返回 {"__switch__": True, "target": "...", "context": "..."}
         if isinstance(result, dict) and result.get("__switch__"):
             target = result.get("target", "")
             if not target:
                 logger.warning("switch handler 缺少 target，忽略切换")
                 return Message(
-                    role="user",
+                    role=Role.USER,
                     event_type=EventType.TOOL_CALL_RESULT,
                     tool=tool_name,
                     tool_call_id=tool_call_id,
@@ -264,7 +380,7 @@ class BaseAgent(Handler):
             self._pending_reject = True
 
         return Message(
-            role="user",
+            role=Role.USER,
             event_type=EventType.TOOL_CALL_RESULT,
             tool=tool_name,
             tool_call_id=tool_call_id,
@@ -319,7 +435,7 @@ class BaseAgent(Handler):
             self._round_counter = 0
             self._history.append(
                 Message(
-                    role="user",
+                    role=Role.USER,
                     message=input.message,
                     event_type=EventType.USER_INPUT,
                 )
@@ -342,6 +458,7 @@ class BaseAgent(Handler):
                         switch_agent=target,
                         switch_context=context,
                         switch_tool_call_id=switch_call_id,
+                        plan=self._plan,
                     )
 
                 if result_msg is not None:
@@ -350,7 +467,25 @@ class BaseAgent(Handler):
                 # reject 检测：handler 返回了 __reject__ 标记，终止循环等用户输入
                 if self._pending_reject:
                     self._pending_reject = False
-                    return Response(type=ResponseType.FINISH, message="")
+                    return Response(type=ResponseType.FINISH, message="", plan=self._plan)
+
+        # ── Plan context 注入 ──
+        active_plan = self._get_active_plan()
+        if active_plan and active_plan.id != self._last_injected_plan_id:
+            self._last_injected_plan_id = active_plan.id
+            total = len(self._plan)
+            idx = active_plan.order + 1  # 人类可读序号
+            ctx_msg = f"[PLAN] 当前任务 [{idx}/{total}]: {active_plan.description}"
+            self._history.append(
+                Message(
+                    role=Role.USER,
+                    event_type=EventType.SYSTEM_MESSAGE,
+                    message=ctx_msg,
+                )
+            )
+            logger.debug("[%s] 注入 plan context: %s", agent_name, ctx_msg)
+        elif active_plan is None:
+            self._last_injected_plan_id = None
 
         # ── Step 2: LLM 推理 + 分发（内层 while 仅用于错误恢复）──
         self._format_injected = False
@@ -364,6 +499,7 @@ class BaseAgent(Handler):
                 len(self._history),
             )
             reply = self._llm.chat_pro(self._to_openai(), **self._pro_params)
+            logger.debug("[%s] LLM 原始回复 (%d chars):\n%s", agent_name, len(reply), reply)
 
             # JSON 解析，失败时注入 output_format 让 LLM 自修复
             try:
@@ -372,17 +508,42 @@ class BaseAgent(Handler):
                 logger.warning(
                     "[%s] JSON parse error (round %d): %s", agent_name, self._round_counter, e
                 )
-                logger.debug("[%s] 原始回复:\n%s", agent_name, reply)
                 if not self._format_injected:
                     self._history.append(
                         Message(
-                            role="user",
+                            role=Role.SYSTEM,
                             event_type=EventType.SYSTEM_MESSAGE,
                             message=self._output_format,
                         )
                     )
                     self._format_injected = True
                     logger.debug("[%s] 已注入 output_format 提示", agent_name)
+                continue
+
+            logger.debug(
+                "[%s] 解析结果 — event_type=%s tool=%s msg_len=%d thinking=%s",
+                agent_name,
+                llm_msg.event_type,
+                llm_msg.tool or "-",
+                len(llm_msg.message),
+                "有" if llm_msg.thinking else "无",
+            )
+
+            # message 为 None 视为格式错误（LLM 输出 null），走 retry
+            if llm_msg.message is None:
+                logger.warning(
+                    "[%s] message 为 None (round %d)，注入 output_format 重试",
+                    agent_name, self._round_counter,
+                )
+                if not self._format_injected:
+                    self._history.append(
+                        Message(
+                            role=Role.SYSTEM,
+                            event_type=EventType.SYSTEM_MESSAGE,
+                            message=self._output_format,
+                        )
+                    )
+                    self._format_injected = True
                 continue
 
             self._history.append(llm_msg)
@@ -395,6 +556,7 @@ class BaseAgent(Handler):
                     type=ResponseType.FINISH,
                     message=llm_msg.message,
                     thinking=llm_msg.thinking,
+                    plan=self._plan,
                 )
 
             # TOOL_CALL → 工具调度 (7b–7d)
@@ -408,7 +570,7 @@ class BaseAgent(Handler):
                 available = ", ".join(self._tools.keys())
                 self._history.append(
                     Message(
-                        role="user",
+                        role=Role.SYSTEM,
                         event_type=EventType.SYSTEM_MESSAGE,
                         message=f"未知工具：{tool_name}。可用工具：{available}",
                     )
@@ -428,6 +590,7 @@ class BaseAgent(Handler):
                 ),
                 thinking=llm_msg.thinking,
                 sub_type=EventType.TOOL_CALL,
+                plan=self._plan,
             )
 
         # 安全阀 — 达到最大轮数
@@ -435,6 +598,7 @@ class BaseAgent(Handler):
         return Response(
             type=ResponseType.FINISH,
             message="已达到最大工具调用轮数，流程终止。",
+            plan=self._plan,
         )
 
     # ── memory ─────────────────────────────────────────────
