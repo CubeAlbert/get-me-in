@@ -101,6 +101,13 @@
 - [决策 91 — 工作区工具按权限边界拆分](#决策-91--工作区工具按权限边界拆分)
 - [决策 92 — RAG 查询拆分为 query_memory 和 query_reference_data](#决策-92--rag-查询拆分为-query_memory-和-query_reference_data)
 - [决策 93 — 简历输入三路径 + LLM 判断](#决策-93--简历输入三路径--llm-判断)
+- [决策 94 — 结构化问题模板：collect_info.md + start_resume_building](#决策-94--结构化问题模板collect_infomd--start_resume_building)
+- [决策 95 — Plan 工具标准模式：context variable 访问 Agent](#决策-95--plan-工具标准模式context-variable-访问-agent)
+- [决策 96 — Role 枚举化](#决策-96--role-枚举化)
+- [决策 97 — SYSTEM_MESSAGE role 分类](#决策-97--system_message-role-分类)
+- [决策 98 — list[str] schema 自动生成 items 类型](#决策-98--liststr-schema-自动生成-items-类型)
+- [决策 99 — message=None 走 retry 而非静默兜底](#决策-99--messagenone-走-retry-而非静默兜底)
+- [决策 100 — Sticky plan 阻塞：questionary + Live 终端冲突](#决策-100--sticky-plan-阻塞questionary--live-终端冲突)
 
 ---
 
@@ -2117,3 +2124,133 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 - 独立 Router 判断输入类型 — 过度设计，LLM 原生能力足够
 - 对话式构建纯 LLM 自由发挥 — 可能漏问必填字段，用户体验不一致
+
+---
+
+### 决策 94 — 结构化问题模板：collect_info.md + start_resume_building
+
+**背景：** 对话式构建简历时，用户没有现成简历文件，需要 Agent 逐步询问收集信息（基本信息、技术栈、工作经历、项目经历、其他）。如果让 LLM 自由发挥，可能遗漏必填字段、询问顺序混乱、每次体验不一致。
+
+**决策：**
+- 将问题模板抽为独立文件 `data/prompts/resume/collect_info.md`，定义 5 个 section 各字段的必填/可选状态和提问措辞
+- `start_resume_building` 工具（ResumeAgent 专属）：加载 `collect_info.md` → `create_plan` 创建 5 个有序 plan item → agent loop 逐项推进
+- 每个 plan item IN_PROGRESS 时，system_message 注入对应 section 名，LLM 按模板中预定义的问题逐项询问
+- Plan 机制保证顺序（基本信息 → 技术栈 → 工作经历 → 项目经历 → 其他），模板保证内容完整（必填字段全覆盖）
+
+**理由：**
+- 模板文件与代码分离，调整问题措辞不需要改代码
+- Plan 机制保证执行顺序，不会出现"先问项目经历再问基本信息"的情况
+- 必填/可选标注让 LLM 知道哪些可以跳过，减少不必要的追问
+- 一致的询问体验，不管用户什么时候开始对话式构建
+
+**曾考虑的替代方案：**
+- LLM 自由发挥询问 — 可能遗漏必填字段（如教育经历），每次体验不一致
+- 问题模板硬编码在 Python 代码中 — 调整措辞需改代码，与提示词分离原则相悖
+- `collect_info.md` 放在 `general_agent/` 下 — 这是 ResumeAgent 专属的，不是通用 Agent 提示词
+
+---
+
+### 决策 95 — Plan 工具标准模式：context variable 访问 Agent
+
+**背景：** Plan 工具最初实现在 `BaseAgent._build_plan_tools()` 中，通过闭包捕获 `self` 来访问 Agent 的 `_plan`。这与项目规范（所有工具放在 `src/tools/` 下、通过 `@tool` 装饰器注册）不一致。
+
+**决策：**
+- Plan 工具移至 `src/tools/plan_tools.py`，使用 `@tool` 装饰器注册（与其他工具一致）
+- 通过模块级 context variable `_set_plan_agent()` / `_get_plan_agent()` 让工具 handler 访问当前 Agent 实例
+- `BaseAgent._execute_tool()` 在调用 handler 前设置 context variable，finally 中清理
+- 模式与 UIBridge 的 `_set_bridge()` / `get_bridge()` 完全一致
+
+**理由：**
+- 工具统一管理在 `src/tools/`，不破坏既有架构约定
+- Context variable 是项目已验证的模式（UIBridge），无需引入新机制
+- 闭包方案把工具逻辑耦合在 BaseAgent 中，不符合关注点分离
+
+**曾考虑的替代方案：**
+- 闭包捕获 `self` —— 工具在 BaseAgent 内部，无法被 ToolRegistry 全局管理，违反架构规范
+
+---
+
+### 决策 96 — Role 枚举化
+
+**背景：** `Message.role` 字段此前为 `str` 类型，代码中散布 `role="user"`、`role="system"`、`role="assistant"` 裸字符串。
+
+**决策：** 在 `src/message.py` 新增 `Role(StrEnum)`：`USER = "user"` / `SYSTEM = "system"` / `ASSISTANT = "assistant"`。`Message.role` 类型改为 `Role`，默认 `Role.USER`。所有文件中裸字符串替换为枚举值。
+
+**理由：**
+- `StrEnum` 继承 `str`，JSON 序列化后仍为 `"user"` 等字符串，与 LLM 交互无摩擦
+- IDE 自动补全 + 静态类型检查，拼写错误在编写阶段暴露
+- 与 `EventType(StrEnum)`（决策 56）风格一致
+
+**曾考虑的替代方案：**
+- 保持 `str` + 常量 —— 无类型约束，枚举更安全
+
+---
+
+### 决策 97 — SYSTEM_MESSAGE role 分类
+
+**背景：** 此前所有 `event_type=SYSTEM_MESSAGE` 的消息统一使用 `role="user"`。但系统提示有两类：纠错类（JSON 格式错误、未知工具）和正常上下文类（plan 进度、退出提示）。纠错类应以 system role 发送，让 LLM 明确区分"框架指令"和"用户内容"。
+
+**决策：**
+- 纠错类 SYSTEM_MESSAGE → `Role.SYSTEM`：output_format 格式注入、message=None 修复提示、未知工具列表
+- 正常上下文 SYSTEM_MESSAGE → `Role.USER`：plan 进度注入、`/exit_sub` 退出提示
+- 外层 OpenAI API 消息格式跟随 `Message.role`：`{"role": "system", "content": "..."}`
+
+**理由：**
+- 纠错信息是框架层面的，不应伪装为 user 消息
+- System role 使 LLM 天然区分框架指令和用户输入，降低混淆
+- Plan 上下文和退出提示是业务流程的一部分，保持 user role 更自然
+
+**曾考虑的替代方案：**
+- 所有 SYSTEM_MESSAGE 都改为 `Role.SYSTEM` —— 过度，plan 进度和退出提示不属于框架纠错
+
+---
+
+### 决策 98 — list[str] schema 自动生成 items 类型
+
+**背景：** `_build_arguments_schema()` 对 `list[str]` 类型参数只输出 `"type": "array"`，不包含元素类型信息。LLM 不知道数组元素是 string 还是 object，容易猜错（如将 `["a", "b"]` 误构为 `{"description": ["a", "b"]}`）。
+
+**决策：** `_build_arguments_schema()` 对 `list[X]` 类型（通过 `get_origin` / `get_args` 解析）自动生成 `"items": {"type": "X"}`。仅处理一层（`list[str]` → `items: {type: string}`），不递归处理嵌套泛型。
+
+**理由：**
+- LLM 需要明确知道数组元素类型才能正确构造参数
+- 一层处理覆盖所有当前用例（create_plan 的 `list[str]`）
+- `plan_tools.py` 移除 `from __future__ import annotations` 以确保类型标注在运行时是可解析对象而非字符串
+
+**曾考虑的替代方案：**
+- 在 `input_schema` 中手写 `items` —— 冗余，应自动推断
+- 递归处理嵌套泛型 —— 当前无使用场景，过度设计
+
+---
+
+### 决策 99 — message=None 走 retry 而非静默兜底
+
+**背景：** LLM 偶尔返回 `{"event_type": "finish", "message": null}`，导致 `Markdown(None)` crash。最初考虑在 `from_llm_reply()` 中静默替换为 `""`，但 `message` 是 required 字段，静默兜底掩盖了 LLM 的格式遵从问题。
+
+**决策：** `process()` 中解析成功后检查 `llm_msg.message is None` → 注入 `output_format` 提示 → `continue`（retry）。不修改 `from_llm_reply()` 的逻辑。
+
+**理由：**
+- `message` 是 required 字段，null 视为格式错误
+- 走与 JSON 解析失败相同的 retry 路径，保持错误处理一致性
+- LLM 自修复能力已验证（JSON parse error retry），复用到 message=None 场景
+- App 层加 `response.message or ""` 防御作为安全网
+
+**曾考虑的替代方案：**
+- 在 `from_llm_reply()` 静默替换为 `""` —— 掩盖 LLM 输出质量问题
+
+---
+
+### 决策 100 — Sticky plan 阻塞：questionary + Live 终端冲突
+
+**背景：** 希望实现常显的 plan 面板（Phase 3），使用 `rich.Live` + `Layout` 将终端分为固定 plan 区域和滚动对话区。但 `questionary` 底层使用 `prompt_toolkit` 接管终端输入，与 `rich.Live` 争抢终端控制权。
+
+**决策：** Phase 3 暂缓。保持 Phase 2 方案：在每次 FINISH、PROGRESS 和 questionary 输入前静态重打印 plan 面板。面板在所有项完成后自动隐藏。等后续有充分时间再评估替代方案（如换用 `prompt_toolkit` 原生 layout 或 `textual`）。
+
+**理由：**
+- `rich.Live` 和 `prompt_toolkit` 都直接操作终端 buffer，无法和平共存
+- 频繁重打印在当前使用频率下视觉上可接受
+- 这是 UI 优化，不是功能阻塞，不应拖慢 M5 核心功能
+
+**曾考虑的替代方案：**
+- 换用 `rich.prompt.Prompt` —— 失去 autocomplete 和 `/` 命令补全
+- 换用 `textual` TUI 框架 —— 引入重依赖 + 大量重构
+- 直接用 ANSI escape 手动管理 scroll region —— 脆弱、跨平台兼容性差

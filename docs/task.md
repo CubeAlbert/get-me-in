@@ -272,10 +272,12 @@
 
 ### 2. Plan 机制
 
-- ⬜ **PlanItem + PlanStatus 数据模型** — `PlanStatus(StrEnum)`（PENDING / IN_PROGRESS / COMPLETED / CANCELLED），`PlanItem` dataclass（id / description / status / order）
-- ⬜ **BaseAgent Plan 内部支持** — `_plan: list[PlanItem]`、`_get_active_plan()`、`_create_plan(items)` / `_update_plan_status(id, status)` / `_cancel_all_plans()` 三个内部方法
-- ⬜ **system_message 动态注入** — `process()` 调 LLM 前，有 IN_PROGRESS plan item 时追加 system_message
-- ⬜ **Plan 工具 handler** — `create_plan` / `update_plan_status` / `cancel_all_plans`（全部免审批），tool_call_result 带当前状态（当前 item / 下一项 / 是否全部完成）
+- ✅ **PlanItem + PlanStatus 数据模型** — `PlanStatus(StrEnum)`（PENDING / IN_PROGRESS / COMPLETED / CANCELLED），`PlanItem` dataclass（id / description / status / order）
+- ✅ **BaseAgent Plan 内部支持** — `_plan: list[PlanItem]`、`_get_active_plan()`、`_create_plan(items)` / `_update_plan_status(id, status)` / `_cancel_all_plans()` + `_plan_summary()` / `_activate_next()`
+- ✅ **system_message 动态注入** — `process()` 中每个新 IN_PROGRESS 项注入一次 `[PLAN] 当前任务 [N/M]: ...`，`_last_injected_plan_id` 去重
+- ✅ **Plan 工具 handler** — `src/tools/plan_tools.py`：`create_plan` / `update_plan_status` / `cancel_all_plans`（全部免审批、全 Agent 可见），通过 `_set_plan_agent` / `_get_plan_agent` context variable 访问 Agent 实例
+- ✅ **CLI plan 面板** — `_plan_panel()` 构建 Panel，FINISH/PROGRESS 时渲染；全部项完成后自动隐藏
+- ⏸️ **Sticky plan（Phase 3）** — `questionary`（prompt_toolkit）与 `rich.Live` 终端控制权冲突，暂时用静态重打印替代
 
 ### 3. 数据结构
 

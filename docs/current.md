@@ -1,14 +1,14 @@
 # 当前状态
 
-**当前阶段：** M4 ✅ → M5: 简历 Agent（设计阶段完成）
+**当前阶段：** M5: 简历 Agent（Plan 机制 ✅）
 
-**当前任务：** M5 简历 Agent 实现
+**当前任务：** 通用工具实现
 
-**当前子任务：** Plan 机制实现 → ResumeAgent 实现 → 通用工具实现
+**当前子任务：** workspace_read/search/fs/edit → read_customer_file → query_memory/query_reference_data
 
 **当前阻塞：** 无
 
-**下一步：** 开始实现 Plan 机制（`BaseAgent._plan` + 3 工具），或根据设计文档选择其他优先级
+**下一步：** 实现工作区工具（`workspace_read` + `workspace_search` 免审批先行）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1. 架构采用 Hub-and-Spoke 模式，自研轻量 Agent 框架，不用 LangChain/CrewAI/AutoGen
@@ -105,3 +105,9 @@
 92. **RAG 查询拆分为两个工具** — `query_memory`（MainAgent + 所有子 Agent 可用）和 `query_reference_data`（仅子 Agent，MainAgent 不可用）
 93. **输入方式三路径** — 文件路径（`read_customer_file`）→ 直接内容（dispatch context 传入）→ 对话式构建（`start_resume_building` + `collect_info.md` 模板），初期 LLM 判断，后期 `@path` 语法
 94. **结构化问题模板** — `data/prompts/resume/collect_info.md` + `start_resume_building` 工具（加载模板 → `create_plan`），对话式构建时 LLM 按模板逐项询问，不由 LLM 自由发挥
+95. **Plan 工具标准模式** — Plan 工具放在 `src/tools/plan_tools.py`（与其他工具一致），通过 `_set_plan_agent` / `_get_plan_agent` 模块级 context variable 访问当前 Agent 实例，与 UIBridge 的 `_set_bridge` / `get_bridge` 模式一致
+96. **`Role` 枚举** — `Role(StrEnum)`：USER / SYSTEM / ASSISTANT，替代裸字符串 `"user"` / `"system"` / `"assistant"`
+97. **SYSTEM_MESSAGE role 分类** — 纠错类（output_format 注入、未知工具提示）→ `Role.SYSTEM`；正常上下文（plan 注入、/exit_sub 提示）→ `Role.USER`
+98. **`list[str]` schema 增强** — `_build_arguments_schema` 对 `list[X]` 类型自动生成 `"items": {"type": "X"}`，避免 LLM 猜测数组元素类型
+99. **message=None 走 retry** — LLM 返回 JSON 中 `message` 为 null 时，走与 JSON 解析失败相同的 output_format 注入 + retry 流程
+100. **Sticky plan 阻塞** — `questionary`（prompt_toolkit）与 `rich.Live` 终端控制权冲突，无法实现真正的常显 plan 面板，暂时用每次响应重打印替代

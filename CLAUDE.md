@@ -42,7 +42,7 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 |----|------|------|
 | 基础设施 | 配置模块 (`src/config.py`) | 启动时 `load_dotenv()` + 必填校验 → `SimpleNamespace` 单例；其他模块禁止 `os.environ` |
 | 基础设施 | 日志模块 (`src/logger.py`) | `get_logger(__name__)` 懒加载；`RotatingFileHandler`（10MB×5）→ `data/logs/app.log`；stderr 输出 ERROR+ |
-| 基础设施 | Message 模块 (`src/message.py`) | 数据总线：9 字段（event_type/id/role/timestamp/message/tool/tool_call_id/event_payload/thinking），`EventType(StrEnum)` 枚举 |
+| 基础设施 | Message 模块 (`src/message.py`) | 数据总线：9 字段（event_type/id/role/timestamp/message/tool/tool_call_id/event_payload/thinking）；`Role(StrEnum)`（USER/SYSTEM/ASSISTANT）+ `EventType(StrEnum)` 双枚举 |
 | 基础设施 | 提示词模块 (`src/prompts/`) | `PromptLoader.get()` 强制拼接 `general_agent/` → 替换 14 个占位符；`get_raw()` 跳过拼接 |
 | 基础设施 | LLM 模块 (`src/llm/`) | `get_client()` 双检锁单例；双 tier（`chat_pro`/`chat_flash`）；`**kwargs` 透传；`_thinking_extra_body()` 控制 provider thinking |
 | 基础设施 | RAG 模块 (`src/rag/`) | Chroma + `sentence_transformers`；`search()`/`load()`/`start()`/`is_ready()` 四个公开 API；bi-encoder 召回 → cross-encoder 重排 |
@@ -50,7 +50,7 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 | 基础设施 | UIBridge (`src/cli/uibridge.py`) | 跨线程通信桥：工具 handler（后台线程）调 `select()`/`confirm()` 阻塞等待，主线程 spinner 循环中轮询并渲染 questionary |
 | 基础设施 | Lifecycle 模块 (`src/lifecycle.py`) | `register_shutdown(hook, name)` → `shutdown()` 逆序执行 |
 | 基础设施 | CLI/App 层 (`src/cli/`) | `App`（I/O + 渲染 + 双循环）+ `Handler`（抽象协议）；`Request`/`Response` 为 App↔Agent 协议层，不进对话历史 |
-| Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}` |
+| Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}`；Plan 基础设施（`_plan` + 3 工具 + system_message 注入） |
 | Agent | MainAgent (`src/agents/main_agent.py`) | 路由 Agent：只做意图识别 + 调度子 Agent，不执行领域任务 |
 | Agent | 子 Agent（resume/learning/interview/job_search） | `JobSearchAgent` 为 M4 测试用；其余待实现 |
 | 服务 | 记忆模块 (`src/memory/`) | Facade：`build_memories`/`search_memories`/`delete_memory`；观察者模式（Store → 事件 → Indexer → RAG）解耦；按 Agent 分目录，一文件一条记忆 |
@@ -71,7 +71,10 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 - **工具 handler 返回纯数据** — 返回 `str`/`dict`，由调用方（`BaseAgent._execute_tool()`）包装为 `tool_call_result` Message
 - **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（实际使用 FINISH/PROGRESS；CONFIRM/SELECT 已废弃）
 - **工具审批由 `ConfirmMode` + UIBridge 共同控制** — `_execute_tool()` 根据 `ConfirmMode`（NEVER/ALWAYS/CONFIG）决定是否调 `get_bridge().confirm()` 弹审批窗；特殊交互（如 `provide_choices` 的 `select()`）由 handler 自行调用 UIBridge
-- **`EventType(StrEnum)` 枚举** — 代码中禁止裸字符串，只用 `EventType.USER_INPUT` 等 5 个枚举值
+- **Plan 机制为通用基础设施** — `BaseAgent` 层 3 个免审批工具（`create_plan`/`update_plan_status`/`cancel_all_plans`），`process()` 中动态注入当前 IN_PROGRESS 任务到 system_message；MainAgent plan 全程存活，子 Agent plan 随 return 丢弃
+- **工具访问 Agent 实例用 context variable** — 需访问 `self` 的工具（如 plan 工具）通过模块级 `_set_*()` / `_get_*()` 函数获取当前 Agent 实例，模式与 UIBridge（`_set_bridge`/`get_bridge`）一致
+- **`EventType(StrEnum)` / `Role(StrEnum)` 双枚举** — 代码中禁止裸字符串；`EventType` 5 个值（USER_INPUT/TOOL_CALL/TOOL_CALL_RESULT/FINISH/SYSTEM_MESSAGE），`Role` 3 个值（USER/SYSTEM/ASSISTANT）
+- **SYSTEM_MESSAGE role 分类** — 纠错类（output_format 注入、未知工具提示）→ `Role.SYSTEM`；正常上下文（plan 注入、退出提示）→ `Role.USER`
 - **System prompt 不在 `_history` 中** — 单独 `_system_prompt` 字符串，`_to_openai()` 时以 `{"role": "system", "content": "..."}` 注入
 - **设计/计划文件直接删除，不保留废弃内容** — Git 负责版本追溯
 - **任务终止用 ⛔ 标记** — `docs/task.md` 中废弃任务标 ⛔ 并追加替代任务
