@@ -408,6 +408,7 @@ name = "get-me-in"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "charset-normalizer" },
     { name = "chromadb" },
     { name = "json-repair" },
     { name = "openai" },
@@ -419,6 +420,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "charset-normalizer", specifier = ">=3.4.7" },
     { name = "chromadb", specifier = ">=1.5.9" },
     { name = "json-repair" },
     { name = "openai", specifier = ">=2.43.0" },
