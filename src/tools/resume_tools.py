@@ -7,6 +7,7 @@ from src.agents.registry import RESUME_AGENT_KEY
 from src.config import config
 from src.tools.registry import ConfirmMode, tool
 from src.tools.exceptions import ToolCallException
+from src.tools.workspace_tools import _validate_path
 
 _TEMPLATE_DIR = Path("data/resume/template")
 _PLACEHOLDER_FILE = "PLACEHOLDER.txt"
@@ -107,3 +108,59 @@ def copy_template(template: str, prefix: str, target_dir: str = ".") -> dict:
     files.append(str(Path(rel).relative_to(working_dir)))
 
     return {"files": files, "target_dir": target_dir}
+
+
+@tool(
+    purpose="编译工作区中的 .tex 文件为 PDF。",
+    use_when="简历 LaTeX 文件填充完成后，需要生成 PDF 时",
+    do_not_use_when=".tex 文件不存在 或 pdflatex 环境未安装时",
+    expected_output='{"stdout": "...", "stderr": "...", "exit_code": 0}',
+    input_schema={
+        "path": {
+            "description": "要编译的 .tex 文件相对路径，基于工作区根目录",
+        },
+    },
+    agent=[RESUME_AGENT_KEY],
+    confirm_mode=ConfirmMode.NEVER,
+)
+def build_pdf(path: str) -> dict:
+    full = _validate_path(path)
+    if not full.is_file():
+        raise ToolCallException(
+            f"file not found: {path}",
+            suggestion="用 workspace_list 确认目标路径",
+        )
+    if full.suffix.lower() != ".tex":
+        raise ToolCallException(
+            f"not a .tex file: {path}",
+            suggestion="build_pdf 仅支持 .tex 文件编译",
+        )
+
+    pdflatex = shutil.which("pdflatex")
+    if pdflatex is None:
+        raise ToolCallException(
+            "系统中未找到 pdflatex，无法编译 PDF",
+            suggestion="请安装 TeX Live 或 MiKTeX，确保 pdflatex 在 PATH 中。安装后重新调用 build_pdf",
+        )
+
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [pdflatex, "-synctex=1", "-interaction=nonstopmode", full.name],
+            capture_output=True,
+            text=True,
+            cwd=str(full.parent),
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        raise ToolCallException(
+            "pdflatex 编译超时（60s），可能模板过大或 pdflatex 卡住",
+            suggestion="请检查 .tex 文件是否有死循环或异常大的内容，或手动编译排查问题",
+        ) from None
+
+    return {
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "exit_code": result.returncode,
+    }
