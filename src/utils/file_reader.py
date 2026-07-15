@@ -100,6 +100,59 @@ def list_directory(path: Path) -> dict:
     }
 
 
+def read_pdf(path: Path) -> str:
+    """用 pdfplumber 提取 PDF 纯文本。
+
+    逐页提取，以 ``\\n\\n--- page N ---\\n\\n`` 分隔各页。
+    不 OCR，不恢复排版，不做结构化。
+
+    Returns:
+        str: 提取的纯文本内容。
+
+    Raises:
+        FileNotFoundError: 文件不存在。
+        ValueError: PDF 损坏、加密或提取失败。
+    """
+    import pdfplumber
+
+    try:
+        with pdfplumber.open(path) as pdf:
+            pages = []
+            for i, page in enumerate(pdf.pages, start=1):
+                text = page.extract_text()
+                if text:
+                    pages.append(f"--- page {i} ---\n{text}")
+            return "\n\n".join(pages)
+    except Exception as e:
+        raise ValueError(f"failed to extract text from PDF: {e}") from e
+
+
+def read_docx(path: Path) -> str:
+    """用 python-docx 提取 DOCX 纯文本。
+
+    逐段落提取，段落间以 ``\\n\\n`` 分隔。
+    仅支持 .docx，不支持旧版 .doc。
+
+    Returns:
+        str: 提取的纯文本内容。
+
+    Raises:
+        FileNotFoundError: 文件不存在。
+        ValueError: 不支持 .doc 格式或解析失败。
+    """
+    from docx import Document
+
+    if path.suffix.lower() == ".doc":
+        raise ValueError("不支持 .doc 格式，请用 Word/WPS 另存为 .docx")
+
+    try:
+        doc = Document(str(path))
+        paragraphs = [para.text for para in doc.paragraphs]
+        return "\n\n".join(paragraphs)
+    except Exception as e:
+        raise ValueError(f"failed to extract text from DOCX: {e}") from e
+
+
 def search_text(
     root: Path,
     pattern: str,

@@ -13,7 +13,8 @@ import src.tools.plan_tools    # noqa: F401 — 触发 @tool 注册（plan）
 import src.tools.switch_tools  # noqa: F401 — 触发 @tool 注册（switch）
 import src.tools.system_tool  # noqa: F401 — 触发 @tool 注册
 import src.tools.web_tool        # noqa: F401 — 触发 @tool 注册
-import src.tools.workspace_tools  # noqa: F401 — 触发 @tool 注册（workspace_*）
+import src.tools.workspace_tools     # noqa: F401 — 触发 @tool 注册（workspace_*）
+import src.tools.customer_file_tool  # noqa: F401 — 触发 @tool 注册（read_customer_file）
 
 logger = get_logger(__name__)
 
