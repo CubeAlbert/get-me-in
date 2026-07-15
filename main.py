@@ -3,7 +3,7 @@
 from src.config import config  # noqa: F401  import 即触发 .env 加载和校验
 from src.agents.job_search import JobSearchAgent
 from src.agents.main_agent import MainAgent
-from src.agents.registry import get_agent_registry
+from src.agents.registry import JOB_SEARCH_AGENT_KEY, get_agent_registry
 from src.llm import get_client
 from src.logger import get_logger
 from src.prompts.loader import PromptLoader
@@ -12,7 +12,8 @@ from src.rag import start
 import src.tools.plan_tools    # noqa: F401 — 触发 @tool 注册（plan）
 import src.tools.switch_tools  # noqa: F401 — 触发 @tool 注册（switch）
 import src.tools.system_tool  # noqa: F401 — 触发 @tool 注册
-import src.tools.web_tool     # noqa: F401 — 触发 @tool 注册
+import src.tools.web_tool        # noqa: F401 — 触发 @tool 注册
+import src.tools.workspace_tools  # noqa: F401 — 触发 @tool 注册（workspace_*）
 
 logger = get_logger(__name__)
 
@@ -29,7 +30,7 @@ def main() -> None:
 
     # 注册子 Agent（必须在 MainAgent 实例化前，使其进入 system prompt）
     registry = get_agent_registry()
-    registry.register("job_search", JobSearchAgent(llm, prompts))
+    registry.register(JOB_SEARCH_AGENT_KEY, JobSearchAgent(llm, prompts))
     logger.info("JobSearchAgent 已注册")
 
     handler = MainAgent(llm, prompts)
