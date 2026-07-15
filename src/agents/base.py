@@ -13,6 +13,7 @@ from abc import abstractmethod
 from src.agents.plan import PlanItem, PlanStatus
 from src.cli.handler import Handler
 from src.agents.registry import MAIN_AGENT_KEY
+from src.tools.exceptions import ToolCallException
 from src.cli.uibridge import get_bridge
 from src.config import config
 from src.llm.client import LLMClient
@@ -320,38 +321,42 @@ class BaseAgent(Handler):
         if extra:
             logger.debug("工具 %s 忽略未知参数: %s", tool_name, extra)
 
+        from src.tools.plan_tools import _set_plan_agent
+
         missing = {
             name for name, param in sig.parameters.items()
             if param.default is inspect.Parameter.empty and name not in filtered
         }
         if missing:
-            return Message(
-                role=Role.USER,
-                event_type=EventType.TOOL_CALL_RESULT,
-                tool=tool_name,
-                tool_call_id=tool_call_id,
-                event_payload={
-                    "error": f"缺少必填参数: {', '.join(sorted(missing))}",
-                    "arguments_schema": tool.arguments_schema,
-                },
-            )
-
-        try:
-            from src.tools.plan_tools import _set_plan_agent
-
-            _set_plan_agent(self)
-            try:
-                result = tool.handler(**filtered)
-            finally:
-                _set_plan_agent(None)
-        except Exception as e:
-            logger.error("工具 %s 执行失败: %s", tool_name, e)
             result = {
-                "error": str(e),
-                "tool": tool_name,
+                "error": f"缺少必填参数: {', '.join(sorted(missing))}",
+                "error_code": "ArgumentMissing",
+                "suggestion": "请参考 arguments_schema 补全必填参数后重试",
                 "arguments_schema": tool.arguments_schema,
                 "expected_output": tool.expected_output,
             }
+        else:
+            _set_plan_agent(self)
+            try:
+                result = tool.handler(**filtered)
+            except ToolCallException as e:
+                result = {
+                    "error": e.message,
+                    "error_code": type(e).__name__,
+                    "suggestion": e.suggestion,
+                    "arguments_schema": tool.arguments_schema,
+                    "expected_output": tool.expected_output,
+                }
+            except Exception as e:
+                logger.error("工具 %s 执行失败: %s", tool_name, e)
+                result = {
+                    "error": str(e),
+                    "error_code": type(e).__name__,
+                    "arguments_schema": tool.arguments_schema,
+                    "expected_output": tool.expected_output,
+                }
+            finally:
+                _set_plan_agent(None)
 
         logger.debug(
             "工具 %s 结果 — type=%s preview=%s",
