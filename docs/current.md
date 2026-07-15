@@ -4,11 +4,11 @@
 
 **当前任务：** 通用工具实现
 
-**当前子任务：** `read_customer_file` 或 `query_memory`/`query_reference_data`（RAG），待选择
+**当前子任务：** Resume 数据模型定义
 
 **当前阻塞：** 无
 
-**下一步：** 二选一 — ① 实现 `read_customer_file`（需 pdfplumber + python-docx）② 实现 RAG 查询工具
+**下一步：** 实现 `src/agents/resume/schemas.py` → ResumeAgent 主体 + 专属工具
 
 **参考文档：** `docs/file-reader-design.md` — workspace 工具组 + read_customer_file 完整设计
 
@@ -122,3 +122,4 @@
 108. **workspace 工具限定 ResumeAgent** — 所有 workspace 工具 `agent=[RESUME_AGENT_KEY]`，仅简历定制场景可用
 109. **workspace_list 单层不递归** — Agent 逐层探索工作区，不一次 dump 全部
 110. **workspace_replace 全文字符串替换** — 简单替换不走 search→read→edit 完整流程，降低 LLM 使用门槛
+111. **RAG 查询工具用 StrEnum 校验 filter** — `MemoryType` / `ReferenceCategory` 枚举保证 LLM 传入值与 metadata 约定一致，枚举标注依赖文件

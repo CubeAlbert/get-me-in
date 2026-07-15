@@ -280,7 +280,7 @@
 - ✅ **`workspace_move`** — 工作区文件/目录移动+重命名（默认审批），dst 不覆盖，自动建父目录
 - ✅ **`workspace_edit`** — 工作区文件精确编辑（默认审批），replace+insert_after 批量操作，倒序处理，old_content 校验
 - ✅ **`read_customer_file`** — 外部用户文件读取（免审批，`agent=["*"]`），绝对路径，txt/md/pdf/docx 统一结构化输出
-- ⬜ **`query_memory` + `query_reference_data`** — 封装 RAG 检索
+- ✅ **`query_memory` + `query_reference_data`** — 封装 RAG 检索，`MemoryType` / `ReferenceCategory` StrEnum，filter 校验，隐藏 rerank_score
 
 ### 2. Plan 机制
 

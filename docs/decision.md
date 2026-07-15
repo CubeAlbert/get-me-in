@@ -118,6 +118,7 @@
 - [决策 108 — workspace 工具限定 ResumeAgent](#决策-108--workspace-工具限定-resumeagent)
 - [决策 109 — workspace_list 单层不递归](#决策-109--workspace_list-单层不递归)
 - [决策 110 — workspace_replace 全文字符串替换](#决策-110--workspace_replace-全文字符串替换)
+- [决策 111 — RAG 查询工具用 StrEnum 校验 filter](#决策-111--rag-查询工具用-strenum-校验-filter)
 
 ---
 
@@ -2407,3 +2408,19 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：**
 - 简单替换场景用 replace 即可，不必走 search → read → edit 完整流程
 - 降低 LLM 使用门槛，减少 tool call 次数
+
+---
+
+### 决策 111 — RAG 查询工具用 StrEnum 校验 filter
+
+**背景：** `query_memory` 和 `query_reference_data` 接受 LLM 传入的 filter 参数，需要确保值与 Chroma metadata 约定一致。
+
+**决策：**
+- 定义 `MemoryType(StrEnum)`（FACT / PREFERENCE）和 `ReferenceCategory(StrEnum)`（6 个子目录名）
+- 枚举值标注依赖文件（`MemoryType` → `builder.md` + `schemas.py`；`ReferenceCategory` → `data/reference/` 子目录）
+- LLM 传入无效值时 `ToolCallException` 附带可选值列表
+
+**理由：**
+- 枚举保证 LLM 传入值和 metadata 约定同步
+- 修改枚举时提醒同步更新相关文件
+- 无效值直接反馈给 LLM 让 GAI 自修复
