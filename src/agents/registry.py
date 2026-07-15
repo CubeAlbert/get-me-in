@@ -16,6 +16,11 @@ logger = get_logger(__name__)
 # 主 Agent 的稳定标识符，用于工具过滤和 App 层 agent 切换判断
 MAIN_AGENT_KEY = "main"
 
+# 子 Agent 的稳定标识符
+RESUME_AGENT_KEY = "resume"
+JOB_SEARCH_AGENT_KEY = "job_search"
+INTERVIEW_AGENT_KEY = "interview"
+
 # ---------------------------------------------------------------------------
 # 模块级单例
 # ---------------------------------------------------------------------------

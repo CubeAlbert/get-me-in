@@ -1,6 +1,7 @@
 """JobSearchAgent — 职位搜索分析子 Agent（测试用）。"""
 
 from src.agents.base import BaseAgent
+from src.agents.registry import JOB_SEARCH_AGENT_KEY
 
 
 class JobSearchAgent(BaseAgent):
@@ -10,6 +11,9 @@ class JobSearchAgent(BaseAgent):
     _flash_params: dict = {}
 
     # ── 14 个抽象方法实现 ──────────────────────────────────
+
+    def _get_agent_key(self) -> str:
+        return JOB_SEARCH_AGENT_KEY
 
     def _get_agent_name(self) -> str:
         return "职位搜索分析Agent"
