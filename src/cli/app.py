@@ -93,7 +93,7 @@ class App:
     负责：接收输入 → 委托 Handler → rich 渲染输出。
     """
 
-    _COMMANDS = ["/exit", "/edit", "/ragreload", "/exit_sub"]
+    _COMMANDS = ["/exit", "/edit", "/ragreload", "/exit_sub", "/dump"]
 
     def __init__(self, handler: Handler) -> None:
         self._handler = handler
@@ -229,6 +229,14 @@ class App:
                 self._console.print()
                 continue
 
+            if user_input == "/dump":
+                result = self._handler.dump_history()
+                if result:
+                    self._console.print(f"[dim]history dumped: {result}[/]")
+                else:
+                    self._console.print("[red]dump failed, see log for details[/]")
+                continue
+
             if user_input == "/exit_sub":
                 if self._handler is self._main_agent:
                     self._console.print("[red]当前已是主Agent，/exit_sub 仅在子Agent会话中可用[/]")
@@ -352,5 +360,5 @@ class App:
         self._console.print(
             Panel.fit("[bold green]get-me-in[/] — AI 求职助手")
         )
-        self._console.print("[dim]命令: /edit 长文本输入 | /ragreload [关键词] 重载RAG | /exit 退出[/]")
+        self._console.print("[dim]命令: /edit 长文本输入 | /ragreload 重载RAG | /dump 导出历史 | /exit_sub 退回主Agent | /exit 退出[/]")
         self._console.print()

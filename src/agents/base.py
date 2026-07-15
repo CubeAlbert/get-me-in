@@ -288,6 +288,16 @@ class BaseAgent(Handler):
             messages.append({"role": m.role, "content": m.to_json()})
         return messages
 
+    def dump_history(self) -> str | None:
+        """将当前对话历史 dump 到日志目录，用于调试上下文丢失问题。
+
+        Returns:
+            dump 文件路径，失败返回 None。
+        """
+        from src.utils.dumper import dump_history
+
+        return dump_history(self._get_agent_name(), self._history)
+
     def _execute_tool(self, tool_name: str, payload: dict, tool_call_id: str) -> Message | None:
         """执行工具并返回 tool_call_result Message。
 
