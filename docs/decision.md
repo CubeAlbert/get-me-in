@@ -114,6 +114,10 @@
 - [决策 104 — workspace_edit 批量编辑 + 倒序处理 + old_content 校验](#决策-104--workspace_edit-批量编辑--倒序处理--old_content-校验)
 - [决策 105 — read_customer_file 绝对路径 + 统一输出格式](#决策-105--read_customer_file-绝对路径--统一输出格式)
 - [决策 106 — ToolCallException 统一工具异常](#决策-106--toolcallexception-统一工具异常)
+- [决策 107 — Agent key 常量统一管理](#决策-107--agent-key-常量统一管理)
+- [决策 108 — workspace 工具限定 ResumeAgent](#决策-108--workspace-工具限定-resumeagent)
+- [决策 109 — workspace_list 单层不递归](#决策-109--workspace_list-单层不递归)
+- [决策 110 — workspace_replace 全文字符串替换](#决策-110--workspace_replace-全文字符串替换)
 
 ---
 
@@ -2353,3 +2357,53 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 给 LLM 足够的上下文自修复（当前架构依赖此机制，见决策 46）
 - 统一的异常类型便于 `_execute_tool()` 区分"预期内的工具错误"和"框架 bug"
 - suggestion 字段给 LLM 明确的修复方向
+
+---
+
+### 决策 107 — Agent key 常量统一管理
+
+**背景：** Agent 标识符散落在 main.py、workspace_tools.py 等多处作为裸字符串，修改时容易遗漏。
+
+**决策：** 在 `src/agents/registry.py` 统一管理所有 Agent key 常量：`MAIN_AGENT_KEY = "main"`、`RESUME_AGENT_KEY = "resume"`、`JOB_SEARCH_AGENT_KEY = "job_search"`、`INTERVIEW_AGENT_KEY = "interview"`。所有代码引用常量而非裸字符串。
+
+**理由：**
+- IDE 自动补全 + 静态检查，拼写错误在编译期暴露
+- 新增 Agent 时只需改 registry.py
+- 与 `MAIN_AGENT_KEY`（决策 86）风格一致
+
+---
+
+### 决策 108 — workspace 工具限定 ResumeAgent
+
+**背景：** 工作区文件操作是简历定制的专属能力，不应暴露给路由 Agent（MainAgent）或其他子 Agent。
+
+**决策：** 所有 workspace 工具 `agent=[RESUME_AGENT_KEY]`，仅 ResumeAgent 可见。JobSearchAgent 等其他子 Agent 不可用工作区工具。
+
+**理由：**
+- MainAgent 是路由 Agent（决策 72），不应操作文件
+- 职位搜索 Agent 只需要搜索结果展示，不需文件系统
+- 未来如需给其他 Agent 开放，改 `agent` 列表即可
+
+---
+
+### 决策 109 — workspace_list 单层不递归
+
+**背景：** 设计阶段没有 list 工具。Agent 需要了解工作区结构。
+
+**决策：** 新增 `workspace_list`（免审批，ResumeAgent 专属），单层目录列表不递归。底层 `file_reader.list_directory()`。
+
+**理由：**
+- 递归输出过大，Agent 应当逐层探索而非一次拿到全部
+- 与 `ls` 默认行为一致，直觉
+
+---
+
+### 决策 110 — workspace_replace 全文字符串替换
+
+**背景：** `workspace_edit` 行级精确校验门槛高，LLM 做简单全局替换（如"Python" → "Python 3"）不需要 reads + 逐行 edits。
+
+**决策：** 新增 `workspace_replace`（`ConfirmMode.CONFIG`），全文件匹配字符串并全部替换，返回替换次数。`old_str` 不存在时不报错返回 0。
+
+**理由：**
+- 简单替换场景用 replace 即可，不必走 search → read → edit 完整流程
+- 降低 LLM 使用门槛，减少 tool call 次数

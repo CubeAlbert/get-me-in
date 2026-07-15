@@ -4,11 +4,11 @@
 
 **当前任务：** 通用工具实现
 
-**当前子任务：** ToolCallException — 统一工具异常类
+**当前子任务：** `workspace_replace` + 其他审批工具（write/delete/move/edit）
 
 **当前阻塞：** 无
 
-**下一步：** 完成 ToolCallException 设计 → 实现 `file_reader.py` 底层 → workspace 工具组（read/grep/search_file 免审批先行）
+**下一步：** 实现 `workspace_replace` → `workspace_write` → `workspace_delete` → `workspace_move` → `workspace_edit`
 
 **参考文档：** `docs/file-reader-design.md` — workspace 工具组 + read_customer_file 完整设计
 
@@ -118,4 +118,7 @@
 103. **workspace_read 结构化输出** — `lines: [[int, str]]`（JSON array-of-arrays），行号保持原始行号不受 offset 影响，供 workspace_edit 精确校验
 104. **workspace_edit 批量编辑 + 倒序处理 + old_content 校验** — replace + insert_after 合并为一个工具，old_content 行号+内容双重匹配，倒序处理避免行号漂移，全量或全不原子性
 105. **read_customer_file 绝对路径 + 统一输出格式** — 所有格式（txt/md/pdf/docx）统一输出 `lines: [[num, str]]`，PDF/DOCX 提取后按 `\n` 拆分；仅支持 .docx 不支持 .doc；不做 OCR
-106. **ToolCallException 统一工具异常** — 替代裸 ValueError/FileNotFoundError，含 message + suggestion 让 LLM 自修复
+107. **Agent key 常量统一管理** — `MAIN_AGENT_KEY` / `RESUME_AGENT_KEY` / `JOB_SEARCH_AGENT_KEY` / `INTERVIEW_AGENT_KEY` 在 registry.py 统一定义，代码引用常量
+108. **workspace 工具限定 ResumeAgent** — 所有 workspace 工具 `agent=[RESUME_AGENT_KEY]`，仅简历定制场景可用
+109. **workspace_list 单层不递归** — Agent 逐层探索工作区，不一次 dump 全部
+110. **workspace_replace 全文字符串替换** — 简单替换不走 search→read→edit 完整流程，降低 LLM 使用门槛

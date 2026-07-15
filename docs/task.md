@@ -264,19 +264,23 @@
 
 ### 1. 通用工具实现
 
-- 🔄 **通用工具设计讨论** — `workspace_read` / `workspace_grep` / `workspace_search_file` / `workspace_write` / `workspace_delete` / `workspace_move` / `workspace_edit` / `read_customer_file` / `ToolCallException` 设计完成，详见 `docs/file-reader-design.md`
-- 🔄 **`ToolCallException`** — 统一工具异常类，替代裸 `ValueError`/`FileNotFoundError`，附带 LLM 可理解的上下文和建议
-- ⬜ **`file_reader.py` 底层** — `read_text` / `read_pdf` / `read_docx` / `search_text` 纯函数
-- ⬜ **沙箱校验** — 相对路径 `resolve()` 校验公共函数，复用于所有 workspace 工具
-- ⬜ **`workspace_read`** — 工作区文本文件读取（免审批），`lines: [[num, str]]` 结构化输出
-- ⬜ **`workspace_grep`** — 工作区文件内容搜索（免审批），结构化输出对齐 `workspace_read`
-- ⬜ **`workspace_search_file`** — 工作区文件名搜索（免审批），fnmatch glob，返回相对路径列表
+- ✅ **通用工具设计讨论** — `workspace_read` / `workspace_grep` / `workspace_search_file` / `workspace_list` / `workspace_write` / `workspace_delete` / `workspace_move` / `workspace_replace` / `workspace_edit` / `read_customer_file` / `ToolCallException` 设计完成，详见 `docs/file-reader-design.md`
+- ✅ **`ToolCallException`** — `src/tools/exceptions.py`，`message` + `suggestion`，`_execute_tool()` 框架填充 `arguments_schema` + `expected_output`
+- ✅ **`file_reader.py` 底层** — `read_text` / `list_directory` / `search_text`（`read_pdf` / `read_docx` 留待 `read_customer_file`）
+- ✅ **沙箱校验** — `_validate_path()` 函数，相对路径 `resolve()` 必须在 `WORKING_DIR` 下
+- ✅ **Agent key 常量** — `MAIN_AGENT_KEY` / `RESUME_AGENT_KEY` / `JOB_SEARCH_AGENT_KEY` / `INTERVIEW_AGENT_KEY` 在 `registry.py` 统一定义
+- ✅ **JobSearchAgent key 修复** — 新增 `_get_agent_key()` 返回 `JOB_SEARCH_AGENT_KEY`，修复中文名与注册 key 不一致
+- ✅ **`workspace_read`** — 工作区文本文件读取（免审批，`agent=[RESUME_AGENT_KEY]`），`lines: [[num, str]]` 结构化输出
+- ✅ **`workspace_list`** — 工作区目录列表（免审批，`agent=[RESUME_AGENT_KEY]`），单层不递归
+- ✅ **`workspace_grep`** — 工作区文件内容搜索（免审批，`agent=[RESUME_AGENT_KEY]`），结构化输出对齐 `workspace_read`
+- ✅ **`workspace_search_file`** — 工作区文件名搜索（免审批，`agent=[RESUME_AGENT_KEY]`），fnmatch glob，返回相对路径列表
+- 🔄 **`workspace_replace`** — 工作区文件字符串全量替换（默认审批），所有出现处替换，返回替换次数
 - ⬜ **`workspace_write`** — 工作区文件新建（默认审批），不覆盖已存在文件，自动建父目录
 - ⬜ **`workspace_delete`** — 工作区文件/空目录删除（默认审批），非空目录报错
 - ⬜ **`workspace_move`** — 工作区文件/目录移动+重命名（默认审批），dst 不覆盖，自动建父目录
 - ⬜ **`workspace_edit`** — 工作区文件精确编辑（默认审批），replace+insert_after 批量操作，倒序处理，old_content 校验
 - ⬜ **`read_customer_file`** — 外部用户文件读取（免审批，`agent=["*"]`），绝对路径，txt/md/pdf/docx 统一结构化输出
-- ⬜ **`query_memory` + `query_reference_data`** — 封装 RAG 检索：`query_memory`（MainAgent + 所有子 Agent 可用），`query_reference_data`（仅子 Agent，MainAgent 不可用）
+- ⬜ **`query_memory` + `query_reference_data`** — 封装 RAG 检索
 
 ### 2. Plan 机制
 
