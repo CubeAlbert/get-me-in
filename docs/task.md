@@ -274,11 +274,11 @@
 - ✅ **`workspace_list`** — 工作区目录列表（免审批，`agent=[RESUME_AGENT_KEY]`），单层不递归
 - ✅ **`workspace_grep`** — 工作区文件内容搜索（免审批，`agent=[RESUME_AGENT_KEY]`），结构化输出对齐 `workspace_read`
 - ✅ **`workspace_search_file`** — 工作区文件名搜索（免审批，`agent=[RESUME_AGENT_KEY]`），fnmatch glob，返回相对路径列表
-- 🔄 **`workspace_replace`** — 工作区文件字符串全量替换（默认审批），所有出现处替换，返回替换次数
-- ⬜ **`workspace_write`** — 工作区文件新建（默认审批），不覆盖已存在文件，自动建父目录
-- ⬜ **`workspace_delete`** — 工作区文件/空目录删除（默认审批），非空目录报错
-- ⬜ **`workspace_move`** — 工作区文件/目录移动+重命名（默认审批），dst 不覆盖，自动建父目录
-- ⬜ **`workspace_edit`** — 工作区文件精确编辑（默认审批），replace+insert_after 批量操作，倒序处理，old_content 校验
+- ✅ **`workspace_replace`** — 工作区文件字符串全量替换（默认审批），所有出现处替换，返回替换次数
+- ✅ **`workspace_write`** — 工作区文件新建（默认审批），不覆盖已存在文件，自动建父目录
+- ✅ **`workspace_delete`** — 工作区文件/空目录删除（默认审批），非空目录报错
+- ✅ **`workspace_move`** — 工作区文件/目录移动+重命名（默认审批），dst 不覆盖，自动建父目录
+- ✅ **`workspace_edit`** — 工作区文件精确编辑（默认审批），replace+insert_after 批量操作，倒序处理，old_content 校验
 - ⬜ **`read_customer_file`** — 外部用户文件读取（免审批，`agent=["*"]`），绝对路径，txt/md/pdf/docx 统一结构化输出
 - ⬜ **`query_memory` + `query_reference_data`** — 封装 RAG 检索
 

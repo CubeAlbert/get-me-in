@@ -4,11 +4,11 @@
 
 **当前任务：** 通用工具实现
 
-**当前子任务：** `workspace_replace` + 其他审批工具（write/delete/move/edit）
+**当前子任务：** `read_customer_file` 或 `query_memory`/`query_reference_data`（RAG），待选择
 
 **当前阻塞：** 无
 
-**下一步：** 实现 `workspace_replace` → `workspace_write` → `workspace_delete` → `workspace_move` → `workspace_edit`
+**下一步：** 二选一 — ① 实现 `read_customer_file`（需 pdfplumber + python-docx）② 实现 RAG 查询工具
 
 **参考文档：** `docs/file-reader-design.md` — workspace 工具组 + read_customer_file 完整设计
 
