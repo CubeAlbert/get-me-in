@@ -39,7 +39,7 @@ JSON — 对话历史中每条消息均为一个 JSON 对象
     },
     "event_payload": {
       "type": ["object", "null"],
-      "description": "工具调用结果，仅 tool_call_result 时填写"
+      "description": "工具调用结果：正常时为工具返回的结构化数据；错误时为 {error, error_code, suggestion?, arguments_schema, expected_output}"
     }
   },
   "required": ["id", "role", "timestamp", "event_type", "message"]
@@ -48,7 +48,7 @@ JSON — 对话历史中每条消息均为一个 JSON 对象
 
 <EventTypes>
 - `user_input` — 用户输入
-- `tool_call_result` — 工具调用结果（系统注入）。`tool` 和 `tool_call_id` 标识来源工具调用，`event_payload` 为工具返回的结构化数据，`message` 可能为空或包含 stdout。
+- `tool_call_result` — 工具调用结果（系统注入）。`tool` 和 `tool_call_id` 标识来源工具调用。`event_payload` 正常时为工具返回的结构化数据；工具执行失败时格式为 `{"error": "<错误描述>", "error_code": "<异常类型名>", "suggestion": "<修复建议|null>", "arguments_schema": "<工具参数schema>", "expected_output": "<期望输出格式>"}`。收到错误后应先用 suggestion 和 arguments_schema 修复参数后重试，不要重复构造相同的错误调用。`message` 可能为空或包含 stdout。
 - `system_message` — 系统提示/错误恢复
 </EventTypes>
 
