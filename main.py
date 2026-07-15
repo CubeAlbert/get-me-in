@@ -16,6 +16,7 @@ import src.tools.web_tool        # noqa: F401 — 触发 @tool 注册
 import src.tools.workspace_tools     # noqa: F401 — 触发 @tool 注册（workspace_*）
 import src.tools.customer_file_tool  # noqa: F401 — 触发 @tool 注册（read_customer_file）
 import src.tools.rag_tools           # noqa: F401 — 触发 @tool 注册（query_memory / query_reference_data）
+import src.tools.resume_tools        # noqa: F401 — 触发 @tool 注册（copy_template）
 
 logger = get_logger(__name__)
 
