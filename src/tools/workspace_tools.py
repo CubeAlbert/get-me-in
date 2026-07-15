@@ -331,13 +331,13 @@ def workspace_move(src: str, dst: str) -> dict:
 
 @tool(
     purpose=(
-        "精确编辑工作区文件中的指定行。支持 replace（替换当行）和 insert_after（行后插入），"
+        "精确编辑工作区文件中的指定行。用新内容替换指定行（content 可含 \\n 实现多行插入/替换），"
         "可一次提交多行编辑。系统内部按行号降序处理，所有编辑引用修改前的原始行号。"
-        "old_content 必须与当前行内容完全一致（line=0 且 insert_after 时除外），任何一条校验失败全部回滚。"
+        "old_content 必须与当前行内容完全一致，任何一条校验失败全部回滚。"
     ),
-    use_when="需要精确修改文件的特定行时 — 必须先调 workspace_read 获取精确的行号和内容",
+    use_when="需要精确修改文件的特定行、插入新行、删除行时 — 必须先调 workspace_read 获取精确的行号和内容",
     do_not_use_when="简单字符串替换用 workspace_replace；新建文件用 workspace_write",
-    expected_output='{"path": "...", "edits_applied": N, "edits": [{"action": "...", "line": N, "status": "applied"}]}',
+    expected_output='{"path": "...", "edits_applied": N, "edits": [{"line": N, "status": "applied"}]}',
     input_schema={
         "path": {
             "description": "要编辑的文件相对路径",
@@ -345,11 +345,15 @@ def workspace_move(src: str, dst: str) -> dict:
         "edits": {
             "description": (
                 "编辑操作列表，按原始行号引用（任意顺序均可），系统自动从高行号到低行号倒序处理。\n"
-                "每个条目包含：\n"
-                "  action: 'replace'（替换该行）| 'insert_after'（该行后插入）\n"
-                "  line: 行号（1-indexed）；insert_after 时 0=文件开头\n"
-                "  old_content: 当前行内容（精确校验）；line=0 + insert_after 时不校验\n"
-                "  content: replace→新行内容；insert_after→插入内容（\\n 分隔多行）"
+                "每个条目包含 {line, old_content, content}：\n"
+                "  line: 行号（1-indexed），必须 ≥1\n"
+                "  old_content: 当前行内容（精确校验，必须完全一致）\n"
+                "  content: 替换后的新内容，可含 \\n 分隔多行（\"\" 表示删除该行）\n\n"
+                "示例：\n"
+                '  在第 1 行前插入: line=1, old_content="原第1行", content="新行\\n原第1行"\n'
+                '  在第 3 行后插入: line=3, old_content="原第3行", content="原第3行\\n新行"\n'
+                '  替换单行: line=2, old_content="old", content="new"\n'
+                '  删除行: line=4, old_content="要删的行", content=""'
             ),
         },
     },
@@ -370,59 +374,31 @@ def workspace_edit(path: str, edits: list) -> dict:
     lines = original.split("\n")
 
     # 按行号降序排列，从后往前处理避免行号漂移
-    sorted_edits = sorted(edits, key=lambda e: e.get("line", 0), reverse=True)
+    sorted_edits = sorted(edits, key=lambda e: -e.get("line", 0))
     results: list[dict] = []
 
     for edit in sorted_edits:
-        action = edit.get("action", "")
         line = edit.get("line", 0)
         old_content = edit.get("old_content", "")
         content = edit.get("content", "")
 
-        if action == "replace":
-            if line < 1 or line > len(lines):
-                raise ToolCallException(
-                    f"replace: line {line} out of range (1..{len(lines)})",
-                    suggestion="用 workspace_read 确认有效行号",
-                )
-            actual = lines[line - 1]
-            if actual != old_content:
-                raise ToolCallException(
-                    f"line {line} content mismatch: expected {old_content!r} got {actual!r}",
-                    suggestion=f"用 workspace_read offset={line} limit=1 获取该行准确内容后重试",
-                )
-            lines[line - 1] = content
-            results.append({"action": "replace", "line": line, "status": "applied"})
-
-        elif action == "insert_after":
-            if line == 0:
-                # 插入文件开头，不校验 old_content
-                insert_lines = content.split("\n")
-                for i in reversed(range(len(insert_lines))):
-                    lines.insert(0, insert_lines[i])
-                results.append({"action": "insert_after", "line": 0, "status": "applied"})
-            else:
-                if line < 1 or line > len(lines):
-                    raise ToolCallException(
-                        f"insert_after: line {line} out of range (1..{len(lines)})",
-                        suggestion="用 workspace_read 确认有效行号",
-                    )
-                actual = lines[line - 1]
-                if actual != old_content:
-                    raise ToolCallException(
-                        f"line {line} content mismatch: expected {old_content!r} got {actual!r}",
-                        suggestion=f"用 workspace_read offset={line} limit=1 获取该行准确内容后重试",
-                    )
-                insert_lines = content.split("\n")
-                for i in reversed(range(len(insert_lines))):
-                    lines.insert(line, insert_lines[i])
-                results.append({"action": "insert_after", "line": line, "status": "applied"})
-
-        else:
+        if line < 1 or line > len(lines):
             raise ToolCallException(
-                f"unknown action: {action}",
-                suggestion="action 只支持 'replace' 或 'insert_after'",
+                f"line {line} out of range (1..{len(lines)})",
+                suggestion="用 workspace_read 确认有效行号",
             )
+
+        actual = lines[line - 1]
+        if actual != old_content:
+            raise ToolCallException(
+                f"line {line} content mismatch: expected {old_content!r} got {actual!r}",
+                suggestion=f"用 workspace_read offset={line} limit=1 获取该行准确内容后重试",
+            )
+
+        # 替换该行：content 按 \n 拆分为多行，空 content = 删除该行
+        new_lines = content.split("\n") if content else []
+        lines[line - 1 : line] = new_lines
+        results.append({"line": line, "status": "applied"})
 
     # 写回文件
     full.write_text("\n".join(lines), encoding="utf-8", newline="")
