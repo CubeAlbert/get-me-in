@@ -2,8 +2,9 @@
 
 from src.config import config  # noqa: F401  import 即触发 .env 加载和校验
 from src.agents.job_search import JobSearchAgent
+from src.agents.resume.agent import ResumeAgent
 from src.agents.main_agent import MainAgent
-from src.agents.registry import JOB_SEARCH_AGENT_KEY, get_agent_registry
+from src.agents.registry import JOB_SEARCH_AGENT_KEY, RESUME_AGENT_KEY, get_agent_registry
 from src.llm import get_client
 from src.logger import get_logger
 from src.prompts.loader import PromptLoader
@@ -35,6 +36,8 @@ def main() -> None:
     registry = get_agent_registry()
     registry.register(JOB_SEARCH_AGENT_KEY, JobSearchAgent(llm, prompts))
     logger.info("JobSearchAgent 已注册")
+    registry.register(RESUME_AGENT_KEY, ResumeAgent(llm, prompts))
+    logger.info("ResumeAgent 已注册")
 
     handler = MainAgent(llm, prompts)
     logger.info("MainAgent 初始化完成")
