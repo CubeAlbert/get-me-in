@@ -83,17 +83,30 @@
 
 ### 里程碑 5 —— 简历 Agent
 
-- **预期产出：** 通用 Plan 基础设施 + 工作区工具集 + 简历 Agent（分析/定制/对话式构建/LaTeX 输出）
+- **预期产出：** 通用 Plan 基础设施 + 工作区工具集 + 简历 Agent
 - **验收标准：**
-  - Plan 机制就绪：BaseAgent 层 `create_plan` / `update_plan_status` / `cancel_all_plans` 3 工具，system_message 动态注入
-  - 工作区工具就绪：`workspace_read/search/fs/edit` + `read_customer_file`（txt/md/docx/pdf）
-  - RAG 查询工具就绪：`query_memory` + `query_reference_data`
-  - 简历数据模型：`Resume` → `BasicInfo` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo`
-  - 三路径输入：文件路径（`read_customer_file`）/ 直接内容（dispatch context）/ 对话式构建（`start_resume_building` + `collect_info.md`）
-  - Plan → Execute 处理：Parse → Plan（`plan_resume_edits` + 用户确认）→ Execute（agent loop 推进 plan）→ Generate（LaTeX 动态构建 + `build_pdf`）
-  - LaTeX 输出：样式参考 `data/resume/template/` + 数据驱动动态构建 + `pdflatex` 编译 PDF
-  - 记忆集成：简历版本写入记忆模块 + 从记忆检索历史简历
-- **前置依赖：** 里程碑 4（BaseAgent + tool 系统 + UIBridge + switch 机制）
+  - ✅ Plan 机制就绪
+  - ✅ 工作区工具就绪（10 个）：`workspace_read/list/grep/search_file/replace/write/delete/move/edit/open`
+  - ✅ RAG 查询工具就绪：`query_memory` + `query_reference_data`
+  - ✅ 简历数据模型：`Resume` → `BasicInfo` / `Education` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo`
+  - ✅ `read_customer_file`（txt/md/pdf/docx）
+  - ✅ `copy_template` + `build_pdf`
+  - ✅ `ToolCallException` 统一异常
+  - ✅ ResumeAgent 壳（14 占位符 + 已注册）
+  - ✅ History dump（`/dump` 命令）
+  - 📌 三路径输入 → 暂缓：改为 LLM 用 workspace 工具直接编辑 LaTeX
+  - 📌 记忆集成 → 之后实现
+- **前置依赖：** 里程碑 4
+
+### 里程碑 5-Review —— 工具与提示词审查
+
+- **预期产出：** 逐一 review 所有工具与 Agent 提示词，确保 LLM 能正确理解和使用
+- **验收标准：**
+  - 工具 schema（purpose / use_when / do_not_use_when / input_schema / expected_output）完整且准确
+  - ToolCallException 覆盖到位（error message + suggestion 对 LLM 有指导性）
+  - Agent 提示词与实际可用工具一致
+  - 工具间协作流程清晰（read → edit → build_pdf → open）
+- **前置依赖：** 里程碑 5 工具实现完成
 
 ### 里程碑 6 —— 学习 Agent
 

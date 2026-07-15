@@ -262,50 +262,56 @@
 
 ## 阶段 5 —— M5: 简历 Agent
 
-### 1. 通用工具实现
+### 1. 通用工具实现（✅ 完成）
 
-- ✅ **通用工具设计讨论** — `workspace_read` / `workspace_grep` / `workspace_search_file` / `workspace_list` / `workspace_write` / `workspace_delete` / `workspace_move` / `workspace_replace` / `workspace_edit` / `read_customer_file` / `ToolCallException` 设计完成，详见 `docs/file-reader-design.md`
-- ✅ **`ToolCallException`** — `src/tools/exceptions.py`，`message` + `suggestion`，`_execute_tool()` 框架填充 `arguments_schema` + `expected_output`
-- ✅ **`file_reader.py` 底层** — `read_text` / `list_directory` / `search_text`（`read_pdf` / `read_docx` 留待 `read_customer_file`）
-- ✅ **沙箱校验** — `_validate_path()` 函数，相对路径 `resolve()` 必须在 `WORKING_DIR` 下
-- ✅ **Agent key 常量** — `MAIN_AGENT_KEY` / `RESUME_AGENT_KEY` / `JOB_SEARCH_AGENT_KEY` / `INTERVIEW_AGENT_KEY` 在 `registry.py` 统一定义
-- ✅ **JobSearchAgent key 修复** — 新增 `_get_agent_key()` 返回 `JOB_SEARCH_AGENT_KEY`，修复中文名与注册 key 不一致
-- ✅ **`workspace_read`** — 工作区文本文件读取（免审批，`agent=[RESUME_AGENT_KEY]`），`lines: [[num, str]]` 结构化输出
-- ✅ **`workspace_list`** — 工作区目录列表（免审批，`agent=[RESUME_AGENT_KEY]`），单层不递归
-- ✅ **`workspace_grep`** — 工作区文件内容搜索（免审批，`agent=[RESUME_AGENT_KEY]`），结构化输出对齐 `workspace_read`
-- ✅ **`workspace_search_file`** — 工作区文件名搜索（免审批，`agent=[RESUME_AGENT_KEY]`），fnmatch glob，返回相对路径列表
-- ✅ **`workspace_replace`** — 工作区文件字符串全量替换（默认审批），所有出现处替换，返回替换次数
-- ✅ **`workspace_write`** — 工作区文件新建（默认审批），不覆盖已存在文件，自动建父目录
-- ✅ **`workspace_delete`** — 工作区文件/空目录删除（默认审批），非空目录报错
-- ✅ **`workspace_move`** — 工作区文件/目录移动+重命名（默认审批），dst 不覆盖，自动建父目录
-- ✅ **`workspace_edit`** — 工作区文件精确编辑（默认审批），replace+insert_after 批量操作，倒序处理，old_content 校验
-- ✅ **`read_customer_file`** — 外部用户文件读取（免审批，`agent=["*"]`），绝对路径，txt/md/pdf/docx 统一结构化输出
-- ✅ **`query_memory` + `query_reference_data`** — 封装 RAG 检索，`MemoryType` / `ReferenceCategory` StrEnum，filter 校验，隐藏 rerank_score
+- ✅ **通用工具设计讨论** — 详见 `docs/file-reader-design.md`
+- ✅ **`ToolCallException`** — `src/tools/exceptions.py`，`message` + `suggestion`
+- ✅ **`file_reader.py` 底层** — `read_text` / `list_directory` / `search_text` / `read_pdf` / `read_docx`
+- ✅ **沙箱校验** — `_validate_path()` 函数
+- ✅ **Agent key 常量** — `MAIN_AGENT_KEY` / `RESUME_AGENT_KEY` / `JOB_SEARCH_AGENT_KEY` / `INTERVIEW_AGENT_KEY`
+- ✅ **JobSearchAgent key 修复** — `_get_agent_key()` 返回 `JOB_SEARCH_AGENT_KEY`
+- ✅ **`workspace_read` / `workspace_list` / `workspace_grep` / `workspace_search_file`** — 4 个免审批读工具
+- ✅ **`workspace_replace` / `workspace_write` / `workspace_delete` / `workspace_move` / `workspace_edit`** — 5 个审批写工具
+- ✅ **`workspace_open`** — 系统默认工具打开文件
+- ✅ **`read_customer_file`** — 外部文件读取（txt/md/pdf/docx）
+- ✅ **`query_memory` + `query_reference_data`** — RAG 查询，`MemoryType` / `ReferenceCategory` StrEnum
+- ✅ **History dump** — `src/utils/dumper.py` + `BaseAgent.dump_history()` + `/dump` CLI 命令
+- ✅ **`copy_template`** — 复制 LaTeX 模板到工作区，`src/tools/resume_tools.py`
+- ✅ **`build_pdf`** — `pdflatex` 编译，60s timeout，`src/tools/resume_tools.py`
+- ✅ **ResumeAgent 壳** — `src/agents/resume/agent.py`，14 占位符，已注册到 main.py
+- ✅ **依赖** — `charset-normalizer` / `pdfplumber` / `python-docx`
 
-### 2. Plan 机制
+### 2. Plan 机制（✅ 完成）
 
-- ✅ **PlanItem + PlanStatus 数据模型** — `PlanStatus(StrEnum)`（PENDING / IN_PROGRESS / COMPLETED / CANCELLED），`PlanItem` dataclass（id / description / status / order）
-- ✅ **BaseAgent Plan 内部支持** — `_plan: list[PlanItem]`、`_get_active_plan()`、`_create_plan(items)` / `_update_plan_status(id, status)` / `_cancel_all_plans()` + `_plan_summary()` / `_activate_next()`
-- ✅ **system_message 动态注入** — `process()` 中每个新 IN_PROGRESS 项注入一次 `[PLAN] 当前任务 [N/M]: ...`，`_last_injected_plan_id` 去重
-- ✅ **Plan 工具 handler** — `src/tools/plan_tools.py`：`create_plan` / `update_plan_status` / `cancel_all_plans`（全部免审批、全 Agent 可见），通过 `_set_plan_agent` / `_get_plan_agent` context variable 访问 Agent 实例
-- ✅ **CLI plan 面板** — `_plan_panel()` 构建 Panel，FINISH/PROGRESS 时渲染；全部项完成后自动隐藏
-- ⏸️ **Sticky plan（Phase 3）** — `questionary`（prompt_toolkit）与 `rich.Live` 终端控制权冲突，暂时用静态重打印替代
+- ✅ **PlanItem + PlanStatus 数据模型**
+- ✅ **BaseAgent Plan 内部支持**
+- ✅ **system_message 动态注入**
+- ✅ **Plan 工具 handler**
+- ✅ **CLI plan 面板**
+- ⏸️ **Sticky plan（Phase 3）** — `questionary` 与 `rich.Live` 终端冲突
 
 ### 3. 数据结构
 
-- ⬜ **Resume 数据模型** — `src/agents/resume/schemas.py`：`BasicInfo` / `Education` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo` / `Resume`
+- ✅ **Resume 数据模型** — `src/agents/resume/schemas.py`：`BasicInfo` / `Education` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo` / `Resume`
+- 📌 **Schema-based 填充工具** — 暂不实现，改为 LLM 用 workspace 工具直接编辑 LaTeX
 
 ### 4. ResumeAgent 实现
 
-- ⬜ **ResumeAgent(BaseAgent)** — 14 占位符 + 专属工具注册（`copy_template` / `build_pdf` / `start_resume_building` / `plan_resume_edits`）
-- ⬜ **copy_template 工具** — 复制 `data/resume/template/` 下的 LaTeX 模板到工作区，默认审批
-- ⬜ **build_pdf 工具** — `pdflatex -synctex=1 -interaction=nonstopmode`，免审批，环境检测留待编码阶段
-- ⬜ **start_resume_building 工具** — 加载 `collect_info.md` → `create_plan` → agent loop 逐项收集
-- ⬜ **plan_resume_edits 工具** — 分析简历 + JD → LLM 生成修改计划 → UIBridge 确认 → `create_plan`
-- ⬜ **LaTeX 动态构建** — 根据 Resume 数据模型 + 样式参考模板动态生成 LaTeX 源码
-- ⬜ **Agent 注册** — `main.py` 注册 ResumeAgent → AgentRegistry
+- ✅ **ResumeAgent(BaseAgent)** — 14 占位符，已注册
+- ✅ **copy_template 工具** — 复制模板到工作区
+- ✅ **build_pdf 工具** — pdflatex 编译 PDF
+- 📌 **start_resume_building 工具** — 暂不实现（LLM 直接操作 LaTeX）
+- 📌 **plan_resume_edits 工具** — 暂不实现（LLM 直接操作 LaTeX）
+- 📌 **LaTeX 动态构建** — 暂不实现
 
 ### 5. 记忆集成
 
-- ⬜ 简历版本写入记忆模块
-- ⬜ 从记忆检索历史简历
+- ⬜ 简历版本写入记忆模块 — 之后实现
+- ⬜ 从记忆检索历史简历 — 之后实现
+
+### 6. M5-Review — 工具与提示词审查
+
+- 🔄 **Review workspace 工具** — 逐一审查 10 个 workspace 工具 schema / prompt / 异常处理
+- ⬜ **Review resume 工具** — `copy_template` / `build_pdf`
+- ⬜ **Review RAG 工具** — `query_memory` / `query_reference_data`
+- ⬜ **Review Agent 提示词** — ResumeAgent + MainAgent prompt 与实际工具一致性

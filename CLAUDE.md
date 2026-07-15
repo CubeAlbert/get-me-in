@@ -15,6 +15,13 @@ uv add <pkg> / uv remove <pkg> # 添加/移除依赖
 uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab  # 交互式调试
 ```
 
+CLI 命令：
+- `/edit` — 长文本输入（调 `$EDITOR`）
+- `/ragreload [关键词]` — 重载 RAG 索引
+- `/dump` — 导出当前 Agent 对话历史到 `data/logs/`
+- `/exit_sub` — 子 Agent 退回主 Agent
+- `/exit` — 退出程序
+
 ## Workflow
 
 本项目遵循 **Plan → Execute → Result Validation → Replan** 循环。
@@ -46,16 +53,39 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 | 基础设施 | 提示词模块 (`src/prompts/`) | `PromptLoader.get()` 强制拼接 `general_agent/` → 替换 14 个占位符；`get_raw()` 跳过拼接 |
 | 基础设施 | LLM 模块 (`src/llm/`) | `get_client()` 双检锁单例；双 tier（`chat_pro`/`chat_flash`）；`**kwargs` 透传；`_thinking_extra_body()` 控制 provider thinking |
 | 基础设施 | RAG 模块 (`src/rag/`) | Chroma + `sentence_transformers`；`search()`/`load()`/`start()`/`is_ready()` 四个公开 API；bi-encoder 召回 → cross-encoder 重排 |
-| 基础设施 | Tool 系统 (`src/tools/`) | `@tool` 装饰器注册 → `ToolRegistry` 全局管理；`input_schema` 扁平化，type/required 自动推断；handler 通过 `UIBridge`（`src/cli/uibridge.py`）直连 CLI 交互 |
+| 基础设施 | Tool 系统 (`src/tools/`) | `@tool` 装饰器注册 → `ToolRegistry` 全局管理；`input_schema` 扁平化，type/required 自动推断；`ToolCallException` 统一异常；handler 通过 `UIBridge`（`src/cli/uibridge.py`）直连 CLI 交互 |
 | 基础设施 | UIBridge (`src/cli/uibridge.py`) | 跨线程通信桥：工具 handler（后台线程）调 `select()`/`confirm()` 阻塞等待，主线程 spinner 循环中轮询并渲染 questionary |
 | 基础设施 | Lifecycle 模块 (`src/lifecycle.py`) | `register_shutdown(hook, name)` → `shutdown()` 逆序执行 |
 | 基础设施 | CLI/App 层 (`src/cli/`) | `App`（I/O + 渲染 + 双循环）+ `Handler`（抽象协议）；`Request`/`Response` 为 App↔Agent 协议层，不进对话历史 |
-| Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}`；Plan 基础设施（`_plan` + 3 工具 + system_message 注入） |
+| 基础设施 | 文件读取 (`src/utils/file_reader.py`) | `read_text(path, offset, limit)` / `list_directory(path)` / `search_text(root, pattern, ...)` / `read_pdf` / `read_docx`；charset-normalizer 编码检测 |
+| 基础设施 | 对话 dump (`src/utils/dumper.py`) | `dump_history(agent_name, history)` → `data/logs/<agent>_<datetime>_message.dump` |
+| Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}`；Plan 基础设施（`_plan` + 3 工具 + system_message 注入）；`dump_history()` 导出历史 |
 | Agent | MainAgent (`src/agents/main_agent.py`) | 路由 Agent：只做意图识别 + 调度子 Agent，不执行领域任务 |
-| Agent | 子 Agent（resume/learning/interview/job_search） | `JobSearchAgent` 为 M4 测试用；其余待实现 |
+| Agent | ResumeAgent (`src/agents/resume/agent.py`) | 简历定制 Agent：workspace 工具直接操作 LaTeX 模板，`copy_template` → 填充占位符 → `build_pdf` → `workspace_open` |
+| Agent | JobSearchAgent (`src/agents/job_search/agent.py`) | M4 测试用子 Agent |
 | 服务 | 记忆模块 (`src/memory/`) | Facade：`build_memories`/`search_memories`/`delete_memory`；观察者模式（Store → 事件 → Indexer → RAG）解耦；按 Agent 分目录，一文件一条记忆 |
 
 **记忆模块是唯一共享通道：** 所有 Agent 通过记忆模块读写上下文，记忆按 Agent 隔离存储在 `data/memories/<agent>/` 下。跨 Agent 检索通过 `search_memories(query, agent=None)` 走 RAG 语义搜索。
+
+**Agent key 常量（`src/agents/registry.py`）：**
+- `MAIN_AGENT_KEY = "main"`
+- `RESUME_AGENT_KEY = "resume"`
+- `JOB_SEARCH_AGENT_KEY = "job_search"`
+- `INTERVIEW_AGENT_KEY = "interview"`
+
+**工具模块清单：**
+
+| 模块 | 工具 | 数量 |
+|------|------|------|
+| `system_tool.py` | `get_current_datetime`, `get_working_dir` | 2 |
+| `web_tool.py` | `web_search` | 1 |
+| `switch_tools.py` | `switch_to_subagent`, `switch_to_mainagent` | 2 |
+| `plan_tools.py` | `create_plan`, `update_plan_status`, `cancel_all_plans` | 3 |
+| `workspace_tools.py` | `workspace_read`, `workspace_list`, `workspace_grep`, `workspace_search_file`, `workspace_replace`, `workspace_write`, `workspace_delete`, `workspace_move`, `workspace_edit`, `workspace_open` | 10 |
+| `customer_file_tool.py` | `read_customer_file` | 1 |
+| `rag_tools.py` | `query_memory`, `query_reference_data` | 2 |
+| `resume_tools.py` | `copy_template`, `build_pdf` | 2 |
+| **总计** | | **23** |
 
 详细设计见 `docs/design.md`。
 
@@ -76,8 +106,13 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 - **`EventType(StrEnum)` / `Role(StrEnum)` 双枚举** — 代码中禁止裸字符串；`EventType` 5 个值（USER_INPUT/TOOL_CALL/TOOL_CALL_RESULT/FINISH/SYSTEM_MESSAGE），`Role` 3 个值（USER/SYSTEM/ASSISTANT）
 - **SYSTEM_MESSAGE role 分类** — 纠错类（output_format 注入、未知工具提示）→ `Role.SYSTEM`；正常上下文（plan 注入、退出提示）→ `Role.USER`
 - **System prompt 不在 `_history` 中** — 单独 `_system_prompt` 字符串，`_to_openai()` 时以 `{"role": "system", "content": "..."}` 注入
+- **`ToolCallException` 统一工具异常** — handler 抛 `ToolCallException(message, suggestion)`，框架层填充 `arguments_schema` + `expected_output` + `error_code`；handler 不感知 tool 定义
+- **工具错误带上下文喂回 LLM 让其自修复** — 原则：给够上下文让 LLM 有能力自修复
+- **Agent key 用常量引用** — `RESUME_AGENT_KEY` / `MAIN_AGENT_KEY` 等，不写裸字符串
+- **StrEnum 用于 filter 枚举** — `MemoryType` / `ReferenceCategory` 保证 LLM 传入值与 metadata 约定一致，修改枚举时需同步更新对应文件（参见枚举 docstring）
 - **设计/计划文件直接删除，不保留废弃内容** — Git 负责版本追溯
 - **任务终止用 ⛔ 标记** — `docs/task.md` 中废弃任务标 ⛔ 并追加替代任务
+- **暂缓任务用 📌 标记** — `docs/task.md` 中暂缓实现的任务标 📌
 - **记忆固化时带分隔符** — Agent 写入记忆按 `---` 分隔，便于 Chunker 切分入库
 - Agent 之间禁止直接调用，必须通过主 Agent 编排
 - Agent 框架自研，不使用 LangChain/CrewAI/AutoGen 等现成框架
@@ -98,5 +133,5 @@ uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter 
 | `docs/current.md` | 当前状态快照（阶段/任务/阻塞/下一步） | 每次会话必读 |
 | `docs/design.md` | 架构与模块设计 | 涉及架构问题时 |
 | `docs/plan.md` | 里程碑与实施计划 | 需要排期时或者当前任务下所有子任务都结束 |
-| `docs/task.md` | 任务列表（阶段→任务→子任务，⬜🔄✅⏸️⛔） | 需要任务细节时 |
+| `docs/task.md` | 任务列表（阶段→任务→子任务，⬜🔄✅⏸️⛔📌） | 需要任务细节时 |
 | `docs/decision.md` | 决策记录 | 需要历史决策理由时 |

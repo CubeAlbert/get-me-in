@@ -143,7 +143,9 @@ get-me-in/
 │   │   └── schemas.py        # Memory 数据结构
 │   ├── utils/               # 通用工具
 │   │   ├── chunker.py        # 通用文本切分（front-matter + --- 分隔）
-│   │   └── formatters.py     # 通用格式化（时间戳文件名 + front-matter 拼装）
+│   │   ├── formatters.py     # 通用格式化（时间戳文件名 + front-matter 拼装）
+│   │   ├── file_reader.py    # 文件读取底层（read_text / list_directory / search_text / read_pdf / read_docx）
+│   │   └── dumper.py         # 对话历史 dump（调试上下文丢失问题）
 │   ├── logger.py             # 日志模块（横切基础设施）
 │   ├── lifecycle.py          # 进程生命周期管理（统一退出清理入口）
 │   ├── llm/                 # LLM 调用封装
@@ -157,7 +159,16 @@ get-me-in/
 │   │   └── reranker.py      # 重排
 │   ├── tools/               # Tool 系统
 │   │   ├── __init__.py
-│   │   └── registry.py      # Tool dataclass + @tool 装饰器 + ToolRegistry
+│   │   ├── exceptions.py    # ToolCallException（工具异常 + 修复建议）
+│   │   ├── registry.py      # Tool dataclass + @tool 装饰器 + ToolRegistry
+│   │   ├── system_tool.py   # 系统工具（get_current_datetime / get_working_dir）
+│   │   ├── web_tool.py      # web_search 工具
+│   │   ├── switch_tools.py  # Agent 切换工具
+│   │   ├── plan_tools.py    # Plan 机制工具
+│   │   ├── workspace_tools.py # 工作区工具（10 个：read/list/grep/search_file/replace/write/delete/move/edit/open）
+│   │   ├── customer_file_tool.py # 外部文件读取（read_customer_file）
+│   │   ├── rag_tools.py     # RAG 查询工具（query_memory / query_reference_data）
+│   │   └── resume_tools.py  # 简历工具（copy_template / build_pdf）
 │   ├── prompts/             # 提示词加载器
 │   │   ├── __init__.py
 │   │   └── loader.py        # 模板加载 & 变量替换
@@ -741,26 +752,43 @@ App.run() [主线程]                          BaseAgent.process() [后台线程
 
 ### 4.7 简历 Agent
 
-**用途：** 帮助用户创建、优化、定制简历。根据目标岗位 JD 调整简历内容，提供修改建议。
+**用途：** 帮助用户创建、优化、定制 LaTeX 简历。通过 workspace 工具直接操作模板文件，支持从模板创建、按 JD 修改、编译 PDF 和预览。
 
 **职责：**
-- 解析用户现有简历
-- 根据 JD 匹配并优化简历内容
-- 生成简历修改建议
-- 输出优化后的简历（Markdown / LaTeX / PDF）
+- 复制 LaTeX 模板到工作区（`copy_template`）
+- 用 workspace 工具（read / edit / replace / grep）填充占位符和修改内容
+- 编译 LaTeX 为 PDF（`build_pdf`）
+- 用系统默认工具打开 PDF 预览（`workspace_open`）
 
-**关键接口 / 公开 API：**
-- `ResumeAgent.analyze(resume: str) -> ResumeAnalysis` —— 分析简历结构
-- `ResumeAgent.tailor(resume: str, jd: str) -> TailoredResume` —— 根据 JD 定制简历
-- `ResumeAgent.suggest(resume: str) -> list[Suggestion]` —— 通用优化建议
+**工作流：**
+```
+copy_template(chn/en/all, prefix)  →  复制模板 + PLACEHOLDER.txt
+  ↓
+workspace_read + PLACEHOLDER.txt   →  LLM 理解占位符
+  ↓
+workspace_replace / workspace_edit  →  逐项填充占位符
+  ↓
+build_pdf                          →  编译 PDF
+  ↓
+workspace_open                     →  预览
+```
 
-**内部结构：**
-- 简历解析器：从 Markdown/PDF/纯文本中提取结构化信息
-- JD 匹配引擎：对比简历和 JD，找出差距
-- 优化生成器：调用 LLM 生成修改后的简历内容
+**专属工具（`src/tools/resume_tools.py`）：**
+
+| 工具 | 审批 | 用途 |
+|------|------|------|
+| `copy_template` | CONFIG | 复制 LaTeX 模板到工作区 |
+| `build_pdf` | NEVER | `pdflatex -synctex=1 -interaction=nonstopmode` 编译，60s timeout |
+
+**数据模型（`src/agents/resume/schemas.py`）：** 已定义 `BasicInfo` / `Education` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo` / `Resume`，暂不用于 schema 填充模式（📌 决策 114），LLM 直接用 workspace 工具编辑 LaTeX。
+
+**ResumeAgent（`src/agents/resume/agent.py`）：** 继承 `BaseAgent`，14 占位符实现，`_get_agent_key()` 返回 `RESUME_AGENT_KEY`。workspace 工具（agent=[RESUME_AGENT_KEY]）和 `query_reference_data`（agent=[\"*\"]) 自动可见。
 
 **设计决策：**
-- 简历 Agent 不直接存储简历 —— 简历内容作为记忆存储在记忆模块中，便于其他 Agent 引用
+- LLM 直接操作 LaTeX 文件而非 schema 填充（决策 114）—— 模板已有占位符，用 workspace_replace 替换即可
+- `copy_template` 前 LLM 与用户确认语言 + 文件名前缀（决策 113）
+- `build_pdf` 找不到 pdflatex 时抛 ToolCallException，LLM 告知用户安装
+- `PLACEHOLDER.txt` 始终跟随模板复制，作为 LLM 的占位符参考
 
 ### 4.8 学习 Agent
 
@@ -984,7 +1012,27 @@ class ToolRegistry:
 - `extra_tools` 参数不进全局 Registry —— 实例级工具注入
 - 工具错误自修复：未知工具 → system_message 附完整可用工具列表；执行失败 → error payload 附带 `arguments_schema` + `expected_output`，LLM 对照检查参数 → 自修复
 
-**位置：** `src/tools/registry.py`
+**`ToolCallException`（`src/tools/exceptions.py`）：**
+- `message: str` — 面向 LLM 的业务错误描述
+- `suggestion: str | None` — 修复建议
+- handler 只抛业务语义，`_execute_tool()` 框架层从 Tool 对象填充 `arguments_schema` + `expected_output`
+- 普通 Exception 仍然走 `{error, error_code, arguments_schema, expected_output}`
+
+**工具模块清单：**
+
+| 模块 | 工具 | 数量 |
+|------|------|------|
+| `system_tool.py` | `get_current_datetime`, `get_working_dir` | 2 |
+| `web_tool.py` | `web_search` | 1 |
+| `switch_tools.py` | `switch_to_subagent`, `switch_to_mainagent` | 2 |
+| `plan_tools.py` | `create_plan`, `update_plan_status`, `cancel_all_plans` | 3 |
+| `workspace_tools.py` | `workspace_read`, `workspace_list`, `workspace_grep`, `workspace_search_file`, `workspace_replace`, `workspace_write`, `workspace_delete`, `workspace_move`, `workspace_edit`, `workspace_open` | 10 |
+| `customer_file_tool.py` | `read_customer_file` | 1 |
+| `rag_tools.py` | `query_memory`, `query_reference_data` | 2 |
+| `resume_tools.py` | `copy_template`, `build_pdf` | 2 |
+| **总计** | | **23** |
+
+**位置：** `src/tools/`
 
 ### 4.14 面试问答 Agent
 

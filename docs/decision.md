@@ -119,6 +119,10 @@
 - [决策 109 — workspace_list 单层不递归](#决策-109--workspace_list-单层不递归)
 - [决策 110 — workspace_replace 全文字符串替换](#决策-110--workspace_replace-全文字符串替换)
 - [决策 111 — RAG 查询工具用 StrEnum 校验 filter](#决策-111--rag-查询工具用-strenum-校验-filter)
+- [决策 112 — workspace_edit 简化为纯 replace 模式](#决策-112--workspace_edit-简化为纯-replace-模式)
+- [决策 113 — copy_template 用户交互前置到 LLM](#决策-113--copy_template-用户交互前置到-llm)
+- [决策 114 — 简历构建改为 workspace 工具直接编辑 LaTeX](#决策-114--简历构建改为-workspace-工具直接编辑-latex)
+- [决策 115 — /dump 命令导出对话历史用于调试](#决策-115--dump-命令导出对话历史用于调试)
 
 ---
 
@@ -2424,3 +2428,55 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 枚举保证 LLM 传入值和 metadata 约定同步
 - 修改枚举时提醒同步更新相关文件
 - 无效值直接反馈给 LLM 让 GAI 自修复
+
+---
+
+### 决策 112 — workspace_edit 简化为纯 replace 模式
+
+**背景：** 原 workspace_edit 有 replace 和 insert_after 两个 action，LLM 需理解 action 字段语义，且同 line 的 replace+insert_after 有排序问题。
+
+**决策：** 简化为纯 replace：每 edit 仅 {line, old_content, content}。content 可含 `\n` 实现多行（行前插入 = content="new\nold"，行后插入 = content="old\nnew"，删除 = content=""）。系统按行号降序处理。
+
+**理由：**
+- LLM 不需要学习 action 字段
+- 用 `\n` 控制插入语义更自然
+- 避免同行 replace+insert_after 排序问题
+
+---
+
+### 决策 113 — copy_template 用户交互前置到 LLM
+
+**背景：** copy_template 需要确认语言、文件名前缀、是否覆盖已有文件。
+
+**决策：** 这些确认由 LLM 在调用工具前完成，工具本身只做参数校验和复制。LLM 应先确认语言和文件名前缀、检查已有文件、确认删除，再调用 copy_template。
+
+**理由：**
+- 工具职责单一（复制文件）
+- 用户交互由 LLM 灵活处理
+- 工具抛 ToolCallException 时 LLM 能自行处理
+
+---
+
+### 决策 114 — 简历构建改为 workspace 工具直接编辑 LaTeX
+
+**背景：** 原计划用 schema-based 工具（`set_basic_info` / `set_education` 等）结构化填充 Resume 对象再生成 LaTeX。实现后发现 schema 定义复杂、LLM 易填错、灵活度不够。
+
+**决策：** 放弃 schema 模式，改为 LLM 用 workspace 工具（read / edit / replace）直接操作 LaTeX 模板文件。ResumeAgent 提示词中说明模板占位符，LLM 逐项替换。
+
+**理由：**
+- LaTeX 模板已有占位符（如 {-NAME-}），直接用 workspace_replace 替换即可
+- LLM 对大段文本编辑的能力足以胜任
+- 避免重复维护 schema 和 LaTeX 两套映射
+
+---
+
+### 决策 115 — `/dump` 命令导出对话历史用于调试
+
+**背景：** 对话中出现上下文丢失问题，需要分析历史消息。
+
+**决策：** `src/utils/dumper.py` + `BaseAgent.dump_history()` + CLI `/dump` 命令。将当前 Agent 的 `_history` 序列化为 JSON 写入 `data/logs/<agent>_<datetime>_message.dump`。
+
+**理由：**
+- 导出完整对话历史可离线分析
+- CLI 命令用户可随时触发
+- JSON 格式便于脚本处理
