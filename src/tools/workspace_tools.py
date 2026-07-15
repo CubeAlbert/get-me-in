@@ -403,3 +403,45 @@ def workspace_edit(path: str, edits: list) -> dict:
     # 写回文件
     full.write_text("\n".join(lines), encoding="utf-8", newline="")
     return {"path": path, "edits_applied": len(results), "edits": results}
+
+
+@tool(
+    purpose="用系统默认工具打开工作区中的文件（如 PDF 预览）。",
+    use_when="需要让用户预览生成的文件（如 PDF）时",
+    do_not_use_when="文件不存在时",
+    expected_output='{"path": "...", "opened": true}',
+    input_schema={
+        "path": {
+            "description": "要打开的文件相对路径，基于工作区根目录",
+        },
+    },
+    agent=[RESUME_AGENT_KEY],
+    confirm_mode=ConfirmMode.CONFIG,
+)
+def workspace_open(path: str) -> dict:
+    import os
+    import platform
+    import subprocess
+
+    full = _validate_path(path)
+    if not full.is_file():
+        raise ToolCallException(
+            f"file not found: {path}",
+            suggestion="用 workspace_list 确认目标路径",
+        )
+
+    system = platform.system()
+    try:
+        if system == "Windows":
+            os.startfile(str(full))
+        elif system == "Darwin":
+            subprocess.run(["open", str(full)], check=True)
+        else:
+            subprocess.run(["xdg-open", str(full)], check=True)
+    except Exception as e:
+        raise ToolCallException(
+            f"无法打开文件: {e}",
+            suggestion="请手动打开该文件",
+        ) from e
+
+    return {"path": path, "opened": True}

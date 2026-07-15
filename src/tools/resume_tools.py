@@ -121,7 +121,7 @@ def copy_template(template: str, prefix: str, target_dir: str = ".") -> dict:
         },
     },
     agent=[RESUME_AGENT_KEY],
-    confirm_mode=ConfirmMode.NEVER,
+    confirm_mode=ConfirmMode.CONFIG,
 )
 def build_pdf(path: str) -> dict:
     full = _validate_path(path)
