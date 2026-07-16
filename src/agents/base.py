@@ -271,6 +271,10 @@ class BaseAgent(Handler):
 
     # ── process — agent loop ──────────────────────────────
 
+    def _stamp_plan_status(self, msg: Message) -> None:
+        """将当前 plan 状态快照写入 Message.plan_status。"""
+        msg.plan_status = self._build_plan_status_info()
+
     def _build_plan_status_info(self) -> PlanStatusInfo | None:
         """构建当前 plan 状态快照。无 plan 时返回 None。"""
         if not self._plan:
@@ -286,16 +290,7 @@ class BaseAgent(Handler):
 
         system prompt 为纯文本，末尾附带 plan_status JSON（如有），对话消息序列化为 Message JSON。
         """
-        content = self._system_prompt
-        plan_status = self._build_plan_status_info()
-        if plan_status is not None:
-            import dataclasses
-            import json
-            status_json = json.dumps(
-                dataclasses.asdict(plan_status), ensure_ascii=False, default=str
-            )
-            content += f"\n\n[PLAN_STATUS]\n{status_json}"
-        messages = [{"role": "system", "content": content}]
+        messages = [{"role": "system", "content": self._system_prompt}]
         for m in self._history:
             messages.append({"role": m.role, "content": m.to_json()})
         return messages
@@ -460,13 +455,13 @@ class BaseAgent(Handler):
             self._pending_switch = None
             self._pending_reject = False
             self._round_counter = 0
-            self._history.append(
-                Message(
-                    role=Role.USER,
-                    message=input.message,
-                    event_type=EventType.USER_INPUT,
-                )
+            msg = Message(
+                role=Role.USER,
+                message=input.message,
+                event_type=EventType.USER_INPUT,
             )
+            self._stamp_plan_status(msg)
+            self._history.append(msg)
         elif input.type == RequestType.CONTINUE:
             # _pending_tool 为 None → 跳过工具执行（如切回主 Agent 后的 CONTINUE）
             if self._pending_tool is not None:
@@ -489,6 +484,7 @@ class BaseAgent(Handler):
                     )
 
                 if result_msg is not None:
+                    self._stamp_plan_status(result_msg)
                     self._history.append(result_msg)
 
                 # reject 检测：handler 返回了 __reject__ 标记，终止循环等用户输入
@@ -555,6 +551,7 @@ class BaseAgent(Handler):
                     self._format_injected = True
                 continue
 
+            self._stamp_plan_status(llm_msg)
             self._history.append(llm_msg)
 
             # ── 事件分发 ──

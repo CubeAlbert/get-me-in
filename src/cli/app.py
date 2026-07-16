@@ -137,11 +137,19 @@ class App:
     # ── auto-save / restore ──
 
     def _auto_save(self) -> None:
-        """自动保存当前 handler 的对话历史和 plan 状态。"""
+        """自动保存当前 handler 的对话历史和活跃 plan 状态。"""
+        from src.agents.plan import PlanStatus
+        plan = self._handler._plan
+        # 只在有 in_progress / pending 项时才持久化 plan
+        if not any(
+            item.status in (PlanStatus.IN_PROGRESS, PlanStatus.PENDING)
+            for item in plan
+        ):
+            plan = None
         self._save_mgr.save(
             self._handler._get_agent_key(),
             self._handler._history,
-            plan=self._handler._plan,
+            plan=plan,
         )
 
     def _restore_interactive(self) -> None:

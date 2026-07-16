@@ -104,7 +104,7 @@ CLI 命令：
 - **工具 handler 返回纯数据** — 返回 `str`/`dict`，由调用方（`BaseAgent._execute_tool()`）包装为 `tool_call_result` Message
 - **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（实际使用 FINISH/PROGRESS；CONFIRM/SELECT 已废弃）
 - **工具审批由 `ConfirmMode` + UIBridge 共同控制** — `_execute_tool()` 根据 `ConfirmMode`（NEVER/ALWAYS/CONFIG）决定是否调 `get_bridge().confirm()` 弹审批窗；特殊交互（如 `provide_choices` 的 `select()`）由 handler 自行调用 UIBridge
-- **Plan 机制为通用基础设施** — `BaseAgent` 层 3 个免审批工具（`create_plan`/`update_plan_status`/`cancel_all_plans`），`process()` 中动态注入当前 IN_PROGRESS 任务到 system_message；MainAgent plan 全程存活，子 Agent plan 随 return 丢弃
+- **Plan 机制为通用基础设施** — `BaseAgent` 层 3 个免审批工具（`create_plan`/`update_plan_status`/`cancel_all_plans`），`process()` 中通过 `_stamp_plan_status()` 将当前 plan 快照写入每条 `Message.plan_status`（不再拼接 system prompt）；MainAgent plan 全程存活，子 Agent plan 随 return 丢弃
 - **工具访问 Agent 实例用 context variable** — 需访问 `self` 的工具（如 plan 工具）通过模块级 `_set_*()` / `_get_*()` 函数获取当前 Agent 实例，模式与 UIBridge（`_set_bridge`/`get_bridge`）一致
 - **`EventType(StrEnum)` / `Role(StrEnum)` 双枚举** — 代码中禁止裸字符串；`EventType` 5 个值（USER_INPUT/TOOL_CALL/TOOL_CALL_RESULT/FINISH/SYSTEM_MESSAGE），`Role` 3 个值（USER/SYSTEM/ASSISTANT）
 - **SYSTEM_MESSAGE role 分类** — 纠错类（output_format 注入、未知工具提示）→ `Role.SYSTEM`；正常上下文（plan 注入、退出提示）→ `Role.USER`

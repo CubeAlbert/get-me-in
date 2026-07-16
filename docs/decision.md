@@ -132,6 +132,8 @@
 - [决策 122 — CLI 命令注册改用 _COMMAND_HELP dict + /help 命令](#决策-122--cli-命令注册改用-_command_help-dict--help-命令)
 - [决策 123 — 会话状态管理模块（auto-save / restore / rollback）](#决策-123--会话状态管理模块auto-save--restore--rollback)
 - [决策 124 — RAG 模型加载本地缓存优先（local_files_only 回退策略）](#决策-124--rag-模型加载本地缓存优先local_files_only-回退策略)
+- [决策 125 — plan_status 落地到 Message 对象](#决策-125--plan_status-落地到-message-对象)
+- [决策 126 — Restore 恢复上下文预览](#决策-126--restore-恢复上下文预览)
 
 ---
 
@@ -2643,3 +2645,48 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 - 全局 `HF_HUB_OFFLINE=1` 环境变量 —— 首次运行（或换模型后）直接失败，无自动回退，已拒绝
 - 调小 `HF_HUB_ETAG_TIMEOUT` —— 仍然发请求，只是快速失败，治标不治本
+
+---
+
+### 决策 125 — plan_status 落地到 Message 对象
+
+**背景：** `plan_status` 原本只在 `_to_openai()` 中拼接 JSON 到 system prompt 末尾，从未写入 `Message.plan_status` 字段。导致保存的 `main.json` 中每条消息的 `plan_status` 全是 null，restore 后丢失每轮对话的 plan 上下文。
+
+**决策：**
+- 移除 `_to_openai()` 中 system prompt 末尾的 `[PLAN_STATUS]` JSON 拼接
+- 新增 `BaseAgent._stamp_plan_status(msg)` 方法，在 `process()` 每次 `_history.append()` 前调用 `_build_plan_status_info()` 写入 `Message.plan_status`
+- Stamping 点：USER_INPUT、TOOL_CALL_RESULT、LLM reply（TOOL_CALL / FINISH）
+- `Message.to_json()` 通过 `dataclasses.asdict()` 自动序列化 `plan_status`，落盘后每条消息带有对应时刻的 plan 快照
+- 全部 plan 项 cancelled/completed 时 `_auto_save()` 传 `None`，同时从 `session.json` 清除 `{agent_key}_plan`
+
+**理由：**
+- 语义正确：每条消息携带当时 plan 状态，restore 后 LLM 能看到历史 plan 轨迹
+- 解耦 system prompt：plan 信息不再混在文本中，由 Message 对象化承载
+- 保存后 `main.json` 完整自描述，不依赖外部上下文
+
+**曾考虑的替代方案：**
+- 仅在 save 时批量回填 plan_status —— 时序不准，每轮 plan 状态可能不同
+- 保留 system prompt 拼接 + 同时写 Message —— 冗余，LLM 收到两份 plan 信息
+
+---
+
+### 决策 126 — Restore 恢复上下文预览
+
+**背景：** `/restore` 选择时用户看不到存档对应的对话内容，恢复后也没有任何上文提示。
+
+**决策：**
+- **preview 字段**：`SaveManager.save()` 从 history 提取首条 `USER_INPUT` 消息（截断 60 字符），写入 `session.json` 的 `preview` 字段；`list_sessions()` 透传
+- **choice title 渲染**：`_restore_interactive()` 在每条 choice 中追加 `"{preview}"`
+- **上下文面板**：`_do_restore()` 恢复后调用 `_render_context_recap()`，倒取最后 5 条非 `SYSTEM_MESSAGE` 消息，除最后一条外截断 80 字符，纯文本输出（不用 Panel，避免 rich 换行破坏布局）
+- **最后一条不截断**：确保最近的对话内容完整展示
+- **分隔线**：最后一条前加 `──` 视觉分隔
+
+**理由：**
+- 用户选择存档前能看到对话概要（preview），恢复后能看到上文，不需要盲选
+- 纯文本渲染避免 Panel 宽度限制导致长消息换行破坏 `>` 前缀布局
+- `rich.text.Text` + `escape()` 比 inline markup 更可靠
+
+**曾考虑的替代方案：**
+- Panel 渲染 —— 长消息换行后 `>` 孤零零悬挂，视觉效果差
+- 显示全部消息不截断 —— 终端被占满
+- 过滤 tool_call 消息 —— 丢失工具调用上下文，已改为只过滤 SYSTEM_MESSAGE

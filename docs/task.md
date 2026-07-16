@@ -328,3 +328,7 @@
 - ✅ **Plan 持久化** — `session.json` 按 `{agent_key}_plan` 存储，跨 save 保留所有 agent 的 plan
 - ✅ **SaveManager 抽出** — auto-save/restore 逻辑从 `app.py` 移至 `SaveManager` 类
 - ⬜ **Rollback（回滚到上句话）** — 每次 FINISH 产生全量快照，支持回退到前一个 FINISH 状态
+- ✅ **Restore 上下文预览** — choice title 显示 preview；恢复后渲染最近 5 条消息面板
+- ✅ **plan_status 落地到 Message** — 从 system prompt 文本注入改为 per-message stamp；`_to_openai()` 不再拼接 plan JSON
+- ✅ **plan 活性过滤** — 全部 cancelled/completed 时不持久化 plan，同时清除 session.json 旧 plan
+- ✅ **Restore sub 会话 switch_tool_call_id 修复** — 从 main history 恢复最后一条 switch_to_subagent 的 id

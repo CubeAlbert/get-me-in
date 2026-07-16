@@ -256,11 +256,15 @@ class SaveManager:
             filepath = session_dir / f"{agent_key}.json"
 
         # 延迟清理：删除旧 sub 存档 + 其 plan
-        plan_keys_to_remove: list[str] | None = None
+        plan_keys_to_remove: list[str] = []
         if agent_key == "main" and self._pending_sub_cleanup:
             self._delete_sub_save(self._pending_sub_cleanup)
-            plan_keys_to_remove = [f"{self._pending_sub_cleanup}_plan"]
+            plan_keys_to_remove.append(f"{self._pending_sub_cleanup}_plan")
             self._pending_sub_cleanup = None
+
+        # plan 为 None 时清除当前 agent 的旧 plan
+        if plan is None:
+            plan_keys_to_remove.append(f"{agent_key}_plan")
 
         # 提取 preview：首条有意义用户消息（截断 60 字符）
         preview = ""
