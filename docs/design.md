@@ -175,7 +175,7 @@ get-me-in/
 │   └── cli/                 # CLI 交互层
 │       ├── __init__.py
 │       ├── app.py           # 终端交互入口
-│       └── handler.py       # Handler 抽象基类 + LLMHandler（M1 验证管线，M4 由 Orchestrator 替换）
+│       └── handler.py       # Handler 抽象基类 + LLMHandler（M1 验证管线，M4 由 Orchestrator 替换，M5-Review 删除 LLMHandler）
 ├── data/                    # 持久化存储（文件系统）
 │   ├── profile/
 │   │   └── profile.md       # 用户画像（free-form section，记录技能、经历、偏好等）
@@ -223,7 +223,7 @@ get-me-in/
 
 ### 4.0 Handler 协议 & App 交互循环
 
-**用途：** 定义 CLI 层与业务逻辑层之间的桥接接口。CLI 不直接调用 LLM 或 Agent，而是调用注入的 `Handler`，由 Handler 负责具体的输入处理逻辑。M1 用 `LLMHandler` 验证端到端管线，M4 由 `BaseAgent` 实现同一协议。
+**用途：** 定义 CLI 层与业务逻辑层之间的桥接接口。CLI 不直接调用 LLM 或 Agent，而是调用注入的 `Handler`，由 Handler 负责具体的输入处理逻辑。M1 用 `LLMHandler` 验证端到端管线，M4 由 `BaseAgent` 实现同一协议（M5-Review 删除 LLMHandler）。
 
 **职责：**
 - 定义 `process(input: Request) -> Response` 抽象方法
@@ -278,7 +278,7 @@ get-me-in/
 - `_pending_tool` 断点恢复 —— `process()` 跨调用保存 (tool_name, payload, tool_call_id)，CONTINUE/CONFIRM_APPROVED 时恢复执行
 - 用户拒绝审批 → 退出内层循环，不调 `process()`，等用户主动输入
 - 交互库选择 `questionary`（`select` + `confirm`）
-- M1 用 `LLMHandler`，M4 由 `BaseAgent` 替换 —— `Handler` 协议是稳定的桥接点
+- M1 用 `LLMHandler`，M4 由 `BaseAgent` 替换（M5-Review 删除 LLMHandler）—— `Handler` 协议是稳定的桥接点
 
 ### 4.1 提示词模块
 

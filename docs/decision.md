@@ -2480,3 +2480,47 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 导出完整对话历史可离线分析
 - CLI 命令用户可随时触发
 - JSON 格式便于脚本处理
+
+---
+
+### 决策 116 — PLACEHOLDER.txt 升级为 README.md
+
+**背景：** copy_template 伴随复制的 `PLACEHOLDER.txt` 仅包含占位符对照表，不足以指导 LLM 正确填充模板。随着模板结构复杂度增加（教育多条目、技能 PRO/OTHER 拆分、各节条数约束、日期格式规范等），需要一份完整的操作手册。
+
+**决策：** 将 `PLACEHOLDER.txt` 升级为 `README.md`，包含三部分：(1) 模板章节结构概览；(2) 完整占位符清单与说明；(3) 填充约束与边界处理指南。`copy_template` 函数常量 `_PLACEHOLDER_FILE` → `_README_FILE`，工具描述同步更新。
+
+**理由：**
+- LLM 在复制模板后立即 `workspace_read(README.md)` 即可获得完整操作指引
+- 约束集中管理，修改模板后只需更新 README.md 无需改 Agent prompt
+- README.md 作为独立文件可被用户直接阅读和编辑
+
+---
+
+### 决策 117 — Agent temperature 分层设置
+
+**背景：** 项目所有 LLM 调用均未设置 `temperature`，依赖 provider 默认值。不同 Agent 对确定性的需求不同（路由 vs 内容生成 vs 记忆提取）。
+
+**决策：**
+- MainAgent（路由/调度）：`temperature=0.1`，`response_format=json_object`
+- JobSearchAgent（搜索分析）：`temperature=0.2`，`response_format=json_object`
+- ResumeAgent（简历定制）：`temperature=0.2`，`response_format=json_object`
+- MemoryBuilder（记忆提取）：`temperature=0`，`response_format=json_object`
+
+**理由：**
+- 路由 Agent 需要最高确定性，避免错误调度
+- 内容生成 Agent 需要少量创造性（0.2），但保持可控
+- 记忆提取是纯信息抽取任务，需要完全确定性
+- 通过 `_pro_params` 类变量设置，`kwargs` 仍可覆盖
+
+---
+
+### 决策 118 — 删除 LLMHandler
+
+**背景：** `LLMHandler` 是 M1 阶段的 demo handler，在 M4 引入 `MainAgent` 后已被完全替代（见 task.md 阶段 4 任务 1）。代码保留在 `src/cli/handler.py` 中，占 ~100 行，依赖 `LLMClient`、`PromptLoader`、`EventType`、`Role` 等模块。
+
+**决策：** 删除 `LLMHandler` 类及 `src/cli/__init__.py` 中的导出。保留 `Handler` 抽象基类和 `_parse_llm_reply()` 静态方法（仍被 `BaseAgent` 使用）。
+
+**理由：**
+- 消除死代码，降低维护负担
+- 减少不必要的模块依赖
+- `MainAgent` 已稳定运行，无回退需求

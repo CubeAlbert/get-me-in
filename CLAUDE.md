@@ -97,6 +97,7 @@ CLI 命令：
 - **`from src.config import config` 放在所有第三方 import 之前** — `config` import 触发 `load_dotenv()`，某些第三方库（`huggingface_hub`、`sentence_transformers`）在 import 时缓存 `os.environ`，必须先加载 `.env`
 - **LLM 客户端用 `get_client()` 单例** — `from src.llm import get_client`，不要直接 `LLMClient()`；双检锁线程安全
 - **提示词与代码分离** — 模板在 `data/prompts/`，`PromptLoader` 加载；Agent 调用 `get()` 自动拼接 `general_agent/`；非 Agent 模块用 `get_raw()`
+- **LLM temperature 由 Agent `_pro_params` 控制** — 不在 LLMClient 层设默认值。MainAgent 0.1，ResumeAgent/JobSearchAgent 0.2，MemoryBuilder 0；调用方可通过 `**kwargs` 覆盖
 - **Agent 必须实现 14 个抽象方法** — `_get_agent_name` + 13 个占位符方法（`_get_agent_description`、`_get_responsibilities` 等），遗漏 Python 在 import 时 `TypeError`
 - **工具 handler 返回纯数据** — 返回 `str`/`dict`，由调用方（`BaseAgent._execute_tool()`）包装为 `tool_call_result` Message
 - **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（实际使用 FINISH/PROGRESS；CONFIRM/SELECT 已废弃）
