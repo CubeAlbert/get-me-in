@@ -1,5 +1,6 @@
 """简历专属工具 — ResumeAgent 使用。"""
 
+import re
 import shutil
 from pathlib import Path
 
@@ -52,8 +53,10 @@ def _copy_file(src: Path, dst: Path, *, overridable: bool = False) -> str:
         },
         "prefix": {
             "description": (
-                "文件名前缀。chn → {prefix}_CHN.tex，en → {prefix}_EN.tex，"
-                "all → {prefix}_CHN.tex + {prefix}_EN.tex"
+                "文件名前缀。工具会自动拼接：chn → {prefix}_CHN.tex，en → {prefix}_EN.tex，"
+                "all → {prefix}_CHN.tex + {prefix}_EN.tex。"
+                "⚠️ 若用户已提供含 _CHN 或 _EN 的完整文件名，去掉后缀部分作为 prefix，"
+                "避免出现 XXX_CHN_CHN.tex 双重后缀"
             ),
         },
         "target_dir": {
@@ -65,6 +68,9 @@ def _copy_file(src: Path, dst: Path, *, overridable: bool = False) -> str:
     confirm_mode=ConfirmMode.CONFIG,
 )
 def copy_template(template: str, prefix: str, target_dir: str = ".") -> dict:
+    # 防止双重后缀：prefix 末尾的 _CHN / _EN 会被自动拼接，先去掉
+    prefix = re.sub(r"(_CHN|_EN)+$", "", prefix)
+
     valid = {"chn", "en", "all"}
     if template not in valid:
         raise ToolCallException(
@@ -151,6 +157,8 @@ def build_pdf(path: str) -> dict:
             [pdflatex, "-synctex=1", "-interaction=nonstopmode", full.name],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=str(full.parent),
             timeout=60,
         )

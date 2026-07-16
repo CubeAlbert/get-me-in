@@ -288,36 +288,36 @@ def workspace_write(path: str, content: str) -> dict:
 
 
 @tool(
-    purpose="删除工作区内的文件或空目录。目录非空时拒绝删除。",
-    use_when="需要删除工作区文件或清理空目录时",
+    purpose="批量删除工作区内的文件或空目录。目录非空时拒绝删除。支持一次删除多个路径。",
+    use_when="需要删除工作区文件或清理空目录时，可一次删除多个",
     do_not_use_when="目录非空时 — 需先逐文件删除再删目录",
-    expected_output='{"path": "...", "deleted": true}',
+    expected_output='{"deleted": ["...", "..."], "errors": []}',
     input_schema={
-        "path": {
-            "description": "要删除的文件或空目录相对路径",
+        "paths": {
+            "description": "要删除的文件或空目录相对路径列表，如 ['main.aux', 'main.log']",
         },
     },
     agent=[RESUME_AGENT_KEY],
     confirm_mode=ConfirmMode.CONFIG,
 )
-def workspace_delete(path: str) -> dict:
-    full = _validate_path(path)
-    if not full.exists():
-        raise ToolCallException(
-            f"path not found: {path}",
-            suggestion="用 workspace_list 确认目标路径",
-        )
-    if full.is_dir():
-        try:
-            full.rmdir()
-        except OSError as e:
-            raise ToolCallException(
-                f"directory not empty: {path}",
-                suggestion="先用 workspace_delete 删除目录中的文件，再删除空目录",
-            ) from e
-    else:
-        full.unlink()
-    return {"path": path, "deleted": True}
+def workspace_delete(paths: list[str]) -> dict:
+    deleted = []
+    errors = []
+    for path in paths:
+        full = _validate_path(path)
+        if not full.exists():
+            errors.append({"path": path, "error": "not found"})
+            continue
+        if full.is_dir():
+            try:
+                full.rmdir()
+            except OSError as e:
+                errors.append({"path": path, "error": f"directory not empty: {e}"})
+                continue
+        else:
+            full.unlink()
+        deleted.append(path)
+    return {"deleted": deleted, "errors": errors}
 
 
 @tool(
