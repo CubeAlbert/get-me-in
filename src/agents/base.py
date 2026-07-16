@@ -10,7 +10,7 @@ import uuid
 
 from abc import abstractmethod
 
-from src.agents.plan import PlanItem, PlanStatus
+from src.agents.plan import PlanItem, PlanStatus, PlanStatusInfo
 from src.cli.handler import Handler
 from src.agents.registry import MAIN_AGENT_KEY
 from src.tools.exceptions import ToolCallException
@@ -275,7 +275,6 @@ class BaseAgent(Handler):
         """构建当前 plan 状态快照。无 plan 时返回 None。"""
         if not self._plan:
             return None
-        from src.agents.plan import PlanStatusInfo
         return PlanStatusInfo(
             current=self._get_active_plan(),
             completed=[i for i in self._plan if i.status == PlanStatus.COMPLETED],
