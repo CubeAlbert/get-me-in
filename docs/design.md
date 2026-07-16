@@ -762,9 +762,9 @@ App.run() [主线程]                          BaseAgent.process() [后台线程
 
 **工作流：**
 ```
-copy_template(chn/en/all, prefix)  →  复制模板 + PLACEHOLDER.txt
+copy_template(chn/en/all, prefix)  →  复制模板 + README.md
   ↓
-workspace_read + PLACEHOLDER.txt   →  LLM 理解占位符
+workspace_read + README.md         →  LLM 理解模板结构和填充约束
   ↓
 workspace_replace / workspace_edit  →  逐项填充占位符
   ↓
@@ -788,7 +788,7 @@ workspace_open                     →  预览
 - LLM 直接操作 LaTeX 文件而非 schema 填充（决策 114）—— 模板已有占位符，用 workspace_replace 替换即可
 - `copy_template` 前 LLM 与用户确认语言 + 文件名前缀（决策 113）
 - `build_pdf` 找不到 pdflatex 时抛 ToolCallException，LLM 告知用户安装
-- `PLACEHOLDER.txt` 始终跟随模板复制，作为 LLM 的占位符参考
+- `README.md` 始终跟随模板复制，作为 LLM 的模板操作手册
 
 ### 4.8 学习 Agent
 

@@ -11,7 +11,7 @@
 
 %A Few Useful Packages
 \usepackage{parskip}
-\usepackage{titlesec}	
+\usepackage{titlesec}    
 \usepackage{multirow}
 \usepackage{graphicx}
 \usepackage[usenames,dvipsnames]{xcolor}
@@ -42,12 +42,12 @@
 \titlespacing{\section}{0pt}{3pt}{3pt}
 
 \newcommand{\sectitle}[1]{
-	\vspace{1.5ex}
-	\section{#1}
-	\vspace{-3ex}
-	\noindent\rule{\textwidth}{0.7pt}
-	\vspace{-4ex}
-	
+    \vspace{1.5ex}
+    \section{#1}
+    \vspace{-3ex}
+    \noindent\rule{\textwidth}{0.7pt}
+    \vspace{-4ex}
+    
 }
 
 % new text bold style
@@ -57,104 +57,113 @@
 
 % dummy text
 \newcommand{\mylipsum}{Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Ut purus elit,
-	vestibulum ut, placerat ac, adipiscing vitae, felis.}
+    vestibulum ut, placerat ac, adipiscing vitae, felis.}
 
 %-------------------- Begin document ----------------------
 \begin{document}
-	
-	%-------------------- Title section ----------------------
-	\begin{minipage}{\textwidth}
-		\vspace{7ex}
-		\par{
-			\centering
-			\vspace{-0.9in}
-			% \textcolor{black}{\emph{Curriculum Vitae}}\\
-			\textcolor{linkcolour}{\Large {-NAME-}}
-			\par}
-	\end{minipage}
-	
-	%-------------------- Header ----------------------
-	\begin{center}
-		{-GENDER-} $\cdot$\ {-AGE-} \,$\cdot$\, 邮箱: \href{mailto:{-EMAIL-}}{{-EMAIL-}} \,$\cdot$\, 电话: \href{tel:{-PHONE-}}{{-PHONE-}}\,$\cdot$\, Github: \href{https://github.com/{-GITHUB-}}{{-GITHUB-}}
-	\end{center}
-	
-	%%% Short paragraph
-	\sectitle{个人简介}
-	\begin{itemize}[itemsep=-5pt]
-		\item{-SUMMARY-1-}
-		\item{-SUMMARY-2-}
-		\item{-SUMMARY-3-}
-		\item{-SUMMARY-4-}
-		\item{-SUMMARY-5-}
-	\end{itemize}
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	\sectitle{教育背景}
-	{-UNIVERSITY-} \hfill {-EDU-DATE-} \\
-	{-MAJOR-} \space \textBF{-DEGREE-}
-	
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	\sectitle{专业技能}
-	\textBF{编程语言:} \emph{-SKILL-LANG-} \\
-	\textBF{数据库 \& 中间件:} \emph{-SKILL-DB-}\\
-	\textBF{框架:} -SKILL-FRAMEWORK-\\
-	\textBF{AI 工程:} -SKILL-AI-\\
-	\textBF{开发工具:} -SKILL-TOOLS-
-	
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	\sectitle{工作经历}
-	\textBF{-JOB-TITLE-} \hfill \emph{-JOB-COMPANY-}\\ {-JOB-DEPT-} \hfill {-JOB-DATE-}
-	\vspace{-0.2 cm}
-	\begin{enumerate}[itemsep=-5pt]
-		\item{-JOB-DESC-1-}
-		\item{-JOB-DESC-2-}
-		\item{-JOB-DESC-3-}
-		\item{-JOB-DESC-4-}
-		\item{-JOB-DESC-5-}
-	\end{enumerate}
-	\vspace{-0.2 cm}
-	%\begin{flushright}
-	\hdashrule{\textwidth}{0.5pt}{2pt}	
-	\pagebreak
-	%-------------------- SECTIONS ----------------------
-	
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	\sectitle{项目经验}
-	\textBF{-PROJECT-NAME-} \\ {-PROJECT-ROLE-} \hfill {-PROJECT-DATE-}
-	\vspace{-0.2 cm}
-	\begin{itemize}[itemsep=-5pt]
-		\item{\textbf{项目概述:}}
-		\vspace{-0.2 cm}
-		\begin{itemize}[itemsep=-5pt]
-			\item {-PROJECT-DESC-}
-		\end{itemize}
-		\item{\textbf{技术栈: }-PROJECT-TECH-}
-		\item{\textbf{职责范围: }}
-		\begin{enumerate}[itemsep=-5pt]
-			\item{-PROJECT-RESP-1-}
-			\item{-PROJECT-RESP-2-}
-			\item{-PROJECT-RESP-3-}
-			\item{-PROJECT-RESP-4-}
-			\item{-PROJECT-RESP-5-}
-			\item{-PROJECT-RESP-6-}
-		\end{enumerate}
-		\item{\textbf{关键成果: }}
-		\vspace{-0.2 cm}
-		\begin{enumerate}[itemsep=-5pt]
-			\item{-PROJECT-RESULT-1-}
-			\item{-PROJECT-RESULT-2-}
-			\item{-PROJECT-RESULT-3-}
-			\item{-PROJECT-RESULT-4-}
-		\end{enumerate}
-	\end{itemize}
-	\vspace{-0.2 cm}
-	\hdashrule{\textwidth}{0.5pt}{2pt}
-	
-	\sectitle{其他信息}
-	\textBF{证书} 
-	\begin{itemize}
-		\item{-CERT-1-}
-		\item{-CERT-2-}
-	\end{itemize}
-	\vspace{0.5ex}
-	
+    
+    %-------------------- Title section ----------------------
+    \begin{minipage}{\textwidth}
+        \vspace{7ex}
+        \par{
+            \centering
+            \vspace{-0.9in}
+            % \textcolor{black}{\emph{Curriculum Vitae}}\\
+            \textcolor{linkcolour}{\Large {-NAME-}}
+            \par}
+    \end{minipage}
+    
+    %-------------------- Header ----------------------
+    \begin{center}
+        性别: {-GENDER-} $\cdot$ 年龄: {-AGE-} \,$\cdot$\, 邮箱: \href{mailto:{-EMAIL-}}{{-EMAIL-}} \,$\cdot$\, 电话: \href{tel:{-PHONE-}}{{-PHONE-}}\,$\cdot$\, Github: \href{https://github.com/{-GITHUB-}}{{-GITHUB-}}
+    \end{center}
+    
+    %-------------------- 个人简介 -------------------
+    \sectitle{个人简介}
+    \begin{itemize}[itemsep=-5pt]
+        \item{-SUMMARY-1-}
+        \item{-SUMMARY-2-}
+        \item{-SUMMARY-3-}
+        \item{-SUMMARY-4-}
+        \item{-SUMMARY-5-}
+    \end{itemize}
+    
+    %-------------------- 教育背景 -------------------
+    \sectitle{教育背景}
+    {-UNIVERSITY-} \hfill {-EDU-DATE-} \\
+    {-MAJOR-} \space \textBF{-DEGREE-} \\
+    \hdashrule{\textwidth}{0.5pt}{2pt}    
+
+    {-UNIVERSITY-} \hfill {-EDU-DATE-} \\
+    {-MAJOR-} \space \textBF{-DEGREE-} 
+    
+    %-------------------- 专业技能 -------------------
+    \sectitle{专业技能}
+    \textBF{编程语言:} \emph{-SKILL-LANG-PRO-}{-SKILL-LANG-OTHER-} \\
+    \textBF{数据库 \& 中间件:} \emph{-SKILL-DB-PRO-}{-SKILL-DB-OTHER-} \\
+    \textBF{框架:} {-SKILL-FRAMEWORK-} \\
+    \textBF{AI 工程:} {-SKILL-AI-} \\
+    \textBF{开发工具:} {-SKILL-TOOLS-}
+    
+    %-------------------- 工作经历 -------------------
+    \sectitle{工作经历}
+    \textBF{-JOB-TITLE-} \hfill \emph{-JOB-COMPANY-}\\ {-JOB-DEPT-} \hfill {-JOB-DATE-}
+    \vspace{-0.2 cm}
+    \begin{enumerate}[itemsep=-5pt]
+        \item{-JOB-DESC-1-}
+        \item{-JOB-DESC-2-}
+        \item{-JOB-DESC-3-}
+        \item{-JOB-DESC-4-}
+        \item{-JOB-DESC-5-}
+        \item{-JOB-DESC-6-}
+        \item{-JOB-DESC-7-}
+    \end{enumerate}
+    \vspace{-0.2 cm}
+    %\begin{flushright}
+    \hdashrule{\textwidth}{0.5pt}{2pt}    
+
+    %-------------------- 项目经验 -------------------
+    \sectitle{项目经验}
+    \textBF{-PROJECT-NAME-} \\ {-PROJECT-ROLE-} \hfill {-PROJECT-DATE-}
+    \vspace{-0.2 cm}
+    \begin{itemize}[itemsep=-5pt]
+        \item{\textbf{项目概述:}}
+        \vspace{-0.2 cm}
+        \begin{itemize}[itemsep=-5pt]
+            \item {-PROJECT-DESC-}
+        \end{itemize}
+        \item{\textbf{技术栈: }{-PROJECT-TECH-}}
+        \item{\textbf{职责范围: }}
+        \begin{enumerate}[itemsep=-5pt]
+            \item{-PROJECT-RESP-1-}
+            \item{-PROJECT-RESP-2-}
+            \item{-PROJECT-RESP-3-}
+            \item{-PROJECT-RESP-4-}
+            \item{-PROJECT-RESP-5-}
+            \item{-PROJECT-RESP-6-}
+            \item{-PROJECT-RESP-7-}
+        \end{enumerate}
+        \item{\textbf{关键成果: }}
+        \vspace{-0.2 cm}
+        \begin{enumerate}[itemsep=-5pt]
+            \item{-PROJECT-RESULT-1-}
+            \item{-PROJECT-RESULT-2-}
+            \item{-PROJECT-RESULT-3-}
+            \item{-PROJECT-RESULT-4-}
+            \item{-PROJECT-RESULT-5-}
+            \item{-PROJECT-RESULT-6-}
+            \item{-PROJECT-RESULT-7-}
+        \end{enumerate}
+    \end{itemize}
+    \vspace{-0.2 cm}
+    \hdashrule{\textwidth}{0.5pt}{2pt}
+    
+    %-------------------- 其他信息 -------------------
+    \sectitle{其他信息}
+    \textBF{{-OTHER-TYPE-1-}}
+    \begin{itemize}[itemsep=-5pt]
+        \item{-OTHER-1-}
+        \item{-OTHER-2-}
+    \end{itemize}
+    \vspace{0.5ex}
 \end{document}

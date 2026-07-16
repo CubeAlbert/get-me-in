@@ -10,7 +10,7 @@ from src.tools.exceptions import ToolCallException
 from src.tools.workspace_tools import _validate_path
 
 _TEMPLATE_DIR = Path("data/resume/template")
-_PLACEHOLDER_FILE = "PLACEHOLDER.txt"
+_README_FILE = "README.md"
 
 _TEX_TEMPLATES = {
     "chn": "CHN_Template.tex",
@@ -35,16 +35,17 @@ def _copy_file(src: Path, dst: Path, *, overridable: bool = False) -> str:
 
 @tool(
     purpose=(
-        "复制 LaTeX 简历模板到工作区，占位符文件 PLACEHOLDER.txt 始终跟随复制。\n\n"
+        "复制 LaTeX 简历模板到工作区，README.md（模板操作手册）始终跟随复制。\n\n"
         "调用前应与用户确认：\n"
         "1. 语言选择：中文 / 英文 / 两者都要\n"
         "2. 文件名前缀（复制后文件名为 {prefix}_CHN.tex / {prefix}_EN.tex）\n"
         "3. 用 workspace_list 检查目标目录，若已有同名文件，"
-        "用 workspace_read 展示给用户确认后 workspace_delete 删除"
+        "用 workspace_read 展示给用户确认后 workspace_delete 删除\n\n"
+        "复制完成后应 workspace_read(README.md) 阅读操作手册，了解模板结构和填充约束。"
     ),
     use_when="用户要求开始构建或修改简历时",
     do_not_use_when="目标目录已有同名 .tex 文件且未被用户确认删除时",
-    expected_output='{"files": ["resume_CHN.tex", "PLACEHOLDER.txt"], "target_dir": "."}',
+    expected_output='{"files": ["resume_CHN.tex", "README.md"], "target_dir": "."}',
     input_schema={
         "template": {
             "description": "模板语言: 'chn'（中文）、'en'（英文）、'all'（中英文都复制）",
@@ -96,14 +97,14 @@ def copy_template(template: str, prefix: str, target_dir: str = ".") -> dict:
         rel = _copy_file(src, dst, overridable=False)
         files.append(str(Path(rel).relative_to(working_dir)))
 
-    # 复制占位符参考文件（可覆盖）
-    src = src_dir / _PLACEHOLDER_FILE
+    # 复制模板操作手册（可覆盖）
+    src = src_dir / _README_FILE
     if not src.exists():
         raise ToolCallException(
-            f"占位符文件不存在: {_PLACEHOLDER_FILE}",
+            f"操作手册不存在: {_README_FILE}",
             suggestion="请检查 data/resume/template/ 目录",
         )
-    dst = dest_dir / _PLACEHOLDER_FILE
+    dst = dest_dir / _README_FILE
     rel = _copy_file(src, dst, overridable=True)
     files.append(str(Path(rel).relative_to(working_dir)))
 

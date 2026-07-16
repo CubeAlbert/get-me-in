@@ -2,7 +2,7 @@
 \usepackage[bottom=0.8in,top=0.8in, left=0.8in,right=0.8in]{geometry}
 
 % non-numbered pages
-\pagestyle{empty} 
+\pagestyle{empty}
 
 %%%%%%%%%%% pdflatex %%%%%%%%%%
 \usepackage[T1]{fontenc}
@@ -11,7 +11,7 @@
 
 %A Few Useful Packages
 \usepackage{parskip}
-\usepackage{titlesec}	
+\usepackage{titlesec}
 \usepackage{multirow}
 \usepackage{graphicx}
 \usepackage[usenames,dvipsnames]{xcolor}
@@ -23,7 +23,7 @@
 \usepackage{fancyhdr}
 
 \pagestyle{fancy}
-\fancyhf{} % 
+\fancyhf{} %
 \renewcommand{\headrulewidth}{0pt}
 \fancyfoot[C]{\thepage}
 
@@ -38,12 +38,12 @@
 \titlespacing{\section}{0pt}{3pt}{3pt}
 
 \newcommand{\sectitle}[1]{
-	\vspace{1.5ex}
-	\section{#1}
-	\vspace{-3ex}
-	\noindent\rule{\textwidth}{0.7pt}
-	\vspace{-4ex}
-	
+    \vspace{1.5ex}
+    \section{#1}
+    \vspace{-3ex}
+    \noindent\rule{\textwidth}{0.7pt}
+    \vspace{-4ex}
+
 }
 
 % new text bold style
@@ -53,104 +53,113 @@
 
 % dummy text
 \newcommand{\mylipsum}{Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Ut purus elit,
-	vestibulum ut, placerat ac, adipiscing vitae, felis.}
+    vestibulum ut, placerat ac, adipiscing vitae, felis.}
 
 %-------------------- Begin document ----------------------
 \begin{document}
-	
-	%-------------------- Title section ----------------------
-	\begin{minipage}{\textwidth}
-		\vspace{7ex}
-		\par{
-			\centering
-			\vspace{-0.9in}
-			% \textcolor{black}{\emph{Curriculum Vitae}}\\
-			\textcolor{linkcolour}{\Large {-NAME-}}
-			\par}
-	\end{minipage}
-	
-	%-------------------- Header ----------------------
-	\begin{center}
-		{-GENDER-} $\cdot$\ {-AGE-} \,$\cdot$\, Email: \href{mailto:{-EMAIL-}}{{-EMAIL-}} \,$\cdot$\, Phone: \href{tel:{-PHONE-}}{{-PHONE-}}\,$\cdot$\, Github: \href{https://github.com/{-GITHUB-}}{{-GITHUB-}}
-	\end{center}
-	
-	%%% Short paragraph
-	\sectitle{Professional Summary}
-	\begin{itemize}[itemsep=-5pt]
-		\item{-SUMMARY-1-}
-		\item{-SUMMARY-2-}
-		\item{-SUMMARY-3-}
-		\item{-SUMMARY-4-}
-		\item{-SUMMARY-5-}
-	\end{itemize}
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	\sectitle{Education}
-	{-UNIVERSITY-} \hfill {-EDU-DATE-} \\
-	{-MAJOR-} \space \textBF{-DEGREE-}
-	
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	\sectitle{Technical Skills}
-	\textBF{Programming Languages:} \emph{-SKILL-LANG-} \\
-	\textBF{Databases \& Middleware:} \emph{-SKILL-DB-}\\
-	\textBF{Frameworks:} -SKILL-FRAMEWORK-\\
-	\textBF{AI Engineering:} -SKILL-AI-\\
-	\textBF{Development Tools:} -SKILL-TOOLS-
-	
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	\sectitle{Work Experience}
-	\textBF{-JOB-TITLE-} \hfill \emph{-JOB-COMPANY-}\\ {-JOB-DEPT-} \hfill {-JOB-DATE-}
-	\vspace{-0.2 cm}
-	\begin{enumerate}[itemsep=-5pt]
-		\item{-JOB-DESC-1-}
-		\item{-JOB-DESC-2-}
-		\item{-JOB-DESC-3-}
-		\item{-JOB-DESC-4-}
-		\item{-JOB-DESC-5-}
-	\end{enumerate}
-	\vspace{-0.2 cm}
-	%\begin{flushright}
-	\hdashrule{\textwidth}{0.5pt}{2pt}	
-	\pagebreak
-	%-------------------- SECTIONS ----------------------
-	
-	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-	\sectitle{Project Experience}
-	\textBF{-PROJECT-NAME-} \\ {-PROJECT-ROLE-} \hfill {-PROJECT-DATE-}
-	\vspace{-0.2 cm}
-	\begin{itemize}[itemsep=-5pt]
-		\item{\textbf{Project Overview:}}
-		\vspace{-0.2 cm}
-		\begin{itemize}[itemsep=-5pt]
-			\item {-PROJECT-DESC-}
-		\end{itemize}
-		\item{\textbf{Tech Stack: }-PROJECT-TECH-}
-		\item{\textbf{Responsibilities: }}
-		\begin{enumerate}[itemsep=-5pt]
-			\item{-PROJECT-RESP-1-}
-			\item{-PROJECT-RESP-2-}
-			\item{-PROJECT-RESP-3-}
-			\item{-PROJECT-RESP-4-}
-			\item{-PROJECT-RESP-5-}
-			\item{-PROJECT-RESP-6-}
-		\end{enumerate}
-		\item{\textbf{Key Achievements: }}
-		\vspace{-0.2 cm}
-		\begin{enumerate}[itemsep=-5pt]
-			\item{-PROJECT-RESULT-1-}
-			\item{-PROJECT-RESULT-2-}
-			\item{-PROJECT-RESULT-3-}
-			\item{-PROJECT-RESULT-4-}
-		\end{enumerate}
-	\end{itemize}
-	\vspace{-0.2 cm}
-	\hdashrule{\textwidth}{0.5pt}{2pt}
-	
-	\sectitle{Additional Information}
-	\textBF{Certifications} 
-	\begin{itemize}
-		\item{-CERT-1-}
-		\item{-CERT-2-}
-	\end{itemize}
-	\vspace{0.5ex}
-	
+
+    %-------------------- Title section ----------------------
+    \begin{minipage}{\textwidth}
+        \vspace{7ex}
+        \par{
+            \centering
+            \vspace{-0.9in}
+            % \textcolor{black}{\emph{Curriculum Vitae}}\\
+            \textcolor{linkcolour}{\Large {-NAME-}}
+            \par}
+    \end{minipage}
+
+    %-------------------- Header ----------------------
+    \begin{center}
+        Gender: {-GENDER-} $\cdot$ Age: {-AGE-} \,$\cdot$\, Email: \href{mailto:{-EMAIL-}}{{-EMAIL-}} \,$\cdot$\, Phone: \href{tel:{-PHONE-}}{{-PHONE-}}\,$\cdot$\, Github: \href{https://github.com/{-GITHUB-}}{{-GITHUB-}}
+    \end{center}
+
+    %-------------------- Professional Summary -------------------
+    \sectitle{Professional Summary}
+    \begin{itemize}[itemsep=-5pt]
+        \item{-SUMMARY-1-}
+        \item{-SUMMARY-2-}
+        \item{-SUMMARY-3-}
+        \item{-SUMMARY-4-}
+        \item{-SUMMARY-5-}
+    \end{itemize}
+
+    %-------------------- Education -------------------
+    \sectitle{Education}
+    {-UNIVERSITY-} \hfill {-EDU-DATE-} \\
+    {-MAJOR-} \space \textBF{-DEGREE-} \\
+    \hdashrule{\textwidth}{0.5pt}{2pt}
+
+    {-UNIVERSITY-} \hfill {-EDU-DATE-} \\
+    {-MAJOR-} \space \textBF{-DEGREE-}
+
+    %-------------------- Technical Skills -------------------
+    \sectitle{Technical Skills}
+    \textBF{Programming Languages:} \emph{-SKILL-LANG-PRO-}{-SKILL-LANG-OTHER-} \\
+    \textBF{Databases \& Middleware:} \emph{-SKILL-DB-PRO-}{-SKILL-DB-OTHER-} \\
+    \textBF{Frameworks:} {-SKILL-FRAMEWORK-} \\
+    \textBF{AI Engineering:} {-SKILL-AI-} \\
+    \textBF{Development Tools:} {-SKILL-TOOLS-}
+
+    %-------------------- Work Experience -------------------
+    \sectitle{Work Experience}
+    \textBF{-JOB-TITLE-} \hfill \emph{-JOB-COMPANY-}\\ {-JOB-DEPT-} \hfill {-JOB-DATE-}
+    \vspace{-0.2 cm}
+    \begin{enumerate}[itemsep=-5pt]
+        \item{-JOB-DESC-1-}
+        \item{-JOB-DESC-2-}
+        \item{-JOB-DESC-3-}
+        \item{-JOB-DESC-4-}
+        \item{-JOB-DESC-5-}
+        \item{-JOB-DESC-6-}
+        \item{-JOB-DESC-7-}
+    \end{enumerate}
+    \vspace{-0.2 cm}
+    %\begin{flushright}
+    \hdashrule{\textwidth}{0.5pt}{2pt}
+
+    %-------------------- Project Experience -------------------
+    \sectitle{Project Experience}
+    \textBF{-PROJECT-NAME-} \\ {-PROJECT-ROLE-} \hfill {-PROJECT-DATE-}
+    \vspace{-0.2 cm}
+    \begin{itemize}[itemsep=-5pt]
+        \item{\textbf{Project Overview:}}
+        \vspace{-0.2 cm}
+        \begin{itemize}[itemsep=-5pt]
+            \item {-PROJECT-DESC-}
+        \end{itemize}
+        \item{\textbf{Tech Stack: }{-PROJECT-TECH-}}
+        \item{\textbf{Responsibilities: }}
+        \begin{enumerate}[itemsep=-5pt]
+            \item{-PROJECT-RESP-1-}
+            \item{-PROJECT-RESP-2-}
+            \item{-PROJECT-RESP-3-}
+            \item{-PROJECT-RESP-4-}
+            \item{-PROJECT-RESP-5-}
+            \item{-PROJECT-RESP-6-}
+            \item{-PROJECT-RESP-7-}
+        \end{enumerate}
+        \item{\textbf{Key Achievements: }}
+        \vspace{-0.2 cm}
+        \begin{enumerate}[itemsep=-5pt]
+            \item{-PROJECT-RESULT-1-}
+            \item{-PROJECT-RESULT-2-}
+            \item{-PROJECT-RESULT-3-}
+            \item{-PROJECT-RESULT-4-}
+            \item{-PROJECT-RESULT-5-}
+            \item{-PROJECT-RESULT-6-}
+            \item{-PROJECT-RESULT-7-}
+        \end{enumerate}
+    \end{itemize}
+    \vspace{-0.2 cm}
+    \hdashrule{\textwidth}{0.5pt}{2pt}
+
+    %-------------------- Additional Information -------------------
+    \sectitle{Additional Information}
+    \textBF{{-OTHER-TYPE-1-}}
+    \begin{itemize}[itemsep=-5pt]
+        \item{-OTHER-1-}
+        \item{-OTHER-2-}
+    \end{itemize}
+    \vspace{0.5ex}
 \end{document}
