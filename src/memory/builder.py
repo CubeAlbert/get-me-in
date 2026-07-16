@@ -66,6 +66,7 @@ class MemoryBuilder:
                     {"role": "system", "content": self._system_prompt},
                     {"role": "user", "content": conv_json},
                 ],
+                temperature=0,
                 response_format={"type": "json_object"},
                 extra_body={"thinking": {"type": "disabled"}},
             )

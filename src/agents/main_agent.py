@@ -14,7 +14,7 @@ class MainAgent(BaseAgent):
     当前阶段仅作为 BaseAgent 的具体实现，对接 CLI 替换 LLMHandler。
     """
 
-    _pro_params: dict = {}
+    _pro_params: dict = {"response_format": {"type": "json_object"}, "temperature": 0.1}
     _flash_params: dict = {}
 
     # ── 14 个抽象方法实现 ──────────────────────────────────

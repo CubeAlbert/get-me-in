@@ -7,7 +7,7 @@ from src.agents.registry import JOB_SEARCH_AGENT_KEY
 class JobSearchAgent(BaseAgent):
     """职位搜索分析 Agent — 帮助用户搜索和筛选程序员岗位。"""
 
-    _pro_params: dict = {}
+    _pro_params: dict = {"response_format": {"type": "json_object"}, "temperature": 0.2}
     _flash_params: dict = {}
 
     # ── 14 个抽象方法实现 ──────────────────────────────────

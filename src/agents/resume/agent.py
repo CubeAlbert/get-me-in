@@ -1,7 +1,7 @@
 """ResumeAgent — 简历定制子 Agent。
 
 使用 workspace 工具直接操作 LaTeX 模板文件，支持：
-1. 从模板创建简历（copy_template → 查看 PLACEHOLDER.txt → 填充占位符）
+1. 从模板创建简历（copy_template → 查看 README.md → 填充占位符）
 2. 根据 JD 定制已有简历（workspace_read → workspace_edit → build_pdf）
 3. 用户可直接要求修改特定部分，Agent 定位 → 读取 → 编辑 → 编译 → 预览
 """
@@ -13,7 +13,7 @@ from src.agents.registry import RESUME_AGENT_KEY
 class ResumeAgent(BaseAgent):
     """简历定制 Agent — 通过工作区工具操作 LaTeX 简历。"""
 
-    _pro_params: dict = {}
+    _pro_params: dict = {"response_format": {"type": "json_object"}, "temperature": 0.2}
     _flash_params: dict = {}
 
     # ── 14 个抽象方法实现 ──────────────────────────────────────
