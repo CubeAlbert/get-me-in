@@ -780,7 +780,7 @@ workspace_open                     →  预览
 | `copy_template` | CONFIG | 复制 LaTeX 模板到工作区 |
 | `build_pdf` | NEVER | `pdflatex -synctex=1 -interaction=nonstopmode` 编译，60s timeout |
 
-**数据模型（`src/agents/resume/schemas.py`）：** 已定义 `BasicInfo` / `Education` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo` / `Resume`，暂不用于 schema 填充模式（📌 决策 114），LLM 直接用 workspace 工具编辑 LaTeX。
+**数据模型：** 原 `src/agents/resume/schemas.py` 已删除（M5-Review）。Schema-based 填充模式未启用（决策 114），LLM 直接用 workspace 工具编辑 LaTeX，无需维护数据模型。
 
 **ResumeAgent（`src/agents/resume/agent.py`）：** 继承 `BaseAgent`，14 占位符实现，`_get_agent_key()` 返回 `RESUME_AGENT_KEY`。workspace 工具（agent=[RESUME_AGENT_KEY]）和 `query_reference_data`（agent=[\"*\"]) 自动可见。
 

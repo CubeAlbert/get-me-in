@@ -292,7 +292,7 @@
 
 ### 3. 数据结构
 
-- ✅ **Resume 数据模型** — `src/agents/resume/schemas.py`：`BasicInfo` / `Education` / `TechStack` / `WorkExperience` / `ProjectExperience` / `OtherInfo` / `Resume`
+- ⛔ **Resume 数据模型** — `src/agents/resume/schemas.py` 已删除。Schema-based 填充未启用，无需维护
 - 📌 **Schema-based 填充工具** — 暂不实现，改为 LLM 用 workspace 工具直接编辑 LaTeX
 
 ### 4. ResumeAgent 实现
