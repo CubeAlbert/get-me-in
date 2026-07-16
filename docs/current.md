@@ -25,3 +25,4 @@
 119. **plan_status 每轮注入** — PlanStatusInfo 替代一次性 PLAN 注入，LLM 始终可见计划全貌
 120. **workspace_edit 读后编辑守卫** — read 后写 _read_files，edit 前校验+消费，每次 edit 后需重新 read
 121. **workspace_delete 批量删除** — 入参从 str 改为 list[str]，部分失败不中断
+122. **CLI 命令注册改用 `_COMMAND_HELP` dict** — 命令名→描述集中管理，`_COMMANDS` 自动生成；新增 `/help` 和 `/auto-approve-switch` 命令

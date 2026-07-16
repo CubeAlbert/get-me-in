@@ -123,6 +123,13 @@
 - [决策 113 — copy_template 用户交互前置到 LLM](#决策-113--copy_template-用户交互前置到-llm)
 - [决策 114 — 简历构建改为 workspace 工具直接编辑 LaTeX](#决策-114--简历构建改为-workspace-工具直接编辑-latex)
 - [决策 115 — /dump 命令导出对话历史用于调试](#决策-115--dump-命令导出对话历史用于调试)
+- [决策 116 — PLACEHOLDER.txt 升级为 README.md](#决策-116--placeholder.txt-升级为-readmemd)
+- [决策 117 — Agent temperature 分层设置](#决策-117--agent-temperature-分层设置)
+- [决策 118 — 删除 LLMHandler](#决策-118--删除-llmhandler)
+- [决策 119 — plan_status 每轮注入替代一次性 PLAN 消息](#决策-119--plan_status-每轮注入替代一次性-plan-消息)
+- [决策 120 — workspace_edit 读后编辑守卫](#决策-120--workspace_edit-读后编辑守卫)
+- [决策 121 — workspace_delete 批量删除](#决策-121--workspace_delete-批量删除)
+- [决策 122 — CLI 命令注册改用 _COMMAND_HELP dict + /help 命令](#决策-122--cli-命令注册改用-_command_help-dict--help-命令)
 
 ---
 
@@ -2562,3 +2569,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：**
 - 减少 tool call 次数
 - 错误不中断批量操作，LLM 可从 errors 字段了解失败原因
+
+---
+
+### 决策 122 — CLI 命令注册改用 `_COMMAND_HELP` dict + `/help` 命令
+
+**背景：** CLI 命令原先以 flat list `_COMMANDS` 注册，欢迎信息中逐一手写命令说明，新增命令需同步改三处（list、dispatch 分支、欢迎信息），且命令说明散落在欢迎字符串中。
+
+**决策：**
+- 用 `_COMMAND_HELP: dict[str, str]` 替代 flat `_COMMANDS` list，命令名 → 描述集中管理
+- `_COMMANDS` 由 `list(_COMMAND_HELP.keys())` 自动生成
+- 新增 `/help` 命令，遍历 `_COMMAND_HELP` 打印所有命令说明
+- 新增 `/auto-approve-switch [on|off]` 命令，运行时修改 `config.TOOL_CONFIRM_ENABLED`（`SimpleNamespace` 可变，`_should_confirm()` 每次读取即时生效）
+- 欢迎信息从一长串简化为 `输入 /help 查看所有命令`
+
+**理由：**
+- 单一数据源：加命令只需加一条 dict entry，自动获得 tab 补全 + help 文档
+- `/help` 自文档化，无需在欢迎信息中堆砌所有命令
+- `/auto-approve-switch` 利用 config `SimpleNamespace` 运行时可变特性，无需重启
+
+**曾考虑的替代方案：**
+- 保持 flat list + 手写欢迎信息 —— 新增命令改多处，容易遗漏
+- 单独维护 help 文本 —— 与命令列表不同步的风险

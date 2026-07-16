@@ -93,7 +93,17 @@ class App:
     负责：接收输入 → 委托 Handler → rich 渲染输出。
     """
 
-    _COMMANDS = ["/exit", "/edit", "/ragreload", "/exit_sub", "/dump"]
+    _COMMAND_HELP: dict[str, str] = {
+        "/auto-approve-switch": "切换工具审批开关 [on|off]",
+        "/dump": "导出当前 Agent 对话历史",
+        "/edit": "调 $EDITOR 输入长文本",
+        "/exit": "退出程序",
+        "/exit_sub": "从子 Agent 退回主 Agent",
+        "/help": "显示所有命令说明",
+        "/ragreload": "重载 RAG 索引（可选关键词）",
+    }
+
+    _COMMANDS = list(_COMMAND_HELP.keys())
 
     def __init__(self, handler: Handler) -> None:
         self._handler = handler
@@ -217,6 +227,13 @@ class App:
             if not user_input:
                 continue
 
+            if user_input == "/help":
+                self._console.print()
+                for cmd, desc in self._COMMAND_HELP.items():
+                    self._console.print(f"  [bold]{cmd}[/] — [dim]{desc}[/]")
+                self._console.print()
+                continue
+
             if user_input == "/exit":
                 self._console.print("[dim]再见！[/]")
                 break
@@ -235,6 +252,19 @@ class App:
                     self._console.print(f"[dim]history dumped: {result}[/]")
                 else:
                     self._console.print("[red]dump failed, see log for details[/]")
+                continue
+
+            if user_input == "/auto-approve-switch" or user_input.startswith("/auto-approve-switch "):
+                arg = user_input[22:].strip()
+                if arg == "on":
+                    config.TOOL_CONFIRM_ENABLED = True
+                elif arg == "off":
+                    config.TOOL_CONFIRM_ENABLED = False
+                else:
+                    config.TOOL_CONFIRM_ENABLED = not config.TOOL_CONFIRM_ENABLED
+                state = "ON" if config.TOOL_CONFIRM_ENABLED else "OFF"
+                self._console.print(f"[dim]工具审批: {state} (TOOL_CONFIRM_ENABLED={config.TOOL_CONFIRM_ENABLED})[/]")
+                self._console.print()
                 continue
 
             if user_input == "/exit_sub":
@@ -360,5 +390,5 @@ class App:
         self._console.print(
             Panel.fit("[bold green]get-me-in[/] — AI 求职助手")
         )
-        self._console.print("[dim]命令: /edit 长文本输入 | /ragreload 重载RAG | /dump 导出历史 | /exit_sub 退回主Agent | /exit 退出[/]")
+        self._console.print("[dim]输入 /help 查看所有命令[/]")
         self._console.print()
