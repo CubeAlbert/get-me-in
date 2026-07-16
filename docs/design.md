@@ -33,6 +33,7 @@
   - [4.13 Tool 系统](#413-tool-系统)
   - [4.14 面试问答 Agent](#414-面试问答-agent)
   - [4.15 Lifecycle 模块](#415-lifecycle-模块)
+  - [4.16 会话状态管理模块](#416-会话状态管理模块)
 - [5. 参考资料与约定](#5-参考资料与约定)
 
 ---
@@ -1085,6 +1086,69 @@ class ToolRegistry:
 - 逆序执行 —— 后注册的先清理，符合依赖关系（如 memory 依赖 RAG，RAG 先注册，memory 后注册，清理时 memory 先退出）
 - 防御性 —— 单个 hook 异常不阻止其他 hook 执行，日志记录异常详情
 - daemon 线程保持 —— `shutdown()` 提供优雅退出路径，不改变线程性质，强制杀进程不会被卡住
+
+### 4.16 会话状态管理模块
+
+**用途：** 自动持久化和恢复 Agent 对话状态，支持崩溃恢复和未来回滚。每次 LLM FINISH 时全量保存当前 handler 的对话历史 + plan 状态到文件系统。
+
+**职责：**
+- Auto-save：每次 FINISH 自动保存到 `data/save/{session_id}/` 目录
+- Restore：`/restore` 命令从存档恢复 `_history` + `_plan`
+- Plan 持久化：`session.json` 中按 agent 分字段存储 PlanItem 列表
+- 延迟子 Agent 清理：sub→main 后等 main 成功保存再删 sub 存档
+
+**存储结构：**
+
+```
+data/save/{session_id}/
+├── session.json    # 元数据 + {agent_key}_plan
+├── main.json       # 主 Agent 消息列表
+└── resume.json     # 子 Agent 消息列表（仅在子 Agent 活跃时）
+```
+
+**关键接口 / 公开 API（`src/utils/saver.py`）：**
+
+| 函数 / 类 | 说明 |
+|-----------|------|
+| `save_messages(filepath, history) -> bool` | 序列化 Message 列表为 JSON，写入文件 |
+| `load_messages(filepath) -> list[Message] \| None` | 读取 JSON 文件，重建 Message 列表 |
+| `save_session_meta(session_dir, session_id, current_agent, plan, plan_keys_to_remove)` | 写入 session.json，保留其他 agent 的 plan |
+| `list_sessions(save_dir) -> list[dict]` | 扫描存档目录，按 mtime 倒序返回会话列表 |
+| `SaveManager` | 高层封装类 — 管理 session_id、延迟清理、`save(agent_key, history, plan)`、`load_main()`、`load_sub()`、`find_sub_agent()`、`load_plans()`、`list_sessions()` |
+
+**SaveManager 类（供 App 使用）：**
+
+```python
+class SaveManager:
+    session_id: str               # 当前会话 ID（yyyyMMddHHmmss），可读写
+    def save(agent_key, history, plan=None) -> None      # 保存 + 延迟清理
+    def schedule_sub_cleanup(agent_key) -> None          # 标记 sub 存档待清理
+    def load_main(session_id) -> list[Message] | None    # 读取主 Agent 历史
+    def load_sub(session_id, agent_key) -> list[Message] | None  # 读取子 Agent 历史
+    def find_sub_agent(session_id) -> str | None         # 找到子 Agent key
+    def load_plans(session_id) -> dict[str, list]        # 读取所有 agent 的 plan
+    def list_sessions() -> list[dict]                    # 列出所有存档会话
+```
+
+**序列化：**
+- `Message.from_dict(d)` — 从 `dataclasses.asdict()` 输出重建 Message，含 `plan_status`（调用 `PlanStatusInfo.from_dict()`）
+- `PlanStatusInfo.from_dict(d)` — 递归重建 PlanItem 列表
+- 写入时用 `dataclasses.asdict()` + `json.dumps(default=str)`，无双层编码
+
+**App 集成（`src/cli/app.py`）：**
+- `_save_mgr = SaveManager(Path(config.SAVE_DIR))` — `__init__` 中创建
+- `_auto_save()` → `_save_mgr.save(agent_key, history, plan=self._handler._plan)` — FINISH 时调用
+- `/restore` → `_restore_interactive()` / `_do_restore(id)` — 用 `questionary.select` 或直接恢复
+
+**位置：** `src/utils/saver.py` + `src/cli/app.py`（薄调用层）
+
+**设计决策：**
+- 独立于 BaseAgent —— Agent 不感知文件系统，状态管理在 App 层
+- 延迟清理 —— sub→main 时不立即删 sub 存档，等 main 下次 FINISH 保存成功后再删，避免崩溃丢数据
+- 全量覆盖写入 —— 每次 save 覆盖对应 JSON 文件，为后续 rollback 预留（每条 FINISH 一个完整快照）
+- Plan 随 session.json 持久化 —— save 时写入当前 agent 的 plan 并保留其他 agent 的 plan，restore 时全部装载
+- Session ID 由 App 生成 —— `yyyyMMddHHmmss` 格式，人类可读、自然有序
+- 后续扩展 —— rollback 到上一句话（回退到前一条 FINISH 对应的 save），可通过 CLI 命令触发
 
 ## 5. 参考资料与约定
 

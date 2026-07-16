@@ -101,16 +101,21 @@ class App:
         "/exit_sub": "从子 Agent 退回主 Agent",
         "/help": "显示所有命令说明",
         "/ragreload": "重载 RAG 索引（可选关键词）",
+        "/restore": "恢复存档会话（无参数列出选择 | /restore <id> 直接恢复）",
     }
 
     _COMMANDS = list(_COMMAND_HELP.keys())
 
     def __init__(self, handler: Handler) -> None:
+        from pathlib import Path
+        from src.utils.saver import SaveManager
+
         self._handler = handler
         self._main_agent = handler  # 切回目标，子 Agent 退出时回到这里
         self._switch_tool_call_id: str | None = None  # main→sub 时的 TOOL_CALL id
         self._console = Console(force_terminal=True)
         self._editor = _resolve_editor()
+        self._save_mgr = SaveManager(Path(config.SAVE_DIR))
 
     @staticmethod
     def _complete_commands() -> list[str]:
@@ -128,6 +133,93 @@ class App:
             return get_agent_registry().get(name)
         except KeyError:
             return None
+
+    # ── auto-save / restore ──
+
+    def _auto_save(self) -> None:
+        """自动保存当前 handler 的对话历史和 plan 状态。"""
+        self._save_mgr.save(
+            self._handler._get_agent_key(),
+            self._handler._history,
+            plan=self._handler._plan,
+        )
+
+    def _restore_interactive(self) -> None:
+        """用 questionary.select 列出存档让用户选择恢复。"""
+        sessions = self._save_mgr.list_sessions()
+        if not sessions:
+            self._console.print("[dim]没有找到存档会话[/]")
+            self._console.print()
+            return
+
+        choices = []
+        for s in sessions:
+            detail_parts = []
+            if s.get("saved_at"):
+                try:
+                    ts = s["saved_at"]
+                    detail_parts.append(ts[11:19] if "T" in ts else ts)
+                except Exception:
+                    pass
+            if s.get("sub_agent"):
+                detail_parts.append(f"sub:{s['sub_agent']}")
+            title = s["id"]
+            if detail_parts:
+                title += f"  [{', '.join(detail_parts)}]"
+            choices.append(questionary.Choice(title=title, value=s["id"]))
+
+        selected = questionary.select(
+            "选择要恢复的存档:",
+            choices=choices,
+            qmark="",
+        ).ask()
+
+        if selected:
+            self._do_restore(selected)
+
+    def _do_restore(self, session_id: str) -> None:
+        """从存档目录恢复会话状态（含 plan）。"""
+        messages = self._save_mgr.load_main(session_id)
+        if messages is None:
+            self._console.print("[red]读取存档失败，详见日志[/]")
+            self._console.print()
+            return
+
+        self._save_mgr.session_id = session_id
+        self._main_agent._history = messages
+        self._switch_tool_call_id = None
+
+        # 恢复 plan 状态
+        plans = self._save_mgr.load_plans(session_id)
+        if "main" in plans:
+            self._main_agent._plan = plans["main"]
+
+        sub_agent = self._save_mgr.find_sub_agent(session_id)
+        if sub_agent:
+            sub_messages = self._save_mgr.load_sub(session_id, sub_agent)
+            if sub_messages is not None:
+                handler = self._get_handler(sub_agent)
+                if handler is None:
+                    self._console.print(f"[red]未知 Agent: {sub_agent}[/]")
+                    self._handler = self._main_agent
+                else:
+                    handler._history = sub_messages
+                    if sub_agent in plans:
+                        handler._plan = plans[sub_agent]
+                    self._handler = handler
+                    self._console.print(
+                        f"[dim]已恢复到 {session_id}，当前在 {sub_agent} 子Agent[/]")
+            else:
+                self._handler = self._main_agent
+                self._console.print(
+                    f"[yellow]子Agent存档读取失败 ({sub_agent})，仅恢复主Agent[/]")
+        else:
+            self._handler = self._main_agent
+            self._console.print(f"[dim]已恢复到 {session_id}[/]")
+
+        self._console.print()
+
+    # ── agent loop ──
 
     def _process_with_spinner(self, request: Request, bridge: UIBridge) -> Response:
         """后台调 handler.process()，主线程显示等待动效并处理 UI 请求。
@@ -254,6 +346,14 @@ class App:
                     self._console.print("[red]dump failed, see log for details[/]")
                 continue
 
+            if user_input == "/restore" or user_input.startswith("/restore "):
+                arg = user_input[9:].strip()
+                if arg:
+                    self._do_restore(arg)
+                else:
+                    self._restore_interactive()
+                continue
+
             if user_input == "/auto-approve-switch" or user_input.startswith("/auto-approve-switch "):
                 arg = user_input[22:].strip()
                 if arg == "on":
@@ -304,11 +404,18 @@ class App:
                 )
 
                 if response.type == ResponseType.FINISH:
+                    # ═══ auto-save: 保存当前 handler 的对话历史 ═══
+                    self._auto_save()
+
                     if response.switch_agent:
+                        old_agent_key = self._handler._get_agent_key()
+
                         if response.switch_agent != MAIN_AGENT_KEY:
+                            # main → sub: 保存 tool_call_id 用于后续闭环
                             if response.switch_tool_call_id:
                                 self._switch_tool_call_id = response.switch_tool_call_id
                         else:
+                            # sub → main: 向 main 注入 tool_call_result
                             if self._switch_tool_call_id:
                                 self._main_agent._history.append(
                                     Message(
@@ -326,6 +433,12 @@ class App:
                             self._console.print(f"[red]未知 Agent: {response.switch_agent}[/]")
                             break
                         self._handler = new_handler
+
+                        # sub → main: 保存 main 注入后的状态，延迟删除 sub 存档
+                        if response.switch_agent == MAIN_AGENT_KEY and old_agent_key != MAIN_AGENT_KEY:
+                            self._auto_save()
+                            self._save_mgr.schedule_sub_cleanup(old_agent_key)
+
                         context = response.switch_context or "请开始处理。"
                         request = Request(
                             type=RequestType.USER_INPUT,

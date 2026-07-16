@@ -47,3 +47,23 @@ class PlanStatusInfo:
     current: PlanItem | None = None
     completed: list[PlanItem] = field(default_factory=list)
     remaining: list[PlanItem] = field(default_factory=list)
+
+    @staticmethod
+    def from_dict(d: dict | None) -> "PlanStatusInfo | None":
+        """从 dict 重建 PlanStatusInfo（用于 save/restore）。"""
+        if d is None:
+            return None
+
+        def _item(item_d: dict) -> PlanItem:
+            return PlanItem(
+                id=item_d["id"],
+                description=item_d["description"],
+                status=PlanStatus(item_d["status"]),
+                order=item_d["order"],
+            )
+
+        return PlanStatusInfo(
+            current=_item(d["current"]) if d.get("current") else None,
+            completed=[_item(i) for i in d.get("completed", [])],
+            remaining=[_item(i) for i in d.get("remaining", [])],
+        )

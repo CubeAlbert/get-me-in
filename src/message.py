@@ -84,6 +84,34 @@ class Message:
         return json.dumps(dataclasses.asdict(self), ensure_ascii=False, default=str)
 
     @staticmethod
+    def from_dict(d: dict) -> "Message":
+        """从字典反序列化 Message，用于 save/restore。
+
+        与 :meth:`from_llm_reply` 不同，此方法从 ``dataclasses.asdict()``
+        的输出重建 Message，而非从 LLM JSON 解析。
+        """
+        from src.agents.plan import PlanStatusInfo
+
+        ts = d.get("timestamp")
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts)
+        elif ts is None:
+            ts = None  # 由 field(default_factory=datetime.now) 自动填充
+
+        return Message(
+            event_type=EventType(d["event_type"]),
+            message=d.get("message", ""),
+            id=d.get("id", ""),
+            role=Role(d.get("role", "user")),
+            timestamp=ts,
+            tool=d.get("tool"),
+            tool_call_id=d.get("tool_call_id"),
+            event_payload=d.get("event_payload"),
+            thinking=d.get("thinking"),
+            plan_status=PlanStatusInfo.from_dict(d.get("plan_status")),
+        )
+
+    @staticmethod
     def from_llm_reply(reply: str) -> "Message":
         """从 LLM 返回的 JSON 构建 Message。
 

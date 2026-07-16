@@ -130,6 +130,7 @@
 - [决策 120 — workspace_edit 读后编辑守卫](#决策-120--workspace_edit-读后编辑守卫)
 - [决策 121 — workspace_delete 批量删除](#决策-121--workspace_delete-批量删除)
 - [决策 122 — CLI 命令注册改用 _COMMAND_HELP dict + /help 命令](#决策-122--cli-命令注册改用-_command_help-dict--help-命令)
+- [决策 123 — 会话状态管理模块（auto-save / restore / rollback）](#决策-123--会话状态管理模块auto-save--restore--rollback)
 
 ---
 
@@ -2591,3 +2592,33 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 - 保持 flat list + 手写欢迎信息 —— 新增命令改多处，容易遗漏
 - 单独维护 help 文本 —— 与命令列表不同步的风险
+
+---
+
+### 决策 123 — 会话状态管理模块（auto-save / restore / rollback）
+
+**背景：** `/dump` 命令只能手动导出对话历史用于调试，缺乏自动持久化和恢复能力。用户希望在每次 LLM FINISH 后自动保存会话状态，支持崩溃恢复和跨会话回滚。
+
+**决策：**
+
+- **模块位置**：新建 `src/utils/saver.py`，包含底层函数（`save_messages` / `load_messages` / `save_session_meta` / `list_sessions`）和高层 `SaveManager` 类
+- **存储结构**：`data/save/{session_id}/` 目录，`main.json` + `{agent_key}.json` + `session.json`（元数据 + plan 状态）
+- **Session ID**：`App.__init__` 时生成 `yyyyMMddHHmmss` 格式 ID，由 `SaveManager` 管理
+- **Auto-save 时机**：每次 LLM FINISH 时自动保存（`App._auto_save()` → `SaveManager.save()`）
+- **延迟子 Agent 清理**：sub→main 时不立即删除 sub 存档，而是设 `pending_sub_cleanup` 标记；等 main 下次 FINISH 成功保存后再删除 sub 存档和对应 plan，避免崩溃丢数据
+- **`/restore` 命令**：无参数时 `questionary.select` 按 mtime 倒序列出存档；带 session_id 直接恢复。恢复时重建 `_history` + `_plan`，如有 sub 存档则切换 handler
+- **Plan 持久化**：`session.json` 中按 `{agent_key}_plan` 分字段存储 `PlanItem` 列表，save 时写入当前 agent 的 plan 并保留其他 agent 的 plan，restore 时装载回 `_plan`
+- **Message 序列化**：`Message.from_dict()` 支持从 `dataclasses.asdict()` 输出重建，含 `plan_status`；`PlanStatusInfo.from_dict()` 递归重建
+- **全量覆盖写入**：每次 save 覆盖对应 JSON 文件，为后续 rollback 功能预留（每条 FINISH 一个快照）
+- **后续扩展**：rollback 到上一句话（上一条 FINISH 对应的 save）
+
+**理由：**
+- 状态管理独立模块，不耦合到 App 或 BaseAgent
+- 目录结构清晰，一个 session 一个目录，人可浏览
+- 延迟清理保证 sub→main 切换窗口期不丢数据
+- Plan 随对话历史一起持久化，restore 后 LLM 继续执行原有计划
+
+**曾考虑的替代方案：**
+- 在 `BaseAgent` 中实现 save/restore —— App 层耦合，Agent 不应感知文件系统
+- 每次 FINISH 保留 diff 而非全量覆盖 —— 复杂度高，rollback 时需 apply 一系列 diff，出错概率大
+- sub 存档立即删除 —— 崩溃窗口风险，已拒绝

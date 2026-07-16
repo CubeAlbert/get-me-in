@@ -317,3 +317,14 @@
 - ✅ **Review RAG 工具** — 确认无需修改，跳过审查
 - ⛔ **Review MainAgent 提示词** — 用户不需要 review MainAgent prompt
 >> 替代：无
+
+### 7. 会话状态管理（auto-save / restore / rollback）
+
+- ✅ **Auto-save on FINISH** — 每次 LLM FINISH 自动保存对话历史到 `data/save/{session_id}/`
+- ✅ **SaveManager 模块** — `src/utils/saver.py`，封装 session_id、文件路径、延迟清理、plan 持久化
+- ✅ **Message.from_dict() 往返序列化** — 支持 `dataclasses.asdict()` → JSON → Message 重建，含 `plan_status`
+- ✅ **`/restore` 命令** — 无参数时 `questionary.select` 交互选择，带 id 直接恢复；恢复 `_history` + `_plan`
+- ✅ **延迟子 Agent 清理** — sub→main 后等 main 保存成功再删 sub 存档，避免崩溃丢数据
+- ✅ **Plan 持久化** — `session.json` 按 `{agent_key}_plan` 存储，跨 save 保留所有 agent 的 plan
+- ✅ **SaveManager 抽出** — auto-save/restore 逻辑从 `app.py` 移至 `SaveManager` 类
+- ⬜ **Rollback（回滚到上句话）** — 每次 FINISH 产生全量快照，支持回退到前一个 FINISH 状态

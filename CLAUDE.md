@@ -19,6 +19,7 @@ CLI 命令：
 - `/edit` — 长文本输入（调 `$EDITOR`）
 - `/ragreload [关键词]` — 重载 RAG 索引
 - `/dump` — 导出当前 Agent 对话历史到 `data/logs/`
+- `/restore [session_id]` — 恢复存档会话（无参数交互选择）
 - `/exit_sub` — 子 Agent 退回主 Agent
 - `/exit` — 退出程序
 
@@ -58,6 +59,7 @@ CLI 命令：
 | 基础设施 | Lifecycle 模块 (`src/lifecycle.py`) | `register_shutdown(hook, name)` → `shutdown()` 逆序执行 |
 | 基础设施 | CLI/App 层 (`src/cli/`) | `App`（I/O + 渲染 + 双循环）+ `Handler`（抽象协议）；`Request`/`Response` 为 App↔Agent 协议层，不进对话历史 |
 | 基础设施 | 文件读取 (`src/utils/file_reader.py`) | `read_text(path, offset, limit)` / `list_directory(path)` / `search_text(root, pattern, ...)` / `read_pdf` / `read_docx`；charset-normalizer 编码检测 |
+| 基础设施 | 状态管理 (`src/utils/saver.py`) | `SaveManager` 类：auto-save on FINISH → `data/save/{session_id}/`；`/restore` 恢复 `_history` + `_plan`；延迟 sub 清理防崩溃；`session.json` 持久化 plan 状态 |
 | 基础设施 | 对话 dump (`src/utils/dumper.py`) | `dump_history(agent_name, history)` → `data/logs/<agent>_<datetime>_message.dump` |
 | Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}`；Plan 基础设施（`_plan` + 3 工具 + system_message 注入）；`dump_history()` 导出历史 |
 | Agent | MainAgent (`src/agents/main_agent.py`) | 路由 Agent：只做意图识别 + 调度子 Agent，不执行领域任务 |
