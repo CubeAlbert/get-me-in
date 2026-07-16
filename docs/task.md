@@ -314,6 +314,6 @@
 - ✅ **Review workspace 工具** — workspace_replace（读后替换约束）、workspace_edit（读后编辑守卫）、workspace_delete（批量删除）、switch_tools（provide_choices 优化）
 - ✅ **Review resume 工具** — copy_template（PLACEHOLDER.txt→README.md + 双重后缀防护）、build_pdf（encoding 修复）、模板全面重构（CHN+EN 同步）
 - ✅ **Review Agent 提示词** — ResumeAgent 去除显式工具名、整合 DecisionPolicy/ExitCriteria/GeneralPrinciples
-- ⬜ **Review RAG 工具** — `query_memory` / `query_reference_data`
+- ✅ **Review RAG 工具** — 确认无需修改，跳过审查
 - ⛔ **Review MainAgent 提示词** — 用户不需要 review MainAgent prompt
 >> 替代：无

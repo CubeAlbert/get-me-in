@@ -1,14 +1,16 @@
 # 当前状态
 
-**当前阶段：** M5-Review: 工具与提示词审查优化
+**当前阶段：** M5: 简历 Agent
 
-**当前任务：** Review 当前所有工具及 Agent 提示词，优化质量
+**当前任务：** 记忆集成（M5-5）
 
-**当前子任务：** workspace / resume 工具及 ResumeAgent 提示词 review 已完成；剩余 RAG 工具
+**当前子任务：** 简历版本写入记忆模块
 
 **当前阻塞：** 无
 
-**下一步：** Review RAG 工具（`query_memory` / `query_reference_data`）
+**下一步：** 决定是否实现记忆集成，或进入下一阶段
+
+**已暂缓：** schema-based 填充工具、记忆集成
 
 **已暂缓：** schema-based 填充工具、记忆集成
 
