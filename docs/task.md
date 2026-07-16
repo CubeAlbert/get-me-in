@@ -311,7 +311,9 @@
 
 ### 6. M5-Review — 工具与提示词审查
 
-- 🔄 **Review workspace 工具** — 逐一审查 10 个 workspace 工具 schema / prompt / 异常处理
-- 🔄 **Review resume 工具** — `copy_template`：PLACEHOLDER.txt→README.md，模板全面重构，温度 0.2；`build_pdf` 暂未 review
+- ✅ **Review workspace 工具** — workspace_replace（读后替换约束）、workspace_edit（读后编辑守卫）、workspace_delete（批量删除）、switch_tools（provide_choices 优化）
+- ✅ **Review resume 工具** — copy_template（PLACEHOLDER.txt→README.md + 双重后缀防护）、build_pdf（encoding 修复）、模板全面重构（CHN+EN 同步）
+- ✅ **Review Agent 提示词** — ResumeAgent 去除显式工具名、整合 DecisionPolicy/ExitCriteria/GeneralPrinciples
 - ⬜ **Review RAG 工具** — `query_memory` / `query_reference_data`
-- ⬜ **Review Agent 提示词** — ResumeAgent + MainAgent prompt 与实际工具一致性
+- ⛔ **Review MainAgent 提示词** — 用户不需要 review MainAgent prompt
+>> 替代：无

@@ -2524,3 +2524,41 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 消除死代码，降低维护负担
 - 减少不必要的模块依赖
 - `MainAgent` 已稳定运行，无回退需求
+
+---
+
+### 决策 119 — plan_status 每轮注入替代一次性 PLAN 消息
+
+**背景：** 原 plan 注入为一次性 `[PLAN] 当前任务 [1/3]: ...` 消息，仅在新任务激活时注入一次，LLM 容易在多轮对话后遗忘计划上下文。
+
+**决策：** 新增 `PlanStatusInfo` 数据结构（current/completed/remaining），`_to_openai()` 每轮将序列化后的 plan_status JSON 注入 system prompt 末尾。移除 `_last_injected_plan_id` 标记机制。
+
+**理由：**
+- 每轮注入确保 LLM 始终可见计划全貌而非仅当前任务
+- system prompt 注入比 _history 消息更可靠（不会被压缩或遗忘）
+- 简化注入逻辑，减少状态管理
+
+---
+
+### 决策 120 — workspace_edit 读后编辑守卫
+
+**背景：** LLM 可能凭历史上下文中的文件内容进行编辑，导致 old_content 校验失败或编辑错行。
+
+**决策：** 模块级 `_read_files: set[str]` 集合。`workspace_read` 后将文件绝对路径加入集合；`workspace_edit` 前检查集合是否存在，未命中则抛 `ToolCallException` 提示先 read；edit 成功后从集合中移除（一次 read 对应一次 edit）。
+
+**理由：**
+- 强制 LLM 编辑前获取最新文件内容
+- 消费机制确保每次 edit 后需重新 read，避免连续编辑导致行号漂移
+- 代码层面兜底，不依赖 prompt 约束
+
+---
+
+### 决策 121 — workspace_delete 批量删除
+
+**背景：** 原 `workspace_delete` 每次只能删除一个路径，删除多个文件（如编译产物 .aux/.log/.out）需要多次调用。
+
+**决策：** 入参从 `path: str` 改为 `paths: list[str]`，返回 `{"deleted": [...], "errors": [...]}`，单个路径失败不中断其他路径。
+
+**理由：**
+- 减少 tool call 次数
+- 错误不中断批量操作，LLM 可从 errors 字段了解失败原因
