@@ -163,6 +163,8 @@ class App:
                     pass
             if s.get("sub_agent"):
                 detail_parts.append(f"sub:{s['sub_agent']}")
+            if s.get("preview"):
+                detail_parts.append(f'"{s["preview"][:40]}"')
             title = s["id"]
             if detail_parts:
                 title += f"  [{', '.join(detail_parts)}]"
@@ -207,17 +209,55 @@ class App:
                     if sub_agent in plans:
                         handler._plan = plans[sub_agent]
                     self._handler = handler
-                    self._console.print(
-                        f"[dim]已恢复到 {session_id}，当前在 {sub_agent} 子Agent[/]")
             else:
                 self._handler = self._main_agent
                 self._console.print(
                     f"[yellow]子Agent存档读取失败 ({sub_agent})，仅恢复主Agent[/]")
         else:
             self._handler = self._main_agent
-            self._console.print(f"[dim]已恢复到 {session_id}[/]")
+
+        self._render_context_recap(session_id, sub_agent)
 
         self._console.print()
+
+    def _render_context_recap(self, session_id: str, sub_agent: str | None) -> None:
+        """恢复后渲染最近 N 条对话消息，让用户看到上文。"""
+        history = self._handler._history
+        if not history:
+            return
+
+        # 倒取最后 5 条非 SYSTEM 消息（有实际内容）
+        recent: list[Message] = []
+        for m in reversed(history):
+            if m.event_type == EventType.SYSTEM_MESSAGE:
+                continue
+            text = (m.message or "").strip()
+            if not text:
+                continue
+            recent.append(m)
+            if len(recent) >= 5:
+                break
+        recent.reverse()
+
+        if not recent:
+            return
+
+        # 除最后一条外截断
+        lines: list[str] = []
+        for i, m in enumerate(recent):
+            is_last = (i == len(recent) - 1)
+            text = " ".join((m.message or "").split())
+            if not is_last and len(text) > 80:
+                text = text[:80] + "…"
+            prefix = "> " if (m.role == Role.USER or m.event_type == EventType.USER_INPUT) else "  "
+            lines.append(prefix + text)
+
+        agent_info = f" — {sub_agent}" if sub_agent else ""
+        self._console.print(f"[dim]── 已恢复 {session_id}{agent_info} ──[/]")
+        for line in lines[:-1]:
+            self._console.print(f"[dim]{line}[/]")
+        if lines:
+            self._console.print(lines[-1])
 
     # ── agent loop ──
 

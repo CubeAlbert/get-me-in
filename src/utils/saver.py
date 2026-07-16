@@ -87,6 +87,7 @@ def save_session_meta(
     current_agent: str,
     plan: list | None = None,
     plan_keys_to_remove: list[str] | None = None,
+    preview: str = "",
 ) -> None:
     """写入 session.json 元数据。
 
@@ -96,6 +97,7 @@ def save_session_meta(
         current_agent: 当前 Agent key（如 ``"main"`` / ``"resume"``）。
         plan: 当前 Agent 的 PlanItem 列表（序列化为 dict）。
         plan_keys_to_remove: 需要从 meta 中移除的 plan key 列表。
+        preview: 会话预览文本（首条用户消息截断），用于 /restore 列表展示。
     """
     import dataclasses
 
@@ -131,6 +133,12 @@ def save_session_meta(
             plan_key = f"{current_agent}_plan"
             meta[plan_key] = [dataclasses.asdict(item) for item in plan]
 
+        # preview：有新的就用新的，否则保留旧的
+        if preview:
+            meta["preview"] = preview[:60]
+        elif existing.get("preview"):
+            meta["preview"] = existing["preview"]
+
         meta_file.write_text(
             json.dumps(meta, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -163,11 +171,13 @@ def list_sessions(save_dir: Path) -> list[dict]:
 
         saved_at = ""
         current_agent = "main"
+        preview = ""
         if meta_file.exists():
             try:
                 meta = json.loads(meta_file.read_text(encoding="utf-8"))
                 saved_at = meta.get("saved_at", "")
                 current_agent = meta.get("current_agent", "main")
+                preview = meta.get("preview", "")
             except Exception:
                 pass
 
@@ -187,6 +197,7 @@ def list_sessions(save_dir: Path) -> list[dict]:
             "current_agent": current_agent,
             "has_sub": has_sub,
             "sub_agent": sub_agent,
+            "preview": preview,
         }
         entries.append((mtime, entry))
 
@@ -251,11 +262,24 @@ class SaveManager:
             plan_keys_to_remove = [f"{self._pending_sub_cleanup}_plan"]
             self._pending_sub_cleanup = None
 
+        # 提取 preview：首条有意义用户消息（截断 60 字符）
+        preview = ""
+        for m in history:
+            if m.event_type.value == "user_input" and m.message.strip():
+                preview = m.message.strip()
+                break
+        if not preview:
+            for m in reversed(history):
+                if m.event_type.value == "finish" and m.message.strip():
+                    preview = m.message.strip()
+                    break
+
         save_messages(filepath, history)
         save_session_meta(
             session_dir, self._session_id, agent_key,
             plan=plan,
             plan_keys_to_remove=plan_keys_to_remove,
+            preview=preview,
         )
 
     def schedule_sub_cleanup(self, agent_key: str) -> None:
