@@ -1,6 +1,9 @@
 """工作区工具 — 沙箱约束 + 文件操作。
 
 所有路径仅接受相对路径，resolve() 后必须在 WORKING_DIR 下。
+
+读后编辑约束：workspace_edit 前必须先 workspace_read 同一文件；
+edit 成功后缓存失效，再次 edit 前必须重新 read。
 """
 
 import shutil
@@ -14,6 +17,29 @@ from src.config import config
 from src.tools.registry import ConfirmMode, tool
 from src.tools.exceptions import ToolCallException
 from src.utils.file_reader import list_directory, read_text, search_text
+
+# 已读数文件路径集合 — read 后加入，edit 后移除
+_read_files: set[str] = set()
+
+
+def _mark_read(file_path: str) -> None:
+    """记录文件已被读取，允许后续 workspace_edit。"""
+    _read_files.add(str(Path(file_path).resolve()))
+
+
+def _check_read_then_consume(file_path: str) -> None:
+    """检查文件是否已被 workspace_read；通过则从集合中移除（一次 edit 消费一次 read）。
+
+    Raises:
+        ToolCallException: 文件未先 workspace_read。
+    """
+    key = str(Path(file_path).resolve())
+    if key not in _read_files:
+        raise ToolCallException(
+            "edit 前必须先 workspace_read 该文件以获取最新内容",
+            suggestion="先用 workspace_read 读取文件，确认行号和内容后再 workspace_edit。每次 edit 成功后需要重新 read 才能再次 edit。",
+        )
+    _read_files.discard(key)
 
 
 def _validate_path(relative_path: str) -> Path:
@@ -68,6 +94,7 @@ def _validate_path(relative_path: str) -> Path:
 )
 def workspace_read(path: str, offset: int = 1, limit: int = 100) -> dict:
     full = _validate_path(path)
+    _mark_read(str(full))
     return read_text(full, offset=offset, limit=limit)
 
 
@@ -196,9 +223,9 @@ def workspace_search_file(
 
 
 @tool(
-    purpose="将文件中所有匹配的字符串全部替换为新字符串，返回替换次数。",
-    use_when="需要对工作区文件做简单字符串替换时，如全局替换名称、关键字等",
-    do_not_use_when="需要精确的行级修改时 — 用 workspace_edit；需要新建文件时 — 用 workspace_write",
+    purpose="将文件中所有匹配的字符串全部替换为新字符串，返回替换次数。⚠️ 前置条件：必须先通过 workspace_read（不设 limit 读完完整文件）或 workspace_grep 确认了文件中 ALL 匹配位置。未掌握全部匹配项时禁止使用 replace，必须用 workspace_edit 逐处精确修改。",
+    use_when="需要对工作区文件做全局替换，且已通过 workspace_read 全文或 workspace_grep 确认了所有匹配位置时",
+    do_not_use_when="未读完文件完整内容、未确认所有匹配位置时 — 必须用 workspace_edit；需要精确的行级修改时 — 用 workspace_edit；需要新建文件时 — 用 workspace_write",
     expected_output='{"path": "...", "replacements": N}',
     input_schema={
         "path": {
@@ -334,9 +361,11 @@ def workspace_move(src: str, dst: str) -> dict:
         "精确编辑工作区文件中的指定行。用新内容替换指定行（content 可含 \\n 实现多行插入/替换），"
         "可一次提交多行编辑。系统内部按行号降序处理，所有编辑引用修改前的原始行号。"
         "old_content 必须与当前行内容完全一致，任何一条校验失败全部回滚。"
+        "⚠️ 前置条件：必须先 workspace_read 该文件（系统强制校验），"
+        "edit 成功后缓存失效，再次 edit 前必须重新 read。"
     ),
-    use_when="需要精确修改文件的特定行、插入新行、删除行时 — 必须先调 workspace_read 获取精确的行号和内容",
-    do_not_use_when="简单字符串替换用 workspace_replace；新建文件用 workspace_write",
+    use_when="需要精确修改文件的特定行、插入新行、删除行时 — 必须先调 workspace_read 获取精确的行号和内容（系统强制）",
+    do_not_use_when="已确认所有匹配位置的全局替换用 workspace_replace；新建文件用 workspace_write。注意：每次 edit 成功后缓存失效，下次 edit 前必须重新 workspace_read",
     expected_output='{"path": "...", "edits_applied": N, "edits": [{"line": N, "status": "applied"}]}',
     input_schema={
         "path": {
@@ -367,6 +396,9 @@ def workspace_edit(path: str, edits: list) -> dict:
             f"file not found or is a directory: {path}",
             suggestion="用 workspace_list 确认目标路径",
         )
+
+    # 读后编辑强制校验
+    _check_read_then_consume(str(full))
 
     # 读取原始内容
     detected = from_path(full)
