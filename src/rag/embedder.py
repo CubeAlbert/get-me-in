@@ -24,7 +24,12 @@ class Embedder:
     def __init__(self) -> None:
         model_name = config.BI_ENCODER_MODEL
         logger.info("开始加载 bi-encoder 模型: %s", model_name)
-        self._model = SentenceTransformer(model_name)
+        # 优先本地缓存（不发任何 HTTP 请求），未命中再联网下载
+        try:
+            self._model = SentenceTransformer(model_name, local_files_only=True)
+        except Exception:
+            logger.info("本地缓存未命中，联网下载 bi-encoder 模型: %s", model_name)
+            self._model = SentenceTransformer(model_name)
         logger.info("bi-encoder 模型加载完成")
 
         self._default_batch_size = int(config.EMBED_BATCH_SIZE)

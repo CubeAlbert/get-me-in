@@ -19,3 +19,4 @@
 101-115: 见 decision.md
 116-122: 见 decision.md
 123. **会话状态管理模块** — `src/utils/saver.py` + `SaveManager`，auto-save on FINISH → `data/save/{session_id}/`，`/restore` 命令恢复，plan 随 session.json 持久化，延迟 sub 清理防崩溃丢数据，为 rollback 预留全量覆盖写入
+124. **RAG 模型加载本地缓存优先** — Embedder/Reranker 先 `local_files_only=True` 纯本地加载（零 HTTP 请求），缓存未命中回退联网下载；消除 hf-mirror 504 重试拖慢启动的问题

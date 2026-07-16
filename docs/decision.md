@@ -131,6 +131,7 @@
 - [决策 121 — workspace_delete 批量删除](#决策-121--workspace_delete-批量删除)
 - [决策 122 — CLI 命令注册改用 _COMMAND_HELP dict + /help 命令](#决策-122--cli-命令注册改用-_command_help-dict--help-命令)
 - [决策 123 — 会话状态管理模块（auto-save / restore / rollback）](#决策-123--会话状态管理模块auto-save--restore--rollback)
+- [决策 124 — RAG 模型加载本地缓存优先（local_files_only 回退策略）](#决策-124--rag-模型加载本地缓存优先local_files_only-回退策略)
 
 ---
 
@@ -2622,3 +2623,23 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 在 `BaseAgent` 中实现 save/restore —— App 层耦合，Agent 不应感知文件系统
 - 每次 FINISH 保留 diff 而非全量覆盖 —— 复杂度高，rollback 时需 apply 一系列 diff，出错概率大
 - sub 存档立即删除 —— 崩溃窗口风险，已拒绝
+
+---
+
+### 决策 124 — RAG 模型加载本地缓存优先（local_files_only 回退策略）
+
+**背景：** `SentenceTransformer` / `CrossEncoder` 默认每次实例化都向 HF Hub 发 HEAD 请求校验缓存元数据（`adapter_config.json` 等），镜像站（hf-mirror.com）偶发 504 时触发 5 轮指数退避重试，严重拖慢 RAG 启动甚至失败。
+
+**决策：**
+- `src/rag/embedder.py` 和 `src/rag/reranker.py` 加载模型时先传 `local_files_only=True`（纯读本地缓存，零 HTTP 请求）
+- 抛异常（缓存未命中）时 try/except 回退为默认联网下载
+- 首次运行仍可自动下载模型；之后每次启动零网络依赖
+
+**理由：**
+- 常态路径（模型已缓存）完全离线，504 问题消失，加载耗时从数次 HEAD 请求等待降至 Embedder 0.3s / Reranker 2.1s
+- 回退分支保证首次运行和换模型场景不受影响
+- 防御性编程：不依赖网络可用性假设
+
+**曾考虑的替代方案：**
+- 全局 `HF_HUB_OFFLINE=1` 环境变量 —— 首次运行（或换模型后）直接失败，无自动回退，已拒绝
+- 调小 `HF_HUB_ETAG_TIMEOUT` —— 仍然发请求，只是快速失败，治标不治本

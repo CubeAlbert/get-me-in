@@ -27,7 +27,12 @@ class Reranker:
     def __init__(self) -> None:
         model_name = config.CROSS_ENCODER_MODEL
         logger.info("开始加载 cross-encoder 模型: %s", model_name)
-        self._model = CrossEncoder(model_name)
+        # 优先本地缓存（不发任何 HTTP 请求），未命中再联网下载
+        try:
+            self._model = CrossEncoder(model_name, local_files_only=True)
+        except Exception:
+            logger.info("本地缓存未命中，联网下载 cross-encoder 模型: %s", model_name)
+            self._model = CrossEncoder(model_name)
         logger.info("cross-encoder 加载完成，开始预热")
         self._model.predict([("预热", "预热")], show_progress_bar=False)
         logger.info("cross-encoder 预热完成")
