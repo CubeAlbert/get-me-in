@@ -198,6 +198,11 @@ class App:
 
         sub_agent = self._save_mgr.find_sub_agent(session_id)
         if sub_agent:
+            # 从 main 历史中找回 switch_to_subagent 的 tool_call_id
+            for m in reversed(messages):
+                if m.event_type == EventType.TOOL_CALL and m.tool == "switch_to_subagent":
+                    self._switch_tool_call_id = m.id
+                    break
             sub_messages = self._save_mgr.load_sub(session_id, sub_agent)
             if sub_messages is not None:
                 handler = self._get_handler(sub_agent)
