@@ -32,3 +32,18 @@ class PlanItem:
     description: str
     status: PlanStatus
     order: int
+
+
+@dataclass
+class PlanStatusInfo:
+    """当前 plan 状态快照 — 注入 Message 发送给 LLM。
+
+    Attributes:
+        current: 当前正在执行的计划项，无则为 None。
+        completed: 已完成的计划项列表。
+        remaining: 待执行的计划项列表。
+    """
+
+    current: PlanItem | None = None
+    completed: list[PlanItem] = field(default_factory=list)
+    remaining: list[PlanItem] = field(default_factory=list)

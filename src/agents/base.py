@@ -162,7 +162,6 @@ class BaseAgent(Handler):
         self._round_counter = 0
         self._format_injected = False
         self._plan: list[PlanItem] = []
-        self._last_injected_plan_id: str | None = None
 
         logger.debug(
             "%s 初始化 — %d 个工具, max_rounds=%d",
@@ -194,13 +193,10 @@ class BaseAgent(Handler):
         return min(pending, key=lambda x: x.order)
 
     def _activate_next(self) -> None:
-        """将下一个 PENDING 项设为 IN_PROGRESS。无 PENDING 项时清空注入标记。"""
+        """将下一个 PENDING 项设为 IN_PROGRESS。"""
         next_item = self._get_next_pending()
         if next_item:
             next_item.status = PlanStatus.IN_PROGRESS
-            self._last_injected_plan_id = next_item.id
-        else:
-            self._last_injected_plan_id = None
 
     def _plan_summary(self) -> dict:
         """构建当前 plan 的摘要，作为 tool_call_result 返回给 LLM。"""
@@ -238,10 +234,8 @@ class BaseAgent(Handler):
             )
             for i, desc in enumerate(items)
         ]
-        self._last_injected_plan_id = None
         if self._plan:
             self._plan[0].status = PlanStatus.IN_PROGRESS
-            self._last_injected_plan_id = self._plan[0].id
         return self._plan_summary()
 
     def _update_plan_status(self, plan_id: str, status: str) -> dict:
@@ -273,17 +267,36 @@ class BaseAgent(Handler):
         for item in self._plan:
             if item.status not in (PlanStatus.COMPLETED, PlanStatus.CANCELLED):
                 item.status = PlanStatus.CANCELLED
-        self._last_injected_plan_id = None
         return self._plan_summary()
 
     # ── process — agent loop ──────────────────────────────
 
+    def _build_plan_status_info(self) -> PlanStatusInfo | None:
+        """构建当前 plan 状态快照。无 plan 时返回 None。"""
+        if not self._plan:
+            return None
+        from src.agents.plan import PlanStatusInfo
+        return PlanStatusInfo(
+            current=self._get_active_plan(),
+            completed=[i for i in self._plan if i.status == PlanStatus.COMPLETED],
+            remaining=[i for i in self._plan if i.status == PlanStatus.PENDING],
+        )
+
     def _to_openai(self) -> list[dict]:
         """将 ``_history`` 转换为 OpenAI API 格式。
 
-        system prompt 为纯文本，对话消息序列化为 Message JSON。
+        system prompt 为纯文本，末尾附带 plan_status JSON（如有），对话消息序列化为 Message JSON。
         """
-        messages = [{"role": "system", "content": self._system_prompt}]
+        content = self._system_prompt
+        plan_status = self._build_plan_status_info()
+        if plan_status is not None:
+            import dataclasses
+            import json
+            status_json = json.dumps(
+                dataclasses.asdict(plan_status), ensure_ascii=False, default=str
+            )
+            content += f"\n\n[PLAN_STATUS]\n{status_json}"
+        messages = [{"role": "system", "content": content}]
         for m in self._history:
             messages.append({"role": m.role, "content": m.to_json()})
         return messages
@@ -483,24 +496,6 @@ class BaseAgent(Handler):
                 if self._pending_reject:
                     self._pending_reject = False
                     return Response(type=ResponseType.FINISH, message="", plan=self._plan)
-
-        # ── Plan context 注入 ──
-        active_plan = self._get_active_plan()
-        if active_plan and active_plan.id != self._last_injected_plan_id:
-            self._last_injected_plan_id = active_plan.id
-            total = len(self._plan)
-            idx = active_plan.order + 1  # 人类可读序号
-            ctx_msg = f"[PLAN] 当前任务 [{idx}/{total}]: {active_plan.description}"
-            self._history.append(
-                Message(
-                    role=Role.USER,
-                    event_type=EventType.SYSTEM_MESSAGE,
-                    message=ctx_msg,
-                )
-            )
-            logger.debug("[%s] 注入 plan context: %s", agent_name, ctx_msg)
-        elif active_plan is None:
-            self._last_injected_plan_id = None
 
         # ── Step 2: LLM 推理 + 分发（内层 while 仅用于错误恢复）──
         self._format_injected = False

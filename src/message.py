@@ -8,11 +8,17 @@
     msg = Message(event_type=EventType.USER_INPUT, message="你好")
 """
 
+from __future__ import annotations
+
 import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.agents.plan import PlanStatusInfo
 
 
 class Role(StrEnum):
@@ -70,6 +76,7 @@ class Message:
     tool_call_id: str | None = None
     event_payload: dict | None = None
     thinking: str | None = None
+    plan_status: PlanStatusInfo | None = None  # 系统注入，LLM 不返回
 
     def to_json(self) -> str:
         """序列化为 JSON 字符串，用于注入 LLM 对话历史。"""

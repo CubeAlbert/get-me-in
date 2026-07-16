@@ -53,13 +53,13 @@ def switch_to_mainagent(summary: str) -> dict:
 
 
 @tool(
-    purpose="向用户列出选项并等待选择。用户可能从选项中选择，也可能提出自己的想法（UI 层自动提供自定义输入入口，你无需在 choices 中添加"其他"选项），你需要尊重用户的选择并据此调整后续行动。",
+    purpose="向用户列出选项并等待选择。用户可能从选项中选择，也可能提出自己的想法（UI 层自动提供自定义输入入口，你无需在 choices 中添加「其他」选项），你需要尊重用户的选择并据此调整后续行动。",
     use_when="用户的请求有多种可能的处理方式、你需要用户做出明确选择时。",
     do_not_use_when="用户意图已经明确、只有一个合理的选项、或用户已经明确指定了方向。",
     expected_output="用户选中的选项文本，作为 tool_call_result 返回。",
     input_schema={
         "question": {"description": "向用户展示的问题/提示文本"},
-        "choices": {"description": "选项列表，每个选项描述一个可选的行动方向。无需添加"其他"/"自定义"选项，UI 已自动处理"},
+        "choices": {"description": "选项列表，每个选项描述一个可选的行动方向。无需添加「其他」/「自定义」选项，UI 已自动处理"},
     },
     agent=None,
     confirm_mode=ConfirmMode.NEVER,
