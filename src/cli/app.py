@@ -102,6 +102,7 @@ class App:
         "/help": "显示所有命令说明",
         "/ragreload": "重载 RAG 索引（可选关键词）",
         "/restore": "恢复存档会话（无参数列出选择 | /restore <id> 直接恢复）",
+        "/rewind": "回退到历史输入（选择一条历史输入回退并预填到输入行）",
     }
 
     _COMMANDS = list(_COMMAND_HELP.keys())
@@ -113,6 +114,8 @@ class App:
         self._handler = handler
         self._main_agent = handler  # 切回目标，子 Agent 退出时回到这里
         self._switch_tool_call_id: str | None = None  # main→sub 时的 TOOL_CALL id
+        self._pending_prefill: str | None = None  # /rewind 等场景预填输入
+        self._pending_rewind_idx: int | None = None  # 确认后截断 _history 的位置
         self._console = Console(force_terminal=True)
         self._editor = _resolve_editor()
         self._save_mgr = SaveManager(Path(config.SAVE_DIR))
@@ -356,15 +359,39 @@ class App:
 
         while True:
             try:
-                user_input = questionary.autocomplete(
-                    "",
-                    choices=self._complete_commands,
-                    qmark=">",
-                ).ask()
-                if user_input is None:  # Ctrl+C
-                    self._console.print("\n[dim]再见！[/]")
-                    break
-                user_input = user_input.strip()
+                if self._pending_prefill:
+                    user_input = questionary.text(
+                        "",
+                        default=self._pending_prefill,
+                        qmark=">",
+                    ).ask()
+                    rewind_idx = self._pending_rewind_idx
+                    self._pending_prefill = None
+                    self._pending_rewind_idx = None
+
+                    if user_input is None:
+                        # Ctrl+C → 取消回退
+                        self._console.print(" [dim]已取消[/]")
+                        continue
+                    user_input = user_input.strip()
+                    if not user_input:
+                        # 空输入 → 取消回退
+                        self._console.print(" [dim]已取消[/]")
+                        continue
+
+                    # 确认：截断 history 到选中位置之前
+                    if rewind_idx is not None:
+                        self._handler._history = self._handler._history[:rewind_idx]
+                else:
+                    user_input = questionary.autocomplete(
+                        "",
+                        choices=self._complete_commands,
+                        qmark=">",
+                    ).ask()
+                    if user_input is None:  # Ctrl+C
+                        self._console.print("\n[dim]再见！[/]")
+                        break
+                    user_input = user_input.strip()
             except (EOFError, KeyboardInterrupt):
                 self._console.print("\n[dim]再见！[/]")
                 break
@@ -405,6 +432,37 @@ class App:
                     self._do_restore(arg)
                 else:
                     self._restore_interactive()
+                continue
+
+            if user_input == "/rewind":
+                # 收集所有 USER_INPUT 消息
+                user_msgs: list[tuple[int, Message]] = []
+                for i, m in enumerate(self._handler._history):
+                    if m.event_type == EventType.USER_INPUT and m.message:
+                        user_msgs.append((i, m))
+
+                if not user_msgs:
+                    self._console.print("[dim]没有可回退的用户输入[/]")
+                    continue
+
+                choices: list[questionary.Choice] = []
+                for idx, m in user_msgs:
+                    preview = " ".join(m.message.split())[:80]
+                    label = f"[{idx}] {preview}"
+                    choices.append(questionary.Choice(title=label, value=idx))
+                choices.append(questionary.Choice(title="── 取消 ──", value=-1))
+
+                selected_idx = questionary.select(
+                    "选择要回退到的输入:",
+                    choices=choices,
+                    qmark="",
+                ).ask()
+
+                if selected_idx is None or selected_idx == -1:
+                    continue
+
+                self._pending_prefill = self._handler._history[selected_idx].message or ""
+                self._pending_rewind_idx = selected_idx
                 continue
 
             if user_input == "/auto-approve-switch" or user_input.startswith("/auto-approve-switch "):
