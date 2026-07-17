@@ -19,6 +19,7 @@
 101-115: 见 decision.md
 116-122: 见 decision.md
 123. **会话状态管理模块** — `src/utils/saver.py` + `SaveManager`，auto-save on FINISH → `data/save/{session_id}/`，`/restore` 命令恢复，plan 随 session.json 持久化，延迟 sub 清理防崩溃丢数据，为 rollback 预留全量覆盖写入
-124. **RAG 模型加载本地缓存优先** — Embedder/Reranker 先 `local_files_only=True` 纯本地加载（零 HTTP 请求），缓存未命中回退联网下载；消除 hf-mirror 504 重试拖慢启动的问题
-125. **plan_status 落地到 Message 对象** — 从 system prompt 末尾拼接 JSON 改为在 `process()` 每次 append 消息时 stamp `_build_plan_status_info()` 到 `Message.plan_status` 字段；`_to_openai()` 不再拼接 plan JSON；plan 全 cancelled/completed 时不持久化
-126. **Restore 上下文预览** — choice title 追加 preview 文本；恢复后渲染最近 5 条消息面板，最后一条不截断、高亮；从 main history 恢复 sub 会话的 `switch_tool_call_id`
+124. **RAG 模型加载本地缓存优先** — Embedder/Reranker 先 `local_files_only=True` 纯本地加载，缓存未命中回退联网下载
+125. **plan_status 落地到 Message 对象** — 在 `process()` 每次 append 消息时 stamp `plan_to_simple()` 到 `Message.plan_status`；TOOL_CALL_RESULT 也携带
+126. **Restore 上下文预览** — choice title 追加 preview 文本；恢复后渲染最近 5 条消息面板
+127. **plan_status 简化 schema** — 从完整 `PlanStatusInfo`（含 `id`/`description`/`status`/`order`）改为字符串格式 `{current: "序号|任务", completed: [...], remaining: [...]}`；同步更新 `08_input_format.md` prompt

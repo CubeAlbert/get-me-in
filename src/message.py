@@ -15,12 +15,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from src.agents.plan import PlanStatusInfo
-
-
 class Role(StrEnum):
     """消息发送者角色枚举。"""
 
@@ -76,7 +70,7 @@ class Message:
     tool_call_id: str | None = None
     event_payload: dict | None = None
     thinking: str | None = None
-    plan_status: PlanStatusInfo | None = None  # 系统注入，LLM 不返回
+    plan_status: dict | None = None  # 系统注入，简化格式 {current, completed, remaining}
 
     def to_json(self) -> str:
         """序列化为 JSON 字符串，用于注入 LLM 对话历史。"""
@@ -90,8 +84,6 @@ class Message:
         与 :meth:`from_llm_reply` 不同，此方法从 ``dataclasses.asdict()``
         的输出重建 Message，而非从 LLM JSON 解析。
         """
-        from src.agents.plan import PlanStatusInfo
-
         ts = d.get("timestamp")
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
@@ -108,7 +100,7 @@ class Message:
             tool_call_id=d.get("tool_call_id"),
             event_payload=d.get("event_payload"),
             thinking=d.get("thinking"),
-            plan_status=PlanStatusInfo.from_dict(d.get("plan_status")),
+            plan_status=d.get("plan_status"),
         )
 
     @staticmethod

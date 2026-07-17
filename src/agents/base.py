@@ -10,7 +10,7 @@ import uuid
 
 from abc import abstractmethod
 
-from src.agents.plan import PlanItem, PlanStatus, PlanStatusInfo
+from src.agents.plan import PlanItem, PlanStatus
 from src.cli.handler import Handler
 from src.agents.registry import MAIN_AGENT_KEY
 from src.tools.exceptions import ToolCallException
@@ -272,18 +272,9 @@ class BaseAgent(Handler):
     # ── process — agent loop ──────────────────────────────
 
     def _stamp_plan_status(self, msg: Message) -> None:
-        """将当前 plan 状态快照写入 Message.plan_status。"""
-        msg.plan_status = self._build_plan_status_info()
-
-    def _build_plan_status_info(self) -> PlanStatusInfo | None:
-        """构建当前 plan 状态快照。无 plan 时返回 None。"""
-        if not self._plan:
-            return None
-        return PlanStatusInfo(
-            current=self._get_active_plan(),
-            completed=[i for i in self._plan if i.status == PlanStatus.COMPLETED],
-            remaining=[i for i in self._plan if i.status == PlanStatus.PENDING],
-        )
+        """将当前 plan 简化摘要写入 Message.plan_status。"""
+        from src.agents.plan import plan_to_simple
+        msg.plan_status = plan_to_simple(self._plan)
 
     def _to_openai(self) -> list[dict]:
         """将 ``_history`` 转换为 OpenAI API 格式。

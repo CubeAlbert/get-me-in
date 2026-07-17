@@ -43,7 +43,7 @@ JSON — 对话历史中每条消息均为一个 JSON 对象
     },
     "plan_status": {
       "type": ["object", "null"],
-      "description": "当前计划状态（系统注入，仅参考）。无计划时为 null。结构：{current: {id, description, status, order} | null, completed: [{id, description, status, order}], remaining: [{id, description, status, order}]}。status 取值：pending / in_progress / completed / cancelled。你应该根据 current 和 remaining 推进任务，完成后自行调用合适的工具更新计划状态。"
+      "description": "当前计划状态（系统注入，仅参考）。无计划时为 null。结构：{current: \"序号|任务名\" | null, completed: [\"序号|任务名\"], remaining: [\"序号|任务名\"]}。序号为从 0 开始递增的数字。你应该根据 current 和 remaining 推进任务，完成后自行调用合适的工具更新计划状态。"
     }
   },
   "required": ["id", "role", "timestamp", "event_type", "message"]

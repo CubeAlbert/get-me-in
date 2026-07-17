@@ -134,6 +134,7 @@
 - [决策 124 — RAG 模型加载本地缓存优先（local_files_only 回退策略）](#决策-124--rag-模型加载本地缓存优先local_files_only-回退策略)
 - [决策 125 — plan_status 落地到 Message 对象](#决策-125--plan_status-落地到-message-对象)
 - [决策 126 — Restore 恢复上下文预览](#决策-126--restore-恢复上下文预览)
+- [决策 127 — plan_status 简化 schema](#决策-127--plan_status-简化-schema)
 
 ---
 
@@ -2689,4 +2690,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 - Panel 渲染 —— 长消息换行后 `>` 孤零零悬挂，视觉效果差
 - 显示全部消息不截断 —— 终端被占满
+
+---
+
+### 决策 127 — plan_status 简化 schema
+
+**背景：** `Message.plan_status` 原本存完整 `PlanStatusInfo` 对象（含 `PlanItem` 的 `id`/`description`/`status`/`order`），每条消息的 JSON 臃肿，LLM 阅读效率低，多轮 tool_call 中难以持续关注 plan 状态。
+
+**决策：**
+- 新增 `plan_to_simple(plan_items) -> dict | None`：将 `PlanItem` 列表转为 `{current: "序号|任务名" | null, completed: ["序号|任务名"], remaining: ["序号|任务名"]}` 字符串格式
+- `Message.plan_status` 类型从 `PlanStatusInfo | None` 改为 `dict | None`
+- 删除 `PlanStatusInfo.from_dict()`，`Message.from_dict()` 直接透传 dict
+- 删除 `_build_plan_status_info()`，`_stamp_plan_status()` 改为调用 `plan_to_simple()`
+- 同步更新 `08_input_format.md` 中 `plan_status` 的 schema 描述
+- `session.json` 中 plan 恢复不受影响（仍用 `PlanItem` 列表）
+
+**理由：**
+- 简化格式大幅减少 token 消耗，LLM 更容易关注 plan 状态
+- 纯 dict 无需 dataclass 重建，序列化/反序列化更简单
+- 序号+任务名字符串已足够 LLM 理解 plan 全貌，不需要 `id`/`status` 等详细字段
+
+**曾考虑的替代方案：**
+- 保持 `PlanStatusInfo` 并只改序列化 —— 类型系统和 LLM 视角不一致，维护两份 schema
+- plan_status 注入 system prompt —— 导致每次 prompt 变化、缓存不命中，已拒绝
 - 过滤 tool_call 消息 —— 丢失工具调用上下文，已改为只过滤 SYSTEM_MESSAGE

@@ -36,34 +36,33 @@ class PlanItem:
 
 @dataclass
 class PlanStatusInfo:
-    """当前 plan 状态快照 — 注入 Message 发送给 LLM。
-
-    Attributes:
-        current: 当前正在执行的计划项，无则为 None。
-        completed: 已完成的计划项列表。
-        remaining: 待执行的计划项列表。
-    """
+    """当前 plan 状态快照 — 未使用，由 plan_to_simple() 替代。"""
 
     current: PlanItem | None = None
     completed: list[PlanItem] = field(default_factory=list)
     remaining: list[PlanItem] = field(default_factory=list)
 
-    @staticmethod
-    def from_dict(d: dict | None) -> "PlanStatusInfo | None":
-        """从 dict 重建 PlanStatusInfo（用于 save/restore）。"""
-        if d is None:
-            return None
 
-        def _item(item_d: dict) -> PlanItem:
-            return PlanItem(
-                id=item_d["id"],
-                description=item_d["description"],
-                status=PlanStatus(item_d["status"]),
-                order=item_d["order"],
-            )
+def plan_to_simple(plan_items: list[PlanItem]) -> dict | None:
+    """将 PlanItem 列表转为简化摘要，用于 Message.plan_status。
 
-        return PlanStatusInfo(
-            current=_item(d["current"]) if d.get("current") else None,
-            completed=[_item(i) for i in d.get("completed", [])],
-            remaining=[_item(i) for i in d.get("remaining", [])],
-        )
+    格式::
+
+        {"current": "1|任务名", "completed": ["0|已完成"], "remaining": ["2|待做"]}
+
+    无 in_progress 且无 pending 项时返回 None。
+    """
+    current = None
+    completed: list[str] = []
+    remaining: list[str] = []
+    for item in plan_items:
+        label = f"{item.order}|{item.description}"
+        if item.status == PlanStatus.IN_PROGRESS:
+            current = label
+        elif item.status == PlanStatus.COMPLETED:
+            completed.append(label)
+        elif item.status == PlanStatus.PENDING:
+            remaining.append(label)
+    if current is None and not remaining:
+        return None
+    return {"current": current, "completed": completed, "remaining": remaining}
