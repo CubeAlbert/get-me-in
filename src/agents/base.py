@@ -238,6 +238,23 @@ class BaseAgent(Handler):
             self._plan[0].status = PlanStatus.IN_PROGRESS
         return self._plan_summary()
 
+    def _replan(self, items: list[str]) -> dict:
+        """修订剩余计划：保留已完成项，替换未完成项。"""
+        kept = [i for i in self._plan if i.status == PlanStatus.COMPLETED]
+        new = [
+            PlanItem(
+                id=uuid.uuid4().hex,
+                description=desc,
+                status=PlanStatus.PENDING,
+                order=len(kept) + i,
+            )
+            for i, desc in enumerate(items)
+        ]
+        if new:
+            new[0].status = PlanStatus.IN_PROGRESS
+        self._plan = kept + new
+        return self._plan_summary()
+
     def _update_plan_status(self, plan_id: str, status: str) -> dict:
         """更新指定计划项的状态。完成/取消当前项时自动激活下一项。"""
         try:

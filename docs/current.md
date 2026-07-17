@@ -22,4 +22,5 @@
 124. **RAG 模型加载本地缓存优先** — Embedder/Reranker 先 `local_files_only=True` 纯本地加载，缓存未命中回退联网下载
 125. **plan_status 落地到 Message 对象** — 在 `process()` 每次 append 消息时 stamp `plan_to_simple()` 到 `Message.plan_status`；TOOL_CALL_RESULT 也携带
 126. **Restore 上下文预览** — choice title 追加 preview 文本；恢复后渲染最近 5 条消息面板
-127. **plan_status 简化 schema** — 从完整 `PlanStatusInfo`（含 `id`/`description`/`status`/`order`）改为字符串格式 `{current: "序号|任务", completed: [...], remaining: [...]}`；同步更新 `08_input_format.md` prompt
+127. **plan_status 简化 schema** — 从完整 `PlanStatusInfo` 改为字符串格式 `{current: "序号|任务", completed: [...], remaining: [...]}`
+128. **replan 工具** — 新增 `replan`（`plan_tools.py` 第 4 个工具）：保留已完成项、替换未完成项；强调状态变化必须先 `update_plan_status` 再继续

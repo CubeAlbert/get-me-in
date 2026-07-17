@@ -135,6 +135,7 @@
 - [决策 125 — plan_status 落地到 Message 对象](#决策-125--plan_status-落地到-message-对象)
 - [决策 126 — Restore 恢复上下文预览](#决策-126--restore-恢复上下文预览)
 - [决策 127 — plan_status 简化 schema](#决策-127--plan_status-简化-schema)
+- [决策 128 — replan 工具（保留已完成项）](#决策-128--replan-工具保留已完成项)
 
 ---
 
@@ -2714,3 +2715,22 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保持 `PlanStatusInfo` 并只改序列化 —— 类型系统和 LLM 视角不一致，维护两份 schema
 - plan_status 注入 system prompt —— 导致每次 prompt 变化、缓存不命中，已拒绝
 - 过滤 tool_call 消息 —— 丢失工具调用上下文，已改为只过滤 SYSTEM_MESSAGE
+
+---
+
+### 决策 128 — replan 工具（保留已完成项）
+
+**背景：** LLM 在执行计划过程中可能发现剩余步骤不再适用，需要修订。`cancel_all` + `create_plan` 组合会丢掉已完成步骤且需两次工具调用。
+
+**决策：**
+- 新增 `replan` 工具（`plan_tools.py` 第 4 个）：接收新步骤列表，保留 `COMPLETED` 项，替换未完成项
+- 新增 `BaseAgent._replan(items)`：保留已完成项（含原 id/description/status/order），取消其余，新项序号接续，首项自动 `IN_PROGRESS`
+- `update_plan_status` 的 `use_when` 强化：任何计划状态变化必须先更新再继续
+
+**理由：**
+- 一次工具调用完成修订，比 cancel_all + create 少一轮 LLM 往返
+- 保留已完成项维护执行轨迹，后续决策有据可查
+- 语义明确：replan 修订剩余计划 vs cancel_all 彻底放弃
+
+**曾考虑的替代方案：**
+- LLM 手动 cancel_all + create —— 多一轮工具调用，且丢失已完成历史

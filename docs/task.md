@@ -334,3 +334,5 @@
 - ✅ **Restore sub 会话 switch_tool_call_id 修复** — 从 main history 恢复最后一条 switch_to_subagent 的 id
 - ✅ **plan_status 简化 schema** — 从完整 `PlanStatusInfo` 改为 `plan_to_simple()` 字符串格式 `{current: "序号|任务", completed: [...], remaining: [...]}`；更新 `08_input_format.md` prompt
 - ✅ **TOOL_CALL_RESULT plan_status stamp** — `_execute_tool()` 返回的 result_msg 在 append 前 stamp
+- ✅ **replan 工具** — `plan_tools.py` 新增 replan（保留已完成项，替换未完成项）；`BaseAgent._replan()` 实现
+- ✅ **update_plan_status 提示强化** — `use_when` 强调任何状态变化必须先更新再继续

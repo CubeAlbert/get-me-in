@@ -76,7 +76,8 @@ def create_plan(items: list[str]) -> dict:
 
 @tool(
     purpose="更新指定计划项的状态：完成、取消，或将待执行项标记为进行中",
-    use_when="当前步骤完成时标记为 completed；需要跳过某步骤时标记为 cancelled；需要回退重做时标记为 pending",
+    use_when="重要：每次计划步骤的状态发生任何变化（完成、取消、跳过、回退等）时，必须先调用本工具更新状态，再继续执行后续步骤。不更新状态会导致 LLM 丢失计划进度。\n"
+    "典型场景：当前步骤完成 → completed；需要跳过某步骤 → cancelled；需要回退重做 → pending",
     do_not_use_when="计划不存在或所有项已完成时",
     expected_output="返回更新后的完整计划状态",
     input_schema={
@@ -108,3 +109,24 @@ def update_plan_status(id: str, status: str) -> dict:
 def cancel_all_plans() -> dict:
     """取消所有未完成的计划项。"""
     return _get_plan_agent()._cancel_all_plans()
+
+
+@tool(
+    purpose="当新的执行结果表明活动计划的未完成部分已经不再有效、完整、必要或可执行时，修订剩余计划。保留原始目标和已完成工作。",
+    use_when="在获得工具结果或完成计划步骤后，如果至少一个未完成步骤需要被新增、删除、替换、重新排序、拆分、合并或修改依赖关系，应主动调用此工具。\n"
+    "典型触发条件包括：步骤被阻塞、原始假设失效、约束发生变化、缺少必要步骤、部分步骤变得多余、所需资源不可用、执行策略失败，或用户在不改变总体目标的情况下修改了要求。\n"
+    "如果继续执行当前计划可能导致失败、错误结果或明显的无效工作，应先调用此工具，再继续执行。",
+    do_not_use_when="当前没有活动计划、原始目标应被取消、只是更新步骤状态、剩余计划仍然有效，或者失败步骤可以直接重试且不影响后续步骤时，不要调用此工具。\n"
+    "不要因为步骤失败本身而重新规划。只有当失败或新信息要求修改剩余计划结构时，才调用 replan。",
+    expected_output="返回新计划状态，保留已完成项，未完成项被替换为新步骤列表，首项自动激活为 in_progress",
+    input_schema={
+        "items": {
+            "description": "新的计划步骤描述列表，替代当前所有未完成项（已完成项保留）",
+        },
+    },
+    agent=None,
+    confirm_mode=ConfirmMode.NEVER,
+)
+def replan(items: list[str]) -> dict:
+    """修订剩余计划：保留已完成项，用新步骤列表替代未完成项。"""
+    return _get_plan_agent()._replan(items)
