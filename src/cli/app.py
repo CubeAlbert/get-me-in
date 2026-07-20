@@ -25,7 +25,7 @@ from rich.text import Text
 
 from src.agents.registry import MAIN_AGENT_KEY, get_agent_registry
 from src.cli.handler import Handler
-from src.cli.uibridge import UIBridge, _set_bridge
+from src.cli.uibridge import UIBridge, _clear_cancel, _set_bridge, _set_cancel, is_cancelled
 from src.config import config
 from src.logger import get_logger
 from src.message import EventType, Message, Role
@@ -86,6 +86,41 @@ def _edit_text() -> str:
 
     os.unlink(tmp_path)
     return content.strip()
+
+
+def _check_esc_pressed() -> bool:
+    """非阻塞检测终端是否按下 Esc 键。
+
+    跨平台实现：
+    - Windows: msvcrt.kbhit() + msvcrt.getch()
+    - Unix:    终端设为 raw 模式，select 检查 stdin 可读性
+
+    此函数有副作用——会消费 stdin 中已缓冲的按键。
+    """
+    if sys.platform == "win32":
+        import msvcrt
+
+        while msvcrt.kbhit():
+            ch = msvcrt.getch()
+            if ch == b"\x1b":
+                return True
+        return False
+    else:
+        import select
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            while select.select([sys.stdin], [], [], 0)[0]:
+                ch = sys.stdin.read(1)
+                if ch == "\x1b":
+                    return True
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return False
 
 
 class App:
@@ -365,10 +400,21 @@ class App:
                 sys.stderr.flush()
                 self._handle_bridge_request(bridge)
             else:
-                elapsed = time.time() - start
-                dots = "." * (int(elapsed * 2) % 3 + 1)
-                sys.stderr.write(f"\r{dots:<3} 处理中 {elapsed:.1f}s  ")
-                sys.stderr.flush()
+                # 已取消 → 持续显示中断提示，不再检测按键
+                if is_cancelled():
+                    sys.stderr.write("\r⏸️  正在中断...\r")
+                    sys.stderr.flush()
+                elif _check_esc_pressed():
+                    _set_cancel()
+                    sys.stderr.write("\r" + " " * 24 + "\r")
+                    sys.stderr.flush()
+                    sys.stderr.write("\r⏸️  正在中断...\r")
+                    sys.stderr.flush()
+                else:
+                    elapsed = time.time() - start
+                    dots = "." * (int(elapsed * 2) % 3 + 1)
+                    sys.stderr.write(f"\r{dots:<3} 处理中 {elapsed:.1f}s  ")
+                    sys.stderr.flush()
             done.wait(0.1)
 
         sys.stderr.write("\r" + " " * 24 + "\r")
@@ -566,6 +612,7 @@ class App:
                 self._history_cursor = -1
 
             # ── 内层 agent loop ──
+            _clear_cancel()
             bridge = UIBridge()
             while True:
                 response = self._process_with_spinner(request, bridge)

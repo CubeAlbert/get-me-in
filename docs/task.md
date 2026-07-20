@@ -336,3 +336,15 @@
 - ✅ **TOOL_CALL_RESULT plan_status stamp** — `_execute_tool()` 返回的 result_msg 在 append 前 stamp
 - ✅ **replan 工具** — `plan_tools.py` 新增 replan（保留已完成项，替换未完成项）；`BaseAgent._replan()` 实现
 - ✅ **update_plan_status 提示强化** — `use_when` 强调任何状态变化必须先更新再继续
+
+### 8. Esc 中断 Agent 处理（✅ 基础完成，📌 即时中止暂缓）
+
+- ✅ **Cancel 标志** — `src/cli/uibridge.py`：`_cancel_event` + `_set_cancel()` / `_clear_cancel()` / `is_cancelled()`，遵循与 `_current_bridge` 相同的模块级 get/set 模式
+- ✅ **Esc 按键检测** — `src/cli/app.py`：`_check_esc_pressed()` 跨平台非阻塞检测（Windows `msvcrt.kbhit()` / Unix `select`+`tty.setraw`），spinner loop 中每 0.1s 轮询
+- ✅ **Spinner 状态保持** — 检测到 Esc 后 `is_cancelled()` 分支持续显示 "⏸️ 正在中断..."，不会被后续 spinner 刷新覆盖
+- ✅ **三个 Cancel 检查点** — `src/agents/base.py` `process()` 中：
+  - #1 while 循环开始（line 530）— `_pending_tool` 已清除，历史一致，直接返回 FINISH
+  - #2 LLM 调用返回后（line 551）— LLM 回复尚未写入 history（line 563 才 append），丢弃无副作用
+  - #3 工具执行前（line 480）— **注入合成 TOOL_CALL_RESULT**（`__cancelled__: True`），确保 history 中有 TOOL_CALL 必有 TOOL_CALL_RESULT，LLM 下次不会产生歧义
+- ✅ **Cancel 标志清理** — `_clear_cancel()` 在内层 agent loop 开始前调用，每次新用户输入从干净状态开始
+- 📌 **即时中止 LLM 调用（httpx transport close）** — 暂缓实现。按 Esc 后若 daemon 线程正阻塞在 `chat_pro()` 的 socket read 中，需等 API 返回后才能中断（10-30s）。理想方案是主线程关闭 httpx transport → socket 断开 → daemon 线程 ~50ms 内收到异常 → 返回 FINISH。但这需要 LLMClient 从底层支持 abort 作为一等公民 API，属于 LLMClient 重构范畴。详见 `docs/design.md#417-agent-中断机制`

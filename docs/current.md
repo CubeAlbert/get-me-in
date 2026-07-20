@@ -4,7 +4,7 @@
 
 **当前任务：** 会话状态管理（M5-7）— ✅ 全部完成
 
-**当前子任务：** M5-7 全部子任务已完成。待用户决定下一步方向（M5-5 记忆集成 / M4-6 InterviewAgent / 新阶段）
+**当前子任务：** M5-7 全部子任务已完成。M5-8 Esc 中断基础功能 ✅ 完成（即时中止 📌 暂缓）。待用户决定下一步方向（M5-5 记忆集成 / M4-6 InterviewAgent / 新阶段）
 
 **当前阻塞：** 无
 
@@ -25,3 +25,4 @@
 127. **plan_status 简化 schema** — 从完整 `PlanStatusInfo` 改为字符串格式 `{current: "序号|任务", completed: [...], remaining: [...]}`
 128. **replan 工具** — 新增 `replan`（`plan_tools.py` 第 4 个工具）：保留已完成项、替换未完成项；强调状态变化必须先 `update_plan_status` 再继续
 129. **`/rewind` 命令 + ↑↓ 输入历史** — 回退到历史输入点：select 选择 → `_pending_prefill` 预填到 CLI → 确认后截断 `_history`；纯内存操作不涉及文件存储；↑↓ 键导航输入历史（通过 `prompt_toolkit.KeyBindings` + `~has_completions` filter 与 autocomplete 下拉互斥）；预填机制 `_pending_prefill` 可复用于后续输入历史功能
+130. **Esc 中断 Agent 处理** — 按 Esc 中断 agent loop：`_cancel_event` (`threading.Event`) + `_check_esc_pressed()` 跨平台非阻塞检测 + 三个检查点（while 开始/LLM 返回后/工具执行前）；工具执行前取消时注入合成 TOOL_CALL_RESULT(`__cancelled__`) 保证 history 闭环；即时中止（httpx transport close）暂缓，需 LLMClient 重构时纳入设计。详见 `docs/design.md#417-agent-中断机制` 和 decision #130

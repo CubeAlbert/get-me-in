@@ -42,6 +42,26 @@ def get_bridge() -> UIBridge:
     return _current_bridge
 
 
+# ── 模块级 cancel 标志 ──────────────────────────────────────────
+
+_cancel_event: threading.Event = threading.Event()
+
+
+def _set_cancel() -> None:
+    """主线程：设置取消标志，通知后台线程停止处理。"""
+    _cancel_event.set()
+
+
+def _clear_cancel() -> None:
+    """主线程：清除取消标志（每次新请求开始时调用）。"""
+    _cancel_event.clear()
+
+
+def is_cancelled() -> bool:
+    """任意线程：检查是否已被主线程请求取消。"""
+    return _cancel_event.is_set()
+
+
 # ── UIBridge ────────────────────────────────────────────────────
 
 

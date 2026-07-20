@@ -107,6 +107,7 @@ CLI 命令：
 - **Plan 机制为通用基础设施** — `BaseAgent` 层 3 个免审批工具（`create_plan`/`update_plan_status`/`cancel_all_plans`），`process()` 中通过 `_stamp_plan_status()` 将当前 plan 快照写入每条 `Message.plan_status`（不再拼接 system prompt）；MainAgent plan 全程存活，子 Agent plan 随 return 丢弃
 - **工具访问 Agent 实例用 context variable** — 需访问 `self` 的工具（如 plan 工具）通过模块级 `_set_*()` / `_get_*()` 函数获取当前 Agent 实例，模式与 UIBridge（`_set_bridge`/`get_bridge`）一致
 - **`EventType(StrEnum)` / `Role(StrEnum)` 双枚举** — 代码中禁止裸字符串；`EventType` 5 个值（USER_INPUT/TOOL_CALL/TOOL_CALL_RESULT/FINISH/SYSTEM_MESSAGE），`Role` 3 个值（USER/SYSTEM/ASSISTANT）
+- **Cancel 中断机制** — 按 Esc 中断 agent loop：`_cancel_event`（`src/cli/uibridge.py`）跨线程取消信号；`_check_esc_pressed()`（`src/cli/app.py`）非阻塞检测；`process()` 中 3 个检查点；工具执行前取消时注入合成 `TOOL_CALL_RESULT`（`__cancelled__`）；cancel 标志在每次新请求开始时 `_clear_cancel()`。详见 `docs/design.md#417-agent-中断机制`
 - **SYSTEM_MESSAGE role 分类** — 纠错类（output_format 注入、未知工具提示）→ `Role.SYSTEM`；正常上下文（plan 注入、退出提示）→ `Role.USER`
 - **System prompt 不在 `_history` 中** — 单独 `_system_prompt` 字符串，`_to_openai()` 时以 `{"role": "system", "content": "..."}` 注入
 - **`ToolCallException` 统一工具异常** — handler 抛 `ToolCallException(message, suggestion)`，框架层填充 `arguments_schema` + `expected_output` + `error_code`；handler 不感知 tool 定义
@@ -134,7 +135,7 @@ CLI 命令：
 | 文件 | 用途 | 加载时机 |
 |------|------|----------|
 | `docs/current.md` | 当前状态快照（阶段/任务/阻塞/下一步） | 每次会话必读 |
-| `docs/design.md` | 架构与模块设计 | 涉及架构问题时 |
+| `docs/design.md` | 架构与模块设计（含 4.17 Agent 中断机制） | 涉及架构问题时 |
 | `docs/plan.md` | 里程碑与实施计划 | 需要排期时或者当前任务下所有子任务都结束 |
 | `docs/task.md` | 任务列表（阶段→任务→子任务，⬜🔄✅⏸️⛔📌） | 需要任务细节时 |
 | `docs/decision.md` | 决策记录 | 需要历史决策理由时 |

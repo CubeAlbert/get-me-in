@@ -14,7 +14,7 @@ from src.agents.plan import PlanItem, PlanStatus
 from src.cli.handler import Handler
 from src.agents.registry import MAIN_AGENT_KEY
 from src.tools.exceptions import ToolCallException
-from src.cli.uibridge import get_bridge
+from src.cli.uibridge import get_bridge, is_cancelled
 from src.config import config
 from src.llm.client import LLMClient
 from src.logger import get_logger
@@ -474,6 +474,30 @@ class BaseAgent(Handler):
             # _pending_tool 为 None → 跳过工具执行（如切回主 Agent 后的 CONTINUE）
             if self._pending_tool is not None:
                 tool_name, payload, tool_call_id = self._pending_tool
+
+                # Cancel 检查：工具执行前中断需注入合成 TOOL_CALL_RESULT，
+                # 避免 history 中有 TOOL_CALL 无 TOOL_CALL_RESULT 导致 LLM 歧义
+                if is_cancelled():
+                    logger.debug("[%s] 检测到 cancel，注入合成 TOOL_CALL_RESULT", agent_name)
+                    self._pending_tool = None
+                    cancel_msg = Message(
+                        role=Role.USER,
+                        event_type=EventType.TOOL_CALL_RESULT,
+                        tool=tool_name,
+                        tool_call_id=tool_call_id,
+                        event_payload={
+                            "__cancelled__": True,
+                            "reason": "用户中断了操作，此工具调用未被执行",
+                        },
+                    )
+                    self._stamp_plan_status(cancel_msg)
+                    self._history.append(cancel_msg)
+                    return Response(
+                        type=ResponseType.FINISH,
+                        message="⏸️ 已中断",
+                        plan=self._plan,
+                    )
+
                 logger.debug("[%s] 执行挂起工具: %s", agent_name, tool_name)
                 result_msg = self._execute_tool(tool_name, payload, tool_call_id)
                 self._pending_tool = None
@@ -503,6 +527,15 @@ class BaseAgent(Handler):
         # ── Step 2: LLM 推理 + 分发（内层 while 仅用于错误恢复）──
         self._format_injected = False
         while self._round_counter < self._max_rounds:
+            # Cancel 检查：每轮循环开始前检查（工具已执行完毕或无需执行，历史一致）
+            if is_cancelled():
+                logger.debug("[%s] 检测到 cancel，退出 agent loop", agent_name)
+                return Response(
+                    type=ResponseType.FINISH,
+                    message="⏸️ 已中断",
+                    plan=self._plan,
+                )
+
             self._round_counter += 1
             logger.debug(
                 "[%s] LLM round %d/%d, history=%d msgs",
@@ -513,6 +546,15 @@ class BaseAgent(Handler):
             )
             reply = self._llm.chat_pro(self._to_openai(), **self._pro_params)
             logger.debug("[%s] LLM 原始回复 (%d chars):\n%s", agent_name, len(reply), reply)
+
+            # Cancel 检查：LLM 调用返回后检查（回复尚未写入 history，丢弃无副作用）
+            if is_cancelled():
+                logger.debug("[%s] 检测到 cancel，丢弃 LLM 回复", agent_name)
+                return Response(
+                    type=ResponseType.FINISH,
+                    message="⏸️ 已中断",
+                    plan=self._plan,
+                )
 
             # JSON 解析，失败时注入 output_format 让 LLM 自修复
             try:

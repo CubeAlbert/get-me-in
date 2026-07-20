@@ -34,6 +34,7 @@
   - [4.14 面试问答 Agent](#414-面试问答-agent)
   - [4.15 Lifecycle 模块](#415-lifecycle-模块)
   - [4.16 会话状态管理模块](#416-会话状态管理模块)
+  - [4.17 Agent 中断机制](#417-agent-中断机制)
 - [5. 参考资料与约定](#5-参考资料与约定)
 
 ---
@@ -1149,6 +1150,73 @@ class SaveManager:
 - Plan 随 session.json 持久化 —— save 时写入当前 agent 的 plan 并保留其他 agent 的 plan，restore 时全部装载
 - Session ID 由 App 生成 —— `yyyyMMddHHmmss` 格式，人类可读、自然有序
 - 后续扩展 —— rollback 到上一句话（回退到前一条 FINISH 对应的 save），可通过 CLI 命令触发
+
+### 4.17 Agent 中断机制
+
+**用途：** 用户按 Esc 键中断正在执行的 Agent 处理，立即（≤0.1s 在非 LLM 调用阶段，等 API 返回在 LLM 调用阶段）返回控制权到输入提示符。
+
+**当前实现：Cancel 标志 + 三检查点**
+
+```
+主线程（spinner loop）              后台线程（agent process）
+     │                                     │
+     ├─ _check_esc_pressed() → Esc!       ├─ LLM call (blocking, 10-30s)
+     ├─ _set_cancel()                      │   ↓ 无法中止，需等 API 返回
+     │   └─ _cancel_event.set()            │
+     │                                     ├─ LLM returns
+     │                                     ├─ is_cancelled() → True!
+     │                                     └─ return FINISH("⏸️ 已中断")
+     │                                     
+     ├─ done.wait(0.1) ← thread done      │
+     └─ return FINISH                      │
+```
+
+**关键设计：**
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| `_cancel_event` | `src/cli/uibridge.py:47` | `threading.Event`，跨线程取消信号 |
+| `_set_cancel()` / `_clear_cancel()` / `is_cancelled()` | `src/cli/uibridge.py:50-62` | 模块级 get/set 函数，与 `_current_bridge` 同模式 |
+| `_check_esc_pressed()` | `src/cli/app.py:91` | 非阻塞 Esc 检测（Win `msvcrt` / Unix `select`+`tty.setraw`） |
+| 检查点 #1（while 开始） | `src/agents/base.py:530` | `_pending_tool` 已清除，历史一致，直接 FINISH |
+| 检查点 #2（LLM 返回后） | `src/agents/base.py:551` | LLM 回复未写入 history，丢弃无副作用 |
+| 检查点 #3（工具执行前） | `src/agents/base.py:480` | **注入合成 TOOL_CALL_RESULT**（`__cancelled__: True`）闭环 |
+
+**检查点 #3 的数据一致性保证：**
+
+上轮 LLM 返回 TOOL_CALL 后分两步：App 收到 PROGRESS → 下一轮 CONTINUE → `_execute_tool()` → append TOOL_CALL_RESULT。如果在 `_execute_tool()` 之前中断，history 中有 TOOL_CALL 但无 RESULT，LLM 下次会困惑"我的工具调用执行了没？"。解决方案：取消时注入 `{"__cancelled__": True, "reason": "用户中断了操作，此工具调用未被执行"}` 的合成 TOOL_CALL_RESULT，让 history 始终闭环。
+
+**未来方向：即时中止 LLM 调用（httpx transport close）**
+
+当前最大的体验缺陷：Esc 按下时若 daemon 线程在执行 `chat_pro()`，需等 LLM API 返回（10-30s）。理想方案是主线程直接关闭 HTTP transport 中止请求。
+
+如果从一开始就设计可中断的 LLM 调用，需要做以下架构调整：
+
+1. **LLMClient 暴露 abort 为一等公民 API** — `LLMClient` 注入自定义 `httpx.Client`（通过 `OpenAI(http_client=...)`），持有对底层 transport 的引用；提供 `close()` 作为公开方法，而非事后从外部掏 `self._client._client.close()` 这种穿透三层私有属性的 hack
+2. **线程模型升级** — daemon 线程改为带取消令牌的可控线程；`done.set()` 从一开始就在 `finally` 块中（当前已修复）；线程异常时能安全唤醒 spinner loop
+3. **`process()` 统一异常处理** — LLM 调用包裹在 `try-except` 中，`is_cancelled()` 为 True 时返回 FINISH，否则 re-raise；不依赖 OpenAI SDK 的具体异常类型
+4. **LLMClient 单例支持重建** — `get_client()` 自动检测 client 是否被 close，是则创建新实例（`if _client is None or _client._is_closed: ...`），确保中断后下次请求正常
+5. **Agent 循环接受取消令牌** — `process()` 接受可选的 `cancel_event: threading.Event` 参数，每个阻塞操作前检查；工具 handler 也支持可选的取消检查（长时间工具如 `build_pdf` 可中途退出）
+
+按上述设计，中断流程优化为：
+
+```
+主线程                               后台线程
+     │                                     │
+     ├─ _check_esc_pressed() → Esc!       ├─ chat_pro() → httpx socket read [BLOCKED]
+     ├─ _set_cancel()                      │
+     ├─ abort_and_reset()                  │
+     │   └─ client.close() → httpx ───────→│ socket 断开 (~50ms)
+     │   └─ _client = None                 │ → OpenAI SDK retry ×2（瞬间失败）
+     │                                     ├─ Exception → process() except
+     │                                     ├─ is_cancelled() → FINISH
+     │                                     ├─ finally: done.set()
+     │                                     │
+     ├─ done.wait(0.1) returns            │
+     └─ return FINISH                      │
+```
+
+**位置：** `src/cli/uibridge.py`（cancel 标志）+ `src/cli/app.py`（Esc 检测 + spinner 逻辑）+ `src/agents/base.py`（检查点）
 
 ## 5. 参考资料与约定
 

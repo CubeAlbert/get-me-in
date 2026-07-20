@@ -137,6 +137,7 @@
 - [决策 127 — plan_status 简化 schema](#决策-127--plan_status-简化-schema)
 - [决策 128 — replan 工具（保留已完成项）](#决策-128--replan-工具保留已完成项)
 - [决策 129 — /rewind 命令（内存级回退 + ↑↓ 输入历史）](#决策-129--rewind-命令内存级回退--输入历史)
+- [决策 130 — Esc 中断 Agent 处理（基础完成，即时中止暂缓）](#决策-130--esc-中断-agent-处理基础完成即时中止暂缓)
 
 ---
 
@@ -2761,3 +2762,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 基于文件快照的 rollback（原设计）—— 需要多版本文件管理，复杂度高，用户实际不需要
 - `/rewind` 仅在子 Agent 可用 —— 用户实际使用中发现主 Agent 也有回退需求，已取消限制
 - 在 select 后直接截断 history 再预填 —— 用户反馈无法取消，改为先预填确认再截断
+
+---
+
+### 决策 130 — Esc 中断 Agent 处理（基础完成，即时中止暂缓）
+
+**背景：** 当工具不需要审批或用户切换审批模式后，Agent 自动连续执行工具，用户无法中断。需要按 Esc 键让 Agent 立即停下返回输入提示符。
+
+**决策：**
+
+- **Cancel 标志用 `threading.Event`** — 放在 `src/cli/uibridge.py` 模块级，与 `_current_bridge` 同模式：`_cancel_event` + `_set_cancel()` / `_clear_cancel()` / `is_cancelled()`。`threading.Event` 是内核级同步原语，`set()` 后跨线程立即可见，不需要额外锁
+- **Esc 检测在主线程 spinner loop 中** — 非阻塞轮询（Windows `msvcrt.kbhit()` / Unix `select`+`tty.setraw`），只在无 bridge request 时检测（避免与确认弹窗的 questionary 冲突）
+- **三个 Cancel 检查点** — 在 `BaseAgent.process()` 中：
+  1. while 循环开始 — `_pending_tool` 已清除，历史一致
+  2. LLM 调用返回后 — LLM 回复未写入 history，丢弃无副作用
+  3. **工具执行前（关键）** — 注入合成 TOOL_CALL_RESULT（`__cancelled__: True`）告知 LLM 工具未执行。因为上轮 LLM 返回的 TOOL_CALL 已在 history 中，必须闭环
+- **即时中止（关闭 httpx transport）暂缓** — 按 Esc 时若 daemon 线程正阻塞在 `chat_pro()` 的 httpx socket read 中，需等 API 返回（10-30s）。理想方案：主线程调 `OpenAI.close()` 关闭底层 httpx transport → socket 断开 → 异常在 ~50ms 内传播到 `process()` → 返回 FINISH。**但这需要 LLMClient 从设计之初就暴露 abort 作为一等公民 API**，当前 `LLMClient` 的 `OpenAI` SDK 是内部黑盒，事后打洞关闭 transport 属于侵入式修改。详见 `docs/design.md#417-agent-中断机制`
+
+**理由：**
+- `threading.Event` 模式已在 UIBridge 验证，跨线程通信零学习成本
+- 三个检查点覆盖了 agent loop 中所有可安全中断的位置，数据一致性由检查点位置保证（非 LLM 调用阶段都能 ≤0.1s 响应）
+- 即时中止暂缓是务实的工程决策 —— 当前架构的 `LLMClient` 未将 HTTP transport 生命周期暴露给外部，硬改风险高（需要同时处理 OpenAI SDK 重试、单例重建、异常类型匹配）。重构 LLMClient 时应将 abort 作为一等需求纳入设计
+
+**曾考虑的替代方案：**
+- 只设一个检查点（工具执行前）—— LLM retry 循环中取消无法生效
+- 不注入合成 TOOL_CALL_RESULT（检查点 #3 直接 return）—— history 中有 TOOL_CALL 无结果，LLM 下次产生歧义
+- 用 `signal` 或 `KeyboardInterrupt` 实现 —— Windows 信号支持不完整，且与 questionary 的 Ctrl+C 处理冲突
+- 从 spinner loop 调 `OpenAI.close()` 强行 abort —— 侵入 LLMClient 内部实现，与当前架构边界冲突，暂缓
