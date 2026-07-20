@@ -140,6 +140,8 @@
 - [决策 130 — Esc 中断 Agent 处理（基础完成，即时中止暂缓）](#决策-130--esc-中断-agent-处理基础完成即时中止暂缓)
 - [决策 131 — 记忆集成基础设施](#决策-131--记忆集成基础设施)
 - [决策 132 — LLM 调用超时 + 异常处理](#决策-132--llm-调用超时--异常处理)
+- [决策 133 — Spinner 计时排除 UIBridge 等待时长](#决策-133--spinner-计时排除-uibridge-等待时长)
+- [决策 134 — SessionId 统一：SaveManager & dumper 共享会话 ID](#决策-134--sessionid-统一savemanager--dumper-共享会话-id)
 
 ---
 
@@ -2847,3 +2849,43 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - `logger.exception()` 完整 traceback —— 对 CLI 用户过于噪音，改为单行 `logger.warning` / `logger.error`
 - 不 pop 未消费 USER_INPUT —— history 残留会导致下次输入时 LLM 看到重复消息
 - 只修 `base.py` 不修 `app.py` —— 未来新的未预期异常仍会导致 spinner 死循环
+
+---
+
+### 决策 133 — Spinner 计时排除 UIBridge 等待时长
+
+**背景：** `_process_with_spinner` 中的 spinner 计时器 `elapsed = time.time() - start` 从处理开始一直计时，当 LLM 返回 `provide_choices` 或工具审批弹窗等待用户输入时（`_handle_bridge_request` 阻塞在 `questionary.select().ask()`），计时器也在跑，给用户造成"系统还在处理中"的错觉。
+
+**决策：** 新增 `paused_duration` 变量累计 UIBridge 交互期间的暂停时长。进入 `_handle_bridge_request` 前记录 `pause_start`，退出后累加 `time.time() - pause_start` 到 `paused_duration`。elapsed 计算改为 `time.time() - start - paused_duration`。3 行改动，不改 `_process_with_spinner` 的 while 循环结构。
+
+**理由：**
+- 最小改动：只加一个累加器变量和两次计时，不重构循环结构
+- 累积模式天然支持多次 UI 交互（如 confirm + select 先后触发），每次都正确扣除
+- 用户看到的秒数只反映实际 LLM 处理耗时，消除"系统卡死"的错觉
+
+**曾考虑的替代方案：**
+- 在 `_handle_bridge_request` 内部暂停/恢复计时器 —— 耦合到 UI 渲染函数，不干净
+- 用单独的 `time.monotonic()` 计时器分段记录 —— 过度设计，当前场景一个累加器足够
+
+---
+
+### 决策 134 — SessionId 统一：SaveManager & dumper 共享会话 ID
+
+**背景：** `SaveManager.__init__` 在构造时生成 `session_id`（`datetime.now().strftime("%Y%m%d%H%M%S")`），而 `dumper.dump_history()` 每次 `/dump` 都重新生成独立时间戳（`datetime.now().strftime("%Y%m%d_%H%M%S")`，格式也不同）。两者互不感知——存档用 ID "A"，dump 文件名用时间戳 "B"，无法通过文件名关联到同一次会话。用户希望 dumper 同 session 多次 dump 直接覆盖旧文件，而非每次生成新文件。
+
+**决策：**
+- 新建 `src/utils/session.py` — 模块级单例，暴露 `init_session_id(session_id=None)` 和 `get_session_id()` 两个函数。`init` 在启动时由 `main.py` 调用生成新 ID；传入参数时用于 `/restore` 切换会话。
+- `SaveManager.__init__` 改用 `get_session_id()` 替代独立的 `datetime.now()`。
+- `SaveManager.session_id` setter 内追加 `init_session_id(value)`，确保 `/restore` 后 dumper 也使用恢复后的旧 ID。
+- `dumper.py` 移除 `from datetime import datetime`，改用 `get_session_id()`；文件名从 `{agent}_{ts}_message.dump` 改为 `{agent}_{session_id}_message.dump`，同一 session 多次 `/dump` 自然覆盖。
+- saver.py 的 `datetime` import 保留——`save_session_meta()` 仍用 `datetime.now(timezone.utc).isoformat()`。
+
+**理由：**
+- 单一真相源：整个进程只有一个会话 ID，存档目录名和 dump 文件名天然一致
+- 零配置：`main.py` 一行 `init_session_id()` 即完成初始化，后续模块 `get_session_id()` 即取即用
+- Restore 兼容：SaveManager setter 是唯一修改会话 ID 的入口，同步共享模块零额外调用点
+- 文件名覆盖：确定性文件名（同一 session = 同一文件名），`/dump` 两次自然覆盖，无需额外删除逻辑
+
+**曾考虑的替代方案：**
+- 让 dumper 接收 SaveManager 实例作为参数 —— 耦合 dumper 到 SaveManager，且 dumper 在 base.py 中通过局部 import 调用，传参链路长
+- 把 session_id 挂到 config 上 —— config 是静态配置，session_id 是运行时状态，语义不匹配

@@ -24,6 +24,11 @@ logger = get_logger(__name__)
 
 def main() -> None:
     logger.info("启动 get-me-in...")
+
+    from src.utils.session import init_session_id
+    init_session_id()
+    logger.info("Session ID 已初始化")
+
     start()  # 后台加载 RAG 模型+数据，不阻塞 CLI
 
     llm = get_client()

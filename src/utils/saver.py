@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.logger import get_logger
+from src.utils.session import get_session_id, init_session_id
 
 if TYPE_CHECKING:
     from src.message import Message
@@ -225,7 +226,7 @@ class SaveManager:
 
     def __init__(self, save_dir: Path) -> None:
         self._save_dir = save_dir
-        self._session_id: str = datetime.now().strftime("%Y%m%d%H%M%S")
+        self._session_id: str = get_session_id()
         self._pending_sub_cleanup: str | None = None
 
     # ── properties ──
@@ -239,6 +240,7 @@ class SaveManager:
     def session_id(self, value: str) -> None:
         self._session_id = value
         self._pending_sub_cleanup = None
+        init_session_id(value)  # sync shared module so dumper uses the restored ID
 
     # ── save ──
 

@@ -1,7 +1,7 @@
 """消息历史 dump 工具 — 将对话历史序列化为 JSON 文件，用于调试上下文丢失问题。"""
 
 import json
-from datetime import datetime
+from src.utils.session import get_session_id
 from pathlib import Path
 
 from src.config import config
@@ -25,8 +25,8 @@ def dump_history(agent_name: str, history: list[Message]) -> str | None:
         log_dir = Path(config.LOG_DIR)
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{agent_name}_{ts}_message.dump"
+        session_id = get_session_id()
+        filename = f"{agent_name}_{session_id}_message.dump"
         filepath = log_dir / filename
 
         data = [m.to_json() for m in history]
