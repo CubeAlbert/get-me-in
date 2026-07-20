@@ -382,6 +382,7 @@ class App:
         result = None
         done = threading.Event()
         start = time.time()
+        paused_duration = 0.0
 
         def _run() -> None:
             nonlocal result
@@ -405,7 +406,9 @@ class App:
             if bridge.has_request:
                 sys.stderr.write("\r" + " " * 24 + "\r")
                 sys.stderr.flush()
+                pause_start = time.time()
                 self._handle_bridge_request(bridge)
+                paused_duration += time.time() - pause_start
             else:
                 # 已取消 → 持续显示中断提示，不再检测按键
                 if is_cancelled():
@@ -418,7 +421,7 @@ class App:
                     sys.stderr.write("\r⏸️  正在中断...\r")
                     sys.stderr.flush()
                 else:
-                    elapsed = time.time() - start
+                    elapsed = time.time() - start - paused_duration
                     dots = "." * (int(elapsed * 2) % 3 + 1)
                     sys.stderr.write(f"\r{dots:<3} 处理中 {elapsed:.1f}s  ")
                     sys.stderr.flush()
