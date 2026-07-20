@@ -139,6 +139,7 @@
 - [决策 129 — /rewind 命令（内存级回退 + ↑↓ 输入历史）](#决策-129--rewind-命令内存级回退--输入历史)
 - [决策 130 — Esc 中断 Agent 处理（基础完成，即时中止暂缓）](#决策-130--esc-中断-agent-处理基础完成即时中止暂缓)
 - [决策 131 — 记忆集成基础设施](#决策-131--记忆集成基础设施)
+- [决策 132 — LLM 调用超时 + 异常处理](#决策-132--llm-调用超时--异常处理)
 
 ---
 
@@ -2818,3 +2819,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 同步写入（`sync_mode=True`）—— 用户需等待 LLM 记忆提取完成（数秒），影响体验，已拒绝
 - 在 `BaseAgent.process()` 中写记忆 —— App 层钩子更合适，Agent 不应感知 I/O 生命周期
 - 保持 `_get_agent_name()` 作为目录名 —— 中文路径不便于脚本处理和跨平台兼容
+
+---
+
+### 决策 132 — LLM 调用超时 + 异常处理
+
+**背景：** OpenAI SDK 默认超时为 `httpx.Timeout(timeout=600.0, connect=10.0)`（读取超时 600 秒），用户反馈 LLM 调用无响应时程序卡死在 spinner 动效。此前 `LLMClient` 构造时未传 `timeout` 参数，`BaseAgent.process()` 中 `chat_pro()` 调用无 try/except，`App._process_with_spinner()` 中 daemon 线程异常未捕获导致 `done` 事件永远不触发（spinner 死循环）。此外 `.env` 文件缺失 10 个已有默认值的配置项。
+
+**决策：**
+
+- **`LLM_TIMEOUT` 配置项** — 新增 `config.LLM_TIMEOUT`（可选，默认 `"60"` 秒），在 `OpenAI()` 构造函数中 `timeout=float(config.LLM_TIMEOUT)` 全局应用于 `chat_pro` / `chat_flash` / `web_search` 三个方法。`.env.example` 和 `.env` 同步追加。
+- **`BaseAgent.process()` 异常捕获** — `chat_pro()` 调用包裹 `try/except Exception`，超时/网络错误时 `logger.warning`（单行，无 traceback）+ 返回 `Response(FINISH, message="❌ LLM 调用失败（超时阈值 {timeout}s）: {e}")`，控制权交还 CLI。
+- **未消费 USER_INPUT 回滚** — 仅首轮 LLM 失败（`_round_counter == 1` 且 `_history[-1].event_type == USER_INPUT`）时 `_history.pop()` 移除未消费的用户消息，保持 history 干净。多轮后（已有 tool 交互）不回滚。
+- **`_process_with_spinner` 兜底** — `_run()` 中 `process()` 调用包裹 `try/except Exception`，任意未预期异常捕获后构造 `Response(FINISH, error_msg)` 并正常 `done.set()`，确保 spinner 永不死循环。
+- **`.env` 补全** — 追加 10 个缺失配置项（`EMBED_BATCH_SIZE`、`RETRIEVAL_TOP_K`、`RERANK_BATCH_SIZE`、`RERANK_TOP_K`、`CHROMA_PERSIST_DIR`、`MEMORIES_BASE_DIR`、`LOG_DIR`、`SAVE_DIR`、`AUTO_MEMORY_ON_EXIT`、`LLM_TIMEOUT`），值与 `_VAR_SPECS` 默认值一致。
+
+**理由：**
+
+- 超时客户端级设置一次覆盖所有 API 调用，改动最小（3 个调用点共享 1 行配置）
+- 异常捕获两层分工：`base.py` 精准处理 LLM 层失败（有意义错误信息 + 回滚），`app.py` 兜底处理所有未知异常（保证 spinner 不死）
+- `_round_counter == 1` 精确识别"用户刚发消息、LLM 从未处理"场景，多轮 tool 交互后的失败不回滚（tool 结果已有效）
+- 用户看到简洁错误信息 + 重试建议，不再面对满屏 traceback
+
+**曾考虑的替代方案：**
+
+- 超时设在逐调用层（`chat.completions.create(timeout=...)`）—— 需改 3 个方法各加参数，无额外收益
+- `logger.exception()` 完整 traceback —— 对 CLI 用户过于噪音，改为单行 `logger.warning` / `logger.error`
+- 不 pop 未消费 USER_INPUT —— history 残留会导致下次输入时 LLM 看到重复消息
+- 只修 `base.py` 不修 `app.py` —— 未来新的未预期异常仍会导致 spinner 死循环

@@ -388,6 +388,12 @@ class App:
             _set_bridge(bridge)
             try:
                 result = self._handler.process(request)
+            except Exception as e:
+                logger.error("Agent process 抛出未捕获异常: %s (%s)", type(e).__name__, e)
+                result = Response(
+                    type=ResponseType.FINISH,
+                    message=f"❌ 处理异常: {e}",
+                )
             finally:
                 _set_bridge(None)
             done.set()

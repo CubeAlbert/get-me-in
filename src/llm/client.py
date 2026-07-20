@@ -60,6 +60,7 @@ class LLMClient:
         self._client = OpenAI(
             base_url=config.OPENAI_BASE_URL,
             api_key=config.OPENAI_API_KEY,
+            timeout=float(config.LLM_TIMEOUT),
         )
 
     @staticmethod

@@ -544,7 +544,23 @@ class BaseAgent(Handler):
                 self._max_rounds,
                 len(self._history),
             )
-            reply = self._llm.chat_pro(self._to_openai(), **self._pro_params)
+            try:
+                reply = self._llm.chat_pro(self._to_openai(), **self._pro_params)
+            except Exception as e:
+                timeout = config.LLM_TIMEOUT
+                logger.warning("[%s] LLM 调用失败 (round %d, timeout=%ss): %s",
+                               agent_name, self._round_counter, timeout, e)
+                # 仅首轮失败时回滚未消费的 USER_INPUT，保持 history 干净
+                if self._round_counter == 1 and self._history and self._history[-1].event_type == EventType.USER_INPUT:
+                    self._history.pop()
+                return Response(
+                    type=ResponseType.FINISH,
+                    message=(
+                        f"❌ LLM 调用失败（超时阈值 {timeout}s）: {e}\n"
+                        f"请检查网络或调整 .env 中的 LLM_TIMEOUT 后重试"
+                    ),
+                    plan=self._plan,
+                )
             logger.debug("[%s] LLM 原始回复 (%d chars):\n%s", agent_name, len(reply), reply)
 
             # Cancel 检查：LLM 调用返回后检查（回复尚未写入 history，丢弃无副作用）

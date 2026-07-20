@@ -52,6 +52,7 @@ _VAR_SPECS: list[tuple[str, bool, str | None, bool]] = [
     ("LLM_THINKING_ENABLED",  False, "true", True),
     ("SAVE_DIR",            False, "data/save/", False),
     ("AUTO_MEMORY_ON_EXIT",  False, "false", True),
+    ("LLM_TIMEOUT",         False, "60", False),
 ]
 
 _missing: list[str] = []
