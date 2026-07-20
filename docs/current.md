@@ -2,13 +2,13 @@
 
 **当前阶段：** M5: 简历 Agent
 
-**当前任务：** 会话状态管理（M5-7）— Rollback
+**当前任务：** 会话状态管理（M5-7）— ✅ 全部完成
 
-**当前子任务：** 回滚到上句话（每次 FINISH 全量快照，支持回退到前一状态）
+**当前子任务：** M5-7 全部子任务已完成。待用户决定下一步方向（M5-5 记忆集成 / M4-6 InterviewAgent / 新阶段）
 
 **当前阻塞：** 无
 
-**下一步：** 设计 rollback 机制：如何触发回滚（CLI 命令？自动？），回滚后如何处理当前未保存的修改
+**下一步：** 用户决定下一步：① M5-5 记忆集成（暂缓） ② M4-6 InterviewAgent（⬜） ③ 新阶段
 
 **已暂缓：** schema-based 填充工具、记忆集成
 
@@ -24,3 +24,4 @@
 126. **Restore 上下文预览** — choice title 追加 preview 文本；恢复后渲染最近 5 条消息面板
 127. **plan_status 简化 schema** — 从完整 `PlanStatusInfo` 改为字符串格式 `{current: "序号|任务", completed: [...], remaining: [...]}`
 128. **replan 工具** — 新增 `replan`（`plan_tools.py` 第 4 个工具）：保留已完成项、替换未完成项；强调状态变化必须先 `update_plan_status` 再继续
+129. **`/rewind` 命令 + ↑↓ 输入历史** — 回退到历史输入点：select 选择 → `_pending_prefill` 预填到 CLI → 确认后截断 `_history`；纯内存操作不涉及文件存储；↑↓ 键导航输入历史（通过 `prompt_toolkit.KeyBindings` + `~has_completions` filter 与 autocomplete 下拉互斥）；预填机制 `_pending_prefill` 可复用于后续输入历史功能

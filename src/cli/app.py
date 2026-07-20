@@ -16,6 +16,8 @@ import threading
 import time
 
 import questionary
+from prompt_toolkit.filters import has_completions
+from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -116,6 +118,8 @@ class App:
         self._switch_tool_call_id: str | None = None  # main→sub 时的 TOOL_CALL id
         self._pending_prefill: str | None = None  # /rewind 等场景预填输入
         self._pending_rewind_idx: int | None = None  # 确认后截断 _history 的位置
+        self._input_history: list[str] = []  # 用户输入历史，最近的在末尾
+        self._history_cursor: int = -1  # -1 = 不导航历史; >=0 = 在历史中
         self._console = Console(force_terminal=True)
         self._editor = _resolve_editor()
         self._save_mgr = SaveManager(Path(config.SAVE_DIR))
@@ -124,6 +128,57 @@ class App:
     def _complete_commands() -> list[str]:
         """返回所有可用命令列表，由 questionary 按输入做前缀匹配。"""
         return App._COMMANDS
+
+    def _create_input_key_bindings(self) -> KeyBindings:
+        """为 questionary prompt 创建 ↑↓ 输入历史导航的 key bindings。
+
+        ``~has_completions`` 过滤器确保：autocomplete 下拉可见时 ↑↓ 导航菜单，
+        不可见时 ↑↓ 导航输入历史。两者互斥，不会冲突。
+        """
+        kb = KeyBindings()
+        app_ref = self  # 闭包引用
+
+        @kb.add("up", filter=~has_completions)  # type: ignore[arg-type]
+        def _(event: object) -> None:
+            buf = event.current_buffer  # type: ignore[union-attr]
+            if not app_ref._input_history:
+                return
+            if app_ref._history_cursor < len(app_ref._input_history) - 1:
+                app_ref._history_cursor += 1
+                text = app_ref._input_history[-(app_ref._history_cursor + 1)]
+                buf.text = text
+                buf.cursor_position = len(text)
+
+        @kb.add("down", filter=~has_completions)  # type: ignore[arg-type]
+        def _(event: object) -> None:
+            buf = event.current_buffer  # type: ignore[union-attr]
+            if app_ref._history_cursor <= 0:
+                app_ref._history_cursor = -1
+                buf.text = ""
+                return
+            app_ref._history_cursor -= 1
+            text = app_ref._input_history[-(app_ref._history_cursor + 1)]
+            buf.text = text
+            buf.cursor_position = len(text)
+
+        return kb
+
+    def _populate_input_history(self) -> None:
+        """从当前 handler 的 _history 中提取 USER_INPUT 初始化输入历史。
+
+        用于 restore 后填充 ↑↓ 导航历史，避免恢复的会话没有历史可用。
+        """
+        self._input_history.clear()
+        self._history_cursor = -1
+        seen: set[str] = set()
+        for m in self._handler._history:
+            if m.event_type == EventType.USER_INPUT and m.message:
+                text = m.message.strip()
+                if text and text not in seen:
+                    # 跳过命令
+                    if not text.startswith("/"):
+                        self._input_history.append(text)
+                        seen.add(text)
 
     def _get_handler(self, name: str) -> Handler | None:
         """按名获取 handler 实例。
@@ -231,6 +286,9 @@ class App:
                     f"[yellow]子Agent存档读取失败 ({sub_agent})，仅恢复主Agent[/]")
         else:
             self._handler = self._main_agent
+
+        # 从恢复的 history 中提取 USER_INPUT 初始化输入历史
+        self._populate_input_history()
 
         self._render_context_recap(session_id, sub_agent)
 
@@ -364,6 +422,7 @@ class App:
                         "",
                         default=self._pending_prefill,
                         qmark=">",
+                        key_bindings=self._create_input_key_bindings(),
                     ).ask()
                     rewind_idx = self._pending_rewind_idx
                     self._pending_prefill = None
@@ -387,6 +446,7 @@ class App:
                         "",
                         choices=self._complete_commands,
                         qmark=">",
+                        key_bindings=self._create_input_key_bindings(),
                     ).ask()
                     if user_input is None:  # Ctrl+C
                         self._console.print("\n[dim]再见！[/]")
@@ -500,6 +560,10 @@ class App:
                 request = Request(type=RequestType.USER_INPUT, message=content)
             else:
                 request = Request(type=RequestType.USER_INPUT, message=user_input)
+                # 记录非命令输入到历史（避免连续重复）
+                if not self._input_history or self._input_history[-1] != user_input:
+                    self._input_history.append(user_input)
+                self._history_cursor = -1
 
             # ── 内层 agent loop ──
             bridge = UIBridge()

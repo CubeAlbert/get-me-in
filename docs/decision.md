@@ -136,6 +136,7 @@
 - [决策 126 — Restore 恢复上下文预览](#决策-126--restore-恢复上下文预览)
 - [决策 127 — plan_status 简化 schema](#决策-127--plan_status-简化-schema)
 - [决策 128 — replan 工具（保留已完成项）](#决策-128--replan-工具保留已完成项)
+- [决策 129 — /rewind 命令（内存级回退 + ↑↓ 输入历史）](#决策-129--rewind-命令内存级回退--输入历史)
 
 ---
 
@@ -2734,3 +2735,29 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 **曾考虑的替代方案：**
 - LLM 手动 cancel_all + create —— 多一轮工具调用，且丢失已完成历史
+
+---
+
+### 决策 129 — /rewind 命令（内存级回退 + ↑↓ 输入历史）
+
+**背景：** 原 rollback 设计（决策 123）规划为"每次 FINISH 全量快照，通过 CLI 命令回退到前一次 FINISH"，依赖文件存储的多版本管理。实际实现时发现方案过重——用户真正需要的是"回到某个输入点重来"，而非文件级版本回溯。
+
+**决策：**
+
+- **`/rewind` 命令**：纯内存操作，通过 CLI 命令触发，列出当前 Agent `_history` 中所有 `USER_INPUT` 消息供用户选择；选中后预填文本到 CLI（`_pending_prefill`），用户可编辑或直接回车确认后才截断 `_history` 到选中位置之前
+- **预填机制（`_pending_prefill`）**：App 级状态字段，输入循环顶部检测并传入 `questionary.text(default=)`，回车后清除；可复用于 ↑↓ 输入历史和 `/rewind`
+- **↑↓ 输入历史导航**：通过 `prompt_toolkit.KeyBindings` 注入到 questionary prompt，`~has_completions` filter 确保 autocomplete 下拉可见时 ↑↓ 导航菜单、不可见时导航输入历史，互斥
+- **不涉及文件存储**：重新设计后 `/rewind` 完全在内存中操作 `_history` 截断，不碰 `data/save/`
+- **取消路径**：select 阶段末尾有 `── 取消 ──` 选项 + Ctrl+C；预填编辑阶段 Ctrl+C / 空回车均可取消，history 不截断
+- **Restore 集成**：`/restore` 恢复会话后调用 `_populate_input_history()`，从恢复的 `_history` 提取 USER_INPUT 填充 `_input_history`
+
+**理由：**
+- 用户需求是 CLIG 级别的"回到某句话重来"，不是 VCS 级别的文件快照回退
+- 纯内存操作零 IO 开销，实现简单（仅 `app.py` 改动）
+- 预填 + 确认的两段式流程给用户安全网：select 可取消、编辑阶段也可取消
+- `_pending_prefill` 机制通用化，后续 ↑↓ 输入历史可直接复用
+
+**曾考虑的替代方案：**
+- 基于文件快照的 rollback（原设计）—— 需要多版本文件管理，复杂度高，用户实际不需要
+- `/rewind` 仅在子 Agent 可用 —— 用户实际使用中发现主 Agent 也有回退需求，已取消限制
+- 在 select 后直接截断 history 再预填 —— 用户反馈无法取消，改为先预填确认再截断
