@@ -138,6 +138,7 @@
 - [决策 128 — replan 工具（保留已完成项）](#决策-128--replan-工具保留已完成项)
 - [决策 129 — /rewind 命令（内存级回退 + ↑↓ 输入历史）](#决策-129--rewind-命令内存级回退--输入历史)
 - [决策 130 — Esc 中断 Agent 处理（基础完成，即时中止暂缓）](#决策-130--esc-中断-agent-处理基础完成即时中止暂缓)
+- [决策 131 — 记忆集成基础设施](#决策-131--记忆集成基础设施)
 
 ---
 
@@ -2789,3 +2790,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 不注入合成 TOOL_CALL_RESULT（检查点 #3 直接 return）—— history 中有 TOOL_CALL 无结果，LLM 下次产生歧义
 - 用 `signal` 或 `KeyboardInterrupt` 实现 —— Windows 信号支持不完整，且与 questionary 的 Ctrl+C 处理冲突
 - 从 spinner loop 调 `OpenAI.close()` 强行 abort —— 侵入 LLMClient 内部实现，与当前架构边界冲突，暂缓
+
+---
+
+### 决策 131 — 记忆集成基础设施
+
+**背景：** M5-5 记忆集成一直处于暂缓状态，需要在 Agent 生命周期中接入记忆模块。此前 `write_memory()` 只在 `BaseAgent` 中定义但无调用入口，且目录名使用了中文显示名（`_get_agent_name()`）而非标识符（`_get_agent_key()`），导致记忆保存到 `data/memories/程序员求职助手路由Agent/` 等路径。
+
+**决策：**
+
+- **`AUTO_MEMORY_ON_EXIT` 配置项** — 新增 `config.AUTO_MEMORY_ON_EXIT`（bool，默认 `false`），在 Agent FINISH 时自动调用 `write_memory(sync_mode=False)` 将当前对话异步固化为长期记忆。同时作用于 MainAgent 正常退出和子 Agent→MainAgent 切换退出。
+- **`/build-memory` CLI 命令** — 新增手动触发命令，调 `self._handler.write_memory(sync_mode=False)` 后立即返回（异步守护线程），控制台打印 `"记忆构建已启动（后台异步处理）"`。
+- **目录名修正** — `BaseAgent.write_memory()` 中 `agent = self._get_agent_name()` → `agent = self._get_agent_key()`，记忆保存到 `data/memories/main/`、`resume/`、`job_search/`。
+- **异步写入** — 两路径均使用 `sync_mode=False`（守护线程后台执行），`src/memory/__init__.py` 的 lifecycle shutdown hook（10s timeout）已覆盖线程等待。
+- **钩子位置** — 自动记忆写入放在 `App.run()` FINISH 分支的 `_auto_save()` 之后、switch 分支之前，覆盖所有三种 FINISH 场景（正常退出 / main→sub / sub→main）。
+- **线程安全** — FINISH 时 agent loop 已退出，`_history` 无并发修改；守护线程只读 conversation 副本；记忆目录（`data/memories/`）与存档目录（`data/save/`）完全隔离。
+
+**理由：**
+
+- 需求明确为通用基础设施（非 resume 专属），配置项 + CLI 命令覆盖自动和手动两种场景
+- 异步写入不阻塞 agent loop 和 CLI 响应，用户无感知延迟
+- `agent_key` 作为目录名与已有 `data/memories/main/`、`interview/` 目录风格一致
+- 复用已有 `write_memory()` 和 `build_memories(sync_mode=False)` 基础设施，新增代码仅 ~15 行
+
+**曾考虑的替代方案：**
+
+- 同步写入（`sync_mode=True`）—— 用户需等待 LLM 记忆提取完成（数秒），影响体验，已拒绝
+- 在 `BaseAgent.process()` 中写记忆 —— App 层钩子更合适，Agent 不应感知 I/O 生命周期
+- 保持 `_get_agent_name()` 作为目录名 —— 中文路径不便于脚本处理和跨平台兼容

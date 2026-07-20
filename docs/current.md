@@ -2,15 +2,15 @@
 
 **当前阶段：** M5: 简历 Agent
 
-**当前任务：** 会话状态管理（M5-7）— ✅ 全部完成
+**当前任务：** 记忆集成（M5-5）— ✅ 全部完成
 
-**当前子任务：** M5-7 全部子任务已完成。M5-8 Esc 中断基础功能 ✅ 完成（即时中止 📌 暂缓）。待用户决定下一步方向（M5-5 记忆集成 / M4-6 InterviewAgent / 新阶段）
+**当前子任务：** M5-5 全部子任务已终结（通用基础设施 ✅ + 简历专项 ⛔）。M5-8 Esc 中断基础功能 ✅ 完成（即时中止 📌 暂缓）。简历专项记忆（版本写入/历史检索）不予实现——ResumeAgent 通过 `query_memory` 工具即可获取用户个人信息和偏好。
 
 **当前阻塞：** 无
 
-**下一步：** 用户决定下一步：① M5-5 记忆集成（暂缓） ② M4-6 InterviewAgent（⬜） ③ 新阶段
+**下一步：** 用户决定：① M4-6 InterviewAgent（⬜） ② 新阶段 ③ 其他
 
-**已暂缓：** schema-based 填充工具、记忆集成
+**已暂缓：** schema-based 填充工具
 
 **参考文档：** `docs/file-reader-design.md` — workspace 工具组完整设计；`data/resume/template/README.md` — 模板操作手册
 
@@ -26,3 +26,4 @@
 128. **replan 工具** — 新增 `replan`（`plan_tools.py` 第 4 个工具）：保留已完成项、替换未完成项；强调状态变化必须先 `update_plan_status` 再继续
 129. **`/rewind` 命令 + ↑↓ 输入历史** — 回退到历史输入点：select 选择 → `_pending_prefill` 预填到 CLI → 确认后截断 `_history`；纯内存操作不涉及文件存储；↑↓ 键导航输入历史（通过 `prompt_toolkit.KeyBindings` + `~has_completions` filter 与 autocomplete 下拉互斥）；预填机制 `_pending_prefill` 可复用于后续输入历史功能
 130. **Esc 中断 Agent 处理** — 按 Esc 中断 agent loop：`_cancel_event` (`threading.Event`) + `_check_esc_pressed()` 跨平台非阻塞检测 + 三个检查点（while 开始/LLM 返回后/工具执行前）；工具执行前取消时注入合成 TOOL_CALL_RESULT(`__cancelled__`) 保证 history 闭环；即时中止（httpx transport close）暂缓，需 LLMClient 重构时纳入设计。详见 `docs/design.md#417-agent-中断机制` 和 decision #130
+131. **记忆集成基础设施** — `AUTO_MEMORY_ON_EXIT` 配置项控制 Agent FINISH 时是否自动异步写入记忆（默认 false，守护线程不阻塞）；`/build-memory` CLI 命令手动触发记忆构建（异步）；`write_memory()` 目录名修正为 `_get_agent_key()`（main/resume/job_search）替代 `_get_agent_name()`（中文显示名）；3 文件共 ~15 行改动

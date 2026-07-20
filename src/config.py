@@ -51,6 +51,7 @@ _VAR_SPECS: list[tuple[str, bool, str | None, bool]] = [
     ("WORKING_DIR",            False, "data/temp/", False),
     ("LLM_THINKING_ENABLED",  False, "true", True),
     ("SAVE_DIR",            False, "data/save/", False),
+    ("AUTO_MEMORY_ON_EXIT",  False, "false", True),
 ]
 
 _missing: list[str] = []

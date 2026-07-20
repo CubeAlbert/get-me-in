@@ -306,8 +306,9 @@
 
 ### 5. 记忆集成
 
-- ⬜ 简历版本写入记忆模块 — 之后实现
-- ⬜ 从记忆检索历史简历 — 之后实现
+- ✅ **通用记忆基础设施** — `AUTO_MEMORY_ON_EXIT` 配置项（默认 false）+ Agent FINISH 时自动异步写入记忆 + `/build-memory` CLI 命令手动触发 + `write_memory()` 目录名修正为 agent_key
+- ⛔ 简历版本写入记忆模块 — 不予实现。ResumeAgent 通过 `query_memory` 工具即可获取用户个人信息和偏好
+- ⛔ 从记忆检索历史简历 — 不予实现。同上，`query_memory` 已覆盖检索需求
 
 ### 6. M5-Review — 工具与提示词审查
 

@@ -679,7 +679,7 @@ class BaseAgent(Handler):
         from src.memory import build_memories
 
         conv = conversation if conversation is not None else self._history
-        agent = self._get_agent_name()
+        agent = self._get_agent_key()
 
         if not conv:
             logger.warning("[%s] write_memory: 对话历史为空，跳过", agent)

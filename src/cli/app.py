@@ -132,6 +132,7 @@ class App:
 
     _COMMAND_HELP: dict[str, str] = {
         "/auto-approve-switch": "切换工具审批开关 [on|off]",
+        "/build-memory": "将当前对话固化为长期记忆（后台异步处理）",
         "/dump": "导出当前 Agent 对话历史",
         "/edit": "调 $EDITOR 输入长文本",
         "/exit": "退出程序",
@@ -532,6 +533,11 @@ class App:
                     self._console.print("[red]dump failed, see log for details[/]")
                 continue
 
+            if user_input == "/build-memory":
+                self._handler.write_memory(sync_mode=False)
+                self._console.print("[dim]记忆构建已启动（后台异步处理）[/]")
+                continue
+
             if user_input == "/restore" or user_input.startswith("/restore "):
                 arg = user_input[9:].strip()
                 if arg:
@@ -628,6 +634,10 @@ class App:
                 if response.type == ResponseType.FINISH:
                     # ═══ auto-save: 保存当前 handler 的对话历史 ═══
                     self._auto_save()
+
+                    # ═══ auto-memory: 将对话固化为长期记忆 ═══
+                    if config.AUTO_MEMORY_ON_EXIT:
+                        self._handler.write_memory(sync_mode=False)
 
                     if response.switch_agent:
                         old_agent_key = self._handler._get_agent_key()
