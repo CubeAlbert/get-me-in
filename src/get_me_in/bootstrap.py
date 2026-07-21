@@ -9,6 +9,8 @@ from src.get_me_in.adapters.os_frontend import OSFrontend
 from src.get_me_in.adapters.openai_web_search import OpenAIWebSearchAdapter
 from src.get_me_in.adapters.authorized_file_reader import AuthorizedFileReader
 from src.get_me_in.adapters.deferred_retrieval import DeferredRetrievalAdapter
+from src.get_me_in.adapters.local_resume_artifacts import LocalResumeArtifacts
+from src.get_me_in.adapters.subprocess_runner import SubprocessRunner
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
@@ -27,6 +29,7 @@ from src.get_me_in.tools.web import build_web_tools
 from src.get_me_in.tools.switch import build_switch_tools
 from src.get_me_in.tools.customer_file import build_customer_file_tools
 from src.get_me_in.tools.retrieval import build_retrieval_tools
+from src.get_me_in.tools.resume import build_resume_tools
 
 
 def build_application(
@@ -66,9 +69,10 @@ def build_application(
     web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
     external_files = AuthorizedFileReader()
     retrieval = DeferredRetrievalAdapter()
+    resume_artifacts = LocalResumeArtifacts(settings.resume_template_dir, SubprocessRunner())
     plan_service = PlanService(id_generator)
     tool_executor = ToolExecutor(
-        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools()))
+        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools(), *build_resume_tools()))
     )
     runtime_llm = llm or OpenAILLMAdapter(
         api_key=settings.openai_api_key,
@@ -97,6 +101,7 @@ def build_application(
             web_search=web_search,
             external_files=external_files,
             retrieval=retrieval,
+            resume_artifacts=resume_artifacts,
         ),
     )
     return Application(

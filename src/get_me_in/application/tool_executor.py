@@ -18,6 +18,7 @@ from src.get_me_in.ports.frontend import FrontendPort
 from src.get_me_in.ports.web_search import WebSearchPort
 from src.get_me_in.ports.external_files import ExternalFileReaderPort
 from src.get_me_in.ports.retrieval import RetrievalPort
+from src.get_me_in.ports.resume_artifacts import ResumeArtifactPort
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class ToolContext:
     web_search: WebSearchPort | None = None
     external_files: ExternalFileReaderPort | None = None
     retrieval: RetrievalPort | None = None
+    resume_artifacts: ResumeArtifactPort | None = None
     approved: bool = False
     rejected: bool = False
 
