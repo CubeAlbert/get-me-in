@@ -114,13 +114,13 @@
 - ✅ capability-based 可见性替代 agent name、`"*"` 和 main 特判。
 - ✅ ToolCatalog 提供目录导出，使文档/诊断可看到真实工具数。
 - ✅ 统一参数过滤、必填校验、业务错误和框架错误。
-- 🔄 完整处理审批、拒绝和取消的 call closure。
+- ✅ 完整处理审批、拒绝和取消的 call closure。
 
 ### 2. Plan
 
 - ✅ 将 Plan/PlanItem/PlanStatus 提取为 domain model。
 - ✅ 将 create/update/cancel/replan 移入 PlanService。
-- ⬜ ToolContext 注入 PlanService，删除 `_plan_agent`。
+- ✅ ToolContext 注入 PlanService，删除 `_plan_agent`。
 - ✅ 保证同一 plan 最多一个 IN_PROGRESS。
 - ✅ 定义 Plan snapshot/restore codec。
 
@@ -133,7 +133,7 @@
 - ✅ 以 file revision/hash 实现 read-before-edit，状态归 session/tool context。
 - ✅ 移除进程级 `_read_files`。
 - ⬜ 定义批量删除部分成功的结果类型。
-- ⬜ 定义 ProcessRunner，支持 timeout/cancel，供 LaTeX 使用。
+- ✅ 定义 ProcessRunner，支持 timeout/cancel，供 LaTeX 使用。
 
 ### 4. 现有工具归类
 
