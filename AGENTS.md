@@ -13,6 +13,8 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 - 重构目标架构以 `docs/refactor-design.md` 为准。
 - 重构里程碑与验收门禁以 `docs/refactor-plan.md` 为准。
 - 重构执行状态以 `docs/refactor-task.md` 为准。
+- `refactor` 分支的新会话必须先用 `/project-bootstrap` 读取 `docs/current.md`，再以其中显式列出的 `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md` 与 `docs/decision.md` 恢复上下文；`current.md` 是唯一阶段快照，禁止从本文件或旧版通用文档推断当前里程碑。
+- 进入新的重构里程碑编码前，必须先检查 `docs/current.md` 的确认门禁；未获用户确认的新文件、类和公开方法清单不得创建。
 - `docs/design.md`、`docs/plan.md`、`docs/task.md` 在 v2 切换完成前继续记录旧实现和历史基线，不提前改写为尚未落地的架构。
 - 用户已确认 `refactor-design.md` 中 R-D1～R-D6；R0/G0 已完成，R1 的新文件、类和公开方法清单已获用户确认。当前可按该清单创建 v2 骨架代码与核心自动化测试；后续阶段仍须在创建新模块前提交对应清单供用户确认。
 - R0～R8 期间冻结 InterviewAgent、LearningAgent、完整 Job Search 等新功能；除非用户明确改变范围，不在旧 `BaseAgent`/`App` 上继续叠加功能。
