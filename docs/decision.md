@@ -142,6 +142,7 @@
 - [决策 132 — LLM 调用超时 + 异常处理](#决策-132--llm-调用超时--异常处理)
 - [决策 133 — Spinner 计时排除 UIBridge 等待时长](#决策-133--spinner-计时排除-uibridge-等待时长)
 - [决策 134 — SessionId 统一：SaveManager & dumper 共享会话 ID](#决策-134--sessionid-统一savemanager--dumper-共享会话-id)
+- [决策 135 — 发送 LLM 消息剥离 thinking + 修正 input format role](#决策-135--发送-llm-消息剥离-thinking--修正-input-format-role)
 
 ---
 
@@ -2889,3 +2890,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 - 让 dumper 接收 SaveManager 实例作为参数 —— 耦合 dumper 到 SaveManager，且 dumper 在 base.py 中通过局部 import 调用，传参链路长
 - 把 session_id 挂到 config 上 —— config 是静态配置，session_id 是运行时状态，语义不匹配
+
+---
+
+### 决策 135 — 发送 LLM 消息剥离 thinking + 修正 input format role
+
+**背景：** 两个独立但相关的问题：
+
+1. `BaseAgent._to_openai()` 将 `_history` 中每条 `Message` 通过 `to_json()` 完整序列化后发给 LLM，包括 `thinking` 字段。前几轮 LLM 回复中的推理过程被原样送回模型，浪费 token 且可能干扰当前推理。
+
+2. `08_input_format.md` 的 schema 中 `role` 写死为 `"const": "user"`，与实际不符——`_to_openai()` 使用 `m.role` 透传，LLM 实际收到 `user`（用户输入/工具结果）、`assistant`（LLM 自身历史回复）、`system`（系统纠错消息）三种 role；`event_type` 也缺少 `tool_call` 和 `finish`（assistant 历史消息的类型）。
+
+**决策：**
+
+1. **代码侧** — `_to_openai()` 中每条消息序列化前用 `dataclasses.replace(m, thinking=None)` 剥离 `thinking` 字段。`to_json()` 保持不变（dump 时仍需完整序列化）。
+
+2. **提示词侧** — `08_input_format.md` 的 `role` 从 `"const": "user"` 改为 `enum: ["user", "assistant", "system"]`，`event_type` enum 扩展 `"tool_call"` 和 `"finish"`，`<EventTypes>` 新增对应条目并标明 **不含 `thinking` 字段**。
+
+**理由：**
+
+- **Token 节省**：`thinking` 是 LLM 的内部推理过程，不应对后续轮次可见，剥离后减少无意义 token 消耗
+- **推理质量**：前轮推理内容可能包含错误路径或过时上下文，混入历史可能误导模型
+- **格式一致**：input format 应与实际发送的数据一致，`role` 写死 `"user"` 会让 LLM 对 `assistant` 和 `system` 消息产生困惑
+- **最小改动**：仅改 `_to_openai()` 一行 + prompt 一处，不影响 dump/save/restore 流程
+
+**曾考虑的替代方案：**
+
+- 修改 `to_json()` 加 `exclude_thinking` 参数 —— 增加方法签名复杂度，且 `to_json()` 在两处调用（LLM 发送 + dump）需求不同，调用方控制更清晰
+- 在 LLMClient 层过滤 —— 职责越界，LLMClient 不应理解 Message 内部结构
