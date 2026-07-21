@@ -18,6 +18,7 @@ class Settings:
     llm_pro_model: str
     llm_flash_model: str
     llm_timeout_seconds: float
+    llm_thinking_enabled: bool
     hf_endpoint: str | None
     reference_dir: Path
     prompts_dir: Path
@@ -47,12 +48,20 @@ class Settings:
         if timeout <= 0:
             raise SettingsValidationError("LLM_TIMEOUT must be greater than zero")
 
+        thinking_raw = env.get("LLM_THINKING_ENABLED", "true").strip().lower()
+        boolean_values = {"true": True, "1": True, "false": False, "0": False}
+        if thinking_raw not in boolean_values:
+            raise SettingsValidationError(
+                "LLM_THINKING_ENABLED must be true, false, 1, or 0"
+            )
+
         return cls(
             openai_api_key=env["OPENAI_API_KEY"],
             openai_base_url=env["OPENAI_BASE_URL"],
             llm_pro_model=env["LLM_PRO_MODEL"],
             llm_flash_model=env["LLM_FLASH_MODEL"],
             llm_timeout_seconds=timeout,
+            llm_thinking_enabled=boolean_values[thinking_raw],
             hf_endpoint=env.get("HF_ENDPOINT") or None,
             reference_dir=project_root / "data" / "reference",
             prompts_dir=project_root / "data" / "prompts",

@@ -16,6 +16,7 @@ def _settings() -> Settings:
         llm_pro_model="pro",
         llm_flash_model="flash",
         llm_timeout_seconds=60,
+        llm_thinking_enabled=True,
         hf_endpoint=None,
         reference_dir=Path("data/reference"),
         prompts_dir=Path("data/prompts"),

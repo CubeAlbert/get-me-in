@@ -16,9 +16,12 @@ class OpenAILLMAdapter(LLMPort):
         api_key: str,
         base_url: str,
         model_names: Mapping[ModelProfile, str],
+        thinking_enabled: bool,
+        client: OpenAI | None = None,
     ) -> None:
-        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self._client = client or OpenAI(api_key=api_key, base_url=base_url)
         self._model_names = dict(model_names)
+        self._thinking_enabled = thinking_enabled
         self._closed = False
 
     def complete(
@@ -31,14 +34,17 @@ class OpenAILLMAdapter(LLMPort):
         if cancellation.is_cancelled:
             raise InterruptedError("Model completion was cancelled")
 
-        response = self._client.chat.completions.create(
-            model=self._model_names[request.profile],
-            messages=[
+        create_kwargs = {
+            "model": self._model_names[request.profile],
+            "messages": [
                 {"role": event.role.value, "content": event.content}
                 for event in request.messages
             ],
-            timeout=request.timeout_seconds,
-        )
+            "timeout": request.timeout_seconds,
+        }
+        if not self._thinking_enabled:
+            create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        response = self._client.chat.completions.create(**create_kwargs)
         if cancellation.is_cancelled:
             raise InterruptedError("Model completion was cancelled")
         content = response.choices[0].message.content

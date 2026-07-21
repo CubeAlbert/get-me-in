@@ -53,6 +53,7 @@ def build_application(
             ModelProfile.PRO: settings.llm_pro_model,
             ModelProfile.FLASH: settings.llm_flash_model,
         },
+        thinking_enabled=settings.llm_thinking_enabled,
     )
     runtime = AgentRuntime(
         spec=main_spec,
