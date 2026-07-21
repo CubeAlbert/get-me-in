@@ -18,6 +18,7 @@ from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capabil
 from src.get_me_in.ports.llm import LLMPort, ModelProfile
 from src.get_me_in.tools.system import build_system_tools
 from src.get_me_in.tools.plan import build_plan_tools
+from src.get_me_in.tools.workspace import build_workspace_tools
 
 
 def build_application(
@@ -54,7 +55,9 @@ def build_application(
     cancellation = CancellationToken()
     workspace = LocalWorkspace(settings.workspace_dir)
     plan_service = PlanService(id_generator)
-    tool_executor = ToolExecutor(ToolCatalog((*build_system_tools(clock), *build_plan_tools())))
+    tool_executor = ToolExecutor(
+        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools()))
+    )
     runtime_llm = llm or OpenAILLMAdapter(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
