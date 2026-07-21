@@ -51,9 +51,9 @@
 ### 1. 包结构与依赖规则
 
 - ✅ 创建 `src/get_me_in/` 分层目录。
-- 🔄 定义 v2 import 规则：domain → 无外部 adapter；application → domain/ports；adapter → ports；CLI → application。
-- ⬜ 增加开发期依赖检查方式，确保 v2 不 import 旧 BaseAgent/App/UIBridge/Registry。
-- ⬜ 清理源码树中的 `.ipynb_checkpoints` 方案，实际删除留到 R8。
+- ✅ 定义 v2 import 规则：domain → 无外部 adapter；application → domain/ports；adapter → ports；CLI → application。
+- ✅ 增加开发期依赖检查方式，确保 v2 不 import 旧 BaseAgent/App/UIBridge/Registry。
+- ✅ 清理源码树中的 `.ipynb_checkpoints` 方案，实际删除留到 R8。
 
 ### 2. Settings 与基础 ports
 
@@ -75,7 +75,7 @@
 - ✅ 设计 `build_application(settings)` 方法清单。
 - 🔄 显式创建所有 service/catalog/adapter，不使用导入副作用。
 - 🔄 确认构造两个 Application 实例不会共享 history、registry、cancel 或 session id。
-- ⬜ 完成 G1 验收。
+- 🔄 完成 G1 验收。
 
 ## R2 —— Agent Runtime 与事件协议
 

@@ -146,6 +146,7 @@
 - [决策 136 — 不暴露 LLM 原生 reasoning_content](#决策-136--不暴露-llm-原生-reasoning_content)
 - [决策 137 — refactor 分支采用独立 v2 受控重写](#决策-137--refactor-分支采用独立-v2-受控重写)
 - [决策 138 — R1 骨架清单获确认后开始编码](#决策-138--r1-骨架清单获确认后开始编码)
+- [决策 139 — R1 临时无工具对话仅用于 G1 验证](#决策-139--r1-临时无工具对话仅用于-g1-验证)
 
 ---
 
@@ -2990,3 +2991,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 继续只更新文档，等待全部里程碑细节确认 —— 用户已明确确认 R1 清单并要求进入 coding phase，会无必要地延迟重构。
 - 在 R1 直接实现完整 Runtime 与真实 LLM 调用 —— 会跨越 R2 的协议和状态机设计门禁，增加返工风险。
+
+---
+
+### 决策 139 — R1 临时无工具对话仅用于 G1 验证
+
+**背景：** G1 需要验证 v2 可以完成一轮无工具 LLM 对话，但正式的 RuntimeCommand/RuntimeEvent、AgentRuntime 和真实 LLM adapter 被安排在 R2，尚未进入确认后的实现范围。用户确认允许增加临时方案，同时要求明确记录后续移除责任。
+
+**决策：**
+
+- 在 `Application` 增加 `complete_text(text) -> str`，仅渲染 main Agent prompt 并调用显式注入的 `LLMPort`。
+- 该方法以 `TEMP-R1` 标记；不保存 history、不支持工具、审批、handoff、session、重试或真实 adapter 的默认装配。
+- 未注入 `LLMPort` 的 application 必须明确失败，不能隐式创建 client 或读取全局状态。
+- R2 正式 AgentRuntime 成为唯一模型调用入口后，必须删除 `complete_text()` 及其测试；不得将临时接口扩展为正式 Runtime。
+
+**理由：**
+
+- 用最小同步链路验证 Settings、PromptRenderer、AgentCatalog、CancellationToken 和 port 注入可以共同工作，同时不跳过 R2 的强类型协议门禁。
+- 显式注入使单元测试可使用 fake LLM，避免在 R1 引入 provider 网络调用、可变单例或 import-time client。
+- 明确的移除条件避免临时 API 在后续阶段成为兼容负担。
+
+**曾考虑的替代方案：**
+
+- R1 直接实现 OpenAI adapter 和完整 Runtime —— 越过 R2 的模型请求、事件和取消设计，已拒绝。
+- 不提供任何对话链路，等 R2 完成后再验证 G1 —— 无法在 R1 发现 prompt 与 composition root 的集成问题，已拒绝。
