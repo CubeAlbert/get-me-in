@@ -82,6 +82,13 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
             policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
             handler=_move,
         ),
+        ToolDefinition(
+            name="workspace_edit",
+            description="按读取时返回的 revision 精确编辑多行；任一校验失败则不写入。",
+            schema=ToolSchema({"path": str, "revision": str, "edits": list}, frozenset({"path", "revision", "edits"})),
+            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            handler=_edit,
+        ),
     )
 
 
@@ -210,6 +217,30 @@ def _move(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
     except (OSError, WorkspaceError) as error:
         return ToolFailure("workspace_move_failed", str(error))
     return ToolSuccess({"src": arguments["src"], "dst": arguments["dst"], "moved": True})
+
+
+def _edit(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+    workspace = _workspace(context)
+    if isinstance(workspace, ToolFailure): return workspace
+    path = Path(arguments["path"])
+    try:
+        snapshot = workspace.read(path)
+        if snapshot.revision != arguments["revision"]:
+            return ToolFailure("workspace_revision_mismatch", "Read the file again before editing")
+        lines = snapshot.content.splitlines()
+        applied: list[dict[str, object]] = []
+        for edit in sorted(arguments["edits"], key=lambda item: item["line"], reverse=True):
+            line, old_content, content = edit["line"], edit["old_content"], edit["content"]
+            if not isinstance(line, int) or line < 1 or line > len(lines):
+                return ToolFailure("workspace_edit_invalid_line", f"Line {line} is out of range")
+            if lines[line - 1] != old_content:
+                return ToolFailure("workspace_edit_content_mismatch", f"Line {line} no longer matches")
+            lines[line - 1 : line] = content.split("\n") if content else []
+            applied.append({"line": line, "status": "applied"})
+        workspace.edit(path, snapshot.revision, "\n".join(lines))
+    except (KeyError, TypeError, OSError, WorkspaceError) as error:
+        return ToolFailure("workspace_edit_failed", str(error))
+    return ToolSuccess({"path": str(path), "edits_applied": len(applied), "edits": tuple(applied)})
 
 
 def _workspace(context: WorkspaceToolContext) -> WorkspacePort | ToolFailure:

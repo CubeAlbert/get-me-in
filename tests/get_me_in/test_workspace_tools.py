@@ -69,3 +69,18 @@ class WorkspaceToolTests(unittest.TestCase):
         self.assertTrue(moved.output["moved"])
         self.assertEqual(("folder\\two.txt",), deleted.output["deleted"])
         self.assertEqual("missing.txt", deleted.output["errors"][0]["path"])
+
+    def test_edit_requires_current_revision_and_applies_multiple_original_lines(self) -> None:
+        self.workspace.write(Path("edit.txt"), "one\ntwo\nthree")
+        snapshot = self.workspace.read(Path("edit.txt"))
+        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, approved=True)
+        outcome = self.executor.execute(
+            "edit", "workspace_edit", {"path": "edit.txt", "revision": snapshot.revision,
+              "edits": [{"line": 1, "old_content": "one", "content": "ONE"}, {"line": 3, "old_content": "three", "content": ""}]}, approved
+        )
+        stale = self.executor.execute(
+            "stale", "workspace_edit", {"path": "edit.txt", "revision": snapshot.revision, "edits": []}, approved
+        )
+        self.assertEqual("ONE\ntwo", self.workspace.read(Path("edit.txt")).content.replace("\r\n", "\n"))
+        self.assertEqual(2, outcome.output["edits_applied"])
+        self.assertEqual("workspace_revision_mismatch", stale.code)
