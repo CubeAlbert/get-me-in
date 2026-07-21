@@ -67,6 +67,38 @@
 | `copy_template` | 模板、前缀、可选目标目录 → 已复制 artifact 路径 | 复制 LaTeX 模板文件与 README | 模板／名称／路径无效，或目标发生冲突 | C | 在 R7 迁移 |
 | `build_pdf` | 相对 `.tex` 路径 → 编译结果／PDF 路径 | 运行 `pdflatex`，生成辅助文件和 PDF | 缺少源文件／编译器，非零退出，超时或编译错误 | C | 通过 process／artifact service 迁移 |
 
+### R3 实际工具迁移矩阵（25/25）
+
+> 本表以 `build_application(settings).tool_catalog.export_descriptors()` 为唯一目录来源；自动化测试断言其名称集合与数量均为 25。`已迁移`表示 R3 已具备显式定义、参数校验、审批策略和 Runtime 闭合；后续里程碑仅替换对应端口实现或补齐编排能力。
+
+| 工具 | v2 builder | R3 状态 | 后续替换／补齐 |
+|---|---|---|---|
+| `get_current_datetime` | `build_system_tools` | 已迁移 | 无 |
+| `get_working_dir` | `build_system_tools` | 已迁移 | 无 |
+| `web_search` | `build_web_tools` | 已迁移 | R5 真实 CLI smoke |
+| `switch_to_subagent` | `build_switch_tools` | 已迁移为 `ToolHandoff` | R4 执行 handoff frame |
+| `switch_to_mainagent` | `build_switch_tools` | 已迁移为 `ToolHandoff` | R4 执行 handoff frame |
+| `provide_choices` | `build_switch_tools` | 已迁移为 `ToolInteraction` | R5 CLI 交互渲染 |
+| `create_plan` | `build_plan_tools` | 已迁移 | R4 将计划纳入 Session |
+| `update_plan_status` | `build_plan_tools` | 已迁移 | R4 将计划纳入 Session |
+| `cancel_all_plans` | `build_plan_tools` | 已迁移 | R4 将计划纳入 Session |
+| `replan` | `build_plan_tools` | 已迁移 | R4 将计划纳入 Session |
+| `workspace_read` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_list` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_grep` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_search_file` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_replace` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_write` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_delete` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_move` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_edit` | `build_workspace_tools` | 已迁移 | R7 capability 绑定 |
+| `workspace_open` | `build_workspace_tools` | 已迁移 | R5/R7 真实前端 smoke |
+| `read_customer_file` | `build_customer_file_tools` | 已迁移 | R5 附件授权入口 |
+| `query_memory` | `build_retrieval_tools` | 已迁移，临时不可用 | R6 `KnowledgeService` 适配器 |
+| `query_reference_data` | `build_retrieval_tools` | 已迁移，临时不可用 | R6 `KnowledgeService` 适配器 |
+| `copy_template` | `build_resume_tools` | 已迁移 | R7 `ArtifactService` 记录版本 |
+| `build_pdf` | `build_resume_tools` | 已迁移 | R7 `ArtifactService` 记录产物 |
+
 ## 数据与生命周期基线
 
 | 能力 | 输入 | 输出 | 副作用 | 失败／边界行为 | v2 处置 |

@@ -1,14 +1,14 @@
 # 当前状态
 
-**当前阶段：** R3: Tool Runtime、Plan 与 Workspace
+**当前阶段：** R4: Session Aggregate 与编排
 
-**当前任务：** 暂以 port adapter 迁移 copy_template/build_pdf
+**当前任务：** 定义 SessionState、AgentState、HandoffFrame 与 ArtifactRef
 
-**当前子任务：** 定义 ResumeArtifactPort 占位 adapter，并迁移 copy_template/build_pdf tool（🔄）
+**当前子任务：** R4 开始前等待用户确认 Session model 的新文件、类和公开方法清单（⬜）
 
 **当前阻塞：** 无；旧 CLI 的真实终端 smoke C01/C05 仍待人工验证，不阻塞 R3
 
-**下一步：** 暂以 port adapter 迁移 Resume tools；随后更新 25 工具矩阵并完成 G3 验收
+**下一步：** 提交 R4 Session model 设计与方法清单，获得确认后开始编码
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -25,3 +25,4 @@
 143. **Runtime 直接执行显式 Catalog 工具，应用独立装配 Workspace** — AgentRuntime 通过 ToolExecutor 执行 capability 允许的工具；审批经 Approve/Reject 闭合，业务失败作为 ToolFinished 结果交回模型。每个 Application 使用显式 WORKSPACE_DIR（默认 `data/workspace/`）及独立 PlanService，不复用旧 `data/temp/` 或模块级上下文
 144. **文件预览经 FrontendPort 处理** — workspace_open 仅校验受限工作区路径并调用注入的 FrontendPort；OS 默认打开器位于 adapter，永不由 domain 或 tool 直接启动
 145. **R3 检索工具只依赖临时 RetrievalPort** — query_memory 与 query_reference_data 保留既有筛选和输出契约，但 composition root 注入的 DeferredRetrievalAdapter 会在 R6 KnowledgeService 落地前明确返回不可用；v2 不回接旧版全局 RAG。
+146. **R3 简历工具使用临时 ResumeArtifactPort** — copy_template 与 build_pdf 在 R3 经显式端口装配为可测试工具；R7 以 ArtifactService 替换适配器并记录 artifact/version，不改变工具与 Runtime 的闭合协议。

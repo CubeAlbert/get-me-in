@@ -3152,3 +3152,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 从 v2 直接 import 旧 `src.rag` —— 违反 v2 依赖边界和无全局运行时状态约束，已拒绝。
 - 返回固定的测试结果 —— 会掩盖真实检索尚未可用的事实，已拒绝。
+
+---
+
+### 决策 146 — R3 简历工具使用临时 ResumeArtifactPort
+
+**背景：** `copy_template` 和 `build_pdf` 是既有的简历工作流入口，但 Artifact、版本与编译记录的持久化模型属于 R7。R3 仍须把这两个工具纳入统一的 ToolCatalog，并消除它们对旧 config、工作区和 `subprocess` 的直接依赖。
+
+**决策：**
+
+- 定义 `ResumeArtifactPort`，使工具只通过端口执行模板复制和 PDF 构建；模板复制仍使用 `WorkspacePort` 约束目标路径，PDF 构建仍使用注入的 `ProcessRunner` 支持超时和取消。
+- R3 使用 `LocalResumeArtifacts` 适配静态 `data/resume/template/` 资产和本机 `pdflatex`；两个工具均要求显式审批。
+- R7 新建 ArtifactService 后替换该适配器，负责 artifact、版本、编译日志和 PDF 引用持久化；不修改已建立的 ToolOutcome/Runtime 闭合协议。
+
+**理由：**
+
+- 现在即可保留模板复制和编译的可观察行为，并以 fake port 覆盖审批、取消和结果序列化。
+- 静态模板读取、进程调用和工作区写入各自位于端口边界，避免工具 handler 直接访问配置或操作系统。
+- R7 的持久化设计不会反向扩大 R3 的实现范围。
+
+**曾考虑的替代方案：**
+
+- 等到 R7 再迁移两个工具 —— 会使 R3 的 25 工具目录不完整，已拒绝。
+- 在工具 handler 内直接读取模板和调用 `subprocess.run` —— 破坏依赖注入和自动化测试隔离，已拒绝。
