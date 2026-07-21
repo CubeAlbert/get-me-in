@@ -21,7 +21,7 @@ def _settings() -> Settings:
 
 
 class BootstrapTests(unittest.TestCase):
-    def test_applications_do_not_share_cancellation_or_catalog_state(self) -> None:
+    def test_applications_do_not_share_mutable_runtime_dependencies(self) -> None:
         first = build_application(_settings())
         second = build_application(_settings())
 
@@ -30,4 +30,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(first.cancellation.is_cancelled)
         self.assertFalse(second.cancellation.is_cancelled)
         self.assertIsNot(first.catalog, second.catalog)
+        self.assertIsNot(first.prompt_renderer, second.prompt_renderer)
+        self.assertIsNot(first.clock, second.clock)
+        self.assertIsNot(first.id_generator, second.id_generator)
         self.assertEqual(AgentKey.MAIN, second.catalog.get(AgentKey.MAIN).key)
