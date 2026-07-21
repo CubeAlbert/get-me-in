@@ -148,6 +148,7 @@
 - [决策 138 — R1 骨架清单获确认后开始编码](#决策-138--r1-骨架清单获确认后开始编码)
 - [决策 139 — R1 临时无工具对话仅用于 G1 验证](#决策-139--r1-临时无工具对话仅用于-g1-验证)
 - [决策 140 — R2 用 ToolResult 闭合暂停的工具回合](#决策-140--r2-用-toolresult-闭合暂停的工具回合)
+- [决策 141 — 保留静态 prompt 的 JSON 在应用边界归一化](#决策-141--保留静态-prompt-的-json-在应用边界归一化)
 
 ---
 
@@ -3039,3 +3040,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 将工具结果塞进 Continue 命令 —— 无法携带 call id 与结果，无法验证闭合对应关系，已拒绝。
 - 等到 R3 再定义完整回合 —— R2 无法满足既定 Runtime 状态机门禁，已拒绝。
+
+---
+
+### 决策 141 — 保留静态 prompt 的 JSON 在应用边界归一化
+
+**背景：** v2 继续复用 `data/prompts/general_agent/` 静态资产。该 prompt 的输出格式使用 `message/event_type/tool/event_payload`，而 R2 的内部 ModelReply 采用更窄的 `content/tool_call` 形状。首次真实 provider smoke 因此在 parser 边界失败。
+
+**决策：**
+
+- ModelReplyParser 同时接受 v2 JSON 形状和保留静态 prompt 的 JSON 形状，并统一归一化为 v2 ModelReply。
+- 兼容仅存在于 application 层 parser；domain、RuntimeEvent 和 LLMPort 不引入旧 Message、旧 Request/Response 或魔法控制字段。
+- 保留 prompt 输出发生 tool_call 时，将 `tool/event_payload` 映射为 `tool_name/tool_arguments`。
+
+**理由：**
+
+- 保留经确认可复用的 prompt 静态资产，同时保持 v2 内部协议单一且强类型。
+- 转换集中在 provider 文本进入 Runtime 的唯一边界，后续替换 prompt 时不影响 domain 或 adapter。
+
+**曾考虑的替代方案：**
+
+- 立即重写全部 general_agent prompt 为 v2 格式 —— 静态资产迁移范围过大，且会干扰旧 CLI 的行为基线，已拒绝。
+- 让 Runtime 直接识别旧 Message/event_type 字段 —— 扩散旧协议并破坏 v2 边界，已拒绝。

@@ -99,11 +99,11 @@
 ### 3. LLM adapter 与取消
 
 - ✅ 定义 LLMRequest/LLMResult/ModelProfile。
-- 🔄 实现 OpenAI sync adapter，集中 pro/flash/provider thinking 配置。
+- ✅ 实现 OpenAI sync adapter，集中 pro/flash/provider thinking 配置。
 - ✅ 设计活动调用 handle 的 cancel/close/reset 生命周期。
 - ✅ 验证取消阻塞调用后下一次调用可继续。
 - ✅ 禁止 Runtime 访问 OpenAI SDK 私有 transport。
-- 🔄 完成 G2 验收。
+- ✅ 完成 G2 验收。
 
 ## R3 —— Tool Runtime、Plan 与 Workspace
 
