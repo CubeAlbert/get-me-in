@@ -17,6 +17,7 @@ from src.get_me_in.ports.workspace import WorkspacePort
 from src.get_me_in.ports.frontend import FrontendPort
 from src.get_me_in.ports.web_search import WebSearchPort
 from src.get_me_in.ports.external_files import ExternalFileReaderPort
+from src.get_me_in.ports.retrieval import RetrievalPort
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class ToolContext:
     frontend: FrontendPort | None = None
     web_search: WebSearchPort | None = None
     external_files: ExternalFileReaderPort | None = None
+    retrieval: RetrievalPort | None = None
     approved: bool = False
     rejected: bool = False
 
