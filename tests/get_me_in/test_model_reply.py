@@ -26,6 +26,22 @@ class ModelReplyParserTests(unittest.TestCase):
         self.assertEqual("search", reply.tool_name)
         self.assertEqual({"q": "x"}, reply.tool_arguments)
 
+    def test_parses_the_legacy_static_prompt_finish_shape(self) -> None:
+        reply = self.parser.parse(
+            '{"role": "assistant", "event_type": "finish", "message": "answer"}'
+        )
+
+        self.assertEqual("answer", reply.content)
+
+    def test_parses_the_legacy_static_prompt_tool_shape(self) -> None:
+        reply = self.parser.parse(
+            '{"event_type": "tool_call", "message": "", "tool": "search", '
+            '"event_payload": {"q": "x"}}'
+        )
+
+        self.assertEqual("search", reply.tool_name)
+        self.assertEqual({"q": "x"}, reply.tool_arguments)
+
     def test_rejects_invalid_json(self) -> None:
         with self.assertRaises(ModelReplyParseError):
             self.parser.parse("not json")

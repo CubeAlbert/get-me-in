@@ -30,15 +30,20 @@ class ModelReplyParser:
         if not isinstance(payload, dict):
             raise ModelReplyParseError("Model response must be a JSON object")
 
-        content = payload.get("content")
+        content = payload.get("content", payload.get("message"))
         if not isinstance(content, str):
-            raise ModelReplyParseError("Model response requires string content")
+            raise ModelReplyParseError("Model response requires string content or message")
 
         thinking = payload.get("thinking", "")
         if not isinstance(thinking, str):
             raise ModelReplyParseError("thinking must be a string")
 
         tool_call = payload.get("tool_call")
+        if tool_call is None and payload.get("event_type") == "tool_call":
+            tool_call = {
+                "name": payload.get("tool"),
+                "arguments": payload.get("event_payload", {}),
+            }
         if tool_call is None:
             return ModelReply(content=content, thinking=thinking)
         if not isinstance(tool_call, dict):
