@@ -3129,3 +3129,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 
 - 在 workspace tool 内直接使用 os.startfile/subprocess —— 耦合操作系统并难以测试，已拒绝。
+
+---
+
+### 决策 145 — R3 检索工具只依赖临时 RetrievalPort
+
+**背景：** R3 需要把 `query_memory` 与 `query_reference_data` 纳入 v2 的显式 ToolCatalog，但 v2 的 KnowledgeService、索引状态与 Chroma 装配被排在 R6。直接调用旧 `src.rag` 会重新引入模块级全局状态和旧运行时边界。
+
+**决策：**
+
+- 定义 `RetrievalPort` 和可序列化的 `RetrievalResult`，查询工具仅通过该端口读取 `memories` 或 `references` collection。
+- R3 的 composition root 注入 `DeferredRetrievalAdapter`；在 R6 实现真实检索前，它返回明确的 `retrieval_unavailable` 失败，不伪造查询结果。
+- 保留 `memory_type`、`category`、`top_k` 的校验与结果去除 `rerank_score` 的输出契约；R6 以真实 KnowledgeService 适配器替换临时适配器。
+
+**理由：**
+
+- 工具目录、参数校验和 Runtime 闭合路径可在 R3 完成并得到自动化测试保护。
+- 临时不可用状态是显式、可观测且可删除的，不会把旧 RAG 单例或 Chroma 生命周期带入 v2。
+- R6 只需替换 composition root 中的适配器，无需重写调用该工具的 Runtime 或 Agent。
+
+**曾考虑的替代方案：**
+
+- 从 v2 直接 import 旧 `src.rag` —— 违反 v2 依赖边界和无全局运行时状态约束，已拒绝。
+- 返回固定的测试结果 —— 会掩盖真实检索尚未可用的事实，已拒绝。

@@ -143,7 +143,7 @@
 - ✅ 迁移 4 个 Plan tools。
 - ✅ 迁移/合并 10 个 workspace tools，保持外部功能等价。
 - ✅ 迁移 read_customer_file，明确外部路径授权边界。
-- ⬜ 暂以 port adapter 迁移 2 个 RAG query tools，R6 再替换实现。
+- ✅ 暂以 port adapter 迁移 2 个 RAG query tools，R6 再替换实现。
 - ⬜ 迁移 copy_template/build_pdf，R7 接入 ArtifactService。
 - ⬜ 输出完整的 25 工具迁移矩阵。
 - ⬜ 完成 G3 验收。

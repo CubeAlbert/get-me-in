@@ -2,13 +2,13 @@
 
 **当前阶段：** R3: Tool Runtime、Plan 与 Workspace
 
-**当前任务：** 暂以 port adapter 迁移 2 个 RAG query tools
+**当前任务：** 暂以 port adapter 迁移 copy_template/build_pdf
 
-**当前子任务：** 定义 RetrievalPort 占位 adapter，并迁移 query_memory/query_reference_data tool（🔄）
+**当前子任务：** 定义 ResumeArtifactPort 占位 adapter，并迁移 copy_template/build_pdf tool（🔄）
 
 **当前阻塞：** 无；旧 CLI 的真实终端 smoke C01/C05 仍待人工验证，不阻塞 R3
 
-**下一步：** 暂以 port adapter 迁移 2 个 RAG query tools；随后处理 Resume tools，并更新 25 工具矩阵
+**下一步：** 暂以 port adapter 迁移 Resume tools；随后更新 25 工具矩阵并完成 G3 验收
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -24,3 +24,4 @@
 142. **system tools 通过显式 Clock 与 WorkspacePort 注入实现** — 当前时间取自注入的 Clock，工作目录由 ToolContext 中的受限 WorkspacePort 根目录解析；不再读取全局 config 或触发 import-time 注册
 143. **Runtime 直接执行显式 Catalog 工具，应用独立装配 Workspace** — AgentRuntime 通过 ToolExecutor 执行 capability 允许的工具；审批经 Approve/Reject 闭合，业务失败作为 ToolFinished 结果交回模型。每个 Application 使用显式 WORKSPACE_DIR（默认 `data/workspace/`）及独立 PlanService，不复用旧 `data/temp/` 或模块级上下文
 144. **文件预览经 FrontendPort 处理** — workspace_open 仅校验受限工作区路径并调用注入的 FrontendPort；OS 默认打开器位于 adapter，永不由 domain 或 tool 直接启动
+145. **R3 检索工具只依赖临时 RetrievalPort** — query_memory 与 query_reference_data 保留既有筛选和输出契约，但 composition root 注入的 DeferredRetrievalAdapter 会在 R6 KnowledgeService 落地前明确返回不可用；v2 不回接旧版全局 RAG。
