@@ -110,6 +110,11 @@ class AgentRuntime:
         )
         return self._complete_once()
 
+    def close(self) -> None:
+        """Cancel active work and release the request-scoped model adapter."""
+        self._cancellation.cancel()
+        self._llm.close()
+
     def _complete_once(self) -> tuple[RuntimeEvent, ...]:
         events: list[RuntimeEvent] = [Progress("Calling model")]
         raw_reply = self._request_reply()

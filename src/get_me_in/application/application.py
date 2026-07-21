@@ -2,7 +2,7 @@
 
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.application.commands import Cancel, RuntimeCommand
+from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.settings import Settings
@@ -39,4 +39,4 @@ class Application:
 
     def close(self) -> None:
         self._closed = True
-        self._runtime.handle(Cancel("Application closed"))
+        self._runtime.close()

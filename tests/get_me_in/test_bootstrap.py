@@ -48,14 +48,28 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("Help me prepare for an interview", llm.request.messages[-1].content)
         self.assertFalse(llm.cancellation.is_cancelled)
 
+    def test_application_close_releases_its_llm_adapter(self) -> None:
+        llm = _FakeLlm("unused")
+        application = build_application(_settings(), llm=llm)
+
+        application.close()
+
+        self.assertTrue(llm.closed)
+        with self.assertRaises(RuntimeError):
+            application.handle(UserMessage("hello"))
+
 
 class _FakeLlm:
     def __init__(self, response: str) -> None:
         self._response = response
         self.request: LLMRequest | None = None
         self.cancellation: CancellationSignal | None = None
+        self.closed = False
 
     def complete(self, request: LLMRequest, cancellation: CancellationSignal) -> LLMResult:
         self.request = request
         self.cancellation = cancellation
         return LLMResult(content=f'{{"content": "{self._response}"}}')
+
+    def close(self) -> None:
+        self.closed = True

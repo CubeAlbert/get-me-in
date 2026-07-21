@@ -172,6 +172,9 @@ class _FakeLlm:
             response(cancellation)
         return LLMResult(content=response)
 
+    def close(self) -> None:
+        pass
+
 
 def _cancel_during_completion(cancellation: CancellationSignal) -> str:
     cancellation.cancel()
