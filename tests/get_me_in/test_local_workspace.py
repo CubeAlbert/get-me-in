@@ -31,3 +31,12 @@ class LocalWorkspaceTests(unittest.TestCase):
     def test_path_cannot_escape_root(self) -> None:
         with self.assertRaises(WorkspacePathError):
             self.workspace.resolve(Path("..") / "outside.txt")
+
+    def test_read_lines_and_search_report_one_based_line_numbers(self) -> None:
+        self.workspace.write(Path("notes.txt"), "first\nneedle here\nlast")
+
+        lines = self.workspace.read_lines(Path("notes.txt"), offset=1, limit=1)
+        matches = self.workspace.search("needle", glob="*.txt")
+
+        self.assertEqual((2, "needle here"), (lines[0].number, lines[0].content))
+        self.assertEqual((Path("notes.txt"), 2), (matches[0].path, matches[0].line.number))

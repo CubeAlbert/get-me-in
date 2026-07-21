@@ -5,9 +5,13 @@ import os
 import tempfile
 from pathlib import Path
 
+from charset_normalizer import from_bytes
+
 from src.get_me_in.ports.workspace import (
     FileSnapshot,
     RevisionMismatchError,
+    SearchMatch,
+    TextLine,
     WorkspaceEntry,
     WorkspacePathError,
 )
@@ -25,8 +29,17 @@ class LocalWorkspace:
 
     def read(self, path: Path) -> FileSnapshot:
         resolved = self.resolve(path)
-        content = resolved.read_text(encoding="utf-8")
+        content = _read_text(resolved)
         return FileSnapshot(resolved.relative_to(self._root), content, _revision(content))
+
+    def read_lines(
+        self, path: Path, *, offset: int = 0, limit: int | None = None
+    ) -> tuple[TextLine, ...]:
+        if offset < 0 or limit is not None and limit < 0:
+            raise ValueError("offset and limit must not be negative")
+        lines = self.read(path).content.splitlines()
+        end = None if limit is None else offset + limit
+        return tuple(TextLine(index + 1, value) for index, value in enumerate(lines[offset:end], offset))
 
     def list(self, path: Path = Path(".")) -> tuple[WorkspaceEntry, ...]:
         resolved = self.resolve(path)
@@ -34,6 +47,20 @@ class LocalWorkspace:
             WorkspaceEntry(item.relative_to(self._root), item.is_dir())
             for item in sorted(resolved.iterdir())
         )
+
+    def search(self, pattern: str, *, glob: str = "**/*") -> tuple[SearchMatch, ...]:
+        matches: list[SearchMatch] = []
+        for path in self._root.glob(glob):
+            if not path.is_file():
+                continue
+            try:
+                content = _read_text(path)
+            except UnicodeError:
+                continue
+            for number, line in enumerate(content.splitlines(), start=1):
+                if pattern in line:
+                    matches.append(SearchMatch(path.relative_to(self._root), TextLine(number, line)))
+        return tuple(matches)
 
     def write(self, path: Path, content: str) -> FileSnapshot:
         resolved = self.resolve(path)
@@ -67,3 +94,11 @@ class LocalWorkspace:
 
 def _revision(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _read_text(path: Path) -> str:
+    raw = path.read_bytes()
+    match = from_bytes(raw).best()
+    if match is None:
+        raise UnicodeError(f"Cannot detect text encoding for {path}")
+    return str(match)
