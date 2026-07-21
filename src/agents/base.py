@@ -4,6 +4,7 @@
 遗漏任何一个 Python 会在 import 时报 ``TypeError``，防止漏填提示词。
 """
 
+import dataclasses
 import inspect
 import json
 import uuid
@@ -300,7 +301,7 @@ class BaseAgent(Handler):
         """
         messages = [{"role": "system", "content": self._system_prompt}]
         for m in self._history:
-            messages.append({"role": m.role, "content": m.to_json()})
+            messages.append({"role": m.role, "content": dataclasses.replace(m, thinking=None).to_json()})
         return messages
 
     def dump_history(self) -> str | None:
