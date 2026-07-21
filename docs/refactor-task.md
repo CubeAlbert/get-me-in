@@ -139,7 +139,7 @@
 
 - ✅ 迁移 2 个 system tools。
 - ✅ 迁移或重新定义 web_search tool。
-- ⬜ 以 typed handoff/interaction 替代 3 个 switch tools 的控制逻辑。
+- ✅ 以 typed handoff/interaction 替代 3 个 switch tools 的控制逻辑。
 - ✅ 迁移 4 个 Plan tools。
 - ✅ 迁移/合并 10 个 workspace tools，保持外部功能等价。
 - ⬜ 迁移 read_customer_file，明确外部路径授权边界。

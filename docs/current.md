@@ -2,13 +2,13 @@
 
 **当前阶段：** R3: Tool Runtime、Plan 与 Workspace
 
-**当前任务：** 以 typed handoff/interaction 替代 3 个 switch tools 的控制逻辑
+**当前任务：** 迁移 read_customer_file，明确外部路径授权边界
 
-**当前子任务：** 将 switch_to_subagent、switch_to_mainagent、provide_choices 映射为 ToolHandoff/ToolInteraction（🔄）
+**当前子任务：** 定义用户显式授权的外部文件读取 port 与 read_customer_file tool（🔄）
 
 **当前阻塞：** 无；旧 CLI 的真实终端 smoke C01/C05 仍待人工验证，不阻塞 R3
 
-**下一步：** 迁移 switch tools 为 typed ToolHandoff/ToolInteraction；随后处理 customer file、RAG stub 与 Resume tools，并更新 25 工具矩阵
+**下一步：** 迁移 read_customer_file 并限制为用户显式授权的路径；随后处理 RAG stub、Resume tools，并更新 25 工具矩阵
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
