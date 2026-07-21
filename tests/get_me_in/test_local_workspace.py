@@ -40,3 +40,15 @@ class LocalWorkspaceTests(unittest.TestCase):
 
         self.assertEqual((2, "needle here"), (lines[0].number, lines[0].content))
         self.assertEqual((Path("notes.txt"), 2), (matches[0].path, matches[0].line.number))
+
+    def test_batch_delete_reports_partial_success(self) -> None:
+        self.workspace.write(Path("delete-me.txt"), "temporary")
+        self.workspace.write(Path("folder") / "keep.txt", "preserved")
+
+        result = self.workspace.delete_many(
+            (Path("delete-me.txt"), Path("missing.txt"), Path("folder"))
+        )
+
+        self.assertEqual((Path("delete-me.txt"),), result.deleted)
+        self.assertEqual((Path("missing.txt"), Path("folder")), tuple(item.path for item in result.failures))
+        self.assertTrue((Path(self.temporary_dir.name) / "folder" / "keep.txt").exists())

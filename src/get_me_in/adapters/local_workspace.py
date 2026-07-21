@@ -4,10 +4,13 @@ import hashlib
 import os
 import tempfile
 from pathlib import Path
+from typing import Iterable
 
 from charset_normalizer import from_bytes
 
 from src.get_me_in.ports.workspace import (
+    BatchDeleteResult,
+    DeleteFailure,
     FileSnapshot,
     RevisionMismatchError,
     SearchMatch,
@@ -84,6 +87,18 @@ class LocalWorkspace:
         if resolved.is_dir():
             raise WorkspacePathError("Directory deletion is not supported by this operation")
         resolved.unlink()
+
+    def delete_many(self, paths: Iterable[Path]) -> BatchDeleteResult:
+        deleted: list[Path] = []
+        failures: list[DeleteFailure] = []
+        for path in paths:
+            try:
+                self.delete(path)
+            except (OSError, WorkspacePathError) as error:
+                failures.append(DeleteFailure(path, str(error)))
+            else:
+                deleted.append(path)
+        return BatchDeleteResult(tuple(deleted), tuple(failures))
 
     def move(self, source: Path, destination: Path) -> None:
         source_path = self.resolve(source)
