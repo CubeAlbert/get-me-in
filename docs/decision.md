@@ -144,6 +144,7 @@
 - [决策 134 — SessionId 统一：SaveManager & dumper 共享会话 ID](#决策-134--sessionid-统一savemanager--dumper-共享会话-id)
 - [决策 135 — 发送 LLM 消息剥离 thinking + 修正 input format role](#决策-135--发送-llm-消息剥离-thinking--修正-input-format-role)
 - [决策 136 — 不暴露 LLM 原生 reasoning_content](#决策-136--不暴露-llm-原生-reasoning_content)
+- [决策 137 — refactor 分支采用独立 v2 受控重写](#决策-137--refactor-分支采用独立-v2-受控重写)
 
 ---
 
@@ -2937,3 +2938,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 
 - `LLMClient` 新增 `chat_pro_thinking()` 返回 `ChatResult(content, reasoning)`，`BaseAgent` 用 `reasoning_content` 填充 `Message.thinking`，同时从 `07_output_format.md` 删除 `thinking` 字段 —— 实施后回滚，理由如上。
+
+---
+
+### 决策 137 — refactor 分支采用独立 v2 受控重写
+
+**背景：** 当前项目已经具备可运行的 CLI、Agent、Tool、Plan、Session、RAG、Memory 和 Resume 链路，但核心能力集中在 `BaseAgent`、`App` 与多套模块级全局状态中。继续在旧结构上增加 Agent 会扩大样板代码、跨层私有访问、导入副作用和控制流耦合。`refactor` 是独立分支，用户不要求保护旧内部接口或旧运行状态。
+
+**决策：**
+
+- 在新的 `src/get_me_in/` 包内受控重写 v2，旧 `src/*` 只作为行为基线，达到门禁后切换入口并删除遗留实现。
+- v2 禁止可变全局运行时单例、import-time 注册、CLI 直接访问 Agent 私有状态和 `__switch__`/`__reject__`/`__cancelled__` 等魔法控制 dict；依赖由 composition root 显式装配，Runtime 使用强类型 Command/Event 协议。
+- 不迁移旧 Session、Memory、Chroma、`data/temp/`、Plan、handoff、input history 或其他运行状态。只保留 `data/reference/`、`data/prompts/`、`data/resume/template/` 三类静态资产，新索引和新会话由 v2 重建。
+- 用户明确授权 `refactor` 分支编写核心自动化测试，优先覆盖 domain/runtime/session/tool codec/workspace；真实 adapter 和交互链路使用集成测试、Notebook 或 smoke checklist。
+- 当前会话只更新设计、计划、状态和技能规则，不创建 v2 项目代码。进入每个实现阶段前仍需先提交新文件、类和公开方法清单供用户确认。
+
+**理由：**
+
+- 独立包让 v2 可以建立单向依赖和明确边界，不必兼容已被判定为重构根因的旧内部协议。
+- 放弃低价值旧运行数据 migration，显著减少 Session/Memory 兼容层和迁移验证工作。
+- 保留 reference、prompts 和 resume templates 能延续真正有价值的项目知识与静态资产。
+- 自动化测试为状态机、handoff、持久化和路径安全提供必要回归保护，适合大规模重写。
+
+**曾考虑的替代方案：**
+
+- 原地拆分旧 BaseAgent/App —— 需要长期维护兼容层，容易把旧耦合带入新模块，已拒绝。
+- 迁移全部 v1 Session/Memory/Workspace 数据 —— 成本高且用户明确不需要，已拒绝。
+- 继续禁止测试文件，只用 Notebook/人工验证 —— 对状态机与持久化重写的回归保护不足，已拒绝。

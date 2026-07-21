@@ -6,6 +6,20 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 **get-me-in** — AI 求职助手，面向程序员的多 Agent 系统。CLI 交互，Python 3.14。
 
+## Refactor Branch
+
+`refactor` 是整个系统的受控重写分支。当前旧实现仍是行为基线，重构目标是在新的 `src/get_me_in/` 包中建立 v2，并按纵向切片逐步迁移，最终切换入口和删除遗留架构。
+
+- 重构目标架构以 `docs/refactor-design.md` 为准。
+- 重构里程碑与验收门禁以 `docs/refactor-plan.md` 为准。
+- 重构执行状态以 `docs/refactor-task.md` 为准。
+- `docs/design.md`、`docs/plan.md`、`docs/task.md` 在 v2 切换完成前继续记录旧实现和历史基线，不提前改写为尚未落地的架构。
+- 用户已确认 `refactor-design.md` 中 R-D1～R-D6；当前会话仍不创建 v2 代码模块。进入 R1 前必须先提交该阶段的新文件、类和公开方法清单供用户确认。
+- R0～R8 期间冻结 InterviewAgent、LearningAgent、完整 Job Search 等新功能；除非用户明确改变范围，不在旧 `BaseAgent`/`App` 上继续叠加功能。
+- v2 禁止依赖可变全局运行时单例、import-time 注册、CLI 访问 Agent 私有状态和魔法控制 dict；依赖由 composition root 显式装配。
+- v2 不迁移旧 Session、Memory、Chroma、`data/temp/` 或其他运行状态；只保留 `data/reference/`、`data/prompts/`、`data/resume/template/` 三类静态资产。
+- 用户已明确授权 `refactor` 分支编写核心自动化测试，优先覆盖 domain/runtime/session/tool codec/workspace；adapter、CLI、真实 LLM、Chroma、LaTeX 使用集成测试、Notebook 或 smoke checklist。
+
 ## Commands
 
 ```bash
@@ -81,19 +95,19 @@ CLI 命令：
 |------|------|------|
 | `system_tool.py` | `get_current_datetime`, `get_working_dir` | 2 |
 | `web_tool.py` | `web_search` | 1 |
-| `switch_tools.py` | `switch_to_subagent`, `switch_to_mainagent` | 2 |
-| `plan_tools.py` | `create_plan`, `update_plan_status`, `cancel_all_plans` | 3 |
+| `switch_tools.py` | `switch_to_subagent`, `switch_to_mainagent`, `provide_choices` | 3 |
+| `plan_tools.py` | `create_plan`, `update_plan_status`, `cancel_all_plans`, `replan` | 4 |
 | `workspace_tools.py` | `workspace_read`, `workspace_list`, `workspace_grep`, `workspace_search_file`, `workspace_replace`, `workspace_write`, `workspace_delete`, `workspace_move`, `workspace_edit`, `workspace_open` | 10 |
 | `customer_file_tool.py` | `read_customer_file` | 1 |
 | `rag_tools.py` | `query_memory`, `query_reference_data` | 2 |
 | `resume_tools.py` | `copy_template`, `build_pdf` | 2 |
-| **总计** | | **23** |
+| **总计** | | **25** |
 
 详细设计见 `docs/design.md`。
 
 ## Key Conventions
 
-- **不要写测试**，除非用户显式要求编写测试文件
+- **测试规则** — `refactor` 分支已获用户明确授权编写核心自动化测试；其他分支仍遵循“不要写测试，除非用户显式要求”
 - **同步代码**，不使用 `asyncio` 或任何异步框架
 - **使用 `uv` 管理依赖和运行** — 运行项目 Python 代码必须带 `uv run` 前缀
 - **`from src.config import config` 放在所有第三方 import 之前** — `config` import 触发 `load_dotenv()`，某些第三方库（`huggingface_hub`、`sentence_transformers`）在 import 时缓存 `os.environ`，必须先加载 `.env`
@@ -104,7 +118,7 @@ CLI 命令：
 - **工具 handler 返回纯数据** — 返回 `str`/`dict`，由调用方（`BaseAgent._execute_tool()`）包装为 `tool_call_result` Message
 - **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（实际使用 FINISH/PROGRESS；CONFIRM/SELECT 已废弃）
 - **工具审批由 `ConfirmMode` + UIBridge 共同控制** — `_execute_tool()` 根据 `ConfirmMode`（NEVER/ALWAYS/CONFIG）决定是否调 `get_bridge().confirm()` 弹审批窗；特殊交互（如 `provide_choices` 的 `select()`）由 handler 自行调用 UIBridge
-- **Plan 机制为通用基础设施** — `BaseAgent` 层 3 个免审批工具（`create_plan`/`update_plan_status`/`cancel_all_plans`），`process()` 中通过 `_stamp_plan_status()` 将当前 plan 快照写入每条 `Message.plan_status`（不再拼接 system prompt）；MainAgent plan 全程存活，子 Agent plan 随 return 丢弃
+- **Plan 机制为通用基础设施** — `BaseAgent` 层 4 个免审批工具（`create_plan`/`update_plan_status`/`cancel_all_plans`/`replan`），`process()` 中通过 `_stamp_plan_status()` 将当前 plan 快照写入每条 `Message.plan_status`（不再拼接 system prompt）；MainAgent plan 全程存活，子 Agent plan 随 return 丢弃
 - **工具访问 Agent 实例用 context variable** — 需访问 `self` 的工具（如 plan 工具）通过模块级 `_set_*()` / `_get_*()` 函数获取当前 Agent 实例，模式与 UIBridge（`_set_bridge`/`get_bridge`）一致
 - **`EventType(StrEnum)` / `Role(StrEnum)` 双枚举** — 代码中禁止裸字符串；`EventType` 5 个值（USER_INPUT/TOOL_CALL/TOOL_CALL_RESULT/FINISH/SYSTEM_MESSAGE），`Role` 3 个值（USER/SYSTEM/ASSISTANT）
 - **Cancel 中断机制** — 按 Esc 中断 agent loop：`_cancel_event`（`src/cli/uibridge.py`）跨线程取消信号；`_check_esc_pressed()`（`src/cli/app.py`）非阻塞检测；`process()` 中 3 个检查点；工具执行前取消时注入合成 `TOOL_CALL_RESULT`（`__cancelled__`）；cancel 标志在每次新请求开始时 `_clear_cancel()`。详见 `docs/design.md#417-agent-中断机制`
@@ -124,7 +138,7 @@ CLI 命令：
 - **Jupyter 调试** — `uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab`，jupyter 不写入项目依赖
 - **新模块先讨论设计** — 接口、职责边界、依赖关系确认后再动手
 - **新文件先列方法清单** — 让用户确认后再创建
-- **非交互模块测试后提供 Notebook 代码** — 让用户自行验证，不要仅给命令行结果
+- **验证交付** — `refactor` 分支以自动化测试保护纯逻辑，以 Notebook/人工 smoke 验证真实 adapter 与交互链路；其他分支的非交互模块测试后仍需提供 Notebook 代码供用户验证
 - **日志用 `get_logger(__name__)`** — 禁止 `print()`；失败记日志不抛异常（防御性编程）
 - **禁止 Bash + Python 读写文件** — 必须用 Read/Edit/Write/Glob/Grep 专用工具
 - **current.md 新增决策时同步更新 decision.md** — 编号体系保持一致
@@ -139,3 +153,6 @@ CLI 命令：
 | `docs/plan.md` | 里程碑与实施计划 | 需要排期时或者当前任务下所有子任务都结束 |
 | `docs/task.md` | 任务列表（阶段→任务→子任务，⬜🔄✅⏸️⛔📌） | 需要任务细节时 |
 | `docs/decision.md` | 决策记录 | 需要历史决策理由时 |
+| `docs/refactor-design.md` | `refactor` 分支现状分析、目标架构与迁移原则 | 在 `refactor` 分支涉及架构或创建 v2 模块时 |
+| `docs/refactor-plan.md` | `refactor` 分支里程碑、依赖与验收门禁 | 在 `refactor` 分支排期或进入下一阶段时 |
+| `docs/refactor-task.md` | `refactor` 分支可执行任务与状态 | 在 `refactor` 分支开始、完成或审查任务时 |

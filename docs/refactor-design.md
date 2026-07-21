@@ -1,0 +1,395 @@
+# 重构设计文档
+
+> 适用分支：`refactor`
+>
+> 本文是重构期间的目标架构来源。`docs/design.md` 记录当前实现及历史设计，二者并存；在 v2 完成切换前，不把旧文档改写成尚未落地的状态。
+
+## 1. 结论
+
+当前项目已经完成一个可运行的 CLI 多 Agent 骨架，并打通了主 Agent 路由、简历 Agent、工具调用、RAG、记忆、Plan、会话恢复和基础中断等关键链路。问题不在于“功能完全不可用”，而在于所有能力逐步堆叠到了少数核心对象和模块级全局状态上：
+
+- `BaseAgent` 同时承担提示词组装、对话状态、LLM 调用、回复解析、工具执行、审批、切换、Plan、记忆和取消处理。
+- `App` 同时承担输入组件、命令路由、渲染、后台线程、UIBridge、Agent 编排、会话恢复、自动保存、记忆触发和输入历史。
+- Agent、Tool、LLM、RAG、Memory、UIBridge、Plan context 与 Session ID 均存在不同形式的全局注册或模块级状态。
+- CLI 通过 `_history`、`_plan`、`_get_agent_key()` 等私有成员直接修改 Agent，协议边界名义上存在，实际上没有形成封装。
+- Tool 使用 `__switch__`、`__reject__`、`__cancelled__` 魔法字典传递控制流，Request/Response 枚举仍保留已废弃分支。
+- 新增 Agent 需要重复实现约 14 个 `_get_*()` 方法；三个现有 Agent 的大部分代码都是提示词元数据样板。
+
+因此本分支推荐进行一次 **受控重写（controlled rewrite）**：在新的 `src/get_me_in/` 包中构建 v2，通过纵向切片逐步获得功能等价；旧实现仅作为行为基线，直到新入口通过验收后再删除。不要在原有 `BaseAgent` 和 `App` 上继续做大规模就地拆分。
+
+## 2. 当前能力盘点
+
+### 2.1 已实现并可作为重构基线的能力
+
+| 能力 | 当前状态 | 当前实现 | 重构要求 |
+|------|----------|----------|----------|
+| CLI 对话 | ✅ | `src/cli/app.py`，questionary + Rich | 保持基本交互和 Markdown 渲染 |
+| 长文本输入 | ✅ | `/edit` 调系统编辑器 | 迁移为独立 CLI command |
+| 命令补全与输入历史 | ✅ | questionary + prompt_toolkit | 从 `App` 提取为输入组件 |
+| LLM 双 tier | ✅ | `LLMClient.chat_pro/chat_flash` | 抽象为 `LLMPort` + model profile |
+| Web Search | ⚠️ | 由 LLM provider 的工具调用模拟 | 保留接口，明确 provider 能力与失败语义 |
+| Prompt 拼装 | ✅ | `PromptLoader` 拼接公共模板并替换占位符 | Agent 元数据改为声明式 `AgentSpec` |
+| 主 Agent 路由 | ✅ | MainAgent + AgentRegistry + switch tools | 改为 typed handoff，不再使用魔法字典 |
+| ResumeAgent | ✅ | workspace 工具直接修改 LaTeX | 作为 v2 第一个完整纵向切片 |
+| JobSearchAgent | ⚠️ | 测试用壳，依赖 web_search | 不视为完整岗位搜索产品能力 |
+| 工具注册与可见性 | ✅ | `@tool` + 全局 ToolRegistry | 显式 ToolCatalog + capability 绑定 |
+| 工具审批 | ✅ | ConfirmMode + UIBridge | 改为 RuntimeEvent/RuntimeCommand 往返 |
+| 工作区文件工具 | ✅ | 10 个 workspace 工具 | 底层统一为 Workspace service，工具保持薄层 |
+| 简历模板与 PDF 编译 | ✅ | copy_template + build_pdf | 迁移为 Resume capability adapter |
+| Plan | ✅ | BaseAgent 内部状态 + 4 个工具 | 提取为独立 PlanService/PlanState |
+| RAG | ✅ | Chroma + bi-encoder + reranker | 显式生命周期，索引 manifest 替代时间戳推断 |
+| Memory | ✅ | Builder + Store + Indexer + Retriever | 应用服务显式编排，不依赖全局 Facade/观察者副作用 |
+| 会话保存与恢复 | ✅ | SaveManager + JSON | 迁移为 versioned SessionSnapshot repository |
+| `/rewind` | ✅ | 截断当前 Agent 内存 history | 升级为 Session aggregate 的受控 rewind |
+| `/dump` | ✅ | 导出 history | 迁移为诊断 command |
+| Esc 中断检查点 | ✅/受限 | 非阻塞阶段可取消，LLM 调用中需等待 | v2 将 cancellation 作为 LLM port 一等能力 |
+| 生命周期清理 | ✅ | 模块级 shutdown hooks | 改为显式 Application.close() 逆序清理 |
+
+### 2.2 尚未实现或明确暂缓的能力
+
+| 能力 | 原因分类 | 说明 | 重构后的处理 |
+|------|----------|------|----------------|
+| InterviewAgent | 路线图未完成 | 设计存在，代码目录不存在 | v2 稳定后新增，不作为首轮迁移阻塞项 |
+| LearningAgent | 路线图未完成 | 仅有设计，没有实现 | v2 稳定后新增 |
+| 完整 Job Search | 产品方案未定 | 数据源、自动化、合规边界未明确 | 先保留 JD 分析能力，搜索数据源另立决策 |
+| LLM 调用即时取消 | 当前架构限制 | LLMClient 不暴露请求/transport 生命周期，单例不可安全重建 | 在 LLMPort 和 request-scoped call handle 中设计 |
+| Sticky Plan | UI 架构限制 | questionary 与 Rich Live 的终端控制冲突 | CLI renderer 独占输出后再实现 |
+| Schema-based 简历填充 | 已放弃方案 | Schema 复杂且限制灵活性，改为直接编辑 LaTeX | 不恢复旧方案；可在 Workspace/Artifact API 稳定后重新评估 |
+| 简历版本写入/历史检索 | 已取消 | 通用 query_memory 被认为已覆盖个人信息检索 | v2 需区分“用户记忆”和“产物版本”，后者归 ArtifactRepository |
+| 多会话并行或多前端 | 当前架构限制 | 全局 bridge/cancel/plan agent/registry/client 只支持单活动上下文 | v2 依赖实例化 ApplicationContext，不共享可变全局状态 |
+
+### 2.3 文档与代码漂移
+
+当前文档列出 23 个工具，但代码实际存在 25 个 `@tool`：Plan 已从 3 个增加到 4 个，switch 模块还包含 `provide_choices`。`RequestType.CONFIRM_APPROVED`、`ResponseType.SELECT`、`ResponseType.CONFIRM` 仍在协议中，但主循环已经不再使用。这类漂移说明当前架构缺少单一事实来源，重构后工具目录、Agent 目录和协议枚举必须由同一声明生成或可直接枚举验证。
+
+## 3. 架构问题与重复代码根因
+
+### 3.1 巨型对象与职责聚合
+
+| 模块 | 当前规模（约） | 混合职责 | 结果 |
+|------|----------------|----------|------|
+| `src/agents/base.py` | 708 行 | Prompt、LLM、解析、状态机、工具、审批、Plan、Memory、Cancel | 任一基础能力变更都影响所有 Agent |
+| `src/cli/app.py` | 700+ 行 | 输入、命令、渲染、线程、交互桥、编排、存档、恢复 | 无法替换 CLI 或独立验证编排逻辑 |
+| `src/tools/workspace_tools.py` | 460+ 行 | 路径安全、读写状态、文件操作、工具描述 | 文件能力无法被非 Resume 场景复用 |
+| `src/utils/saver.py` | 340+ 行 | JSON codec、文件 repository、session aggregate、清理策略 | schema 演进与业务流程耦合 |
+
+核心问题不是文件行数本身，而是每个模块包含多个变化原因。
+
+### 3.2 Agent 声明样板重复
+
+MainAgent、ResumeAgent 和 JobSearchAgent 都重复实现 `_get_agent_name()`、`_get_agent_description()`、`_get_responsibilities()`、`_get_primary_goal()`、`_get_success_criterions()`、约束和风格等方法。它们没有行为差异，只是在 Python 方法里返回字符串。新增 InterviewAgent 或 LearningAgent 会继续复制相同结构。
+
+目标：使用一个不可变 `AgentSpec` 声明 key、展示信息、prompt 片段、model profile 和 capability；只有真正存在领域行为时才创建 Agent 类。
+
+### 3.3 全局状态与隐式装配重复
+
+当前存在多套相似模式：
+
+- `get_client()`：双检锁 LLM 单例。
+- `get_agent_registry()`：双检锁 AgentRegistry 单例。
+- `src/rag/__init__.py`：Store/Reranker/Loader 单例与后台线程。
+- `src/memory/__init__.py`：Store/Indexer/Retriever 单例与后台线程。
+- `UIBridge._current_bridge`、`plan_tools._plan_agent`、`session._session_id`：模块级当前上下文。
+- `main.py` 通过导入八个 tool 模块触发注册副作用。
+
+这些代码块表面不同，根因相同：依赖没有在 composition root 中显式创建并传递。它们让初始化顺序成为隐藏协议，也让并行会话、隔离验证和资源释放变得困难。
+
+### 3.4 控制流使用魔法字段
+
+工具普通返回值和框架控制信号共用 dict：`__switch__`、`__reject__`、`__cancelled__`。BaseAgent 需要依次探测这些键并设置 `_pending_switch`、`_pending_reject`、`_pending_tool`。App 又需要解释 Response 上的 switch 字段并补写 tool result。
+
+目标：Tool 只返回显式 `ToolOutcome`；Runtime 只产生显式 `RuntimeEvent`。Handoff、Approval、Selection、Cancelled 和 Failed 都是类型，不再藏在业务数据中。
+
+### 3.5 抽象泄漏和跨层私有访问
+
+`App` 直接读取或覆盖 Handler 的 `_history`、`_plan`，直接调用 `_get_agent_key()`、`dump_history()`、`write_memory()`；AgentRegistry 也通过 `_get_*()` 私有方法抽取描述。这意味着 `Handler.process()` 并不是实际边界，换一个 Handler 实现仍需伪造 BaseAgent 私有结构。
+
+目标：`ApplicationSession` 是会话状态唯一所有者；CLI 只调用公开的 Application API；AgentRuntime 通过 `AgentStateRepository` 读写状态。
+
+### 3.6 UI 与执行线程互相侵入
+
+当前 App 启后台线程执行 Agent，工具再通过全局 UIBridge 阻塞回主线程做 confirm/select；取消标志也放在 UI 模块。这虽然解决了单 CLI 场景，却使工具依赖 CLI，实现其他前端时必须复刻桥接协议。
+
+目标：Runtime 遇到审批或选择时返回事件并暂停；前端把用户结果作为 command 送回。后台线程只用于运行阻塞步骤和显示 spinner，不承载业务协议。
+
+### 3.7 文件访问和路径安全散落
+
+workspace、customer file、resume tools 和 file_reader 各自处理 Path、exists、suffix、编码和错误转换。`_validate_path()` 使用字符串前缀判断是否越界，语义上不如 `Path.is_relative_to()` 可靠；读取后编辑状态 `_read_files` 又是进程级集合，会跨会话污染。
+
+目标：建立实例化 `Workspace`，集中处理 root、路径解析、编码、原子写入和 read revision；工具只负责参数适配与结果展示。
+
+### 3.8 序列化与 schema 演进分散
+
+Message、MemoryBuilder、Saver 都直接使用 `dataclasses.asdict()` + `json.dumps()`；恢复逻辑手工重建枚举和 datetime。存档没有 `schema_version`，模型字段变化会直接影响旧存档。
+
+目标：使用 versioned DTO + codec + migration；Domain 对象不直接决定磁盘格式。
+
+### 3.9 RAG 与 Memory 生命周期耦合
+
+MemoryStore 通过回调触发 MemoryIndexer，Indexer 再延迟 import RAG Facade。RAG 自身又有单例状态和后台加载线程。`.last_update` 只按时间戳判断增量，无法完整表达删除、重命名或内容 hash。
+
+目标：KnowledgeService 显式协调 repository 与 index；manifest 记录 source、collection、hash、mtime 和 chunk ids；启动、重载、关闭均为公开生命周期。
+
+## 4. 重构目标与非目标
+
+### 4.1 目标
+
+1. 每个模块只有一个主要变化原因，核心对象控制在可审查范围内。
+2. 所有运行时依赖由 composition root 显式创建；禁止依赖导入副作用完成装配。
+3. 单个进程可创建多个相互隔离的 ApplicationSession。
+4. CLI 不读取 Agent 私有字段，Agent 不导入 CLI。
+5. Agent 元数据声明式，新增普通 Agent 不再复制 14 个方法。
+6. 工具控制结果强类型化，工具上下文显式注入。
+7. Session、Message、Plan、Artifact 使用版本化持久化 schema。
+8. 取消令牌贯穿 Runtime、LLM、Tool 和 ProcessRunner。
+9. 保持同步编程模型；允许受控 worker thread，不引入 asyncio。
+10. 在切换入口前达到当前已实现功能的可验证等价。
+
+### 4.2 非目标
+
+- 本轮重构不同时开发 InterviewAgent、LearningAgent 或完整招聘平台抓取。
+- 不引入 LangChain、CrewAI、AutoGen 等 Agent 框架。
+- 不因重构恢复已放弃的 schema-based 简历方案。
+- 不在 v2 骨架未稳定前增加新的 CLI 功能。
+- 不把记忆模块当作跨 Agent 业务对象数据库；简历 PDF 等产物由 ArtifactRepository 管理。
+
+## 5. 目标架构
+
+### 5.1 分层与依赖方向
+
+```text
+interfaces/cli ───────┐
+                      v
+                application
+               /           \
+              v             v
+           domain          ports
+                             ^
+                             |
+                         adapters
+
+bootstrap/composition root 负责创建 adapters 并注入 application。
+domain 和 application 不允许反向 import CLI、OpenAI、Chroma、questionary 或具体文件系统实现。
+```
+
+### 5.2 建议目录
+
+```text
+src/get_me_in/
+├── domain/
+│   ├── agents.py          # AgentSpec / AgentKey / Capability
+│   ├── messages.py        # ConversationEvent / Role
+│   ├── plans.py           # Plan / PlanItem / PlanStatus
+│   ├── sessions.py        # SessionState / AgentState / HandoffFrame
+│   └── tools.py           # ToolDefinition / ToolOutcome
+├── application/
+│   ├── runtime.py         # AgentRuntime 状态机
+│   ├── orchestration.py   # Hub-and-Spoke handoff
+│   ├── commands.py        # RuntimeCommand
+│   ├── events.py          # RuntimeEvent
+│   ├── session_service.py
+│   ├── memory_service.py
+│   └── knowledge_service.py
+├── ports/
+│   ├── llm.py
+│   ├── interaction.py
+│   ├── persistence.py
+│   ├── retrieval.py
+│   ├── workspace.py
+│   └── clock.py
+├── adapters/
+│   ├── llm/openai.py
+│   ├── persistence/json_session.py
+│   ├── retrieval/chroma.py
+│   ├── workspace/local.py
+│   └── resume/latex.py
+├── tools/
+│   ├── catalog.py
+│   ├── common.py
+│   ├── plan.py
+│   ├── workspace.py
+│   └── resume.py
+├── agents/
+│   ├── catalog.py
+│   ├── main.py
+│   ├── resume.py
+│   └── job_search.py
+├── interfaces/cli/
+│   ├── app.py
+│   ├── commands.py
+│   ├── input.py
+│   ├── renderer.py
+│   └── worker.py
+└── bootstrap.py           # 唯一 composition root
+```
+
+旧 `src/*` 在迁移期间保留。禁止新 v2 模块反向 import 旧 `BaseAgent`、`App`、全局 Registry 或 UIBridge；必要兼容通过最外层 adapter 完成。
+
+## 6. 核心模型与公开边界
+
+### 6.1 AgentSpec 替代 14 个占位符方法
+
+建议模型：
+
+```python
+@dataclass(frozen=True)
+class AgentSpec:
+    key: AgentKey
+    display_name: str
+    description: str
+    responsibilities: tuple[str, ...]
+    primary_goal: str
+    success_criteria: tuple[str, ...]
+    hard_constraints: tuple[str, ...]
+    soft_constraints: tuple[str, ...]
+    style: AgentStyle
+    model_profile: str
+    capabilities: frozenset[Capability]
+```
+
+PromptRenderer 接收 AgentSpec、ToolCatalog 和 AgentCatalog，统一生成 system prompt。AgentCatalog 提供公开 descriptor，不再调用 Agent 私有方法。真正需要领域状态机的 Agent 才增加实现类。
+
+### 6.2 RuntimeCommand 与 RuntimeEvent
+
+建议 command：`UserMessage`、`Continue`、`ApproveTool`、`RejectTool`、`SubmitSelection`、`CancelRun`。
+
+建议 event：`AssistantProgress`、`ApprovalRequested`、`SelectionRequested`、`ToolStarted`、`ToolFinished`、`HandoffRequested`、`RunCompleted`、`RunFailed`、`RunCancelled`。
+
+ApplicationService 公开：
+
+```python
+def handle(session_id: str, command: RuntimeCommand) -> RuntimeEvent
+def snapshot(session_id: str) -> SessionSnapshot
+def restore(session_id: str) -> SessionView
+def rewind(session_id: str, message_id: str) -> SessionView
+def close() -> None
+```
+
+该协议取代当前 Request/Response、UIBridge action 和 switch magic dict。Runtime 每次只推进一个明确状态，不使用多个松散 `_pending_*` 标志表达组合状态。
+
+### 6.3 ToolCatalog、ToolContext 与 ToolOutcome
+
+Tool 不再在 import 时注册。每个 tool module 暴露 `build_*_tools(dependencies) -> list[ToolDefinition]`，由 bootstrap 汇总：
+
+```python
+@dataclass(frozen=True)
+class ToolContext:
+    session_id: str
+    agent_key: AgentKey
+    plan: PlanService
+    workspace: WorkspacePort
+    cancellation: CancellationToken
+
+class ToolOutcome: ...
+class ToolSuccess(ToolOutcome): ...
+class ToolFailure(ToolOutcome): ...
+class ToolHandoff(ToolOutcome): ...
+class ToolInteraction(ToolOutcome): ...
+```
+
+Agent 可见工具由 capability 决定，例如 `resume.workspace.read`、`resume.latex.build`，不再使用 `agent=["*"]` 和主 Agent 特判。
+
+### 6.4 Session aggregate 与编排
+
+SessionState 是活跃 Agent、所有 AgentState、handoff stack、plan、input history 和 artifact references 的唯一所有者。Hub-and-Spoke 规则保留：只有 Orchestrator 能进行 handoff，子 Agent 不能持有 AgentCatalog 或直接调用其他子 Agent。
+
+Handoff 使用 `HandoffFrame(source, target, call_id, context)`；返回主 Agent 时由 Orchestrator 闭合调用并写入 summary。CLI 不再补写 tool result。
+
+### 6.5 持久化
+
+SessionSnapshot 至少包含：
+
+```json
+{
+  "schema_version": 2,
+  "session_id": "...",
+  "active_agent": "resume",
+  "agents": {"main": {}, "resume": {}},
+  "handoff_stack": [],
+  "artifacts": [],
+  "created_at": "...",
+  "saved_at": "..."
+}
+```
+
+Repository 必须原子写入临时文件后 replace，codec 与文件 I/O 分离。v2 从全新 `schema_version=2` 会话开始，不读取或迁移旧 Session；Rewind 在 SessionState 上执行并同步修正 pending action、plan 与 handoff，不能只截断某个 Agent 的 `_history`。
+
+### 6.6 LLM 与取消
+
+`LLMPort.complete(request, cancellation)` 返回标准 `LLMResult`。OpenAI adapter 负责模型名、provider thinking、timeout、retry 与原始 SDK 数据转换。每个活动调用产生可取消 handle；取消后该 handle 失效，但 Application 和下一次调用仍可继续。不要通过外部访问 OpenAI SDK 私有字段。
+
+如果 OpenAI SDK 无法稳定中止同步调用，adapter 可以使用 request-scoped client/transport，由 worker 持有并在取消时关闭；该细节不得泄漏到 Runtime。
+
+### 6.7 CLI
+
+CLI 拆为：
+
+- `CliApp`：外层输入循环和 command/event 转发。
+- `CommandRegistry`：命令解析、帮助文本和 handler 映射，取代连续 if/elif。
+- `InputController`：autocomplete、历史、prefill、editor。
+- `Renderer`：Markdown、Plan、spinner、错误和上下文 recap。
+- `WorkerRunner`：阻塞调用、事件轮询、cancel token；不含 Agent 业务规则。
+
+UI 交互由 `ApprovalRequested`/`SelectionRequested` event 驱动。Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
+
+### 6.8 Workspace 与 Artifact
+
+WorkspacePort 提供 `resolve/read/list/search/write/edit/delete/move`；LocalWorkspace 统一：
+
+- 使用 `Path.resolve()` + `Path.is_relative_to(root)` 校验边界。
+- 使用 session-scoped revision 代替进程级 `_read_files`。
+- 写入使用原子替换，错误统一为 domain error。
+- 编码检测集中处理，不在每个 tool 重复。
+
+Resume 的模板复制、LaTeX 编译和 PDF 产物记录属于 ArtifactService。用户记忆只保存事实/偏好，不承担简历文件版本管理。
+
+### 6.9 Knowledge 与 Memory
+
+`KnowledgeService` 管理 source ingestion、query、reload、manifest 和生命周期；`MemoryService` 负责从会话提取 Memory、写 repository，再调用 KnowledgeService 建索引。两者通过 port 连接，不使用 observer callback 和延迟 import。
+
+索引 manifest 使用内容 hash 检测新增、修改、删除和重命名。索引失败时文件写入不能被报告为“全部成功”；应记录 pending/error 状态供重试。
+
+## 7. 迁移策略
+
+采用 Strangler Fig/纵向切片迁移：
+
+1. 冻结当前功能基线，不再向旧 BaseAgent/App 添加新能力；旧运行时数据不作为兼容目标。
+2. 建立 v2 domain、ports、composition root 和最小 CLI 对话。
+3. 迁移工具执行与 Plan，验证无全局 Registry/UIBridge。
+4. 迁移 Session/Handoff/Save/Restore/Rewind。
+5. 迁移 CLI 命令与取消。
+6. 迁移 RAG/Memory。
+7. 以 ResumeAgent 完成第一个端到端功能等价。
+8. 切换 `main.py` 到 v2，保留一次可回退提交点。
+9. 删除旧实现和兼容层，再开发 Interview/Learning 等新功能。
+
+每个阶段都必须可运行；不允许同时改写全部模块后才做首次集成。
+
+### 7.1 数据保留边界（已确认）
+
+v2 只复用以下静态项目资产：
+
+- `data/reference/`
+- `data/prompts/`
+- `data/resume/template/`
+
+不迁移旧会话和运行时资料，包括 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 以及旧 Plan、handoff、input history、dump/log 状态。新索引从保留的 reference 数据重建；用户工作区和 Resume 产物由 v2 使用新的持久化边界管理。
+
+## 8. 验证策略
+
+用户已明确授权在 `refactor` 分支为核心 domain/runtime/session/tool codec/workspace 编写自动化 characterization、unit 和 contract tests。Adapter、CLI、真实 LLM、Chroma 与 LaTeX 仍通过集成测试、Notebook 或人工 smoke checklist 验证。
+
+每个迁移门禁至少验证：基础对话、工具成功/失败/拒绝、主→子→主 handoff、Plan、save/restore/rewind、Esc cancel、RAG query、Memory write/query、Resume template/edit/build。自动化测试应优先覆盖纯 domain/application 逻辑和失败路径，不用 mock 掩盖真实 adapter 集成问题。
+
+## 9. 需要用户确认的架构决策
+
+| 编号 | 已确认决定 | 影响 |
+|------|------------|------|
+| R-D1 | 采用新 `src/get_me_in/` 包受控重写，而非原地拆旧代码 | 最大化边界清晰度，迁移期存在双实现 |
+| R-D2 | v2 禁止可变全局单例和 import-time 注册 | 所有依赖改由 bootstrap 显式装配 |
+| R-D3 | 用 RuntimeCommand/RuntimeEvent 替换 Request/Response/UIBridge 控制协议 | CLI 与 Runtime 解耦，迁移工作量较大 |
+| R-D4 | Resume 继续直接操作 LaTeX，但通过 Workspace/Artifact service | 保留现有产品行为，消除工具层重复 |
+| R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
+| R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
+
+R-D1～R-D6 已由用户确认。当前会话仍只完成文档与技能调整，不创建 v2 代码模块；进入 R1 前仍需按项目约定提交新文件、类和公开方法清单。
