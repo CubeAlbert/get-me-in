@@ -9,9 +9,14 @@ from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
+from src.get_me_in.ports.llm import LLMPort
 
 
-def build_application(settings: Settings) -> Application:
+def build_application(
+    settings: Settings,
+    *,
+    llm: LLMPort | None = None,
+) -> Application:
     """Build one isolated R1 application without import-time side effects."""
     if settings.hf_endpoint:
         os.environ["HF_ENDPOINT"] = settings.hf_endpoint
@@ -32,6 +37,7 @@ def build_application(settings: Settings) -> Application:
         ),
         model_profile="pro",
         capabilities=frozenset({Capability.ROUTE}),
+        priorities=("先明确用户当前目标，再选择下一步。",),
     )
     return Application(
         settings=settings,
@@ -40,4 +46,5 @@ def build_application(settings: Settings) -> Application:
         clock=SystemClock(),
         id_generator=UuidGenerator(),
         cancellation=CancellationToken(),
+        llm=llm,
     )

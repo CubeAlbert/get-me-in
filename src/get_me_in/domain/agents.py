@@ -47,6 +47,7 @@ class AgentSpec:
     style: AgentStyle
     model_profile: str
     capabilities: frozenset[Capability]
+    priorities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

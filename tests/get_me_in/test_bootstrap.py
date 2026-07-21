@@ -2,8 +2,10 @@ import unittest
 from pathlib import Path
 
 from src.get_me_in.bootstrap import build_application
+from src.get_me_in.application.application import TemporaryConversationUnavailableError
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.ports.llm import CancellationSignal
 
 
 def _settings() -> Settings:
@@ -34,3 +36,31 @@ class BootstrapTests(unittest.TestCase):
         self.assertIsNot(first.clock, second.clock)
         self.assertIsNot(first.id_generator, second.id_generator)
         self.assertEqual(AgentKey.MAIN, second.catalog.get(AgentKey.MAIN).key)
+
+    def test_complete_text_runs_one_temporary_no_tool_conversation(self) -> None:
+        llm = _FakeLlm("completed")
+        application = build_application(_settings(), llm=llm)
+
+        result = application.complete_text("Help me prepare for an interview")
+
+        self.assertEqual("completed", result)
+        self.assertIn("Help me prepare for an interview", llm.prompt)
+        self.assertFalse(llm.cancellation.is_cancelled)
+
+    def test_complete_text_requires_explicit_llm_injection(self) -> None:
+        application = build_application(_settings())
+
+        with self.assertRaises(TemporaryConversationUnavailableError):
+            application.complete_text("hello")
+
+
+class _FakeLlm:
+    def __init__(self, response: str) -> None:
+        self._response = response
+        self.prompt = ""
+        self.cancellation: CancellationSignal | None = None
+
+    def complete(self, prompt: str, cancellation: CancellationSignal) -> str:
+        self.prompt = prompt
+        self.cancellation = cancellation
+        return self._response

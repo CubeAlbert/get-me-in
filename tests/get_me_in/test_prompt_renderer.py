@@ -22,6 +22,7 @@ def _spec() -> AgentSpec:
         style=AgentStyle("专业", "简洁", "直接"),
         model_profile="pro",
         capabilities=frozenset({Capability.ROUTE}),
+        priorities=("优先级",),
     )
 
 
@@ -45,3 +46,13 @@ class PromptRendererTests(unittest.TestCase):
 
             with self.assertRaises(UnexpectedPromptVariableError):
                 PromptRenderer(root.parent).render(_spec())
+
+    def test_renders_priorities_placeholder(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir) / "general_agent"
+            root.mkdir()
+            (root / "01.md").write_text("{{PRIORITIES}}", encoding="utf-8")
+
+            rendered = PromptRenderer(root.parent).render(_spec())
+
+        self.assertEqual("优先级", rendered)
