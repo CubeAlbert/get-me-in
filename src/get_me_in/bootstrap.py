@@ -71,9 +71,10 @@ def build_application(
     retrieval = DeferredRetrievalAdapter()
     resume_artifacts = LocalResumeArtifacts(settings.resume_template_dir, SubprocessRunner())
     plan_service = PlanService(id_generator)
-    tool_executor = ToolExecutor(
-        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools(), *build_resume_tools()))
+    tool_catalog = ToolCatalog(
+        (*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools(), *build_resume_tools())
     )
+    tool_executor = ToolExecutor(tool_catalog)
     runtime_llm = llm or OpenAILLMAdapter(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
@@ -111,5 +112,6 @@ def build_application(
         id_generator=id_generator,
         cancellation=cancellation,
         runtime=runtime,
+        tool_catalog=tool_catalog,
         web_search=web_search,
     )

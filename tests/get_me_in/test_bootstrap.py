@@ -67,6 +67,25 @@ class BootstrapTests(unittest.TestCase):
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual("done", events[-1].message.content)
 
+    def test_application_exposes_the_complete_explicit_tool_catalog(self) -> None:
+        application = build_application(_settings(), llm=_FakeLlm("unused"))
+
+        names = tuple(item["name"] for item in application.tool_catalog.export_descriptors())
+
+        self.assertEqual(25, len(names))
+        self.assertEqual(
+            {
+                "get_current_datetime", "get_working_dir", "web_search",
+                "switch_to_subagent", "switch_to_mainagent", "provide_choices",
+                "create_plan", "update_plan_status", "cancel_all_plans", "replan",
+                "workspace_read", "workspace_list", "workspace_grep", "workspace_search_file",
+                "workspace_replace", "workspace_write", "workspace_delete", "workspace_move",
+                "workspace_edit", "workspace_open", "read_customer_file", "query_memory",
+                "query_reference_data", "copy_template", "build_pdf",
+            },
+            set(names),
+        )
+
     def test_application_close_releases_its_llm_adapter(self) -> None:
         llm = _FakeLlm("unused")
         application = build_application(_settings(), llm=llm)
