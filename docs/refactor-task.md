@@ -109,29 +109,29 @@
 
 ### 1. Tool Catalog
 
-- ⬜ 定义 ToolDefinition、ToolSchema、ToolPolicy、ToolContext、ToolOutcome。
-- ⬜ 将 decorator 改为仅创建定义，不自动写全局 Registry；或改为显式 builder。
-- ⬜ capability-based 可见性替代 agent name、`"*"` 和 main 特判。
-- ⬜ ToolCatalog 提供目录导出，使文档/诊断可看到真实工具数。
-- ⬜ 统一参数过滤、必填校验、业务错误和框架错误。
-- ⬜ 完整处理审批、拒绝和取消的 call closure。
+- ✅ 定义 ToolDefinition、ToolSchema、ToolPolicy、ToolContext、ToolOutcome。
+- ✅ 将 decorator 改为仅创建定义，不自动写全局 Registry；或改为显式 builder。
+- ✅ capability-based 可见性替代 agent name、`"*"` 和 main 特判。
+- ✅ ToolCatalog 提供目录导出，使文档/诊断可看到真实工具数。
+- ✅ 统一参数过滤、必填校验、业务错误和框架错误。
+- 🔄 完整处理审批、拒绝和取消的 call closure。
 
 ### 2. Plan
 
-- ⬜ 将 Plan/PlanItem/PlanStatus 提取为 domain model。
-- ⬜ 将 create/update/cancel/replan 移入 PlanService。
+- ✅ 将 Plan/PlanItem/PlanStatus 提取为 domain model。
+- ✅ 将 create/update/cancel/replan 移入 PlanService。
 - ⬜ ToolContext 注入 PlanService，删除 `_plan_agent`。
-- ⬜ 保证同一 plan 最多一个 IN_PROGRESS。
-- ⬜ 定义 Plan snapshot/restore codec。
+- ✅ 保证同一 plan 最多一个 IN_PROGRESS。
+- ✅ 定义 Plan snapshot/restore codec。
 
 ### 3. Workspace
 
-- ⬜ 定义 WorkspacePort 与 LocalWorkspace。
-- ⬜ 使用 `Path.is_relative_to(root)` 做边界检查。
+- ✅ 定义 WorkspacePort 与 LocalWorkspace。
+- ✅ 使用 `Path.is_relative_to(root)` 做边界检查。
 - ⬜ 集中编码检测、文本行模型、glob/search 和结构化错误。
-- ⬜ 写入与编辑使用原子文件替换。
-- ⬜ 以 file revision/hash 实现 read-before-edit，状态归 session/tool context。
-- ⬜ 移除进程级 `_read_files`。
+- ✅ 写入与编辑使用原子文件替换。
+- ✅ 以 file revision/hash 实现 read-before-edit，状态归 session/tool context。
+- ✅ 移除进程级 `_read_files`。
 - ⬜ 定义批量删除部分成功的结果类型。
 - ⬜ 定义 ProcessRunner，支持 timeout/cancel，供 LaTeX 使用。
 

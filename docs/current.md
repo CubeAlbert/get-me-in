@@ -2,13 +2,13 @@
 
 **当前阶段：** R3: Tool Runtime、Plan 与 Workspace
 
-**当前任务：** 建立显式 Tool Catalog 与工具执行协议
+**当前任务：** 完成 ToolExecutor 的审批、拒绝与取消闭合
 
-**当前子任务：** R3 新文件、类和公开方法清单（🔄）——在创建 Tool Catalog、Plan 或 Workspace 模块前提交用户确认
+**当前子任务：** ToolContext 注入 PlanService 与 WorkspacePort（🔄）——已完成显式 ToolCatalog、PlanService 和 LocalWorkspace 核心，下一步将 per-call 依赖接入执行器并闭合审批/拒绝/取消
 
 **当前阻塞：** 无；旧 CLI 的真实终端 smoke C01/C05 仍待人工验证，不阻塞 R3
 
-**下一步：** 提交 R3 的 Tool Catalog、Plan 与 Workspace 文件/类/方法清单供用户确认；确认后先实现 Tool Catalog 与回合闭合
+**下一步：** 为 ToolContext 注入 PlanService 与 WorkspacePort，扩展 ToolExecutor 的审批、拒绝与取消 call closure；随后实现 Workspace 编码/搜索、批量结果与 ProcessRunner
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
