@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from src.get_me_in.application.cancellation import CancellationToken
+from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.tools import (
@@ -12,6 +13,7 @@ from src.get_me_in.domain.tools import (
     ToolInteraction,
     ToolOutcome,
 )
+from src.get_me_in.ports.workspace import WorkspacePort
 
 
 @dataclass(frozen=True)
@@ -21,7 +23,10 @@ class ToolContext:
     session_id: str
     agent_key: AgentKey
     cancellation: CancellationToken
+    plan: PlanService | None = None
+    workspace: WorkspacePort | None = None
     approved: bool = False
+    rejected: bool = False
 
 
 class ToolExecutor:
@@ -40,6 +45,8 @@ class ToolExecutor:
         del call_id
         if context.cancellation.is_cancelled:
             return ToolFailure("cancelled", "Tool call was cancelled before execution")
+        if context.rejected:
+            return ToolFailure("rejected", f"Tool call {tool_name} was rejected")
         try:
             definition = self._catalog.get(tool_name)
         except KeyError:
