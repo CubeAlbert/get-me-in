@@ -128,16 +128,16 @@
 
 - ✅ 定义 WorkspacePort 与 LocalWorkspace。
 - ✅ 使用 `Path.is_relative_to(root)` 做边界检查。
-- ⬜ 集中编码检测、文本行模型、glob/search 和结构化错误。
+- ✅ 集中编码检测、文本行模型、glob/search 和结构化错误。
 - ✅ 写入与编辑使用原子文件替换。
 - ✅ 以 file revision/hash 实现 read-before-edit，状态归 session/tool context。
 - ✅ 移除进程级 `_read_files`。
-- ⬜ 定义批量删除部分成功的结果类型。
+- ✅ 定义批量删除部分成功的结果类型。
 - ✅ 定义 ProcessRunner，支持 timeout/cancel，供 LaTeX 使用。
 
 ### 4. 现有工具归类
 
-- ⬜ 迁移 2 个 system tools。
+- ✅ 迁移 2 个 system tools。
 - ⬜ 迁移或重新定义 web_search tool。
 - ⬜ 以 typed handoff/interaction 替代 3 个 switch tools 的控制逻辑。
 - ⬜ 迁移 4 个 Plan tools。

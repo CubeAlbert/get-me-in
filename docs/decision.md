@@ -3062,3 +3062,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 立即重写全部 general_agent prompt 为 v2 格式 —— 静态资产迁移范围过大，且会干扰旧 CLI 的行为基线，已拒绝。
 - 让 Runtime 直接识别旧 Message/event_type 字段 —— 扩散旧协议并破坏 v2 边界，已拒绝。
+
+---
+
+### 决策 142 — system tools 通过显式 Clock 与 WorkspacePort 注入实现
+
+**背景：** 旧 `get_current_datetime` 和 `get_working_dir` 直接依赖全局 config 与装饰器注册。R3 已建立显式 ToolCatalog/ToolExecutor，需要迁移这两项基础工具，同时不得引入可变运行时单例或 import-time 副作用。
+
+**决策：**
+
+- `build_system_tools(clock)` 显式接收 Clock，时间工具只读取该依赖。
+- 工作目录工具从 ToolContext 的 WorkspacePort 解析 `Path(".")`，返回受限工作区的绝对根目录；未配置工作区时返回结构化 `workspace_unavailable` 失败。
+- 工具定义由工厂返回，待 composition root 汇总，不使用装饰器或全局 Registry。
+
+**理由：**
+
+- 时间和工作区边界可由测试替身替换，且每个 Application 实例保持隔离。
+- 工作目录的语义与 WorkspacePort 的路径边界一致，不再让工具绕过受限文件系统。
+- 失败通过 ToolOutcome 表达，Runtime 可以按统一 typed event 协议处理。
+
+**曾考虑的替代方案：**
+
+- 保留对旧 config.WORKING_DIR 的读取 —— 会把 v1 全局配置依赖带入 v2，已拒绝。
+- 在工具模块 import 时注册到全局 ToolRegistry —— 违反 R-D2，已拒绝。

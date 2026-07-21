@@ -2,13 +2,13 @@
 
 **当前阶段：** R3: Tool Runtime、Plan 与 Workspace
 
-**当前任务：** 完成 Workspace 编码、搜索与批量操作边界
+**当前任务：** 将显式 ToolCatalog/ToolExecutor 接入 Runtime
 
-**当前子任务：** Workspace 编码检测、文本行模型与 glob/search（🔄）——ToolContext 已注入 PlanService/WorkspacePort，审批/拒绝/取消与 ProcessRunner 已完成
+**当前子任务：** 以 capability 过滤后的 ToolCatalog 替换 R2 的 `available_tools` 过渡集合（🔄）
 
 **当前阻塞：** 无；旧 CLI 的真实终端 smoke C01/C05 仍待人工验证，不阻塞 R3
 
-**下一步：** 为 LocalWorkspace 补充编码检测、文本行模型、glob/search 与批量删除结果；再开始迁移 system tools 并更新 25 工具矩阵
+**下一步：** 将 ToolCatalog/ToolExecutor 接入 AgentRuntime，闭合工具成功、失败、审批、拒绝与取消的 typed event 路径；随后迁移 web_search、switch、Plan 与 workspace tools，并更新 25 工具矩阵
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -21,3 +21,4 @@
 139. **R1 临时无工具对话仅用于 G1 验证** — `Application.complete_text()` 必须显式注入 `LLMPort`，不保存 history、不支持工具或 handoff，并用 `TEMP-R1` 标注；R2 正式 AgentRuntime 落地时必须删除，不能作为正式 Runtime 演进
 140. **R2 用 ToolResult 闭合暂停的工具回合** — Runtime 对已声明工具发出 `ToolStarted` 后暂停，只接受匹配 `call_id` 的 `ToolResult` 并产生 `ToolFinished` 后继续 LLM；R3 的 ToolCatalog 将替代 R2 过渡期的可用工具集合
 141. **保留静态 prompt 的 JSON 在应用边界归一化** — ModelReplyParser 同时接受 v2 `content/tool_call` 与保留 prompt 的 `message/event_type/tool/event_payload` 形状，内部只输出 v2 ModelReply；不引入旧 Message 或旧 Runtime 协议
+142. **system tools 通过显式 Clock 与 WorkspacePort 注入实现** — 当前时间取自注入的 Clock，工作目录由 ToolContext 中的受限 WorkspacePort 根目录解析；不再读取全局 config 或触发 import-time 注册
