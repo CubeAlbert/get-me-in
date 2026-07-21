@@ -2,8 +2,13 @@
 
 from typing import Protocol
 
-from src.get_me_in.application.cancellation import CancellationToken
+
+class CancellationSignal(Protocol):
+    """Read-only cancellation view accepted by blocking adapters."""
+
+    @property
+    def is_cancelled(self) -> bool: ...
 
 
 class LLMPort(Protocol):
-    def complete(self, prompt: str, cancellation: CancellationToken) -> str: ...
+    def complete(self, prompt: str, cancellation: CancellationSignal) -> str: ...
