@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.application.commands import Cancel, UserMessage
+from src.get_me_in.application.commands import Cancel, ToolResult, UserMessage
 from src.get_me_in.application.events import Cancelled, Completed, Failed, ToolFinished, ToolStarted
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.runtime import AgentRuntime
@@ -52,6 +52,36 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(any(isinstance(event, ToolFinished) for event in events))
         self.assertEqual("unknown_tool", events[-1].code)
 
+    def test_known_tool_pauses_then_resumes_after_matching_result(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [
+                '{"content": "", "tool_call": {"name": "search"}}',
+                '{"content": "final answer"}',
+            ],
+            available_tools=frozenset({"search"}),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        started = runtime.handle(UserMessage("question"))
+        call_id = started[-1].call_id
+        resumed = runtime.handle(ToolResult(call_id=call_id, output="search result"))
+
+        self.assertIsInstance(started[-1], ToolStarted)
+        self.assertIsInstance(resumed[0], ToolFinished)
+        self.assertIsInstance(resumed[-1], Completed)
+
+    def test_tool_result_rejects_the_wrong_call_id(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            ['{"content": "", "tool_call": {"name": "search"}}'],
+            available_tools=frozenset({"search"}),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+        runtime.handle(UserMessage("question"))
+
+        events = runtime.handle(ToolResult(call_id="wrong", output="result"))
+
+        self.assertEqual("tool_call_mismatch", events[-1].code)
+
     def test_timeout_and_provider_failures_are_typed(self) -> None:
         timeout_runtime, _, timeout_dir = _runtime([TimeoutError()])
         failure_runtime, _, failure_dir = _runtime([RuntimeError("provider down")])
@@ -96,6 +126,7 @@ def _runtime(
     responses: list[object],
     *,
     max_rounds: int = 2,
+    available_tools: frozenset[str] = frozenset(),
 ) -> tuple[AgentRuntime, "_FakeLlm", tempfile.TemporaryDirectory[str]]:
     temporary_dir = tempfile.TemporaryDirectory()
     root = Path(temporary_dir.name) / "general_agent"
@@ -122,6 +153,7 @@ def _runtime(
         id_generator=_Ids(),
         cancellation=CancellationToken(),
         max_rounds=max_rounds,
+        available_tools=available_tools,
     )
     return runtime, llm, temporary_dir
 

@@ -36,5 +36,13 @@ class SubmitSelection(RuntimeCommand):
 
 
 @dataclass(frozen=True)
+class ToolResult(RuntimeCommand):
+    """The explicit result that resumes a runtime paused for a tool call."""
+
+    call_id: str
+    output: str
+
+
+@dataclass(frozen=True)
 class Cancel(RuntimeCommand):
     reason: str = "Cancelled by user"
