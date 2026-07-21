@@ -14,7 +14,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 - 重构里程碑与验收门禁以 `docs/refactor-plan.md` 为准。
 - 重构执行状态以 `docs/refactor-task.md` 为准。
 - `docs/design.md`、`docs/plan.md`、`docs/task.md` 在 v2 切换完成前继续记录旧实现和历史基线，不提前改写为尚未落地的架构。
-- 用户已确认 `refactor-design.md` 中 R-D1～R-D6；当前会话仍不创建 v2 代码模块。进入 R1 前必须先提交该阶段的新文件、类和公开方法清单供用户确认。
+- 用户已确认 `refactor-design.md` 中 R-D1～R-D6；R0/G0 已完成，R1 的新文件、类和公开方法清单已获用户确认。当前可按该清单创建 v2 骨架代码与核心自动化测试；后续阶段仍须在创建新模块前提交对应清单供用户确认。
 - R0～R8 期间冻结 InterviewAgent、LearningAgent、完整 Job Search 等新功能；除非用户明确改变范围，不在旧 `BaseAgent`/`App` 上继续叠加功能。
 - v2 禁止依赖可变全局运行时单例、import-time 注册、CLI 访问 Agent 私有状态和魔法控制 dict；依赖由 composition root 显式装配。
 - v2 不迁移旧 Session、Memory、Chroma、`data/temp/` 或其他运行状态；只保留 `data/reference/`、`data/prompts/`、`data/resume/template/` 三类静态资产。
