@@ -4,11 +4,11 @@
 
 **当前任务：** 迁移/合并 10 个 workspace tools，保持外部功能等价
 
-**当前子任务：** 迁移 `workspace_replace`、`workspace_write`、`workspace_delete`、`workspace_move`、`workspace_edit` 与 `workspace_open`（🔄）
+**当前子任务：** 迁移 revision-aware `workspace_edit` 与通过 Frontend/OS adapter 的 `workspace_open`（🔄）
 
 **当前阻塞：** 无；旧 CLI 的真实终端 smoke C01/C05 仍待人工验证，不阻塞 R3
 
-**下一步：** 以 WorkspacePort 的原子写入、revision 与部分成功结果实现剩余 Workspace 写操作；随后迁移 web_search、switch、customer file、RAG stub 与 Resume tools，并更新 25 工具矩阵
+**下一步：** 以 read 返回的 revision 实现精确 edit，并定义 Frontend/OS port 迁移 workspace_open；随后迁移 web_search、switch、customer file、RAG stub 与 Resume tools，并更新 25 工具矩阵
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 

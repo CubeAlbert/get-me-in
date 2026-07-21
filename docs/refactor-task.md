@@ -141,7 +141,7 @@
 - ⬜ 迁移或重新定义 web_search tool。
 - ⬜ 以 typed handoff/interaction 替代 3 个 switch tools 的控制逻辑。
 - ✅ 迁移 4 个 Plan tools。
-- 🔄 迁移/合并 10 个 workspace tools，保持外部功能等价（已完成 read/list/grep/search_file，待完成 replace/write/delete/move/edit/open）。
+- 🔄 迁移/合并 10 个 workspace tools，保持外部功能等价（已完成 read/list/grep/search_file/replace/write/delete/move，待完成 edit/open）。
 - ⬜ 迁移 read_customer_file，明确外部路径授权边界。
 - ⬜ 暂以 port adapter 迁移 2 个 RAG query tools，R6 再替换实现。
 - ⬜ 迁移 copy_template/build_pdf，R7 接入 ArtifactService。
