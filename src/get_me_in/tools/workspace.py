@@ -14,10 +14,12 @@ from src.get_me_in.domain.tools import (
     ToolSuccess,
 )
 from src.get_me_in.ports.workspace import WorkspaceError, WorkspacePort
+from src.get_me_in.ports.frontend import FrontendPort
 
 
 class WorkspaceToolContext(ToolHandlerContext, Protocol):
     workspace: WorkspacePort | None
+    frontend: FrontendPort | None
 
 
 def build_workspace_tools() -> tuple[ToolDefinition, ...]:
@@ -88,6 +90,13 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
             schema=ToolSchema({"path": str, "revision": str, "edits": list}, frozenset({"path", "revision", "edits"})),
             policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
             handler=_edit,
+        ),
+        ToolDefinition(
+            name="workspace_open",
+            description="用前端或操作系统默认程序打开工作区中的已有文件。",
+            schema=ToolSchema({"path": str}, frozenset({"path"})),
+            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            handler=_open,
         ),
     )
 
@@ -241,6 +250,22 @@ def _edit(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
     except (KeyError, TypeError, OSError, WorkspaceError) as error:
         return ToolFailure("workspace_edit_failed", str(error))
     return ToolSuccess({"path": str(path), "edits_applied": len(applied), "edits": tuple(applied)})
+
+
+def _open(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+    workspace = _workspace(context)
+    if isinstance(workspace, ToolFailure): return workspace
+    if context.frontend is None:
+        return ToolFailure("frontend_unavailable", "This tool requires a configured frontend")
+    path = Path(arguments["path"])
+    try:
+        resolved = workspace.resolve(path)
+        if not resolved.is_file():
+            return ToolFailure("workspace_file_not_found", f"File not found: {path}")
+        context.frontend.open_file(resolved)
+    except (OSError, WorkspaceError) as error:
+        return ToolFailure("workspace_open_failed", str(error))
+    return ToolSuccess({"path": str(path), "opened": True})
 
 
 def _workspace(context: WorkspaceToolContext) -> WorkspacePort | ToolFailure:

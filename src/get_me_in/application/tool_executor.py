@@ -14,6 +14,7 @@ from src.get_me_in.domain.tools import (
     ToolOutcome,
 )
 from src.get_me_in.ports.workspace import WorkspacePort
+from src.get_me_in.ports.frontend import FrontendPort
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class ToolContext:
     cancellation: CancellationToken
     plan: PlanService | None = None
     workspace: WorkspacePort | None = None
+    frontend: FrontendPort | None = None
     approved: bool = False
     rejected: bool = False
 

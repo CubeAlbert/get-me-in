@@ -5,6 +5,7 @@ import os
 from src.get_me_in.adapters.system import SystemClock, UuidGenerator
 from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
 from src.get_me_in.adapters.local_workspace import LocalWorkspace
+from src.get_me_in.adapters.os_frontend import OSFrontend
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
@@ -54,6 +55,7 @@ def build_application(
     id_generator = UuidGenerator()
     cancellation = CancellationToken()
     workspace = LocalWorkspace(settings.workspace_dir)
+    frontend = OSFrontend()
     plan_service = PlanService(id_generator)
     tool_executor = ToolExecutor(
         ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools()))
@@ -81,6 +83,7 @@ def build_application(
             cancellation=cancellation,
             plan=plan_service,
             workspace=workspace,
+            frontend=frontend,
         ),
     )
     return Application(

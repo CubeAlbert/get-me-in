@@ -84,3 +84,19 @@ class WorkspaceToolTests(unittest.TestCase):
         self.assertEqual("ONE\ntwo", self.workspace.read(Path("edit.txt")).content.replace("\r\n", "\n"))
         self.assertEqual(2, outcome.output["edits_applied"])
         self.assertEqual("workspace_revision_mismatch", stale.code)
+
+    def test_open_uses_the_injected_frontend(self) -> None:
+        self.workspace.write(Path("preview.pdf"), "placeholder")
+        frontend = _Frontend()
+        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, frontend=frontend, approved=True)
+        outcome = self.executor.execute("open", "workspace_open", {"path": "preview.pdf"}, approved)
+        self.assertTrue(outcome.output["opened"])
+        self.assertEqual(Path(self.temporary_dir.name).resolve() / "preview.pdf", frontend.opened)
+
+
+class _Frontend:
+    def __init__(self) -> None:
+        self.opened: Path | None = None
+
+    def open_file(self, path: Path) -> None:
+        self.opened = path
