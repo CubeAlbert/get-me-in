@@ -145,6 +145,7 @@
 - [决策 135 — 发送 LLM 消息剥离 thinking + 修正 input format role](#决策-135--发送-llm-消息剥离-thinking--修正-input-format-role)
 - [决策 136 — 不暴露 LLM 原生 reasoning_content](#决策-136--不暴露-llm-原生-reasoning_content)
 - [决策 137 — refactor 分支采用独立 v2 受控重写](#决策-137--refactor-分支采用独立-v2-受控重写)
+- [决策 138 — R1 骨架清单获确认后开始编码](#决策-138--r1-骨架清单获确认后开始编码)
 
 ---
 
@@ -2965,3 +2966,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 原地拆分旧 BaseAgent/App —— 需要长期维护兼容层，容易把旧耦合带入新模块，已拒绝。
 - 迁移全部 v1 Session/Memory/Workspace 数据 —— 成本高且用户明确不需要，已拒绝。
 - 继续禁止测试文件，只用 Notebook/人工验证 —— 对状态机与持久化重写的回归保护不足，已拒绝。
+
+---
+
+### 决策 138 — R1 骨架清单获确认后开始编码
+
+**背景：** R0 的能力基线、静态资产边界、旧入口基线和 G0 审查均已完成。用户已确认 R1 的新文件、类和公开方法清单，并要求后续会话可以进入编码阶段，不再因旧约束停留在文档准备阶段。
+
+**决策：**
+
+- 在 `src/get_me_in/` 创建 v2 的 `domain`、`application`、`ports`、`adapters` 分层骨架；项目源码目录保持既有布局，因此包导入统一使用 `src.get_me_in`。
+- 首批实现仅覆盖 Settings、基础 ports、声明式 Agent/Prompt、实例级 CancellationToken、Application 与 `build_application(settings)` composition root；不提前实现 R2 Runtime、真实 LLM adapter 或 Session 持久化。
+- 为上述纯逻辑增加核心自动化测试。R1 的开发期 import guard、最小无工具 LLM 对话和 G1 验收尚未完成，任务状态保持进行中。
+- 更新 `AGENTS.md`：R1 清单获得用户确认后允许创建骨架代码；后续阶段仍须先提交对应清单供用户确认。
+
+**理由：**
+
+- 分层骨架先把 v2 的依赖方向和实例隔离落实到可执行代码，后续 Runtime 与工具迁移可在此基础上增量完成。
+- 先只实现无副作用的核心模型和装配点，避免在 R1 过早复制旧 `BaseAgent`/`App` 的控制流耦合。
+- 自动化测试能在后续重构中持续验证 Settings、Agent catalog、Prompt 渲染和 composition root 的基本行为。
+
+**曾考虑的替代方案：**
+
+- 继续只更新文档，等待全部里程碑细节确认 —— 用户已明确确认 R1 清单并要求进入 coding phase，会无必要地延迟重构。
+- 在 R1 直接实现完整 Runtime 与真实 LLM 调用 —— 会跨越 R2 的协议和状态机设计门禁，增加返工风险。

@@ -36,13 +36,13 @@
 
 ### 3. 基线材料
 
-- 🔄 建立 capability parity matrix，逐项列出输入、输出、副作用和失败行为。
+- ✅ 建立 capability parity matrix，逐项列出输入、输出、副作用和失败行为。
 - ⛔ 选取 v1 Session 样例用于 migration —— 不迁移旧会话，已由 R-D6 终止。
 - ⛔ 选取旧 Memory/Workspace 样例用于 migration —— 不迁移旧运行数据，已由 R-D6 终止。
-- ⬜ 核对 `data/reference/`、`data/prompts/`、`data/resume/template/` 的 v2 输入边界。
-- ⬜ 建立 CLI smoke checklist。
-- ⬜ 记录旧入口可运行的基线 commit。
-- ⬜ 完成 G0 审查；未通过前不创建 v2 代码文件。
+- ✅ 核对 `data/reference/`、`data/prompts/`、`data/resume/template/` 的 v2 输入边界。
+- ✅ 建立 CLI smoke checklist。
+- ✅ 记录旧入口可运行的基线 commit。
+- ✅ 完成 G0 审查；未通过前不创建 v2 代码文件。
 
 ## R1 —— v2 骨架与 Composition Root
 
@@ -50,31 +50,31 @@
 
 ### 1. 包结构与依赖规则
 
-- ⬜ 创建 `src/get_me_in/` 分层目录。
-- ⬜ 定义 v2 import 规则：domain → 无外部 adapter；application → domain/ports；adapter → ports；CLI → application。
+- ✅ 创建 `src/get_me_in/` 分层目录。
+- 🔄 定义 v2 import 规则：domain → 无外部 adapter；application → domain/ports；adapter → ports；CLI → application。
 - ⬜ 增加开发期依赖检查方式，确保 v2 不 import 旧 BaseAgent/App/UIBridge/Registry。
 - ⬜ 清理源码树中的 `.ipynb_checkpoints` 方案，实际删除留到 R8。
 
 ### 2. Settings 与基础 ports
 
-- ⬜ 设计 typed Settings 字段、解析、必填校验和错误返回。
-- ⬜ 保留 `config` 在第三方模型 import 前设置 HF 环境的能力，但移除业务模块 import 时 `sys.exit()`。
-- ⬜ 定义 Clock、IdGenerator、LLMPort、SessionRepository 最小协议。
-- ⬜ 创建实例级 CancellationToken。
+- ✅ 设计 typed Settings 字段、解析、必填校验和错误返回。
+- ✅ 保留 `config` 在第三方模型 import 前设置 HF 环境的能力，但移除业务模块 import 时 `sys.exit()`。
+- ✅ 定义 Clock、IdGenerator、LLMPort、SessionRepository 最小协议。
+- ✅ 创建实例级 CancellationToken。
 
 ### 3. 声明式 Agent 与 Prompt
 
-- ⬜ 定义 AgentKey、Capability、AgentStyle、AgentSpec。
-- ⬜ 定义 AgentDescriptor 与 AgentCatalog。
-- ⬜ 定义 PromptRenderer，复用现有 `data/prompts/general_agent/` 模板。
-- ⬜ 将 MainAgent 14 个方法转换为一个声明式 spec。
-- ⬜ 明确 prompt 模板缺失变量和多余变量的错误类型。
+- ✅ 定义 AgentKey、Capability、AgentStyle、AgentSpec。
+- ✅ 定义 AgentDescriptor 与 AgentCatalog。
+- ✅ 定义 PromptRenderer，复用现有 `data/prompts/general_agent/` 模板。
+- ✅ 将 MainAgent 14 个方法转换为一个声明式 spec。
+- ✅ 明确 prompt 模板缺失变量和多余变量的错误类型。
 
 ### 4. Composition Root
 
-- ⬜ 设计 `build_application(settings)` 方法清单。
-- ⬜ 显式创建所有 service/catalog/adapter，不使用导入副作用。
-- ⬜ 确认构造两个 Application 实例不会共享 history、registry、cancel 或 session id。
+- ✅ 设计 `build_application(settings)` 方法清单。
+- 🔄 显式创建所有 service/catalog/adapter，不使用导入副作用。
+- 🔄 确认构造两个 Application 实例不会共享 history、registry、cancel 或 session id。
 - ⬜ 完成 G1 验收。
 
 ## R2 —— Agent Runtime 与事件协议
