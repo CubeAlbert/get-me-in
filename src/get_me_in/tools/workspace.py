@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from src.get_me_in.domain.tools import (
+    ConfirmationMode,
     ToolDefinition,
     ToolFailure,
     ToolHandlerContext,
@@ -52,6 +53,34 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
             schema=ToolSchema({"pattern": str, "path": str, "max_results": int}, frozenset({"pattern"})),
             policy=ToolPolicy(),
             handler=_search_file,
+        ),
+        ToolDefinition(
+            name="workspace_replace",
+            description="原子替换文件内全部匹配文本。",
+            schema=ToolSchema({"path": str, "old_str": str, "new_str": str}, frozenset({"path", "old_str", "new_str"})),
+            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            handler=_replace,
+        ),
+        ToolDefinition(
+            name="workspace_write",
+            description="创建新的工作区文本文件，拒绝覆盖已有文件。",
+            schema=ToolSchema({"path": str, "content": str}, frozenset({"path", "content"})),
+            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            handler=_write,
+        ),
+        ToolDefinition(
+            name="workspace_delete",
+            description="批量删除工作区文件或空目录，并返回逐路径结果。",
+            schema=ToolSchema({"paths": list}, frozenset({"paths"})),
+            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            handler=_delete,
+        ),
+        ToolDefinition(
+            name="workspace_move",
+            description="移动或重命名工作区路径，拒绝覆盖已有目标。",
+            schema=ToolSchema({"src": str, "dst": str}, frozenset({"src", "dst"})),
+            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            handler=_move,
         ),
     )
 
@@ -133,6 +162,54 @@ def _search_file(arguments: Mapping[str, object], context: WorkspaceToolContext)
         return ToolFailure("workspace_search_failed", str(error))
     return ToolSuccess({"pattern": arguments["pattern"], "files": tuple(str(file) for file in files),
                         "total_results": len(files), "truncated": len(files) >= max_results})
+
+
+def _replace(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+    workspace = _workspace(context)
+    if isinstance(workspace, ToolFailure): return workspace
+    path = Path(arguments["path"])
+    try:
+        snapshot = workspace.read(path)
+        replacements = snapshot.content.count(arguments["old_str"])
+        if replacements:
+            workspace.write(path, snapshot.content.replace(arguments["old_str"], arguments["new_str"]))
+    except (OSError, UnicodeError, WorkspaceError) as error:
+        return ToolFailure("workspace_replace_failed", str(error))
+    return ToolSuccess({"path": str(path), "replacements": replacements})
+
+
+def _write(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+    workspace = _workspace(context)
+    if isinstance(workspace, ToolFailure): return workspace
+    path = Path(arguments["path"])
+    try:
+        if workspace.exists(path):
+            return ToolFailure("workspace_path_exists", f"File already exists: {path}")
+        workspace.write(path, arguments["content"])
+    except (OSError, WorkspaceError) as error:
+        return ToolFailure("workspace_write_failed", str(error))
+    return ToolSuccess({"path": str(path), "written": True})
+
+
+def _delete(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+    workspace = _workspace(context)
+    if isinstance(workspace, ToolFailure): return workspace
+    try:
+        result = workspace.delete_many(tuple(Path(path) for path in arguments["paths"]))
+    except (TypeError, WorkspaceError) as error:
+        return ToolFailure("workspace_delete_failed", str(error))
+    return ToolSuccess({"deleted": tuple(str(path) for path in result.deleted),
+                        "errors": tuple({"path": str(item.path), "error": item.message} for item in result.failures)})
+
+
+def _move(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+    workspace = _workspace(context)
+    if isinstance(workspace, ToolFailure): return workspace
+    try:
+        workspace.move(Path(arguments["src"]), Path(arguments["dst"]))
+    except (OSError, WorkspaceError) as error:
+        return ToolFailure("workspace_move_failed", str(error))
+    return ToolSuccess({"src": arguments["src"], "dst": arguments["dst"], "moved": True})
 
 
 def _workspace(context: WorkspaceToolContext) -> WorkspacePort | ToolFailure:

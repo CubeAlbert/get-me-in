@@ -33,6 +33,9 @@ class LocalWorkspace:
             raise WorkspacePathError(f"Path escapes workspace: {path}")
         return candidate
 
+    def exists(self, path: Path) -> bool:
+        return self.resolve(path).exists()
+
     def read(self, path: Path) -> FileSnapshot:
         resolved = self.resolve(path)
         content = _read_text(resolved)
@@ -125,7 +128,11 @@ class LocalWorkspace:
         failures: list[DeleteFailure] = []
         for path in paths:
             try:
-                self.delete(path)
+                resolved = self.resolve(path)
+                if resolved.is_dir():
+                    resolved.rmdir()
+                else:
+                    resolved.unlink()
             except (OSError, WorkspacePathError) as error:
                 failures.append(DeleteFailure(path, str(error)))
             else:
@@ -135,6 +142,8 @@ class LocalWorkspace:
     def move(self, source: Path, destination: Path) -> None:
         source_path = self.resolve(source)
         destination_path = self.resolve(destination)
+        if destination_path.exists():
+            raise FileExistsError(f"Destination already exists: {destination}")
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         os.replace(source_path, destination_path)
 

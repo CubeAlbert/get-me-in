@@ -56,3 +56,16 @@ class WorkspaceToolTests(unittest.TestCase):
         self.assertEqual({expected_path: [(2, "needle two")]}, grep.output["files"])
         self.assertEqual((expected_path,), files.output["files"])
         self.assertTrue(files.output["truncated"])
+
+    def test_approved_write_replace_delete_and_move_operations(self) -> None:
+        write = self.executor.execute("write", "workspace_write", {"path": "one.txt", "content": "old old"}, self.context)
+        self.assertEqual("approval", write.kind)
+        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, approved=True)
+        self.executor.execute("write", "workspace_write", {"path": "one.txt", "content": "old old"}, approved)
+        replaced = self.executor.execute("replace", "workspace_replace", {"path": "one.txt", "old_str": "old", "new_str": "new"}, approved)
+        moved = self.executor.execute("move", "workspace_move", {"src": "one.txt", "dst": "folder/two.txt"}, approved)
+        deleted = self.executor.execute("delete", "workspace_delete", {"paths": ["folder/two.txt", "missing.txt"]}, approved)
+        self.assertEqual(2, replaced.output["replacements"])
+        self.assertTrue(moved.output["moved"])
+        self.assertEqual(("folder\\two.txt",), deleted.output["deleted"])
+        self.assertEqual("missing.txt", deleted.output["errors"][0]["path"])
