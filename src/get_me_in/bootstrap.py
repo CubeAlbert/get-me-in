@@ -4,14 +4,18 @@ import os
 
 from src.get_me_in.adapters.system import SystemClock, UuidGenerator
 from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
+from src.get_me_in.adapters.local_workspace import LocalWorkspace
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.settings import Settings
+from src.get_me_in.application.tool_catalog import ToolCatalog
+from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 from src.get_me_in.ports.llm import LLMPort, ModelProfile
+from src.get_me_in.tools.system import build_system_tools
 
 
 def build_application(
@@ -46,6 +50,8 @@ def build_application(
     clock = SystemClock()
     id_generator = UuidGenerator()
     cancellation = CancellationToken()
+    workspace = LocalWorkspace(settings.workspace_dir)
+    tool_executor = ToolExecutor(ToolCatalog(build_system_tools(clock)))
     runtime_llm = llm or OpenAILLMAdapter(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
@@ -62,6 +68,13 @@ def build_application(
         clock=clock,
         id_generator=id_generator,
         cancellation=cancellation,
+        tool_executor=tool_executor,
+        tool_context=ToolContext(
+            session_id="application",
+            agent_key=AgentKey.MAIN,
+            cancellation=cancellation,
+            workspace=workspace,
+        ),
     )
     return Application(
         settings=settings,

@@ -23,6 +23,7 @@ from src.get_me_in.ports.workspace import (
 class LocalWorkspace:
     def __init__(self, root: Path) -> None:
         self._root = root.resolve()
+        self._root.mkdir(parents=True, exist_ok=True)
 
     def resolve(self, path: Path) -> Path:
         candidate = (self._root / path).resolve() if not path.is_absolute() else path.resolve()

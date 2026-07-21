@@ -3,7 +3,7 @@ from pathlib import Path
 
 from src.get_me_in.bootstrap import build_application
 from src.get_me_in.application.commands import UserMessage
-from src.get_me_in.application.events import Completed
+from src.get_me_in.application.events import Completed, ToolFinished
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult
@@ -21,6 +21,7 @@ def _settings() -> Settings:
         reference_dir=Path("data/reference"),
         prompts_dir=Path("data/prompts"),
         resume_template_dir=Path("data/resume/template"),
+        workspace_dir=Path("data/workspace"),
     )
 
 
@@ -49,6 +50,23 @@ class BootstrapTests(unittest.TestCase):
         self.assertIn("Help me prepare for an interview", llm.request.messages[-1].content)
         self.assertFalse(llm.cancellation.is_cancelled)
 
+    def test_application_executes_its_explicit_system_tool_catalog(self) -> None:
+        application = build_application(
+            _settings(),
+            llm=_FakeLlm(
+                [
+                    '{"content": "", "tool_call": {"name": "get_current_datetime"}}',
+                    '{"content": "done"}',
+                ]
+            ),
+        )
+
+        events = application.handle(UserMessage("What time is it?"))
+
+        self.assertTrue(any(isinstance(event, ToolFinished) for event in events))
+        self.assertIsInstance(events[-1], Completed)
+        self.assertEqual("done", events[-1].message.content)
+
     def test_application_close_releases_its_llm_adapter(self) -> None:
         llm = _FakeLlm("unused")
         application = build_application(_settings(), llm=llm)
@@ -61,8 +79,8 @@ class BootstrapTests(unittest.TestCase):
 
 
 class _FakeLlm:
-    def __init__(self, response: str) -> None:
-        self._response = response
+    def __init__(self, response: str | list[str]) -> None:
+        self._responses = [response] if isinstance(response, str) else list(response)
         self.request: LLMRequest | None = None
         self.cancellation: CancellationSignal | None = None
         self.closed = False
@@ -70,7 +88,10 @@ class _FakeLlm:
     def complete(self, request: LLMRequest, cancellation: CancellationSignal) -> LLMResult:
         self.request = request
         self.cancellation = cancellation
-        return LLMResult(content=f'{{"content": "{self._response}"}}')
+        response = self._responses.pop(0)
+        if response.startswith("{"):
+            return LLMResult(content=response)
+        return LLMResult(content=f'{{"content": "{response}"}}')
 
     def close(self) -> None:
         self.closed = True

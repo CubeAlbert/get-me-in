@@ -23,6 +23,7 @@ class Settings:
     reference_dir: Path
     prompts_dir: Path
     resume_template_dir: Path
+    workspace_dir: Path
 
     @classmethod
     def from_env(cls, env: Mapping[str, str], *, project_root: Path) -> "Settings":
@@ -66,4 +67,5 @@ class Settings:
             reference_dir=project_root / "data" / "reference",
             prompts_dir=project_root / "data" / "prompts",
             resume_template_dir=project_root / "data" / "resume" / "template",
+            workspace_dir=Path(env.get("WORKSPACE_DIR", project_root / "data" / "workspace")),
         )
