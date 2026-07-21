@@ -1,7 +1,9 @@
 """Local filesystem workspace with root confinement and atomic replacement."""
 
 import hashlib
+import fnmatch
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Iterable
@@ -52,19 +54,48 @@ class LocalWorkspace:
             for item in sorted(resolved.iterdir())
         )
 
-    def search(self, pattern: str, *, glob: str = "**/*") -> tuple[SearchMatch, ...]:
+    def search(
+        self,
+        pattern: str,
+        *,
+        path: Path = Path("."),
+        glob: str = "**/*",
+        regex: bool = False,
+        max_matches: int | None = None,
+    ) -> tuple[SearchMatch, ...]:
+        if max_matches is not None and max_matches < 1:
+            raise ValueError("max_matches must be positive")
+        scope = self.resolve(path)
+        candidates = (scope,) if scope.is_file() else sorted(scope.glob(glob))
+        matcher = re.compile(pattern) if regex else None
         matches: list[SearchMatch] = []
-        for path in self._root.glob(glob):
-            if not path.is_file():
+        for candidate in candidates:
+            if not candidate.is_file():
                 continue
             try:
-                content = _read_text(path)
+                content = _read_text(candidate)
             except UnicodeError:
                 continue
             for number, line in enumerate(content.splitlines(), start=1):
-                if pattern in line:
-                    matches.append(SearchMatch(path.relative_to(self._root), TextLine(number, line)))
+                if (matcher.search(line) if matcher else pattern in line):
+                    matches.append(SearchMatch(candidate.relative_to(self._root), TextLine(number, line)))
+                    if max_matches is not None and len(matches) >= max_matches:
+                        return tuple(matches)
         return tuple(matches)
+
+    def find_files(
+        self, pattern: str, *, path: Path = Path("."), max_results: int | None = None
+    ) -> tuple[Path, ...]:
+        if max_results is not None and max_results < 1:
+            raise ValueError("max_results must be positive")
+        scope = self.resolve(path)
+        candidates = (scope,) if scope.is_file() else sorted(scope.rglob("*"))
+        results = [
+            candidate.relative_to(self._root)
+            for candidate in candidates
+            if candidate.is_file() and fnmatch.fnmatch(candidate.name, pattern)
+        ]
+        return tuple(results if max_results is None else results[:max_results])
 
     def write(self, path: Path, content: str) -> FileSnapshot:
         resolved = self.resolve(path)

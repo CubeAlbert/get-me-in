@@ -40,3 +40,19 @@ class WorkspaceToolTests(unittest.TestCase):
 
         self.assertIsInstance(outcome, ToolSuccess)
         self.assertEqual(({"name": "note.txt", "type": "file"},), outcome.output["entries"])
+
+    def test_grep_and_file_search_respect_scope_and_limits(self) -> None:
+        self.workspace.write(Path("notes") / "one.txt", "needle one\nneedle two")
+        self.workspace.write(Path("other.txt"), "needle other")
+
+        grep = self.executor.execute(
+            "grep", "workspace_grep", {"pattern": r"needle\s+two", "path": "notes", "regex": True}, self.context
+        )
+        files = self.executor.execute(
+            "files", "workspace_search_file", {"pattern": "*.txt", "path": "notes", "max_results": 1}, self.context
+        )
+
+        expected_path = str(Path("notes") / "one.txt")
+        self.assertEqual({expected_path: [(2, "needle two")]}, grep.output["files"])
+        self.assertEqual((expected_path,), files.output["files"])
+        self.assertTrue(files.output["truncated"])
