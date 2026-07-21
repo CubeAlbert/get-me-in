@@ -16,6 +16,7 @@ from src.get_me_in.domain.tools import (
 from src.get_me_in.ports.workspace import WorkspacePort
 from src.get_me_in.ports.frontend import FrontendPort
 from src.get_me_in.ports.web_search import WebSearchPort
+from src.get_me_in.ports.external_files import ExternalFileReaderPort
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class ToolContext:
     workspace: WorkspacePort | None = None
     frontend: FrontendPort | None = None
     web_search: WebSearchPort | None = None
+    external_files: ExternalFileReaderPort | None = None
     approved: bool = False
     rejected: bool = False
 

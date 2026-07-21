@@ -7,6 +7,7 @@ from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
 from src.get_me_in.adapters.local_workspace import LocalWorkspace
 from src.get_me_in.adapters.os_frontend import OSFrontend
 from src.get_me_in.adapters.openai_web_search import OpenAIWebSearchAdapter
+from src.get_me_in.adapters.authorized_file_reader import AuthorizedFileReader
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
@@ -23,6 +24,7 @@ from src.get_me_in.tools.plan import build_plan_tools
 from src.get_me_in.tools.workspace import build_workspace_tools
 from src.get_me_in.tools.web import build_web_tools
 from src.get_me_in.tools.switch import build_switch_tools
+from src.get_me_in.tools.customer_file import build_customer_file_tools
 
 
 def build_application(
@@ -60,9 +62,10 @@ def build_application(
     workspace = LocalWorkspace(settings.workspace_dir)
     frontend = OSFrontend()
     web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
+    external_files = AuthorizedFileReader()
     plan_service = PlanService(id_generator)
     tool_executor = ToolExecutor(
-        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools()))
+        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools()))
     )
     runtime_llm = llm or OpenAILLMAdapter(
         api_key=settings.openai_api_key,
@@ -89,6 +92,7 @@ def build_application(
             workspace=workspace,
             frontend=frontend,
             web_search=web_search,
+            external_files=external_files,
         ),
     )
     return Application(
