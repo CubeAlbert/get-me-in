@@ -71,9 +71,31 @@ class RuntimeTests(unittest.TestCase):
         self.assertIsInstance(cancelled[-1], Cancelled)
         self.assertIsInstance(completed[-1], Completed)
 
+    def test_cancellation_during_completion_allows_the_next_request(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [_cancel_during_completion, '{"content": "after cancellation"}']
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        cancelled = runtime.handle(UserMessage("first"))
+        completed = runtime.handle(UserMessage("second"))
+
+        self.assertIsInstance(cancelled[-1], Cancelled)
+        self.assertIsInstance(completed[-1], Completed)
+
+    def test_format_repair_respects_max_rounds(self) -> None:
+        runtime, _, temporary_dir = _runtime(["broken"], max_rounds=1)
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = runtime.handle(UserMessage("question"))
+
+        self.assertEqual("max_rounds_exceeded", events[-1].code)
+
 
 def _runtime(
     responses: list[object],
+    *,
+    max_rounds: int = 2,
 ) -> tuple[AgentRuntime, "_FakeLlm", tempfile.TemporaryDirectory[str]]:
     temporary_dir = tempfile.TemporaryDirectory()
     root = Path(temporary_dir.name) / "general_agent"
@@ -99,6 +121,7 @@ def _runtime(
         clock=_Clock(),
         id_generator=_Ids(),
         cancellation=CancellationToken(),
+        max_rounds=max_rounds,
     )
     return runtime, llm, temporary_dir
 
@@ -113,7 +136,14 @@ class _FakeLlm:
         response = self._responses.pop(0)
         if isinstance(response, Exception):
             raise response
+        if callable(response):
+            response(cancellation)
         return LLMResult(content=response)
+
+
+def _cancel_during_completion(cancellation: CancellationSignal) -> str:
+    cancellation.cancel()
+    return '{"content": "discarded"}'
 
 
 class _Clock:
