@@ -143,6 +143,7 @@
 - [决策 133 — Spinner 计时排除 UIBridge 等待时长](#决策-133--spinner-计时排除-uibridge-等待时长)
 - [决策 134 — SessionId 统一：SaveManager & dumper 共享会话 ID](#决策-134--sessionid-统一savemanager--dumper-共享会话-id)
 - [决策 135 — 发送 LLM 消息剥离 thinking + 修正 input format role](#决策-135--发送-llm-消息剥离-thinking--修正-input-format-role)
+- [决策 136 — 不暴露 LLM 原生 reasoning_content](#决策-136--不暴露-llm-原生-reasoning_content)
 
 ---
 
@@ -1665,7 +1666,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 74 — 退出清理统一入口：Lifecycle 模块
+### 决策 74 — 退出清理统一入口：Lifecycle 模块
 
 **背景：**
 - M4 阶段实现了 `build_memories(async_mode)` 后台记忆固化，使用 daemon 线程
@@ -1694,7 +1695,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 75 — BaseAgent LLM 调用默认强制 JSON 输出
+### 决策 75 — BaseAgent LLM 调用默认强制 JSON 输出
 
 **背景：**
 - Agent LLM 输出格式由 `general_agent/06_output_format.md` 定义为 flat JSON schema
@@ -1721,7 +1722,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 76 — LLM Thinking 可配置开关
+### 决策 76 — LLM Thinking 可配置开关
 
 **背景：**
 - commit `21205f2` 引入了 `LLM_THINKING_ENABLED` 环境变量和对应的 `extra_body` 注入逻辑
@@ -1754,7 +1755,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 77 — JSON 解析增强：json-repair + 换行转义 + 提示注入节制
+### 决策 77 — JSON 解析增强：json-repair + 换行转义 + 提示注入节制
 
 **背景：**
 - LLM 输出中包含多行文本时，`message` 字段内的物理换行未被转义为 `\n`，导致 `json.loads()` 解析失败（报错后 LLM 重试浪费 token 和轮数）
@@ -1785,7 +1786,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 78 — Agent 切换机制：Tool-based 异步工具调用模型
+### 决策 78 — Agent 切换机制：Tool-based 异步工具调用模型
 
 **背景：** 主 Agent 需要调度子 Agent 执行专业任务（如面试模拟），并在子任务完成后收回控制权。切换时需要携带上下文（用户目标、历史背景等），子 Agent 完成工作后需要将总结带回主 Agent，使主 Agent 能继续决策。需要设计一个保证主 Agent 上下文完整性、子 Agent 无状态的切换机制。
 
@@ -1816,7 +1817,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 79 — `/exit_sub` 主 Agent 前台时报错
+### 决策 79 — `/exit_sub` 主 Agent 前台时报错
 
 **背景：** `/exit_sub` 仅在子 Agent 会话中有意义。在主 Agent 前台时用户误输入，需要明确的错误反馈。后续可考虑动态隐藏命令，但当前阶段以简单明确为优先。
 
@@ -1833,7 +1834,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 80 — 子 Agent 列表 prompt 注入：{{SUB_AGENTS_LIST}} 占位符 + 模板重排
+### 决策 80 — 子 Agent 列表 prompt 注入：{{SUB_AGENTS_LIST}} 占位符 + 模板重排
 
 **背景：** 主 Agent 的 system prompt 需要动态注入子 Agent 列表（名称、描述、职责、约束），让 LLM 知道有哪些子 Agent 可用、何时该切换。此内容对子 Agent 无意义（子 Agent 不能调度其他 Agent）。
 
@@ -1864,7 +1865,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 81 — Agent 稳定标识 `_get_agent_key()` 与 ToolRegistry `agent_key` 参数
+### 决策 81 — Agent 稳定标识 `_get_agent_key()` 与 ToolRegistry `agent_key` 参数
 
 **背景：** `switch_to_subagent` 需要 `agent=["main"]` 仅对主 Agent 可见，但 `ToolRegistry.get_for()` 使用 `_get_agent_name()`（展示名"程序员求职助手路由Agent"）做匹配，无法用稳定的短标识过滤。同时 `switch_to_mainagent` 需要对所有子 Agent 可见但对 MainAgent 不可见，需要"非 main"语义。
 
@@ -1883,7 +1884,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 82 — CONFIRM 拒绝 → 下次 USER_INPUT 携带拒绝信息
+### 决策 82 — CONFIRM 拒绝 → 下次 USER_INPUT 携带拒绝信息
 
 **背景：** 用户拒绝工具审批（如拒绝 switch_to_subagent）后，TOOL_CALL 已写入 `_history` 但无 TOOL_CALL_RESULT 闭环。直接删除 TOOL_CALL 会丢失上下文。需要在用户下次输入时告知 LLM 上一条工具调用被拒绝了。
 
@@ -1905,7 +1906,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ---
 
-## 决策 83 — switch tool 必须声明 input_schema
+### 决策 83 — switch tool 必须声明 input_schema
 
 **背景：** `@tool` 装饰器通过 `input_schema` 参数声明工具参数，`inspect.signature` 仅用于填充 `type`/`required`。初次实现 `switch_to_subagent` 时未传 `input_schema`，导致 `arguments_schema` 为空 `{}`，LLM 无法得知参数定义。
 
@@ -2918,3 +2919,21 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 修改 `to_json()` 加 `exclude_thinking` 参数 —— 增加方法签名复杂度，且 `to_json()` 在两处调用（LLM 发送 + dump）需求不同，调用方控制更清晰
 - 在 LLMClient 层过滤 —— 职责越界，LLMClient 不应理解 Message 内部结构
+
+---
+
+### 决策 136 — 不暴露 LLM 原生 reasoning_content
+
+**背景：** DeepSeek API 在 `chat.completions` 响应中提供 `reasoning_content` 字段（原生推理内容），比当前 LLM 在 JSON 中手写 `thinking` 字段更准确且省 token。考虑过让 `LLMClient` 捕获 `reasoning_content` 并替换 `Message.thinking`。
+
+**决策：** **不做。** 保持当前方案——LLM 推理过程仅在 `Message.thinking` 中存储（由 `07_output_format.md` 的 JSON `thinking` 字段承载），`_to_openai()` 发送前剥离。`LLMClient` 层不捕获 `reasoning_content`。
+
+**理由：**
+
+- **安全风险**：`reasoning_content` 是模型的原生推理过程，可能包含系统提示词（system prompt）的片段或推导。将其暴露给用户（通过 `SHOW_THINKING` Panel 渲染或 dump 导出）会泄露系统设计细节和约束，存在 prompt injection 风险。
+- **省 token 不如此重要**：JSON `thinking` 字段占用 token 但可控（`_to_openai()` 已剥离，不会累积到上下文窗口）。与安全风险相比，这点 token 开销可接受。
+- **JSON thinking 更可控**：LLM 在 JSON 中手写的 `thinking` 是面向用户的摘要，不会包含敏感的系统提示词推导过程。
+
+**曾考虑的替代方案：**
+
+- `LLMClient` 新增 `chat_pro_thinking()` 返回 `ChatResult(content, reasoning)`，`BaseAgent` 用 `reasoning_content` 填充 `Message.thinking`，同时从 `07_output_format.md` 删除 `thinking` 字段 —— 实施后回滚，理由如上。
