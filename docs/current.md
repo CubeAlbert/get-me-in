@@ -2,13 +2,13 @@
 
 **当前阶段：** R3: Tool Runtime、Plan 与 Workspace
 
-**当前任务：** 迁移/合并 10 个 workspace tools，保持外部功能等价
+**当前任务：** 迁移或重新定义 web_search tool
 
-**当前子任务：** 迁移 revision-aware `workspace_edit` 与通过 Frontend/OS adapter 的 `workspace_open`（🔄）
+**当前子任务：** 定义 provider-neutral WebSearchPort 与 web_search tool 的失败、审批及结果语义（🔄）
 
 **当前阻塞：** 无；旧 CLI 的真实终端 smoke C01/C05 仍待人工验证，不阻塞 R3
 
-**下一步：** 以 read 返回的 revision 实现精确 edit，并定义 Frontend/OS port 迁移 workspace_open；随后迁移 web_search、switch、customer file、RAG stub 与 Resume tools，并更新 25 工具矩阵
+**下一步：** 迁移或重新定义 web_search；随后以 typed handoff/interaction 迁移 switch tools，再处理 customer file、RAG stub 与 Resume tools，并更新 25 工具矩阵
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -23,3 +23,4 @@
 141. **保留静态 prompt 的 JSON 在应用边界归一化** — ModelReplyParser 同时接受 v2 `content/tool_call` 与保留 prompt 的 `message/event_type/tool/event_payload` 形状，内部只输出 v2 ModelReply；不引入旧 Message 或旧 Runtime 协议
 142. **system tools 通过显式 Clock 与 WorkspacePort 注入实现** — 当前时间取自注入的 Clock，工作目录由 ToolContext 中的受限 WorkspacePort 根目录解析；不再读取全局 config 或触发 import-time 注册
 143. **Runtime 直接执行显式 Catalog 工具，应用独立装配 Workspace** — AgentRuntime 通过 ToolExecutor 执行 capability 允许的工具；审批经 Approve/Reject 闭合，业务失败作为 ToolFinished 结果交回模型。每个 Application 使用显式 WORKSPACE_DIR（默认 `data/workspace/`）及独立 PlanService，不复用旧 `data/temp/` 或模块级上下文
+144. **文件预览经 FrontendPort 处理** — workspace_open 仅校验受限工作区路径并调用注入的 FrontendPort；OS 默认打开器位于 adapter，永不由 domain 或 tool 直接启动

@@ -3108,3 +3108,24 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 保留 R2 的外部 ToolResult 作为正式执行入口 —— CLI 仍需理解工具私有状态，已拒绝。
 - 继续使用旧 WORKING_DIR/data/temp —— 会迁移被 R-D6 排除的运行状态边界，已拒绝。
+
+---
+
+### 决策 144 — 文件预览经 FrontendPort 处理
+
+**背景：** 旧 `workspace_open` 在工具 handler 内按操作系统分支直接启动 GUI。该副作用既无法由测试替身替换，也让 tool/domain 层掌握操作系统细节。
+
+**决策：**
+
+- 定义 FrontendPort.open_file(path)，workspace_open 仅检查受限工作区内的文件并调用该 port。
+- OSFrontend 在 adapter 层按 Windows/macOS/Linux 调用默认打开器；composition root 显式装配它。
+- workspace_open 保持 ALWAYS 审批，frontend 缺失或打开失败返回结构化 ToolFailure。
+
+**理由：**
+
+- 工具逻辑可用 fake FrontendPort 测试，而不在自动化测试中打开用户程序。
+- 操作系统副作用集中在 adapter，符合 v2 的依赖方向和可替换性。
+
+**曾考虑的替代方案：**
+
+- 在 workspace tool 内直接使用 os.startfile/subprocess —— 耦合操作系统并难以测试，已拒绝。
