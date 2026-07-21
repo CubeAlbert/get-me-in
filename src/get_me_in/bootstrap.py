@@ -9,6 +9,7 @@ from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.prompt_renderer import PromptRenderer
+from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
@@ -16,6 +17,7 @@ from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 from src.get_me_in.ports.llm import LLMPort, ModelProfile
 from src.get_me_in.tools.system import build_system_tools
+from src.get_me_in.tools.plan import build_plan_tools
 
 
 def build_application(
@@ -51,7 +53,8 @@ def build_application(
     id_generator = UuidGenerator()
     cancellation = CancellationToken()
     workspace = LocalWorkspace(settings.workspace_dir)
-    tool_executor = ToolExecutor(ToolCatalog(build_system_tools(clock)))
+    plan_service = PlanService(id_generator)
+    tool_executor = ToolExecutor(ToolCatalog((*build_system_tools(clock), *build_plan_tools())))
     runtime_llm = llm or OpenAILLMAdapter(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
@@ -73,6 +76,7 @@ def build_application(
             session_id="application",
             agent_key=AgentKey.MAIN,
             cancellation=cancellation,
+            plan=plan_service,
             workspace=workspace,
         ),
     )
