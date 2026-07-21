@@ -8,6 +8,7 @@ from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.ports.clock import Clock
 from src.get_me_in.ports.ids import IdGenerator
+from src.get_me_in.ports.web_search import WebSearchPort
 
 
 class Application:
@@ -22,6 +23,7 @@ class Application:
         id_generator: IdGenerator,
         cancellation: CancellationToken,
         runtime: AgentRuntime,
+        web_search: WebSearchPort | None = None,
     ) -> None:
         self.settings = settings
         self.catalog = catalog
@@ -29,6 +31,7 @@ class Application:
         self.id_generator = id_generator
         self.cancellation = cancellation
         self._runtime = runtime
+        self._web_search = web_search
         self._closed = False
 
     def handle(self, command: RuntimeCommand) -> tuple[RuntimeEvent, ...]:
@@ -40,3 +43,5 @@ class Application:
     def close(self) -> None:
         self._closed = True
         self._runtime.close()
+        if self._web_search is not None:
+            self._web_search.close()

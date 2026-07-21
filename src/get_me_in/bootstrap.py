@@ -6,6 +6,7 @@ from src.get_me_in.adapters.system import SystemClock, UuidGenerator
 from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
 from src.get_me_in.adapters.local_workspace import LocalWorkspace
 from src.get_me_in.adapters.os_frontend import OSFrontend
+from src.get_me_in.adapters.openai_web_search import OpenAIWebSearchAdapter
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
@@ -20,6 +21,7 @@ from src.get_me_in.ports.llm import LLMPort, ModelProfile
 from src.get_me_in.tools.system import build_system_tools
 from src.get_me_in.tools.plan import build_plan_tools
 from src.get_me_in.tools.workspace import build_workspace_tools
+from src.get_me_in.tools.web import build_web_tools
 
 
 def build_application(
@@ -56,9 +58,10 @@ def build_application(
     cancellation = CancellationToken()
     workspace = LocalWorkspace(settings.workspace_dir)
     frontend = OSFrontend()
+    web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
     plan_service = PlanService(id_generator)
     tool_executor = ToolExecutor(
-        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools()))
+        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools()))
     )
     runtime_llm = llm or OpenAILLMAdapter(
         api_key=settings.openai_api_key,
@@ -84,6 +87,7 @@ def build_application(
             plan=plan_service,
             workspace=workspace,
             frontend=frontend,
+            web_search=web_search,
         ),
     )
     return Application(
@@ -93,4 +97,5 @@ def build_application(
         id_generator=id_generator,
         cancellation=cancellation,
         runtime=runtime,
+        web_search=web_search,
     )

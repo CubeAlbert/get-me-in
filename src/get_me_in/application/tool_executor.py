@@ -15,6 +15,7 @@ from src.get_me_in.domain.tools import (
 )
 from src.get_me_in.ports.workspace import WorkspacePort
 from src.get_me_in.ports.frontend import FrontendPort
+from src.get_me_in.ports.web_search import WebSearchPort
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class ToolContext:
     plan: PlanService | None = None
     workspace: WorkspacePort | None = None
     frontend: FrontendPort | None = None
+    web_search: WebSearchPort | None = None
     approved: bool = False
     rejected: bool = False
 
