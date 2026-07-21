@@ -3085,3 +3085,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 保留对旧 config.WORKING_DIR 的读取 —— 会把 v1 全局配置依赖带入 v2，已拒绝。
 - 在工具模块 import 时注册到全局 ToolRegistry —— 违反 R-D2，已拒绝。
+
+---
+
+### 决策 143 — Runtime 直接执行显式 Catalog 工具，应用独立装配 Workspace
+
+**背景：** R2 的 `available_tools` 只验证“暂停后由外部提交 ToolResult”的过渡协议，无法提供真实工具发现、capability 校验或 handler 执行。旧工具同时依赖全局 `WORKING_DIR=data/temp/` 和模块级 Plan context，违反 v2 实例隔离原则。
+
+**决策：**
+
+- AgentRuntime 通过显式 ToolExecutor 执行 ToolCatalog 中的工具，并以 AgentSpec capabilities 强制校验可见性。
+- 需要审批的工具先产生 ApprovalRequested；Approve/Reject 用同一 call_id 重新闭合执行。业务失败序列化为 ToolFinished 结果后继续交给模型修复，不把它误作 Runtime 致命失败。
+- composition root 为每个 Application 创建 LocalWorkspace、PlanService 和 ToolContext；新增 WORKSPACE_DIR，默认 `data/workspace/` 并忽略运行内容，不读取旧 `data/temp/`。
+
+**理由：**
+
+- 工具目录、审批与执行的事实来源统一在显式对象中，消除 R2 过渡集合和全局注册。
+- 每个 Application 的工作区与计划状态可独立测试，后续 R4 Session 只需接管这些实例状态。
+- 业务工具失败仍可让模型调整参数或策略，避免过早终止用户任务。
+
+**曾考虑的替代方案：**
+
+- 保留 R2 的外部 ToolResult 作为正式执行入口 —— CLI 仍需理解工具私有状态，已拒绝。
+- 继续使用旧 WORKING_DIR/data/temp —— 会迁移被 R-D6 排除的运行状态边界，已拒绝。
