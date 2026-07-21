@@ -6,11 +6,14 @@ import tempfile
 import unittest
 
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.application.commands import Cancel, ToolResult, UserMessage
-from src.get_me_in.application.events import Cancelled, Completed, Failed, ToolFinished, ToolStarted
+from src.get_me_in.application.commands import Approve, Cancel, Reject, ToolResult, UserMessage
+from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, Failed, ToolFinished, ToolStarted
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.runtime import AgentRuntime
+from src.get_me_in.application.tool_catalog import ToolCatalog
+from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
+from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
 
 
@@ -42,43 +45,101 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertEqual("invalid_model_reply", events[-1].code)
 
-    def test_unknown_tool_emits_typed_tool_and_failure_events(self) -> None:
-        runtime, _, temporary_dir = _runtime(['{"content": "", "tool_call": {"name": "missing"}}'])
+    def test_unknown_catalog_tool_returns_structured_result_to_model(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [
+                '{"content": "", "tool_call": {"name": "missing"}}',
+                '{"content": "recovered"}',
+            ],
+            tool_executor=_executor(_tool("other")),
+        )
         self.addCleanup(temporary_dir.cleanup)
 
         events = runtime.handle(UserMessage("question"))
 
         self.assertTrue(any(isinstance(event, ToolStarted) for event in events))
         self.assertTrue(any(isinstance(event, ToolFinished) for event in events))
-        self.assertEqual("unknown_tool", events[-1].code)
+        finished = next(event for event in events if isinstance(event, ToolFinished))
+        self.assertIn('"code": "unknown_tool"', finished.output)
+        self.assertIsInstance(events[-1], Completed)
 
-    def test_known_tool_pauses_then_resumes_after_matching_result(self) -> None:
+    def test_catalog_tool_executes_and_resumes_model(self) -> None:
         runtime, _, temporary_dir = _runtime(
             [
                 '{"content": "", "tool_call": {"name": "search"}}',
                 '{"content": "final answer"}',
             ],
-            available_tools=frozenset({"search"}),
+            tool_executor=_executor(_tool("search")),
         )
         self.addCleanup(temporary_dir.cleanup)
 
-        started = runtime.handle(UserMessage("question"))
-        call_id = started[-1].call_id
-        resumed = runtime.handle(ToolResult(call_id=call_id, output="search result"))
+        events = runtime.handle(UserMessage("question"))
 
-        self.assertIsInstance(started[-1], ToolStarted)
-        self.assertIsInstance(resumed[0], ToolFinished)
-        self.assertIsInstance(resumed[-1], Completed)
+        self.assertTrue(any(isinstance(event, ToolStarted) for event in events))
+        self.assertTrue(any(isinstance(event, ToolFinished) for event in events))
+        self.assertIsInstance(events[-1], Completed)
 
-    def test_tool_result_rejects_the_wrong_call_id(self) -> None:
+    def test_approval_round_trip_executes_after_explicit_approval(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [
+                '{"content": "", "tool_call": {"name": "delete"}}',
+                '{"content": "final answer"}',
+            ],
+            tool_executor=_executor(_tool("delete", confirmation=ConfirmationMode.ALWAYS)),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        requested = runtime.handle(UserMessage("question"))
+        approved = runtime.handle(Approve(requested[-1].call_id))
+
+        self.assertIsInstance(requested[-1], ApprovalRequested)
+        self.assertTrue(any(isinstance(event, ToolFinished) for event in approved))
+        self.assertIsInstance(approved[-1], Completed)
+
+    def test_rejection_returns_tool_failure_to_the_model(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [
+                '{"content": "", "tool_call": {"name": "delete"}}',
+                '{"content": "declined"}',
+            ],
+            tool_executor=_executor(_tool("delete", confirmation=ConfirmationMode.ALWAYS)),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        requested = runtime.handle(UserMessage("question"))
+        rejected = runtime.handle(Reject(requested[-1].call_id))
+
+        self.assertIsInstance(rejected[0], ToolFinished)
+        self.assertIn('"code": "rejected"', rejected[0].output)
+        self.assertIsInstance(rejected[-1], Completed)
+
+    def test_catalog_filters_tools_by_agent_capability(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [
+                '{"content": "", "tool_call": {"name": "resume_read"}}',
+                '{"content": "not available"}',
+            ],
+            tool_executor=_executor(
+                _tool("resume_read", capabilities=frozenset({Capability.RESUME_WORKSPACE}))
+            ),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = runtime.handle(UserMessage("question"))
+
+        finished = next(event for event in events if isinstance(event, ToolFinished))
+        self.assertIn('"code": "tool_not_permitted"', finished.output)
+        self.assertIsInstance(events[-1], Completed)
+
+    def test_approval_rejects_the_wrong_call_id(self) -> None:
         runtime, _, temporary_dir = _runtime(
             ['{"content": "", "tool_call": {"name": "search"}}'],
-            available_tools=frozenset({"search"}),
+            tool_executor=_executor(_tool("search", confirmation=ConfirmationMode.ALWAYS)),
         )
         self.addCleanup(temporary_dir.cleanup)
         runtime.handle(UserMessage("question"))
 
-        events = runtime.handle(ToolResult(call_id="wrong", output="result"))
+        events = runtime.handle(Approve(call_id="wrong"))
 
         self.assertEqual("tool_call_mismatch", events[-1].code)
 
@@ -126,7 +187,7 @@ def _runtime(
     responses: list[object],
     *,
     max_rounds: int = 2,
-    available_tools: frozenset[str] = frozenset(),
+    tool_executor: ToolExecutor | None = None,
 ) -> tuple[AgentRuntime, "_FakeLlm", tempfile.TemporaryDirectory[str]]:
     temporary_dir = tempfile.TemporaryDirectory()
     root = Path(temporary_dir.name) / "general_agent"
@@ -153,7 +214,8 @@ def _runtime(
         id_generator=_Ids(),
         cancellation=CancellationToken(),
         max_rounds=max_rounds,
-        available_tools=available_tools,
+        tool_executor=tool_executor,
+        tool_context=ToolContext("session", AgentKey.MAIN, CancellationToken()),
     )
     return runtime, llm, temporary_dir
 
@@ -193,3 +255,22 @@ class _Ids:
     def new_id(self) -> str:
         self._number += 1
         return f"id-{self._number}"
+
+
+def _executor(definition: ToolDefinition) -> ToolExecutor:
+    return ToolExecutor(ToolCatalog((definition,)))
+
+
+def _tool(
+    name: str,
+    *,
+    confirmation: ConfirmationMode = ConfirmationMode.NEVER,
+    capabilities: frozenset[Capability] = frozenset(),
+) -> ToolDefinition:
+    return ToolDefinition(
+        name=name,
+        description=name,
+        schema=ToolSchema(properties={}),
+        policy=ToolPolicy(required_capabilities=capabilities, confirmation=confirmation),
+        handler=lambda arguments, context: ToolSuccess({"tool": name}),
+    )

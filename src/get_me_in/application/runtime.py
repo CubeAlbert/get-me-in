@@ -1,17 +1,20 @@
 """Synchronous, typed state machine for one declarative agent."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import (
+    Approve,
     Cancel,
+    Reject,
     RuntimeCommand,
     ToolResult,
     UserMessage,
 )
 from src.get_me_in.application.events import (
+    ApprovalRequested,
     Cancelled,
     Completed,
     Failed,
@@ -20,10 +23,12 @@ from src.get_me_in.application.events import (
     ToolFinished,
     ToolStarted,
 )
+from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.application.model_reply import ModelReplyParseError, ModelReplyParser
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.domain.agents import AgentSpec
 from src.get_me_in.domain.messages import ConversationEvent, EventKind, Role
+from src.get_me_in.domain.tools import ToolFailure, ToolInteraction, ToolOutcome, ToolSuccess
 from src.get_me_in.ports.clock import Clock
 from src.get_me_in.ports.ids import IdGenerator
 from src.get_me_in.ports.llm import LLMPort, LLMRequest, ModelProfile
@@ -48,6 +53,7 @@ class AgentState:
     rounds: int = 0
     pending_call_id: str | None = None
     pending_tool_name: str | None = None
+    pending_tool_arguments: str | None = None
 
 
 class AgentRuntime:
@@ -63,7 +69,8 @@ class AgentRuntime:
         id_generator: IdGenerator,
         cancellation: CancellationToken,
         max_rounds: int = 2,
-        available_tools: frozenset[str] = frozenset(),
+        tool_executor: ToolExecutor | None = None,
+        tool_context: ToolContext | None = None,
     ) -> None:
         if max_rounds < 1:
             raise ValueError("max_rounds must be at least one")
@@ -74,7 +81,8 @@ class AgentRuntime:
         self._id_generator = id_generator
         self._cancellation = cancellation
         self._max_rounds = max_rounds
-        self._available_tools = available_tools
+        self._tool_executor = tool_executor
+        self._tool_context = tool_context
         self._state = AgentState()
 
     def handle(self, command: RuntimeCommand) -> tuple[RuntimeEvent, ...]:
@@ -91,6 +99,10 @@ class AgentRuntime:
             return (Cancelled(command.reason),)
         if isinstance(command, ToolResult):
             return self._resume_after_tool(command)
+        if isinstance(command, Approve):
+            return self._approve_tool(command)
+        if isinstance(command, Reject):
+            return self._reject_tool(command)
         if not isinstance(command, UserMessage):
             return (
                 Failed(
@@ -159,32 +171,36 @@ class AgentRuntime:
                 ),
                 kind=EventKind.TOOL_CALL,
             )
-            if reply.tool_name in self._available_tools:
-                self._state = AgentState(
-                    phase=RuntimePhase.WAITING_FOR_TOOL,
-                    history=(*self._state.history, tool_call_event),
-                    rounds=self._state.rounds,
-                    pending_call_id=call_id,
-                    pending_tool_name=reply.tool_name,
-                )
-                return (*events, ToolStarted(call_id=call_id, tool_name=reply.tool_name))
             self._state = AgentState(
-                phase=RuntimePhase.FAILED,
+                phase=RuntimePhase.READY,
                 history=(*self._state.history, tool_call_event),
                 rounds=self._state.rounds,
+            )
+            if self._tool_executor is None or self._tool_context is None:
+                return (
+                    *events,
+                    ToolStarted(call_id=call_id, tool_name=reply.tool_name),
+                    ToolFinished(
+                        call_id=call_id,
+                        tool_name=reply.tool_name,
+                        output="Tool execution is not configured",
+                    ),
+                    Failed(
+                        code="tool_runtime_unconfigured",
+                        message="AgentRuntime requires a ToolExecutor and ToolContext",
+                    ),
+                )
+            outcome = self._tool_executor.execute(
+                call_id,
+                reply.tool_name,
+                reply.tool_arguments or {},
+                self._tool_context,
+                self._spec.capabilities,
             )
             return (
                 *events,
                 ToolStarted(call_id=call_id, tool_name=reply.tool_name),
-                ToolFinished(
-                    call_id=call_id,
-                    tool_name=reply.tool_name,
-                    output="R2 has no ToolCatalog",
-                ),
-                Failed(
-                    code="unknown_tool",
-                    message=f"Tool {reply.tool_name!r} is not available in R2",
-                ),
+                *self._handle_tool_outcome(call_id, reply.tool_name, reply.tool_arguments or {}, outcome),
             )
 
         assistant_event = self._conversation_event(Role.ASSISTANT, reply.content)
@@ -230,6 +246,82 @@ class AgentRuntime:
             ),
             *self._complete_once(),
         )
+
+    def _approve_tool(self, command: Approve) -> tuple[RuntimeEvent, ...]:
+        if command.call_id != self._state.pending_call_id:
+            return (Failed(code="tool_call_mismatch", message="Approval does not match the pending call"),)
+        return self._resume_pending_tool(approved=True)
+
+    def _reject_tool(self, command: Reject) -> tuple[RuntimeEvent, ...]:
+        if command.call_id != self._state.pending_call_id:
+            return (Failed(code="tool_call_mismatch", message="Rejection does not match the pending call"),)
+        return self._resume_pending_tool(rejected=True)
+
+    def _resume_pending_tool(
+        self,
+        *,
+        approved: bool = False,
+        rejected: bool = False,
+    ) -> tuple[RuntimeEvent, ...]:
+        if self._state.phase is not RuntimePhase.WAITING_FOR_TOOL:
+            return (Failed(code="unexpected_tool_decision", message="Runtime is not waiting for tool approval"),)
+        if self._tool_executor is None or self._tool_context is None:
+            return (Failed(code="tool_runtime_unconfigured", message="Tool execution is not configured"),)
+        call_id = self._state.pending_call_id
+        tool_name = self._state.pending_tool_name
+        arguments = self._state.pending_tool_arguments
+        assert call_id is not None and tool_name is not None and arguments is not None
+        outcome = self._tool_executor.execute(
+            call_id,
+            tool_name,
+            json.loads(arguments),
+            replace(self._tool_context, approved=approved, rejected=rejected),
+            self._spec.capabilities,
+        )
+        return self._handle_tool_outcome(call_id, tool_name, json.loads(arguments), outcome)
+
+    def _handle_tool_outcome(
+        self,
+        call_id: str,
+        tool_name: str,
+        arguments: dict[str, object],
+        outcome: ToolOutcome,
+    ) -> tuple[RuntimeEvent, ...]:
+        if isinstance(outcome, ToolInteraction):
+            if outcome.kind != "approval":
+                return (Failed(code="unsupported_interaction", message=f"Unsupported tool interaction: {outcome.kind}"),)
+            self._state = AgentState(
+                phase=RuntimePhase.WAITING_FOR_TOOL,
+                history=self._state.history,
+                rounds=self._state.rounds,
+                pending_call_id=call_id,
+                pending_tool_name=tool_name,
+                pending_tool_arguments=json.dumps(arguments, ensure_ascii=False, sort_keys=True),
+            )
+            return (ApprovalRequested(call_id, outcome.prompt),)
+        if isinstance(outcome, ToolSuccess):
+            return self._finish_tool(call_id, tool_name, outcome.output)
+        assert isinstance(outcome, ToolFailure)
+        return self._finish_tool(
+            call_id,
+            tool_name,
+            {"code": outcome.code, "message": outcome.message, "suggestion": outcome.suggestion},
+        )
+
+    def _finish_tool(
+        self,
+        call_id: str,
+        tool_name: str,
+        output: object,
+    ) -> tuple[RuntimeEvent, ...]:
+        rendered = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False, sort_keys=True)
+        tool_event = self._conversation_event(Role.TOOL, rendered, kind=EventKind.TOOL_RESULT)
+        self._state = AgentState(
+            phase=RuntimePhase.READY,
+            history=(*self._state.history, tool_event),
+            rounds=self._state.rounds,
+        )
+        return (ToolFinished(call_id, tool_name, rendered), *self._complete_once())
 
     def _request_reply(
         self,

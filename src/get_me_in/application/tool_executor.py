@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.tool_catalog import ToolCatalog
-from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.agents import AgentKey, Capability
 from src.get_me_in.domain.tools import (
     ConfirmationMode,
     ToolFailure,
@@ -41,6 +41,7 @@ class ToolExecutor:
         tool_name: str,
         arguments: Mapping[str, object],
         context: ToolContext,
+        capabilities: frozenset[Capability] | None = None,
     ) -> ToolOutcome:
         del call_id
         if context.cancellation.is_cancelled:
@@ -51,6 +52,8 @@ class ToolExecutor:
             definition = self._catalog.get(tool_name)
         except KeyError:
             return ToolFailure("unknown_tool", f"Unknown tool: {tool_name}")
+        if capabilities is not None and not definition.policy.required_capabilities <= capabilities:
+            return ToolFailure("tool_not_permitted", f"Tool {tool_name} is not available to this agent")
         if (
             definition.policy.confirmation is ConfirmationMode.ALWAYS
             and not context.approved

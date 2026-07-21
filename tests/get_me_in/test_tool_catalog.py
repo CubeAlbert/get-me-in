@@ -68,6 +68,24 @@ class ToolExecutorTests(unittest.TestCase):
         self.assertEqual("rejected", executor.execute("call", "echo", {"text": "x"}, rejected).code)
         self.assertEqual("cancelled", executor.execute("call", "echo", {"text": "x"}, cancelled).code)
 
+    def test_execution_respects_agent_capabilities(self) -> None:
+        definition = _tool(
+            "resume_read",
+            capabilities=frozenset({Capability.RESUME_WORKSPACE}),
+        )
+        executor = ToolExecutor(ToolCatalog((definition,)))
+
+        outcome = executor.execute(
+            "call",
+            "resume_read",
+            {"text": "x"},
+            self.context,
+            frozenset({Capability.ROUTE}),
+        )
+
+        self.assertIsInstance(outcome, ToolFailure)
+        self.assertEqual("tool_not_permitted", outcome.code)
+
     def test_context_exposes_plan_and_workspace_to_handlers(self) -> None:
         plan = PlanService(_Ids())
         workspace = object()
