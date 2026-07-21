@@ -6,14 +6,15 @@ import tempfile
 import unittest
 
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.application.commands import Approve, Cancel, Reject, ToolResult, UserMessage
-from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, Failed, ToolFinished, ToolStarted
+from src.get_me_in.application.commands import Approve, Cancel, Reject, SubmitSelection, ToolResult, UserMessage
+from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, Failed, Handoff, SelectionRequested, ToolFinished, ToolStarted
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolPolicy, ToolSchema, ToolSuccess
+from src.get_me_in.tools.switch import build_switch_tools
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
 
 
@@ -130,6 +131,28 @@ class RuntimeTests(unittest.TestCase):
         finished = next(event for event in events if isinstance(event, ToolFinished))
         self.assertIn('"code": "tool_not_permitted"', finished.output)
         self.assertIsInstance(events[-1], Completed)
+
+    def test_selection_interaction_resumes_with_selected_value(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            ['{"content": "", "tool_call": {"name": "provide_choices", "arguments": {"question": "pick", "choices": ["a", "b"]}}}', '{"content": "selected"}'],
+            tool_executor=ToolExecutor(ToolCatalog(build_switch_tools())),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+        requested = runtime.handle(UserMessage("question"))
+        completed = runtime.handle(SubmitSelection(requested[-1].request_id, "b"))
+        self.assertIsInstance(requested[-1], SelectionRequested)
+        self.assertIsInstance(completed[-1], Completed)
+
+    def test_subagent_switch_emits_typed_handoff(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            ['{"content": "", "tool_call": {"name": "switch_to_subagent", "arguments": {"agent_name": "resume", "context": "resume help"}}}'],
+            tool_executor=ToolExecutor(ToolCatalog(build_switch_tools())),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+        requested = runtime.handle(UserMessage("question"))
+        events = runtime.handle(Approve(requested[-1].call_id))
+        self.assertIsInstance(events[-1], Handoff)
+        self.assertEqual(AgentKey.RESUME, events[-1].target)
 
     def test_approval_rejects_the_wrong_call_id(self) -> None:
         runtime, _, temporary_dir = _runtime(

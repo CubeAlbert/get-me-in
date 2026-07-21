@@ -9,12 +9,15 @@ from src.get_me_in.application.commands import (
     Approve,
     Cancel,
     Reject,
+    SubmitSelection,
     RuntimeCommand,
     ToolResult,
     UserMessage,
 )
 from src.get_me_in.application.events import (
     ApprovalRequested,
+    Handoff,
+    SelectionRequested,
     Cancelled,
     Completed,
     Failed,
@@ -28,7 +31,7 @@ from src.get_me_in.application.model_reply import ModelReplyParseError, ModelRep
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.domain.agents import AgentSpec
 from src.get_me_in.domain.messages import ConversationEvent, EventKind, Role
-from src.get_me_in.domain.tools import ToolFailure, ToolInteraction, ToolOutcome, ToolSuccess
+from src.get_me_in.domain.tools import ToolFailure, ToolHandoff, ToolInteraction, ToolOutcome, ToolSuccess
 from src.get_me_in.ports.clock import Clock
 from src.get_me_in.ports.ids import IdGenerator
 from src.get_me_in.ports.llm import LLMPort, LLMRequest, ModelProfile
@@ -54,6 +57,7 @@ class AgentState:
     pending_call_id: str | None = None
     pending_tool_name: str | None = None
     pending_tool_arguments: str | None = None
+    pending_interaction: str | None = None
 
 
 class AgentRuntime:
@@ -103,6 +107,8 @@ class AgentRuntime:
             return self._approve_tool(command)
         if isinstance(command, Reject):
             return self._reject_tool(command)
+        if isinstance(command, SubmitSelection):
+            return self._submit_selection(command)
         if not isinstance(command, UserMessage):
             return (
                 Failed(
@@ -280,6 +286,14 @@ class AgentRuntime:
         )
         return self._handle_tool_outcome(call_id, tool_name, json.loads(arguments), outcome)
 
+    def _submit_selection(self, command: SubmitSelection) -> tuple[RuntimeEvent, ...]:
+        if self._state.phase is not RuntimePhase.WAITING_FOR_TOOL or self._state.pending_interaction != "selection":
+            return (Failed(code="unexpected_selection", message="Runtime is not waiting for a selection"),)
+        if command.request_id != self._state.pending_call_id:
+            return (Failed(code="selection_mismatch", message="Selection does not match the pending request"),)
+        assert self._state.pending_tool_name is not None
+        return self._finish_tool(command.request_id, self._state.pending_tool_name, {"selected": command.value})
+
     def _handle_tool_outcome(
         self,
         call_id: str,
@@ -288,6 +302,16 @@ class AgentRuntime:
         outcome: ToolOutcome,
     ) -> tuple[RuntimeEvent, ...]:
         if isinstance(outcome, ToolInteraction):
+            if outcome.kind == "selection":
+                self._state = AgentState(
+                    phase=RuntimePhase.WAITING_FOR_TOOL,
+                    history=self._state.history,
+                    rounds=self._state.rounds,
+                    pending_call_id=call_id,
+                    pending_tool_name=tool_name,
+                    pending_interaction="selection",
+                )
+                return (SelectionRequested(call_id, outcome.prompt, outcome.choices),)
             if outcome.kind != "approval":
                 return (Failed(code="unsupported_interaction", message=f"Unsupported tool interaction: {outcome.kind}"),)
             self._state = AgentState(
@@ -297,8 +321,12 @@ class AgentRuntime:
                 pending_call_id=call_id,
                 pending_tool_name=tool_name,
                 pending_tool_arguments=json.dumps(arguments, ensure_ascii=False, sort_keys=True),
+                pending_interaction="approval",
             )
             return (ApprovalRequested(call_id, outcome.prompt),)
+        if isinstance(outcome, ToolHandoff):
+            self._state = AgentState(phase=RuntimePhase.COMPLETED, history=self._state.history, rounds=self._state.rounds)
+            return (Handoff(self._spec.key, outcome.target, outcome.context),)
         if isinstance(outcome, ToolSuccess):
             return self._finish_tool(call_id, tool_name, outcome.output)
         assert isinstance(outcome, ToolFailure)

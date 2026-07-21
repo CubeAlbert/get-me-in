@@ -22,6 +22,7 @@ from src.get_me_in.tools.system import build_system_tools
 from src.get_me_in.tools.plan import build_plan_tools
 from src.get_me_in.tools.workspace import build_workspace_tools
 from src.get_me_in.tools.web import build_web_tools
+from src.get_me_in.tools.switch import build_switch_tools
 
 
 def build_application(
@@ -61,7 +62,7 @@ def build_application(
     web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
     plan_service = PlanService(id_generator)
     tool_executor = ToolExecutor(
-        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools()))
+        ToolCatalog((*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools()))
     )
     runtime_llm = llm or OpenAILLMAdapter(
         api_key=settings.openai_api_key,
