@@ -73,37 +73,37 @@
 ### 4. Composition Root
 
 - ✅ 设计 `build_application(settings)` 方法清单。
-- 🔄 显式创建所有 service/catalog/adapter，不使用导入副作用。
-- 🔄 确认构造两个 Application 实例不会共享 history、registry、cancel 或 session id。
-- 🔄 完成 G1 验收。
+- ✅ 显式创建所有 service/catalog/adapter，不使用导入副作用。
+- ✅ 确认构造两个 Application 实例不会共享 history、registry、cancel 或 session id。
+- ✅ 完成 G1 验收。
 
 ## R2 —— Agent Runtime 与事件协议
 
 ### 1. Domain event
 
-- ⬜ 定义 ConversationEvent、Role、EventKind。
-- ⬜ 定义 RuntimeCommand：UserMessage/Continue/Approve/Reject/Selection/Cancel。
-- ⬜ 定义 RuntimeEvent：Progress/Approval/Selection/ToolStarted/ToolFinished/Handoff/Completed/Failed/Cancelled。
-- ⬜ 删除 v2 中对 `__switch__`、`__reject__`、`__cancelled__` 的需求。
+- ✅ 定义 ConversationEvent、Role、EventKind。
+- ✅ 定义 RuntimeCommand：UserMessage/Continue/Approve/Reject/Selection/Cancel/ToolResult。
+- ✅ 定义 RuntimeEvent：Progress/Approval/Selection/ToolStarted/ToolFinished/Handoff/Completed/Failed/Cancelled。
+- ✅ 删除 v2 中对 `__switch__`、`__reject__`、`__cancelled__` 的需求。
 
 ### 2. Agent state machine
 
-- ⬜ 定义 AgentState 和单一 phase 枚举，替代 `_pending_tool/_pending_switch/_pending_reject` 组合。
-- ⬜ 实现 user input → LLM → finish 基本路径。
-- ⬜ 实现 tool call → pause → tool result → LLM 路径。
-- ⬜ 实现 output format 修复与最多一次格式提示注入。
-- ⬜ 实现 unknown tool、max rounds、timeout 和 provider failure。
-- ⬜ 提取 ModelReplyParser；domain Message 不直接解析 provider 字符串。
-- ⬜ 保证 thinking 不写回下一轮模型输入。
+- ✅ 定义 AgentState 和单一 phase 枚举，替代 `_pending_tool/_pending_switch/_pending_reject` 组合。
+- ✅ 实现 user input → LLM → finish 基本路径。
+- ✅ 实现 tool call → pause → tool result → LLM 路径。
+- ✅ 实现 output format 修复与最多一次格式提示注入。
+- ✅ 实现 unknown tool、max rounds、timeout 和 provider failure。
+- ✅ 提取 ModelReplyParser；domain Message 不直接解析 provider 字符串。
+- ✅ 保证 thinking 不写回下一轮模型输入。
 
 ### 3. LLM adapter 与取消
 
-- ⬜ 定义 LLMRequest/LLMResult/ModelProfile。
-- ⬜ 实现 OpenAI sync adapter，集中 pro/flash/provider thinking 配置。
-- ⬜ 设计活动调用 handle 的 cancel/close/reset 生命周期。
-- ⬜ 验证取消阻塞调用后下一次调用可继续。
-- ⬜ 禁止 Runtime 访问 OpenAI SDK 私有 transport。
-- ⬜ 完成 G2 验收。
+- ✅ 定义 LLMRequest/LLMResult/ModelProfile。
+- 🔄 实现 OpenAI sync adapter，集中 pro/flash/provider thinking 配置。
+- ✅ 设计活动调用 handle 的 cancel/close/reset 生命周期。
+- ✅ 验证取消阻塞调用后下一次调用可继续。
+- ✅ 禁止 Runtime 访问 OpenAI SDK 私有 transport。
+- 🔄 完成 G2 验收。
 
 ## R3 —— Tool Runtime、Plan 与 Workspace
 

@@ -147,6 +147,7 @@
 - [决策 137 — refactor 分支采用独立 v2 受控重写](#决策-137--refactor-分支采用独立-v2-受控重写)
 - [决策 138 — R1 骨架清单获确认后开始编码](#决策-138--r1-骨架清单获确认后开始编码)
 - [决策 139 — R1 临时无工具对话仅用于 G1 验证](#决策-139--r1-临时无工具对话仅用于-g1-验证)
+- [决策 140 — R2 用 ToolResult 闭合暂停的工具回合](#决策-140--r2-用-toolresult-闭合暂停的工具回合)
 
 ---
 
@@ -3015,3 +3016,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - R1 直接实现 OpenAI adapter 和完整 Runtime —— 越过 R2 的模型请求、事件和取消设计，已拒绝。
 - 不提供任何对话链路，等 R2 完成后再验证 G1 —— 无法在 R1 发现 prompt 与 composition root 的集成问题，已拒绝。
+
+---
+
+### 决策 140 — R2 用 ToolResult 闭合暂停的工具回合
+
+**背景：** R2 的 Runtime 需要实现 `tool call → pause → tool result → LLM`，但原先确认的 RuntimeCommand 清单没有能承载工具执行结果的命令。用户明确允许新增该命令；真实 ToolCatalog 与 handler 执行仍属于 R3。
+
+**决策：**
+
+- 新增 `ToolResult(call_id, output)` RuntimeCommand。
+- Runtime 对已声明的工具调用发出 `ToolStarted` 并进入 `WAITING_FOR_TOOL`；只接受相同 `call_id` 的 ToolResult，先发出 `ToolFinished`，再将结果作为 `Role.TOOL` 的 ConversationEvent 继续请求 LLM。
+- call id 不匹配或非等待状态收到结果时返回确定的 Failed event；未声明工具仍返回 `unknown_tool`。
+- R2 的 `available_tools` 仅为回合协议测试的过渡集合；R3 必须以显式 ToolCatalog 替换，不能形成全局 Registry。
+
+**理由：**
+
+- 工具回合的状态与闭合关系成为强类型协议，不再依赖魔法 dict 或 CLI 补写历史。
+- 先完成 Runtime 的暂停/恢复语义，R3 可以独立注入真正的工具发现、审批与执行能力。
+
+**曾考虑的替代方案：**
+
+- 将工具结果塞进 Continue 命令 —— 无法携带 call id 与结果，无法验证闭合对应关系，已拒绝。
+- 等到 R3 再定义完整回合 —— R2 无法满足既定 Runtime 状态机门禁，已拒绝。
