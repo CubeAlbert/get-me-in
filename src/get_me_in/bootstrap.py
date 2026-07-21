@@ -3,13 +3,15 @@
 import os
 
 from src.get_me_in.adapters.system import SystemClock, UuidGenerator
+from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.prompt_renderer import PromptRenderer
+from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
-from src.get_me_in.ports.llm import LLMPort
+from src.get_me_in.ports.llm import LLMPort, ModelProfile
 
 
 def build_application(
@@ -39,12 +41,32 @@ def build_application(
         capabilities=frozenset({Capability.ROUTE}),
         priorities=("先明确用户当前目标，再选择下一步。",),
     )
+    catalog = AgentCatalog((main_spec,))
+    prompt_renderer = PromptRenderer(settings.prompts_dir)
+    clock = SystemClock()
+    id_generator = UuidGenerator()
+    cancellation = CancellationToken()
+    runtime_llm = llm or OpenAILLMAdapter(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        model_names={
+            ModelProfile.PRO: settings.llm_pro_model,
+            ModelProfile.FLASH: settings.llm_flash_model,
+        },
+    )
+    runtime = AgentRuntime(
+        spec=main_spec,
+        prompt_renderer=prompt_renderer,
+        llm=runtime_llm,
+        clock=clock,
+        id_generator=id_generator,
+        cancellation=cancellation,
+    )
     return Application(
         settings=settings,
-        catalog=AgentCatalog((main_spec,)),
-        prompt_renderer=PromptRenderer(settings.prompts_dir),
-        clock=SystemClock(),
-        id_generator=UuidGenerator(),
-        cancellation=CancellationToken(),
-        llm=llm,
+        catalog=catalog,
+        clock=clock,
+        id_generator=id_generator,
+        cancellation=cancellation,
+        runtime=runtime,
     )
