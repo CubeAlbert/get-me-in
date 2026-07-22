@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R5 —— CLI 拆分与交互迁移（审查修复完成，G5 复验通过；R6 尚未启动）
+**当前阶段：** R6 —— Knowledge/RAG 与 Memory（设计复审完成，待清单确认；coding 尚未启动）
 
-**当前任务：** 等待整理并确认 R6 设计问题
+**当前任务：** 等待用户审查并确认 R6 新文件、对象、构造依赖与公开方法清单
 
-**当前子任务：** R5 `/exit_sub` 事件闭合与命令错误边界已修复；未提交 R6 新文件、类与公开方法清单，且不开始 R6 编码（⏸️）
+**当前子任务：** R6 新增／删除／修改项、实现切片、G6 与 R6-T 终止门禁已写入文档；当前会话未创建或修改 R6 代码（⏸️）
 
-**当前阻塞：** R6 的 CLI 命令执行、Memory 会话输入、资源所有权与 manifest 一致性边界尚待整理和确认
+**当前阻塞：** 用户尚未确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 文件、对象、构造依赖与公开方法清单
 
-**会话交接说明：** R5 已完成并通过 G5 复验：用户确认 V50–V56 人工 smoke 可接受，核心自动化测试 134 项通过，DeepSeek Web Search 最小 provider smoke 已通过。审查发现的 `/exit_sub` 事件丢失已通过 `CommandAction.DRIVE` 修复，命令 handler 异常会显示可读错误并返回输入框；跨组件测试覆盖 CommandRegistry → CliApp → Continue。独立 v2 CLI 入口为 `python -m src.get_me_in.cli`；`/rewind`、`/restore` 显示用户可读预览并提供“❌ 取消”，`/rewind` 会预填目标输入；`/help` 与实际注册表同源排序，`/approval` 以“✅ 执行 / ❌ 取消”选项交互。工具展示脱敏参数、结果预览与 Plan 表格；用户拒绝审批会立即归还输入框。临时 `scripts/v2_runtime_smoke.py` 已删除，旧 `main.py` 未修改。R6 尚未开始。
+**会话交接说明：** R5 已完成并通过 G5 复验，134 项核心测试通过。R6 设计复审已完成：保留 RetrievalPort，删除重复 SearchQuery/SearchResult、v1 RagLoader Facade、MemoryService.search 与 observer/daemon 方案；新增 ApplicationCommand RUN path、immutable MemoryBuildSource、observed/indexed manifest、单 BackgroundWorker、ResourceStack、typed close report 与 `Application.finalize_turn()`。R6 只使用全新 `data/v2/knowledge/` 和 `data/v2/memories/`，不读取旧运行数据。R6/R7 不再并行；G6 后必须经过 R6-T checkpoint 并停止，等待用户审查。当前只更新了文档，没有创建或修改 R6 代码。
 
-**下一步：** 整理 R6 的四项设计问题，再提交 R6 新文件、类、构造依赖与公开方法清单供确认；未经确认不得编码。
+**下一步：** 用户审查 R6 清单并提出修改或明确确认；确认后才能按“domain/ports/manifest diff → resource/command path → KnowledgeService → adapters → MemoryService → CLI/bootstrap → G6”逐切片编码。G6 后必须停在 R6-T，不得进入 R7。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -50,3 +50,4 @@
 166. **`/restore` 与 `/rewind` 的选择菜单提供取消项** — 两个交互菜单末尾固定显示“❌ 取消”；选择后仅返回 CLI，不调用 RestoreSession 或 RewindSession，也不依赖 Ctrl+C。
 167. **G5 已通过且 R6 暂停** — 用户确认 V50–V56 smoke 可接受；临时 `scripts/v2_runtime_smoke.py` 已删除。R6 仍须先经新文件、类与公开方法清单确认，当前按用户指示不进入该阶段。
 168. **R5 审查修复命令事件闭合与错误边界** — `/exit_sub` 通过 `CommandAction.DRIVE` 将 RuntimeEvent 交回 CliApp 继续推进；命令 handler 的预期异常统一渲染并返回输入循环。跨组件回归补齐后 134 项核心测试通过；R6 仍未开始。
+169. **R6 重设一致性边界并增加强制终止门禁** — 保留 RetrievalPort，删除重复搜索 DTO 和旧 Facade/observer/daemon 形状；新增 RUN command path、immutable MemoryBuildSource、observed/indexed manifest、BackgroundWorker、ResourceStack 与 typed close report。R6/R7 不再并行；G6 后必须 checkpoint 并停在 R6-T，未经用户授权不得进入 R7/R8。当前只完成设计文档，R6 coding 未启动。

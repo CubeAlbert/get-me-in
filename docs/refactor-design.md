@@ -420,11 +420,76 @@ Resume 的模板复制、LaTeX 编译和 PDF 产物记录属于 ArtifactService�
 
 ### 6.9 Knowledge 与 Memory
 
-现有 `RetrievalPort` 作为 tool-facing 查询端口保留，不在 R6 重复定义。`KnowledgeService` 实现或适配该端口，并管理 source ingestion、query、reload、manifest 和生命周期；内部写入边界拆为 source repository、index adapter 与 manifest repository，避免用含义模糊的单一 `KnowledgeRepository` 包揽三类职责。`MemoryService` 负责从会话提取 Memory、写 repository，再调用 KnowledgeService 建索引。两者通过 port 连接，不使用 observer callback 和延迟 import。
+R6 复审结论是保留 Knowledge/Memory 的总体方向，但重新设计命令执行、会话输入、manifest 一致性和资源所有权。R6 只迁移当前 Reference RAG、Memory 构建/查询/删除、`/ragreload`、`/build-memory` 与可配置的终态自动 Memory；不引入 R7 Resume Agent、Artifact schema 或其他新功能。
 
-索引 manifest 使用内容 hash 检测新增、修改、删除和重命名。索引失败时文件写入不能被报告为“全部成功”；应记录 pending/error 状态供重试。
+#### 6.9.1 新增、删除与修改
 
-Application 使用统一的逆序资源清理栈管理 LLM、Web Search、Knowledge loader/index 和其他可关闭 adapter；`Application.close()` 不按模块逐项硬编码。R6 与 R7 可在 G5 后并行实现；只有 Resume 验收中实际使用 knowledge/memory 的路径依赖 G6。
+**新增：**
+
+- 增加通用的前台 `ApplicationCommand` 执行路径。`CommandAction.RUN` 携带 application command，`WorkerRunner` 串行执行并返回强类型 `ApplicationResult`；`CliApp` 只负责调用 Renderer，不识别 Knowledge/Memory 私有状态。`/ragreload` 在 worker 中同步执行、可通过 `Application.request_cancel()` 取消；`/build-memory` 只排入受控后台队列并立即返回 receipt。
+- 增加 `MemoryBuildSource`。`SessionService` 在 application 层复制当前 Agent 的 provider-neutral `ConversationRecord`，CLI 和 Memory 后台任务均不得持有 `SessionState` 或读取私有 history。
+- 增加 schema-versioned `IndexManifest` 和全新 v2 Memory repository。默认路径分别位于 `data/v2/knowledge/manifest.json`、`data/v2/knowledge/chroma/` 与 `data/v2/memories/`；不得读取旧 `data/chroma/` 或 `data/memories/`。
+- 增加一个 Application-owned、非 daemon 的 `BackgroundWorker`，串行处理启动加载和 Memory 构建。KnowledgeService/MemoryService 只借用该 worker，不拥有或关闭它；后台任务使用自己的 cancellation，不与前台 Runtime command 共用可变 token。ResourceStack 必须先关闭 worker、等待或取消任务，再关闭 MemoryService/KnowledgeService 持有的 repository/index/model。
+- 增加逆序、幂等、失败隔离的 `ResourceStack`。只注册顶层 owner，嵌套资源只由其直接 owner 关闭，禁止 LLM/index/repository 被重复注册和重复关闭。
+- 增加 `Application.finalize_turn()`：终态依次尝试 snapshot 和按 `AUTO_MEMORY_ON_EXIT` 的 v2 typed setting 可选排入 Memory 构建；两项结果独立记录，snapshot 失败仍按旧行为继续尝试 auto-memory，任一失败都不得覆盖另一项结果或原 RuntimeEvent。
+
+**删除／不再创建：**
+
+- 删除原任务中的通用 `SearchQuery`／`SearchResult`；tool-facing 查询继续使用已经稳定的 `RetrievalPort`／`RetrievalResult`，index 内部只使用 `IndexHit`，避免两套公开搜索 DTO。
+- 不迁移 v1 `RagLoader`、`start/is_ready/load/load_file/delete` Facade 形状，不创建第二个 Loader service；启动、查询、重载、单 source upsert/delete 均收敛到 `KnowledgeService`。
+- 不创建 `MemoryService.search()`；`query_memory` 仍通过 `RetrievalPort` 查询 `memories` collection，MemoryService 只负责 build/delete 与 repository→index 一致性。
+- 不保留 observer callback、延迟 import、模块级 singleton、daemon thread、`.last_update` 时间戳增量和 v1 Markdown Memory 兼容读取。
+- R6 完成后删除临时 `DeferredRetrievalAdapter`；删除动作只能与真实 `KnowledgeService` 装配及 retrieval contract tests 同一切片完成，不能提前制造无 adapter 状态。
+
+**修改：**
+
+- `KnowledgeService` 直接实现 `RetrievalPort.search()`，并显式依赖一组 source repositories、document chunker、index port、manifest repository 与 cancellation；启动/全量 reload 同时扫描只读 reference repository 和全新 v2 memory repository。ToolDefinition、RetrievalPort 签名和 Runtime tool closure 不变。
+- `MemoryExtractor` 使用专用 `LLMPort` 和静态 memory prompt；不创建旧 PromptLoader/LLMClient，不与活动 AgentRuntime 共享 cancellation。MemoryService 显式执行 `extract → repository.write → KnowledgeService.index_document`。
+- `Application.close()` 改为只关闭 `ResourceStack` 并返回 `CloseReport`；CLI 在退出时显示 close error/timeout，但所有资源仍必须继续逆序关闭。
+- `Settings` 增加 v2 index/memory 路径、embedding/rerank batch/top-k、shutdown timeout 与 auto-memory typed 配置；禁止 adapter 读取旧全局 config 或自行读取环境变量。
+- 决策 149/153 中允许 R6/R7 并行的部分由决策 169 取代。R6 coding、G6、文档 checkpoint 全部完成后强制终止，不得创建、修改或确认任何 R7 文件、类、公开方法或代码。
+
+#### 6.9.2 状态与一致性
+
+`KnowledgeState` 使用 `IDLE/LOADING/READY/DEGRADED/ERROR/CLOSING/CLOSED`。首次启动尚无可用 index 时，`IDLE/LOADING/ERROR` 查询返回明确 `retrieval_unavailable`；`READY` 可查询；部分 source 失败时进入 `DEGRADED`，保留已提交 index 可查询并在 reload report 中列出失败项。并发 reload 不排队、不重入，返回 typed busy failure；search 与 index mutation 由 KnowledgeService 串行边界保护，不直接依赖 Chroma 的隐含线程安全。
+
+Manifest 以规范化的 `collection + project-relative source path` 作为 source key，记录 `schema_version/source_key/collection/observed_hash/indexed_hash/mtime/chunk_ids/status/pending_operation/error`。内容 hash 是变化判定依据，mtime 仅作扫描优化。写入或删除前先原子保存 `PENDING`；index 成功后保存 `READY` 或移除已删除 entry；失败保存 `ERROR`，保留上一次 `indexed_hash/chunk_ids` 以支持幂等重试。重命名通过“旧路径消失 + 同 collection 同 hash 新路径出现”报告，但实际按可重试的 delete+upsert 执行，不依赖 Chroma 原子 rename。
+
+Memory repository 每条记录使用独立、versioned JSON 文件。repository 写成功但 index 失败时，build report 必须返回 partial failure，manifest 保留 pending/error；不得报告“全部成功”。删除先写入 manifest delete intent，再删除 index，最后删除 repository 文件；中途失败保留可重试状态。MemoryExtractor 的输出只能包含 `fact/preference`，空白、未知 category 或无效 JSON 作为 typed extraction failure，不写 repository。
+
+#### 6.9.3 R6 文件、对象与公开边界清单（待用户确认）
+
+下表是 R6 唯一允许创建的新代码范围；本次会话只记录设计，不创建这些文件。获得用户明确确认后，才允许按实施切片逐步编码。
+
+| 文件 | 新增对象 | 构造依赖与公开方法 |
+|------|----------|--------------------|
+| `src/get_me_in/domain/knowledge.py` | `KnowledgeCollection`、`KnowledgeState`、`ManifestStatus`、`PendingIndexOperation`、`KnowledgeSource`、`KnowledgeDocument`、`IndexChunk`、`IndexHit`、`ManifestEntry`、`IndexManifest`、`ReloadReport` | immutable DTO/StrEnum；无 I/O 方法 |
+| `src/get_me_in/domain/memories.py` | `MemoryCategory`、`MemoryRecord`、`MemoryBuildSource`、`MemoryBuildReceipt`、`MemoryBuildReport` | versioned immutable DTO；`MemoryBuildSource` 只持有复制后的 ConversationRecord |
+| `src/get_me_in/application/app_results.py` | `ApplicationResult`、`BackgroundJobReceipt`、`KnowledgeReloaded`、`MemoryBuildScheduled`、`TurnFinalizationResult`、`CloseIssue`、`CloseReport` | strong typed result；不返回控制 dict |
+| `src/get_me_in/application/background_worker.py` | `BackgroundWorker` | `__init__(name, shutdown_timeout_seconds)`、`submit(task_name, task) -> BackgroundJobReceipt`、`close() -> CloseReport`；单非 daemon worker，timeout 构造注入 |
+| `src/get_me_in/application/resources.py` | `ResourceStack` | `register(name, close: Callable[[], CloseReport | None]) -> None`、`close() -> CloseReport`；显式注册唯一 owner 的 close callback，逆序、幂等、失败隔离 |
+| `src/get_me_in/application/knowledge_service.py` | `KnowledgeService` | `__init__(sources: tuple[KnowledgeSourceRepository, ...], chunker, index, manifests, worker)`、`start() -> None`、`state`、现有 `RetrievalPort.search(...)`、`reload(target=None) -> ReloadReport`、`index_document(document) -> ReloadReport`、`delete_source(source_key) -> ReloadReport`、`request_cancel(reason) -> None`、`close() -> CloseReport`；worker 为 borrowed dependency，close 不关闭 worker |
+| `src/get_me_in/application/memory_extractor.py` | `MemoryExtractor` | `__init__(llm, prompt, clock, id_generator, timeout_seconds)`、`extract(source, cancellation) -> tuple[MemoryRecord, ...]` |
+| `src/get_me_in/application/memory_service.py` | `MemoryService` | `__init__(repository, extractor, knowledge, worker)`、`build_async(source) -> MemoryBuildReceipt`、`delete(memory_id) -> MemoryBuildReport`、`close() -> CloseReport`；KnowledgeService/worker 均为 borrowed dependency，close 只关闭自有 repository/extractor |
+| `src/get_me_in/ports/knowledge.py` | `KnowledgeSourceRepository`、`DocumentChunker`、`KnowledgeIndexPort`、`ManifestRepository` | `scan/read`、`chunk`、`replace_source/delete_source/search/close`、`load/save/close`；全部为 Protocol |
+| `src/get_me_in/ports/memories.py` | `MemoryRepository` | `write(record) -> KnowledgeDocument`、`get(memory_id)`、`list(agent=None)`、`delete(memory_id)`、`close()`；具体 adapter 还需实现 KnowledgeSourceRepository 供重启重建 index |
+| `src/get_me_in/adapters/local_knowledge_sources.py` | `LocalKnowledgeSourceRepository` | `__init__(reference_root)`、`scan(target=None)`、`read(source)`；只允许 reference_root 下 Markdown |
+| `src/get_me_in/adapters/markdown_chunker.py` | `MarkdownChunker` | `chunk(document) -> tuple[IndexChunk, ...]`；chunk id 对 source key、content hash 和序号确定性生成 |
+| `src/get_me_in/adapters/json_manifest_repository.py` | `JsonManifestRepository` | `__init__(path)`、`load()`、`save(manifest)`、`close()`；schema 校验与原子替换 |
+| `src/get_me_in/adapters/chroma_knowledge_index.py` | `SentenceTransformerEmbedder`、`CrossEncoderReranker`、`ChromaKnowledgeIndex` | 模型名、batch/top-k、persist path 全部构造注入；index 实现 KnowledgeIndexPort，不读取全局 config |
+| `src/get_me_in/adapters/json_memory_repository.py` | `JsonMemoryRepository` | `__init__(root, clock)`，同时实现 MemoryRepository 与 KnowledgeSourceRepository 的 `scan/read`；只读写全新 v2 JSON，使应用重启或 index 重建时可显式恢复 memories collection |
+| `tests/get_me_in/test_knowledge_service.py` | Knowledge service contract tests | manifest diff、busy/state、增删改名、失败重试、取消与 close |
+| `tests/get_me_in/test_memory_service.py` | Memory service contract tests | immutable source、extract/write/index、partial failure、delete retry、后台关闭 |
+| `tests/get_me_in/test_resources.py` | Resource lifecycle tests | 逆序、幂等、异常隔离、timeout report |
+| `tests/get_me_in/test_knowledge_adapters.py` | adapter contract tests | JSON schema/atomicity、path boundary、deterministic chunk ids；真实模型/Chroma 仍走 integration smoke |
+
+允许修改的既有文件仅为 `application/settings.py`、`application/app_commands.py`、`application/application.py`、`application/session_service.py`、`bootstrap.py`、`cli/app.py`、`cli/commands.py`、`cli/worker.py`、`cli/renderer.py`、`cli/main.py`、`tools/retrieval.py`、对应既有测试和 R6 文档。`RuntimeCommand`、`RuntimeEvent`、AgentRuntime、Session snapshot schema、ToolDefinition、R7 文件和旧 `main.py` 均不在 R6 修改范围。
+
+#### 6.9.4 实施与终止门禁
+
+R6 固定按以下切片实施，每个切片独立验证、独立提交：domain/ports/manifest diff → ResourceStack 与 application command worker path → KnowledgeService fake-index contract → 本地 source/manifest/chunker/Chroma adapters → MemoryExtractor/MemoryService/background worker → Settings/bootstrap/CLI 接入与 DeferredRetrievalAdapter 删除 → G6 integration/smoke。
+
+**R6-T 强制终止门禁：** G6 通过后，只允许整理验收证据并执行 `/project-checkpoint`，把 `docs/current.md` 保存为“R6 完成、R7 未启动、等待用户审查”。随后必须停止；未经用户在后续指令中明确确认，不得提交 R7 设计清单、创建 R7 文件、修改 R7 代码、切换入口或执行 R8 清理。
 
 ## 7. 迁移策略
 
@@ -469,4 +534,4 @@ v2 只复用以下静态项目资产：
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。当前会话仍只完成文档与技能调整，不创建 v2 代码模块；进入 R1 前仍需按项目约定提交新文件、类和公开方法清单。
+R-D1～R-D6 已由用户确认。R0～R5 已完成；当前只完成 R6 设计复审和清单更新，没有创建或修改 R6 代码。R6 清单仍须用户明确确认后才能 coding；R6 完成后还必须停在 R6-T，未经后续授权不得进入 R7。

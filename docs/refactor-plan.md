@@ -159,27 +159,36 @@
 
 ### R6 —— Knowledge/RAG 与 Memory 迁移
 
-**目标：** 消除 RAG/Memory 全局 Facade 与回调式隐式索引，建立显式生命周期和可恢复一致性。
+**目标：** 消除 RAG/Memory 全局 Facade 与回调式隐式索引，建立显式生命周期、可恢复一致性和受控的 CLI/ApplicationCommand 执行边界。
 
 **产出：**
 
-- 保留现有 tool-facing RetrievalPort；新增 KnowledgeSourceRepository、KnowledgeIndexPort、ManifestRepository、IndexManifest 与 KnowledgeService。
-- Chroma adapter、embedder、reranker 与 loader 显式装配。
-- 内容 hash 增量索引，正确处理新增、更新、删除和重命名。
-- MemoryRepository、MemoryExtractor、MemoryService。
-- build/query/delete 与 lifecycle close。
-- `/ragreload`、`/build-memory` 的真实 CLI handler 通过 `CommandRegistry.replace()` 替换 R5 unavailable spec。
-- Application 使用统一逆序资源清理栈关闭 loader/index 等资源。
+- 保留现有 tool-facing RetrievalPort/RetrievalResult；不再新增重复的 SearchQuery/SearchResult。
+- 新增 KnowledgeSourceRepository、DocumentChunker、KnowledgeIndexPort、ManifestRepository、versioned IndexManifest 与 KnowledgeService；不迁移 v1 RagLoader/Facade 形状。
+- Chroma adapter、embedder、reranker、source scanner、chunker 与 manifest repository 显式装配，禁止读取旧全局 config。
+- 内容 hash 增量索引，正确处理新增、更新、删除和重命名；manifest 记录 observed/indexed hash、chunk ids、pending operation 与 error，失败可幂等重试。
+- 新增 versioned JSON MemoryRepository、MemoryBuildSource、MemoryExtractor、MemoryService 与受控单 BackgroundWorker；JsonMemoryRepository 同时作为只读 KnowledgeSourceRepository 参与重启重建，不读取旧 Markdown Memory。
+- Memory build/delete 显式执行 repository 与 KnowledgeService 协调；写入或删除部分成功必须返回 typed partial failure。
+- 新增通用 `CommandAction.RUN` + ApplicationCommand/ApplicationResult worker path；`/ragreload` 前台可取消，`/build-memory` 后台非阻塞，并通过 `CommandRegistry.replace()` 替换 R5 unavailable spec。
+- `Application.finalize_turn()` 统一终态 snapshot 和可选 auto-memory 排队，不向 CLI 暴露 Session history。
+- Application 使用逆序、幂等、失败隔离的 ResourceStack；close 返回 error/timeout report。
 - v2 Memory 使用全新 repository；不读取或迁移 v1 Memory 文件。
+- 删除 DeferredRetrievalAdapter 只能与真实 KnowledgeService 装配和 retrieval contract tests 同一切片完成。
 
 **验收门禁 G6：**
 
 - reference 与 memory query 达到当前可接受结果。
-- 文件删除后索引不残留；索引失败有可重试状态。
+- 新增、修改、删除和重命名在 reload 后与 manifest/index 一致；失败保留 observed/indexed 差异和可重试状态，不误报全部成功。
 - 两个 Application 实例的服务生命周期可预测，不依赖模块全局状态。
-- 退出时等待受控后台工作并有明确 timeout 结果。
+- `/ragreload` 通过单 WorkerRunner 串行执行并可取消；`/build-memory` 复制不可变会话输入后后台执行，CLI 不阻塞。
+- terminal snapshot、手动 build-memory 与可选 auto-memory 均不读取 CLI/Session 私有状态。
+- 退出时逆序关闭所有顶层 owner，等待受控后台工作并有明确 error/timeout 结果；一个 close 失败不阻断后续资源。
+- DeferredRetrievalAdapter 已删除，25 个工具签名与 retrieval_unavailable/cancelled 失败契约保持一致。
+- 核心 domain/application contract tests、adapter contract tests 与真实 Chroma/model smoke 均有验收证据。
 
-**依赖：** G3；可在 R4-R5 后并行设计，但集成验收在 G5 后。
+**依赖：** G3、G5；R6 设计清单必须先获用户确认。R6 与 R7 不再并行实施。
+
+**R6-T 强制终止门禁：** G6 通过后执行 `/project-checkpoint`，将状态保存为“R6 完成、R7 未启动、等待用户审查”，然后立即停止。未经后续明确授权，不得提交 R7 设计清单、创建或修改 R7 文件、切换入口或执行 R8 清理。
 
 ### R7 —— Resume 纵向切片与产物管理
 
@@ -199,7 +208,7 @@
 - ResumeAgent 不含重复的 14 个 `_get_*()` 方法。
 - 当前 ResumeAgent 已实现能力达到等价后，才允许切换主入口。
 
-**依赖：** G3、G4、G5；可与 R6 并行实现。只有实际使用 knowledge/memory 的 Resume 验收路径依赖 G6，G7 最终验收仍需相关路径完成。
+**依赖：** G3、G4、G5、G6 以及 R6-T 后用户对进入 R7 的明确授权。不得与 R6 并行实现。
 
 ### R8 —— 入口切换与旧代码删除
 
@@ -242,11 +251,10 @@
 ## 3. 关键依赖顺序
 
 ```text
-R0 → R1 → R2 → R3 → R4 → R5 → R7 → R8 → R9
-                         └────→ R6 ────┘
+R0 → R1 → R2 → R3 → R4 → R5 → R6 → R6-T（强制停止／用户审查） → R7 → R8 → R9
 ```
 
-R6 的内部设计可在 R4/R5 期间进行；R6 与 R7 可在 G5 后并行，但 R8 必须等待 G6、G7 均完成。R8 之前旧实现保持可运行。
+R6 与 R7 不再并行。R6 coding 与 G6 完成后必须先停在 R6-T；只有用户明确授权后才能进入 R7。R8 仍须等待 G6、G7 均完成，且在 R8 之前旧实现保持可运行。
 
 ## 4. 风险与控制
 
@@ -266,6 +274,7 @@ R6 的内部设计可在 R4/R5 期间进行；R6 与 R7 可在 G5 后并行，�
 - 每次只允许一个重构阶段处于 🔄。
 - 阶段开始前确认该阶段新文件、类和公开方法清单。
 - 验收失败先记录原因并 replan，不得直接推进下一门禁。
+- 到达阶段终止门禁时必须 checkpoint 并停止，不得以“下一阶段已有计划”为由自动推进。
 - 不适用的任务直接删除或用 ⛔ 标明替代任务；历史由 Git 保存。
 - 暂缓但仍有效的任务用 📌。
 - 完成一阶段后由用户审查，再使用 `/project-checkpoint` 更新项目状态。

@@ -183,6 +183,7 @@
 - [决策 166 — /restore 与 /rewind 的选择菜单提供取消项](#决策-166---restore-与-rewind-的选择菜单提供取消项)
 - [决策 167 — G5 已通过且 R6 暂停](#决策-167--g5-已通过且-r6-暂停)
 - [决策 168 — R5 审查修复命令事件闭合与错误边界](#决策-168--r5-审查修复命令事件闭合与错误边界)
+- [决策 169 — R6 重设一致性边界并增加强制终止门禁](#决策-169--r6-重设一致性边界并增加强制终止门禁)
 
 ---
 
@@ -3728,3 +3729,36 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 在 `/exit_sub` handler 内循环调用 Continue —— 会复制 CliApp 的审批、选择、终态与 snapshot 规则，已拒绝。
 - 只为 `/exit_sub` 捕获 `ValueError` —— 无法覆盖 restore/rewind 等同类用户可控错误，已拒绝。
 - 提前建立 R6 通用 ApplicationCommand worker 协议 —— 超出本次 R5 修复范围，留待 R6 设计整理，已拒绝。
+
+---
+
+### 决策 169 —— R6 重设一致性边界并增加强制终止门禁
+
+**背景：** R5 修复完成后复审 R6，发现原设计只有 KnowledgeService/MemoryService 的方向，没有固定长时间 CLI command 如何经过 WorkerRunner、Memory 如何合法取得会话输入、后台任务和前台取消如何隔离、manifest 如何区分 observed/indexed 状态，也没有资源唯一 owner 和阶段终止门禁。原任务还重复提出 SearchQuery/SearchResult，并允许 R6/R7 并行，容易在 Knowledge/Memory 未稳定时提前进入 Resume。
+
+**决定：**
+
+- 保留现有 RetrievalPort/RetrievalResult；删除重复 SearchQuery/SearchResult、MemoryService.search 和 v1 RagLoader Facade 形状。
+- R6 新增 `CommandAction.RUN`、typed ApplicationCommand/ApplicationResult 和 WorkerRunner 执行路径；`/ragreload` 前台串行且可取消，`/build-memory` 复制会话输入后排入单非 daemon worker。
+- `SessionService.memory_source()` 只返回复制后的 provider-neutral ConversationRecord；CLI、MemoryExtractor 和后台任务不得读取 SessionState/private history。
+- manifest 同时记录 observed/indexed hash、pending operation、chunk ids、status/error；index/repository 部分成功必须可见且可重试，不得误报全部成功。
+- v2 Chroma、manifest 和 Memory 使用 `data/v2/` 全新 schema-versioned 路径；不读取旧 Chroma、旧 Markdown Memory 或 `.last_update`。
+- JsonMemoryRepository 同时实现 MemoryRepository 与只读 KnowledgeSourceRepository；KnowledgeService 启动和全量 reload 显式扫描 reference 与 v2 memory repositories，不依赖写入回调恢复 memory index。
+- Application 通过 ResourceStack 管理顶层 owner；close 逆序、幂等、失败隔离并返回 timeout/error report。前台 reload、活动 Runtime 与后台 Memory 使用不同 cancellation 所有权。
+- `Application.finalize_turn()` 负责终态 snapshot 与可选 auto-memory 排队，保持 CLI 不接触 history，且 Memory 失败不覆盖原终态。
+- R6/R7 不再并行。增加 R6-T 强制终止门禁：G6 后只允许 checkpoint、提交证据并停止，未经用户后续明确授权不得进入 R7 或 R8。
+- R6 文件、对象、构造依赖与公开方法以 `docs/refactor-design.md#69-knowledge-与-memory` 为待确认清单；当前会话只更新文档，不创建或修改 R6 代码。
+
+**理由：**
+
+- 长时间 reload 与非阻塞 memory build 是两种不同执行语义，必须在 application/worker 边界显式建模，不能继续由 command handler 直接阻塞或自行开 daemon thread。
+- observed/indexed 双状态和 pending operation 可以表达文件已变但旧 index 仍有效、删除中断和失败重试，单一 hash/status 无法可靠恢复。
+- 单一资源 owner 与独立 cancellation 避免 close 双调用、后台 Memory 被 Esc 误取消或前台 reload 无法停止。
+- 终止门禁让 R6 的真实模型、Chroma、后台关闭和一致性证据先接受用户审查，再决定是否承担 R7 的 Resume/Artifact 复杂度。
+
+**曾考虑的替代方案：**
+
+- 直接迁移 v1 RagLoader、Memory Facade 和 observer callbacks —— 会恢复全局状态、延迟 import 和不可恢复的隐式索引，已拒绝。
+- 让 `/ragreload` 和 `/build-memory` 在 CommandRegistry handler 中直接调用 service —— 会绕过 WorkerRunner、spinner/cancel 和强类型 ApplicationResult，已拒绝。
+- 让 CLI 读取 SessionSnapshot/history 构造 Memory —— 违反 R4/R5 的只读投影与私有状态边界，已拒绝。
+- 继续并行 R6/R7 —— 会绕过用户要求的 R6 完成后停顿，也会让 Resume 验收依赖尚未稳定的 Knowledge/Memory，已拒绝。
