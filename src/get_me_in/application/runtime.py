@@ -8,7 +8,9 @@ from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import (
     Approve,
     Cancel,
+    CompleteHandoff,
     Continue,
+    FailHandoff,
     Reject,
     RuntimeCommand,
     SubmitSelection,
@@ -118,6 +120,10 @@ class AgentRuntime:
             return self._continue()
         if isinstance(command, ToolResult):
             return self._resume_external_tool(command)
+        if isinstance(command, CompleteHandoff):
+            return self._complete_handoff(command)
+        if isinstance(command, FailHandoff):
+            return self._fail_handoff(command)
         if isinstance(command, Approve):
             return self._approve(command)
         if isinstance(command, Reject):
@@ -341,6 +347,23 @@ class AgentRuntime:
             return failure
         assert self._state.pending_tool is not None
         return self._finish_tool(self._state.pending_tool, command.output)
+
+    def _complete_handoff(self, command: CompleteHandoff) -> RuntimeEvent:
+        failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_HANDOFF)
+        if failure is not None:
+            return failure
+        assert self._state.pending_tool is not None
+        return self._finish_tool(self._state.pending_tool, {"summary": command.summary})
+
+    def _fail_handoff(self, command: FailHandoff) -> RuntimeEvent:
+        failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_HANDOFF)
+        if failure is not None:
+            return failure
+        assert self._state.pending_tool is not None
+        return self._finish_tool(
+            self._state.pending_tool,
+            {"code": command.code, "message": command.message},
+        )
 
     def _validate_pending(self, call_id: str, phase: RuntimePhase) -> Failed | None:
         if self._state.phase is not phase:

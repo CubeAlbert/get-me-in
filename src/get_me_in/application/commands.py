@@ -44,5 +44,18 @@ class ToolResult(RuntimeCommand):
 
 
 @dataclass(frozen=True)
+class CompleteHandoff(RuntimeCommand):
+    call_id: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class FailHandoff(RuntimeCommand):
+    call_id: str
+    code: str
+    message: str
+
+
+@dataclass(frozen=True)
 class Cancel(RuntimeCommand):
     reason: str = "Cancelled by user"
