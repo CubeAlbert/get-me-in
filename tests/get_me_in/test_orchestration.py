@@ -36,6 +36,17 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual("call-main", result.event.call_id)
         self.assertEqual(RuntimePhase.MODEL_QUEUED, result.session.agents[AgentKey.MAIN].phase)
 
+    def test_exit_subagent_closes_original_call_id(self) -> None:
+        orchestrator = Orchestrator({AgentKey.MAIN: _FakeRuntime(AgentKey.MAIN), AgentKey.RESUME: _FakeRuntime(AgentKey.RESUME)})
+        started = orchestrator.handle(_session(), UserMessage("delegate"))
+
+        exited = orchestrator.exit_subagent(started.session)
+
+        self.assertIsInstance(exited.event, ToolFinished)
+        self.assertEqual("call-main", exited.event.call_id)
+        self.assertEqual(AgentKey.MAIN, exited.session.active_agent)
+        self.assertEqual((), exited.session.handoff_stack)
+
 
 class _FakeRuntime:
     def __init__(self, key: AgentKey, *, target: AgentKey | None = None) -> None:

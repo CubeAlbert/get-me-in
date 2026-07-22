@@ -58,11 +58,11 @@ class Application:
         if isinstance(command, RestoreSession):
             return self.restore(command.session_id)
         if isinstance(command, RewindSession):
-            return self._sessions.rewind(command.turn_id)
+            return self.rewind(command.turn_id)
         if isinstance(command, ExitSubAgent):
-            return self._sessions.exit_subagent()
+            return self.exit_subagent()
         if isinstance(command, DumpSession):
-            return self._sessions.dump()
+            return self.dump()
         return self._sessions.handle(command)
 
     def view(self) -> SessionView:
@@ -74,8 +74,17 @@ class Application:
     def restore(self, session_id: str) -> SessionView:
         return self._sessions.restore(session_id)
 
+    def rewind(self, turn_id: str) -> SessionView:
+        return self._sessions.rewind(turn_id)
+
     def list_sessions(self) -> tuple[SessionPreview, ...]:
         return self._sessions.list_sessions()
+
+    def dump(self) -> Path:
+        return self._sessions.dump()
+
+    def exit_subagent(self) -> RuntimeEvent:
+        return self._sessions.exit_subagent()
 
     def request_cancel(self, reason: str = "Cancelled by user") -> None:
         """Cancel an active blocking call without mutating Runtime state cross-thread."""

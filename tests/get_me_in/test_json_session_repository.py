@@ -3,6 +3,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from src.get_me_in.adapters.json_session_repository import JsonSessionRepository
 from src.get_me_in.application.session_codec import SessionSnapshotCodec
@@ -25,3 +26,13 @@ class JsonSessionRepositoryTests(unittest.TestCase):
             repository = JsonSessionRepository(Path(temporary), codec=SessionSnapshotCodec())
             with self.assertRaises(ValueError):
                 repository.load("../not-a-session")
+
+    def test_failed_replace_preserves_existing_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = JsonSessionRepository(Path(temporary), codec=SessionSnapshotCodec())
+            repository.save(_snapshot())
+            with patch.object(Path, "replace", side_effect=OSError("disk failure")):
+                with self.assertRaises(OSError):
+                    repository.save(_snapshot())
+
+            self.assertEqual("session-1", repository.load("session-1").session.session_id)
