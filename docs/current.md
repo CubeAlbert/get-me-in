@@ -4,11 +4,11 @@
 
 **当前任务：** 基于 R4 实际落地边界重新 Review R5～R8，并确认 R5 新文件、类与公开方法清单
 
-**当前子任务：** 复核 R5 CLI/WorkerRunner 是否仍为薄层，以及 R6/R7 依赖、资源关闭与 R8 删除/回退范围（⬜）
+**当前子任务：** R4 复审遗留已修复并通过 104 项核心测试；正在形成 R5 新文件、类与公开方法清单（🔄）
 
 **当前阻塞：** R5 编码尚未获准：必须先完成 R5～R8 复审、记录结论并取得 R5 新文件、类与公开方法清单确认
 
-**下一步：** 审查实际 `Application`、`SessionService`、`Orchestrator`、ApplicationCommand/RuntimeCommand、RuntimeEvent 与 cancellation 边界；形成 R5 清单后提交用户确认
+**下一步：** 将 R5 CLI/WorkerRunner、命令扩展、自动保存、审批策略和独立启动入口的最终清单同步到活跃文档，然后提交用户确认
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -31,3 +31,4 @@
 149. **后续设计按当前 Runtime 重新校准** — 每个 Application 同时只管理一个活动 Session；SessionState 唯一持有 AgentSessionState，Runtime 以状态转换器工作；handoff 由 CompleteHandoff/FailHandoff 闭合，rewind 使用 turn_id，snapshot 禁止重放活动副作用；CLI input history 与 Artifact schema 分别留在 R5/R7，R6/R7 可在 G5 后并行。
 150. **增加强制 R5 前复审门禁** — G4 完成并 checkpoint 后，必须根据实际落地的 Application/Session/Command/Event/cancellation 边界重新 Review R5～R8，重点检查 CLI 薄层、R6 命令与资源生命周期、R6/R7 依赖及 R8 删除/回退范围；记录结论并确认 R5 清单前不得开始 R5 coding。
 151. **R4/G4 已完成并进入 R5 前复审** — `SessionState` 已成为唯一状态源，Runtime 以 `advance(state, command)` 转换，Orchestrator 通过 Complete/FailHandoff 闭合原 call id；v2 snapshot 使用 schema_version=2、turn_id rewind 与安全 phase 规范化。98 项核心自动化测试通过；不更新设计/计划，先执行强制 R5～R8 复审。
+152. **R4 复审补齐 handoff 启动、失败闭合与 frontend 回合投影** — Orchestrator 切换时用 context 启动目标 Runtime，子 Agent 取消/失败通过 FailHandoff 闭合原 call id；snapshot 严格校验 frame，restore 拒绝未装配 Agent，SessionView 公开只读 rewind_points。104 项核心自动化测试通过，G4 复验完成。

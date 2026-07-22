@@ -305,7 +305,7 @@ CLI input history 属于 R5 `InputController`，不进入 domain SessionState；
 
 Hub-and-Spoke 规则保留：只有 Orchestrator 能进行 handoff。Main Runtime 只接收可路由的 Agent descriptor；子 Agent Runtime 不持有完整 `AgentCatalog`，也不直接调用其他子 Agent。
 
-Handoff 使用 `HandoffFrame(source, target, call_id, turn_id, context)`。Orchestrator 切换到子 Agent 时保留源 Agent 的 `WAITING_FOR_HANDOFF` pending call；子 Agent 返回 summary 后，Orchestrator 向源 Runtime 发送 `CompleteHandoff`，原子地写入 tool result、弹出 frame 并恢复 active agent。未知 Agent、失败、中断和 `/exit_sub` 均必须通过 `FailHandoff` 或 `CompleteHandoff` 闭合原 call id；CLI 不补写 conversation record。
+Handoff 使用 `HandoffFrame(source, target, call_id, turn_id, context)`。Orchestrator 切换到子 Agent 时保留源 Agent 的 `WAITING_FOR_HANDOFF` pending call，并立即以 `UserMessage(context)` 启动目标 Runtime，使 CLI 在收到 `HandoffRequested` 后只需继续驱动新的 active agent。子 Agent 返回 summary 后，Orchestrator 向源 Runtime 发送 `CompleteHandoff`，原子地写入 tool result、弹出 frame 并恢复 active agent。未知 Agent、目标启动失败、嵌套切换、子 Agent 失败或取消以及 `/exit_sub` 均必须通过 `FailHandoff` 或 `CompleteHandoff` 闭合原 call id；CLI 不补写 conversation record。
 
 R4 以测试专用 sub Agent 完成 G4 编排门禁；真实 Resume AgentSpec 与领域能力仍在 R7 落地，避免 R4 反向依赖 R7。
 
@@ -329,13 +329,15 @@ SessionSnapshot 至少包含：
 
 Repository 必须原子写入临时文件后 replace，磁盘 `SessionSnapshotCodec` 与 provider-facing `ConversationCodec` 分离。v2 从全新 `schema_version=2` 会话开始，不读取或迁移旧 Session。
 
-Snapshot 只记录可恢复的稳定状态。正在执行的 LLM/Process 调用先归一化为 interrupted/cancelled；`TOOL_READY` 不允许作为可自动重放状态持久化，避免恢复后重复副作用。等待 approval、selection 或 handoff 的状态可以保存，但恢复后仍按原 call id 校验。restore/rewind 必须清除 `WorkspaceAccessState`，编辑前重新读取文件。
+Snapshot 只记录可恢复的稳定状态。正在执行的 LLM/Process 调用先归一化为 interrupted/cancelled；`TOOL_READY` 不允许作为可自动重放状态持久化，避免恢复后重复副作用。等待 approval、selection 或 handoff 的状态可以保存，但 handoff frame 必须与 active agent、源 Agent 的 `WAITING_FOR_HANDOFF`、pending call id 和 turn id 一致。restore 必须先确认 snapshot 中的 Agent 均已由当前 Application 装配，再替换活动 Session；restore/rewind 必须清除 `WorkspaceAccessState`，编辑前重新读取文件。
+
+`SessionView` 通过只读 `SessionTurnView` 投影公开主 Agent 用户回合的 `turn_id`、文本和时间，用于 R5 context recap 与 `/rewind` 选择；CLI 不读取完整 `SessionSnapshot` 或私有 history。CLI 自己的输入导航历史仍归 `InputController`，不进入 domain Session。
 
 R4 新增文件、类和公开方法清单如下，编码前仍需用户确认：
 
 | 文件 | 新增/调整对象 | 公开边界 |
 |------|---------------|----------|
-| `domain/sessions.py` | `RuntimePhase`、`PendingToolCall`、`AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionView`、`SessionPreview` | 不提供副作用方法；承接现有 runtime state 类型并只保存不可变规范状态，禁止 domain 反向 import application |
+| `domain/sessions.py` | `RuntimePhase`、`PendingToolCall`、`AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionTurnView`、`SessionView`、`SessionPreview` | 不提供副作用方法；承接现有 runtime state 类型并只保存不可变规范状态，禁止 domain 反向 import application；`SessionTurnView` 仅为 frontend 提供安全回合投影 |
 | `application/runtime.py` | 调整 `RuntimeState` 所有权；新增 `RuntimeTransition` | `advance(state, command) -> RuntimeTransition`；移除长期内部状态副本 |
 | `application/commands.py` | `CompleteHandoff`、`FailHandoff` | 强类型字段按 call id 闭合 handoff |
 | `application/app_commands.py` | `ApplicationCommand`、`RestoreSession`、`RewindSession`、`ExitSubAgent`、`DumpSession` | 仅供 Application/CLI，不进入 AgentRuntime |

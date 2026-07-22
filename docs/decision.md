@@ -3310,3 +3310,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 
 - 直接开始 R5 CLI 编码 —— 违反决策 150 的强制复审门禁，已拒绝。
+
+---
+
+### 决策 152 — R4 复审补齐 handoff 启动、失败闭合与 frontend 回合投影
+
+**背景：** R5 前强制复审发现，R4 虽已让 Orchestrator 切换 active agent，但没有用 handoff context 启动目标 Runtime；正式 CLI 在 `HandoffRequested` 后发送 `Continue` 时，目标 Runtime 仍处于 `READY`。同时，子 Agent 在活动 handoff 中取消或失败时，源 Agent 的原始 call id 未闭合；`SessionView` 也没有提供 `/rewind` 选择所需的安全 turn 投影。原有 98 项测试未覆盖这些真实边界。
+
+**决策：**
+
+- Orchestrator 在 main→sub 切换时立即以 `UserMessage(context)` 推进目标 Runtime，保存其新状态后再向 CLI 返回原 `HandoffRequested`；CLI 不负责构造子 Agent 私有上下文。
+- 活动子 Agent 返回 `Cancelled` 或 `Failed` 时，Orchestrator 必须以 `FailHandoff` 闭合源 Agent 的原 call id、弹出 frame 并恢复源 Agent。
+- Snapshot codec 拒绝 nested frame，以及 active agent、源 phase、pending call id、turn id 与 frame 不一致的数据；restore 在替换当前 Session 前拒绝当前 Application 未装配的 Agent。
+- 增加只读 `SessionTurnView`，由 `SessionView.rewind_points` 公开主 Agent 用户回合；CLI input navigation history 仍由 R5 `InputController` 独立管理。
+- 补齐 handoff 启动/取消/嵌套、复杂 rewind、workspace grant 清理、损坏 snapshot 和公开 rewind projection 测试；104 项核心自动化测试通过后恢复 G4 完成结论。
+
+**理由：**
+
+- Handoff 编排必须在 application 层形成可直接继续驱动的状态，不能把子 Runtime 启动细节泄漏给 CLI。
+- 任何 handoff 终止路径都需要闭合原 call id，避免主 Agent 永久停留在 `WAITING_FOR_HANDOFF`。
+- Frontend 需要 rewind 选择数据，但不应因此读取完整 snapshot 或 Agent 私有 history。
+
+**曾考虑的替代方案：**
+
+- 由 CLI 在收到 `HandoffRequested` 后向子 Agent 发送 `UserMessage(context)` —— 会让 CLI 吸收业务编排，已拒绝。
+- 让 CLI 从 `SessionSnapshot` 扫描 user record —— 暴露持久化内部结构并耦合 codec，已拒绝。

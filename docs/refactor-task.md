@@ -156,7 +156,7 @@
 
 ### 1. Session model
 
-- ✅ 定义 `AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionView`、`SessionPreview`；R4 不提前定义 Artifact schema。
+- ✅ 定义 `AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionTurnView`、`SessionView`、`SessionPreview`；R4 不提前定义 Artifact schema。
 - ✅ 将现有 RuntimeState 的 history/phase/pending/model-call/repair 状态并入 AgentSessionState，SessionState 成为唯一规范状态源。
 - ✅ AgentRuntime 改为 `advance(state, command) -> RuntimeTransition`，不得保留第二份长期状态；Application 对外仍一次返回一个 RuntimeEvent。
 - ✅ 每个 Application 同时只管理一个活动 Session；生成真实 session id，并按 session/agent 构造 ToolContext、CancellationToken、Plan 绑定与 WorkspaceAccessState。
@@ -171,9 +171,10 @@
 - ✅ Main Runtime 只注入可路由 descriptor；子 Agent Runtime 不持有完整 AgentCatalog。
 - ✅ 定义 `CompleteHandoff` 与 `FailHandoff`，使 WAITING_FOR_HANDOFF 可以按原 call id 闭合。
 - ✅ 实现带 turn_id/call_id 的 main→sub handoff frame。
+- ✅ 切换到子 Agent 时以 handoff context 启动目标 Runtime，正式 CLI 后续只需继续驱动 active agent。
 - ✅ 实现 sub→main summary、frame pop、active agent 恢复与源 tool call 原子闭合。
 - ✅ 实现 `/exit_sub` 的 application command，不向 Agent 私有 history 直接 append。
-- ✅ 处理未知 Agent、嵌套切换和中断中的 handoff；所有失败路径均闭合原 call id。
+- ✅ 处理未知 Agent、目标启动失败、嵌套切换、子 Agent 失败/取消和中断中的 handoff；所有失败路径均闭合原 call id。
 - ✅ 使用测试专用 sub Agent 完成 G4；真实 Resume AgentSpec 不提前从 R7 移入。
 
 ### 3. Snapshot repository
@@ -186,8 +187,10 @@
 - ⛔ 实现 v1 session/meta/message/plan → v2 migration —— R-D6 明确不迁移。
 - ✅ 实现 list、preview、dump。
 - ✅ Restore/Rewind 同步修正 pending action、plan 和 handoff stack，并清除 WorkspaceAccessState，编辑前重新读取。
+- ✅ Restore 在替换当前 Session 前拒绝未装配 Agent；snapshot 校验 handoff frame 与 active agent、源 pending call 和 turn id 一致。
 - ✅ 增加 Session、Orchestrator、Snapshot codec 与 JSON repository 的核心自动化测试文件，覆盖 G4 失败路径。
-- ✅ 完成 G4 验收（98 项核心自动化测试通过）。
+- ✅ R5 前复审补齐 handoff 启动/取消/嵌套、复杂 rewind、workspace grant 清理、损坏 snapshot 与公开 rewind projection 测试。
+- ✅ 完成 G4 复验（104 项核心自动化测试通过）。
 
 ## R5 —— CLI 拆分与交互迁移
 

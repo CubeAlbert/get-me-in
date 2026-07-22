@@ -108,9 +108,9 @@
 
 **产出：**
 
-- SessionState、AgentSessionState、HandoffFrame、SessionView；不提前定义 R7 Artifact schema，也不把 CLI input history 放入 domain Session。
+- SessionState、AgentSessionState、HandoffFrame、SessionTurnView、SessionView；不提前定义 R7 Artifact schema，也不把 CLI input history 放入 domain Session。
 - 现有 RuntimeState 并入 AgentSessionState，AgentRuntime 改为接收规范状态并返回 RuntimeTransition，不保留第二份长期状态。
-- Orchestrator 执行 main→sub→main，通过 CompleteHandoff/FailHandoff 统一闭合 handoff tool call。
+- Orchestrator 执行 main→sub→main；切换时用 context 启动目标 Runtime，并通过 CompleteHandoff/FailHandoff 统一闭合正常返回、启动失败、嵌套、取消和失败路径的 handoff tool call。
 - versioned SessionSnapshot、codec 和 JSON repository；v2 使用全新会话，不提供 v1 migration。
 - Session repository 默认写入全新 `data/v2/sessions/`，不读取旧 `data/save/`。
 - 原子 save、restore、rewind、dump。
@@ -124,6 +124,7 @@
 - rewind 不产生孤立 TOOL_CALL，也不遗留与截断历史不匹配的 Plan/pending state。
 - snapshot 不重放活动 LLM/Process 或 TOOL_READY 副作用；restore/rewind 清除 workspace revision grant。
 - CLI/application 只使用公开 Session API。
+- SessionView 提供 `/rewind` 所需的只读用户回合投影；snapshot 拒绝与 active agent、pending call 或 turn 不一致的 handoff frame。
 
 **依赖：** G3。
 
