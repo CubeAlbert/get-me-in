@@ -32,6 +32,7 @@ class CommandResult:
 
 
 CommandHandler = Callable[[str], CommandResult]
+_CANCEL_SELECTION = "❌ 取消"
 
 
 @dataclass(frozen=True)
@@ -126,8 +127,8 @@ def build_command_registry(application: object, input_controller: object, render
             if not sessions:
                 return handled("没有可恢复的会话。")
             choices = _restore_choices(sessions)
-            selected = input_controller.select("选择要恢复的会话:", tuple(choices))
-            if selected is None:
+            selected = input_controller.select("选择要恢复的会话:", (*choices, _CANCEL_SELECTION))
+            if selected is None or selected == _CANCEL_SELECTION:
                 return CommandResult(CommandAction.HANDLED)
             arguments = choices[selected]
         view = application.handle(RestoreSession(arguments))
@@ -141,8 +142,8 @@ def build_command_registry(application: object, input_controller: object, render
             if not points:
                 return handled("没有可回退的用户输入。")
             choices = _rewind_choices(points)
-            selected = input_controller.select("选择要回退的输入:", tuple(choices))
-            if selected is None:
+            selected = input_controller.select("选择要回退的输入:", (*choices, _CANCEL_SELECTION))
+            if selected is None or selected == _CANCEL_SELECTION:
                 return CommandResult(CommandAction.HANDLED)
             arguments = choices[selected]
         prefill = next((point.user_text for point in points if point.turn_id == arguments), None)

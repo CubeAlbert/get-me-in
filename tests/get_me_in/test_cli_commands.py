@@ -75,8 +75,18 @@ class CoreCommandTests(unittest.TestCase):
         rewound = self.registry.dispatch("/rewind")
 
         self.assertEqual(CommandResult(CommandAction.PREFILL, "second"), rewound)
-        self.assertEqual(("1. first", "2. second"), self.input_controller.selection_choices)
+        self.assertEqual(("1. first", "2. second", "❌ 取消"), self.input_controller.selection_choices)
         self.assertEqual([RewindSession("turn-2")], self.application.commands)
+
+    def test_interactive_restore_and_rewind_cancel_without_calling_application(self) -> None:
+        self.input_controller.selected = "❌ 取消"
+
+        restored = self.registry.dispatch("/restore")
+        rewound = self.registry.dispatch("/rewind")
+
+        self.assertEqual(CommandResult(CommandAction.HANDLED), restored)
+        self.assertEqual(CommandResult(CommandAction.HANDLED), rewound)
+        self.assertEqual([], self.application.commands)
 
     def test_rewind_prefills_the_target_even_when_it_is_absent_from_the_rewound_view(self) -> None:
         self.application.rewound_view = _View(())
@@ -94,7 +104,7 @@ class CoreCommandTests(unittest.TestCase):
 
         self.assertEqual(CommandAction.HANDLED, restored.action)
         self.assertEqual(
-            ("1. first session  [2026-07-22 08:00]", "2. second session  [2026-07-22 09:00]"),
+            ("1. first session  [2026-07-22 08:00]", "2. second session  [2026-07-22 09:00]", "❌ 取消"),
             self.input_controller.selection_choices,
         )
         self.assertEqual([RestoreSession("session-2")], self.application.commands)

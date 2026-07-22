@@ -217,8 +217,8 @@
 - 🔄 `/help`；从当前注册表按命令名排序，列出 alias 与参数说明。
 - 🔄 `/edit`
 - 🔄 `/dump`
-- 🔄 `/restore [session_id]`；无参数时显示序号、最新用户输入预览与保存时间，通过 InputController 选择 session 并映射回 session_id。
-- 🔄 `/rewind`；无参数时显示序号与用户输入预览，通过 InputController 选择公开 rewind point，并映射回精确 turn_id；回退前保存目标文本，成功后预填到下一次 CLI 输入框，不能从回退后的投影反查目标。
+- 🔄 `/restore [session_id]`；无参数时显示序号、最新用户输入预览与保存时间，通过 InputController 选择 session 并映射回 session_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application。
+- 🔄 `/rewind`；无参数时显示序号与用户输入预览，通过 InputController 选择公开 rewind point，并映射回精确 turn_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application；回退前保存目标文本，成功后预填到下一次 CLI 输入框，不能从回退后的投影反查目标。
 - 🔄 `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/exit_sub`

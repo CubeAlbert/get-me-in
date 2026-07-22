@@ -180,6 +180,7 @@
 - [决策 163 — 用户拒绝审批立即结束当前 Agent 回合](#决策-163--用户拒绝审批立即结束当前-agent-回合)
 - [决策 164 — 审批交互使用明确选项而非 y/N](#决策-164--审批交互使用明确选项而非-yn)
 - [决策 165 — /rewind 在回退前捕获预填文本](#决策-165---rewind-在回退前捕获预填文本)
+- [决策 166 — /restore 与 /rewind 的选择菜单提供取消项](#决策-166---restore-与-rewind-的选择菜单提供取消项)
 
 ---
 
@@ -3655,3 +3656,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 让 Application 在 rewind 返回值中新增 target text —— 当前 `SessionView` 已能在操作前提供所需投影，扩展 application 协议没有必要。
 - 从 Session 私有 history 或磁盘 snapshot 读取目标文本 —— 破坏既定的 CLI/Application 边界。
+
+---
+
+### 决策 166 —— `/restore` 与 `/rewind` 的选择菜单提供取消项
+
+**背景：** `/restore` 和 `/rewind` 使用 questionary 选择列表时，用户只能通过 Ctrl+C 中断选择。该操作会以终端中断的方式返回，缺少明确、可发现的正常取消路径。
+
+**决定：**
+
+- 两个命令的无参数选择列表末尾固定追加“❌ 取消”。
+- 选择该项时 CommandRegistry 返回 `HANDLED`，不发送 `RestoreSession` 或 `RewindSession`，CliApp 自然进入下一次输入。
+- `InputController.select()` 的通用取消（EOF、KeyboardInterrupt）继续保留；显式取消项只用于这两个会话管理命令。
+
+**理由：**
+
+- 用户无需记忆 Ctrl+C，即可安全地退出会话选择。
+- 在 CommandRegistry 消化取消意图，不会让 Application 或 Session 层感知 CLI 展示选项。
+
+**曾考虑的替代方案：**
+
+- 为所有 `InputController.select()` 自动加入取消项 —— 会改变工具选择等其他交互的选项契约，范围过大。
+- 仅提示用户使用 Ctrl+C —— 交互不可发现，且不满足正常返回 CLI 的需求。
