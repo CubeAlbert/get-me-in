@@ -32,6 +32,30 @@ class Orchestrator:
             return SessionTransition(session, event)
         return self._handoff(session, event)
 
+    def exit_subagent(self, session: SessionState) -> SessionTransition:
+        """Return from the active sub-agent by closing the original handoff call."""
+        if not session.handoff_stack or session.active_agent is AgentKey.MAIN:
+            raise ValueError("No sub-agent handoff is active")
+        frame = session.handoff_stack[-1]
+        runtime = self._runtimes[frame.source]
+        transition = runtime.advance(
+            session.agents[frame.source],
+            FailHandoff(frame.call_id, "subagent_exited", "Sub-agent exited before completing"),
+        )
+        session = self._replace_agent(session, frame.source, transition.state)
+        return SessionTransition(
+            replace(session, active_agent=frame.source, handoff_stack=session.handoff_stack[:-1]),
+            transition.event,
+        )
+
+    def request_cancel(self, reason: str = "Cancelled by user") -> None:
+        for runtime in self._runtimes.values():
+            runtime.request_cancel(reason)
+
+    def close(self) -> None:
+        for runtime in self._runtimes.values():
+            runtime.close()
+
     def _handoff(self, session: SessionState, event: HandoffRequested) -> SessionTransition:
         if event.target not in self._runtimes or event.target not in session.agents:
             return self._close_failure(session, event, "unknown_agent", f"Unknown agent: {event.target.value}")

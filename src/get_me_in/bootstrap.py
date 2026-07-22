@@ -21,6 +21,7 @@ from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.session_codec import SessionSnapshotCodec
 from src.get_me_in.application.session_service import SessionService
+from src.get_me_in.application.orchestration import Orchestrator
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
@@ -142,8 +143,8 @@ def build_application(
     )
     sessions = SessionService(
         session,
-        runtime=runtime,
-        plans=plan_service,
+        orchestrator=Orchestrator({AgentKey.MAIN: runtime}),
+        plans={AgentKey.MAIN: plan_service},
         repository=JsonSessionRepository(settings.sessions_dir, codec=SessionSnapshotCodec()),
         clock=clock,
         workspace_access=workspace_access,

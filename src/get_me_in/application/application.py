@@ -64,11 +64,10 @@ class Application:
         """Cancel an active blocking call without mutating Runtime state cross-thread."""
         if self._closed:
             raise RuntimeError("Application is closed")
-        self._runtime.request_cancel(reason)
+        self._sessions.request_cancel(reason)
 
     def close(self) -> None:
         self._closed = True
-        self._runtime.close()
         self._sessions.close()
         if self._web_search is not None:
             self._web_search.close()
