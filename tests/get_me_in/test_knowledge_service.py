@@ -1,6 +1,8 @@
 """R6 manifest-diff domain tests; KnowledgeService follows in a later slice."""
 
 from datetime import datetime, timezone
+from threading import Event, Thread
+from time import monotonic, sleep
 import unittest
 
 from src.get_me_in.domain.knowledge import (
@@ -106,6 +108,8 @@ class KnowledgeServiceTests(unittest.TestCase):
     def test_reload_sets_ready_and_search_uses_existing_retrieval_contract(self) -> None:
         self.assertEqual(KnowledgeState.IDLE, self.service.state)
         self.service.start()
+        self.assertTrue(self.index.replaced_event.wait(timeout=1))
+        _wait_for_state(self.service, KnowledgeState.READY)
 
         result = self.service.search("query", collection="references", category=None, top_k=1, cancellation=CancellationToken())
 
@@ -131,6 +135,59 @@ class KnowledgeServiceTests(unittest.TestCase):
         self.assertEqual(ManifestStatus.READY, entry.status)
         self.assertEqual("hash", entry.indexed_hash)
 
+    def test_request_cancel_interrupts_only_an_active_reload(self) -> None:
+        blocking_index = _BlockingIndex()
+        service = KnowledgeService(
+            (_Sources((self.source,)),), _Chunker(), blocking_index, self.manifests, self.worker
+        )
+
+        service.start()
+        self.assertTrue(blocking_index.started.wait(timeout=1))
+        service.request_cancel()
+        self.assertTrue(blocking_index.cancelled.wait(timeout=1))
+        _wait_for_state(service, KnowledgeState.DEGRADED)
+
+        self.assertTrue(service.index_document(KnowledgeDocument(self.source, "content")).updated)
+        service.close()
+
+    def test_startup_cancel_is_not_reset_before_queued_reload_begins(self) -> None:
+        worker = _QueuedWorker()
+        blocking_index = _BlockingIndex()
+        service = KnowledgeService(
+            (_Sources((self.source,)),), _Chunker(), blocking_index, self.manifests, worker
+        )
+
+        service.start()
+        service.request_cancel()
+        worker.run()
+
+        self.assertTrue(blocking_index.cancelled.is_set())
+        self.assertEqual(KnowledgeState.DEGRADED, service.state)
+        service.close()
+
+    def test_search_returns_busy_while_index_mutation_holds_serial_boundary(self) -> None:
+        blocking_index = _BlockingIndex()
+        service = KnowledgeService(
+            (_Sources((self.source,)),), _Chunker(), blocking_index, self.manifests, self.worker
+        )
+        thread = Thread(target=service.reload)
+        thread.start()
+        self.assertTrue(blocking_index.started.wait(timeout=1))
+
+        with self.assertRaisesRegex(RuntimeError, "retrieval_busy"):
+            service.search(
+                "query",
+                collection="references",
+                category=None,
+                top_k=1,
+                cancellation=CancellationToken(),
+            )
+
+        service.request_cancel()
+        thread.join(timeout=1)
+        self.assertFalse(thread.is_alive())
+        service.close()
+
 
 class _Sources:
     def __init__(self, sources): self.sources = sources
@@ -143,11 +200,39 @@ class _Chunker:
 
 
 class _Index:
-    def __init__(self): self.replaced = []
-    def replace_source(self, source, chunks, cancellation): self.replaced.append(source.source_key)
+    def __init__(self): self.replaced = []; self.replaced_event = Event()
+    def replace_source(self, source, chunks, cancellation): self.replaced.append(source.source_key); self.replaced_event.set()
     def delete_source(self, source_key, *, cancellation): pass
     def search(self, query, *, collection, category, top_k, cancellation): return (IndexHit("chunk", "found", {}, 1.0),)
     def close(self): pass
+
+
+class _BlockingIndex(_Index):
+    def __init__(self):
+        super().__init__()
+        self.started = Event()
+        self.cancelled = Event()
+        self._should_block = True
+
+    def replace_source(self, source, chunks, cancellation):
+        if not self._should_block:
+            return super().replace_source(source, chunks, cancellation)
+        self._should_block = False
+        self.started.set()
+        deadline = monotonic() + 1
+        while not cancellation.is_cancelled and monotonic() < deadline:
+            sleep(0.001)
+        if cancellation.is_cancelled:
+            self.cancelled.set()
+            self.started.clear()
+            raise InterruptedError("cancelled")
+        super().replace_source(source, chunks, cancellation)
+
+
+class _QueuedWorker:
+    def __init__(self): self.task = None
+    def submit(self, task_name, task): self.task = task; return object()
+    def run(self): self.task()
 
 
 class _Manifests:
@@ -178,3 +263,11 @@ def _entry(
 
 def _manifest(*entries: ManifestEntry) -> IndexManifest:
     return IndexManifest(1, entries)
+
+
+def _wait_for_state(service: KnowledgeService, expected: KnowledgeState) -> None:
+    deadline = monotonic() + 1
+    while service.state is not expected and monotonic() < deadline:
+        sleep(0.001)
+    if service.state is not expected:
+        raise AssertionError(f"expected {expected}, got {service.state}")

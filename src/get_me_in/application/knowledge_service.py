@@ -38,7 +38,7 @@ class KnowledgeService:
         self._manifests = manifests
         self._worker = worker
         self._state = KnowledgeState.IDLE
-        self._cancellation = CancellationToken()
+        self._reload_cancellation = CancellationToken()
         self._lock = Lock()
         self._closed = False
 
@@ -47,26 +47,42 @@ class KnowledgeService:
         return self._state
 
     def start(self) -> None:
-        self.reload()
+        with self._lock:
+            self._ensure_open()
+            if self._state is not KnowledgeState.IDLE:
+                return
+            self._state = KnowledgeState.LOADING
+            try:
+                self._worker.submit("load-knowledge", lambda: self.reload())
+            except Exception:
+                self._state = KnowledgeState.ERROR
+                raise
 
     def search(
         self, query: str, *, collection: str, category: str | None, top_k: int, cancellation: CancellationSignal
     ) -> tuple[RetrievalResult, ...]:
-        if cancellation.is_cancelled:
-            raise InterruptedError
-        if self._state not in {KnowledgeState.READY, KnowledgeState.DEGRADED}:
-            raise RuntimeError("retrieval_unavailable")
-        return tuple(RetrievalResult(hit.content, hit.metadata) for hit in self._index.search(
-            query, collection=collection, category=category, top_k=top_k, cancellation=cancellation
-        ))
+        if not self._lock.acquire(blocking=False):
+            raise RuntimeError("retrieval_busy")
+        try:
+            if cancellation.is_cancelled:
+                raise InterruptedError
+            if self._state not in {KnowledgeState.READY, KnowledgeState.DEGRADED}:
+                raise RuntimeError("retrieval_unavailable")
+            return tuple(RetrievalResult(hit.content, hit.metadata) for hit in self._index.search(
+                query, collection=collection, category=category, top_k=top_k, cancellation=cancellation
+            ))
+        finally:
+            self._lock.release()
 
     def reload(self, target: str | None = None) -> ReloadReport:
         if not self._lock.acquire(blocking=False):
             return ReloadReport(busy=True)
         try:
             self._ensure_open()
+            starting = self._state is KnowledgeState.LOADING
             self._state = KnowledgeState.LOADING
-            self._cancellation.reset()
+            if not starting:
+                self._reload_cancellation.reset()
             manifest = self._manifests.load()
             observed_pairs = tuple(
                 (source, repository)
@@ -79,23 +95,30 @@ class KnowledgeService:
             failures: list[str] = []
             for source_key in (*report.deleted, *(old for old, _ in report.renamed)):
                 entry = next(entry for entry in manifest.entries if entry.source_key == source_key)
-                manifest, error = self._delete_entry(manifest, entry)
+                manifest, error = self._delete_entry(manifest, entry, self._reload_cancellation)
                 if error:
                     failures.append(error)
             for source_key in report.retried:
                 entry = next(entry for entry in manifest.entries if entry.source_key == source_key)
                 if entry.pending_operation is PendingIndexOperation.DELETE:
-                    manifest, error = self._delete_entry(manifest, entry)
+                    manifest, error = self._delete_entry(manifest, entry, self._reload_cancellation)
                 else:
                     source = next((item for item in observed if item.source_key == source_key), None)
                     if source is None:
                         error = f"missing retry source: {source_key}"
                     else:
-                        manifest, error = self._upsert_source(manifest, source, repositories[source_key])
+                        manifest, error = self._upsert_source(
+                            manifest, source, repositories[source_key], self._reload_cancellation
+                        )
                 if error:
                     failures.append(error)
             for source_key in (*report.added, *report.updated, *(new for _, new in report.renamed)):
-                manifest, error = self._upsert_source(manifest, next(source for source in observed if source.source_key == source_key), repositories[source_key])
+                manifest, error = self._upsert_source(
+                    manifest,
+                    next(source for source in observed if source.source_key == source_key),
+                    repositories[source_key],
+                    self._reload_cancellation,
+                )
                 if error:
                     failures.append(error)
             self._state = KnowledgeState.DEGRADED if failures else KnowledgeState.READY
@@ -111,7 +134,9 @@ class KnowledgeService:
             return ReloadReport(busy=True)
         try:
             self._ensure_open()
-            manifest, error = self._upsert_document(self._manifests.load(), document)
+            manifest, error = self._upsert_document(
+                self._manifests.load(), document, CancellationToken()
+            )
             if error:
                 self._state = KnowledgeState.DEGRADED
                 return ReloadReport(failures=(error,))
@@ -131,12 +156,12 @@ class KnowledgeService:
             manifest = self._manifests.load()
             entry = next((item for item in manifest.entries if item.source_key == source_key), None)
             if entry is not None:
-                _, error = self._delete_entry(manifest, entry)
+                _, error = self._delete_entry(manifest, entry, CancellationToken())
                 if error:
                     self._state = KnowledgeState.DEGRADED
                     return ReloadReport(failures=(error,))
             else:
-                self._index.delete_source(source_key, cancellation=self._cancellation)
+                self._index.delete_source(source_key, cancellation=CancellationToken())
             return ReloadReport(deleted=(source_key,))
         except Exception as error:
             self._state = KnowledgeState.DEGRADED
@@ -146,7 +171,8 @@ class KnowledgeService:
 
     def request_cancel(self, reason: str = "Cancelled by user") -> None:
         del reason
-        self._cancellation.cancel()
+        if self._state is KnowledgeState.LOADING:
+            self._reload_cancellation.cancel()
 
     def close(self) -> CloseReport:
         if self._closed:
@@ -168,15 +194,22 @@ class KnowledgeService:
             raise RuntimeError("KnowledgeService is closed")
 
     def _upsert_source(
-        self, manifest: IndexManifest, source: object, repository: KnowledgeSourceRepository
+        self,
+        manifest: IndexManifest,
+        source: object,
+        repository: KnowledgeSourceRepository,
+        cancellation: CancellationSignal,
     ) -> tuple[IndexManifest, str | None]:
         try:
-            return self._upsert_document(manifest, repository.read(source))
+            return self._upsert_document(manifest, repository.read(source), cancellation)
         except Exception as error:
             return manifest, f"{source.source_key}: {error}"
 
     def _upsert_document(
-        self, manifest: IndexManifest, document: KnowledgeDocument
+        self,
+        manifest: IndexManifest,
+        document: KnowledgeDocument,
+        cancellation: CancellationSignal,
     ) -> tuple[IndexManifest, str | None]:
         source = document.source
         chunks = self._chunker.chunk(document)
@@ -190,7 +223,7 @@ class KnowledgeService:
         manifest = self._replace_entry(manifest, pending)
         self._manifests.save(manifest)
         try:
-            self._index.replace_source(source, chunks, self._cancellation)
+            self._index.replace_source(source, chunks, cancellation)
         except Exception as error:
             failed = replace(pending, status=ManifestStatus.ERROR, error=str(error))
             manifest = self._replace_entry(manifest, failed)
@@ -206,13 +239,16 @@ class KnowledgeService:
         return manifest, None
 
     def _delete_entry(
-        self, manifest: IndexManifest, entry: ManifestEntry
+        self,
+        manifest: IndexManifest,
+        entry: ManifestEntry,
+        cancellation: CancellationSignal,
     ) -> tuple[IndexManifest, str | None]:
         pending = replace(entry, status=ManifestStatus.PENDING, pending_operation=PendingIndexOperation.DELETE, error=None)
         manifest = self._replace_entry(manifest, pending)
         self._manifests.save(manifest)
         try:
-            self._index.delete_source(entry.source_key, cancellation=self._cancellation)
+            self._index.delete_source(entry.source_key, cancellation=cancellation)
         except Exception as error:
             failed = replace(pending, status=ManifestStatus.ERROR, error=str(error))
             manifest = self._replace_entry(manifest, failed)

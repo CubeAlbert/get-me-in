@@ -199,7 +199,7 @@ def build_application(
     resources.register("knowledge", knowledge.close)
     resources.register("memory", memory.close)
     resources.register("background_worker", worker.close)
-    return Application(
+    application = Application(
         settings=settings,
         catalog=catalog,
         clock=clock,
@@ -213,3 +213,9 @@ def build_application(
         knowledge=knowledge,
         memory=memory,
     )
+    try:
+        knowledge.start()
+    except Exception:
+        application.close()
+        raise
+    return application

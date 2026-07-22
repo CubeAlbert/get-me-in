@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 
 from src.get_me_in.bootstrap import build_application
 from src.get_me_in.application.commands import Continue, UserMessage
@@ -30,9 +31,21 @@ def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
 
 
 class BootstrapTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._knowledge_start_patcher = patch(
+            "src.get_me_in.bootstrap.KnowledgeService.start"
+        )
+        self.knowledge_start = self._knowledge_start_patcher.start()
+        self.addCleanup(self._knowledge_start_patcher.stop)
+
+    def _build_application(self, settings: Settings, *, llm: object):
+        application = build_application(settings, llm=llm)
+        self.addCleanup(application.close)
+        return application
+
     def test_applications_do_not_share_mutable_runtime_dependencies(self) -> None:
-        first = build_application(_settings(), llm=_FakeLlm("first"))
-        second = build_application(_settings(), llm=_FakeLlm("second"))
+        first = self._build_application(_settings(), llm=_FakeLlm("first"))
+        second = self._build_application(_settings(), llm=_FakeLlm("second"))
 
         first.cancellation.cancel()
 
@@ -45,7 +58,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_application_handles_one_no_tool_conversation(self) -> None:
         llm = _FakeLlm("completed")
-        application = build_application(_settings(), llm=llm)
+        application = self._build_application(_settings(), llm=llm)
 
         events = _pump(application, UserMessage("Help me prepare for an interview"))
 
@@ -58,7 +71,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertFalse(llm.cancellation.is_cancelled)
 
     def test_application_executes_its_explicit_system_tool_catalog(self) -> None:
-        application = build_application(
+        application = self._build_application(
             _settings(),
             llm=_FakeLlm(
                 [
@@ -75,7 +88,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("done", events[-1].message.content)
 
     def test_application_exposes_the_complete_explicit_tool_catalog(self) -> None:
-        application = build_application(_settings(), llm=_FakeLlm("unused"))
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
 
         names = tuple(item["name"] for item in application.tool_catalog.export_descriptors())
 
@@ -94,7 +107,7 @@ class BootstrapTests(unittest.TestCase):
         )
 
     def test_main_agent_cannot_see_workspace_or_resume_tools(self) -> None:
-        application = build_application(_settings(), llm=_FakeLlm("unused"))
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
         main = application.catalog.get(AgentKey.MAIN)
 
         names = {
@@ -108,7 +121,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertNotIn("switch_to_mainagent", names)
 
     def test_every_production_tool_declares_capabilities(self) -> None:
-        application = build_application(_settings(), llm=_FakeLlm("unused"))
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
 
         missing = [
             item["name"]
@@ -120,7 +133,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_application_close_releases_its_llm_adapter(self) -> None:
         llm = _FakeLlm("unused")
-        application = build_application(_settings(), llm=llm)
+        application = self._build_application(_settings(), llm=llm)
 
         report = application.close()
 
@@ -131,7 +144,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_snapshot_normalises_active_work_and_dump_is_written(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            application = build_application(
+            application = self._build_application(
                 _settings(sessions_dir=Path(temporary)), llm=_FakeLlm("unused")
             )
             self.assertIsInstance(application.handle(UserMessage("start")), Progress)
@@ -144,7 +157,7 @@ class BootstrapTests(unittest.TestCase):
 
     def test_rewind_and_restore_use_public_session_commands(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            application = build_application(
+            application = self._build_application(
                 _settings(sessions_dir=Path(temporary)), llm=_FakeLlm("finished")
             )
             _pump(application, UserMessage("first"))
@@ -158,6 +171,15 @@ class BootstrapTests(unittest.TestCase):
 
             self.assertEqual(RuntimePhase.READY, rewound.phase)
             self.assertEqual(RuntimePhase.COMPLETED, restored.phase)
+
+    def test_composition_starts_knowledge_and_cancel_reaches_it(self) -> None:
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
+
+        self.knowledge_start.assert_called()
+        with patch.object(application._knowledge, "request_cancel") as cancel_knowledge:
+            application.request_cancel("stop reload")
+
+        cancel_knowledge.assert_called_once_with("stop reload")
 
 
 class _FakeLlm:

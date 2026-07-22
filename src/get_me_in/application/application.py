@@ -116,6 +116,8 @@ class Application:
         if self._closed:
             raise RuntimeError("Application is closed")
         self._sessions.request_cancel(reason)
+        if self._knowledge is not None:
+            self._knowledge.request_cancel(reason)
 
     def finalize_turn(self) -> TurnFinalizationResult:
         """Persist a terminal session and independently schedule optional memory work."""
