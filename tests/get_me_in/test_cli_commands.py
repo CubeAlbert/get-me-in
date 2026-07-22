@@ -36,7 +36,10 @@ class CommandRegistryTests(unittest.TestCase):
         registry = CommandRegistry((CommandSpec("/known", "old", lambda _: CommandResult(CommandAction.HANDLED), ("/k",)),))
         registry.replace(CommandSpec("/known", "new", lambda _: CommandResult(CommandAction.EXIT), ("/new",)))
 
-        self.assertEqual((("/known", "new"),), registry.help_entries())
+        self.assertEqual(
+            (("/known", "new"), ("/new", "兼容别名；请参见 /known 的参数说明")),
+            registry.help_entries(),
+        )
         self.assertEqual(("/known", "/new"), registry.completions())
         self.assertEqual(CommandAction.EXIT, registry.dispatch("/new").action)
         self.assertEqual("未知命令：/k", registry.dispatch("/k").text)
@@ -89,7 +92,16 @@ class CoreCommandTests(unittest.TestCase):
     def test_unavailable_approval_and_exit_commands_have_typed_results(self) -> None:
         self.assertIn("R6", self.registry.dispatch("/ragreload references").text)
         self.assertEqual(ApprovalMode.AUTO, self.registry.dispatch("/auto-approve-switch auto").approval_mode)
+        self.assertEqual(ApprovalMode.AUTO, self.registry.dispatch("/auto-approve-switch on").approval_mode)
+        self.assertIn("参数必填", self.registry.dispatch("/approval").text)
         self.assertEqual(CommandAction.EXIT, self.registry.dispatch("/exit").action)
+
+    def test_help_entries_are_alphabetical_and_include_the_compatibility_alias(self) -> None:
+        entries = self.registry.help_entries()
+
+        self.assertEqual(tuple(sorted(command for command, _ in entries)), tuple(command for command, _ in entries))
+        self.assertIn(("/auto-approve-switch", "兼容别名；请参见 /approval 的参数说明"), entries)
+        self.assertIn(("/approval", "设置审批模式（参数：prompt|auto；兼容 on|off）"), entries)
 
     def test_edit_dump_and_exit_subagent_delegate_only_to_public_dependencies(self) -> None:
         self.input_controller.editor_result = "long input"

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 159 — 帮助从真实命令注册表排序并列出 alias](#决策-159--帮助从真实命令注册表排序并列出-alias)
 - [决策 158 — /restore 选择显示会话预览而非内部 session_id](#决策-158--restore-选择显示会话预览而非内部-session_id)
 - [决策 157 — /rewind 选择显示用户输入预览而非内部 turn_id](#决策-157--rewind-选择显示用户输入预览而非内部-turn_id)
 - [决策 156 — InputController 通过 CompletionProvider 获取动态命令补全](#决策-156--inputcontroller-通过-completionprovider-获取动态命令补全)
@@ -3484,3 +3485,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 继续仅显示 session_id —— 人工 smoke 已证明不可用，已拒绝。
 - 在 CLI 直接读取 snapshot 文件 —— 会破坏 application/session 与 frontend 的公开边界，已拒绝。
+
+---
+
+### 决策 159 — 帮助从真实命令注册表排序并列出 alias
+
+**背景：** 人工 smoke 发现 `/help` 按注册顺序显示主命令，未展示 `/auto-approve-switch` 等可实际补全的 alias，也未明确 `/approval` 的参数；帮助内容与可用命令不一致。
+
+**决策：**
+
+- `help_entries()` 和 `completions()` 都从当前 CommandRegistry 派生并按命令名排序。
+- 帮助逐项显示 alias，alias 指向主命令的参数说明；主命令描述包含必要参数。
+- `/approval` 接受 `prompt|auto`，同时兼容旧 `/auto-approve-switch on|off` 语义。
+
+**理由：**
+
+- 注册表是命令可用性的唯一事实来源，帮助和补全必须与其保持一致。
+- 明确参数可避免用户输入无参数命令时只能得到不透明错误。
+
+**曾考虑的替代方案：**
+
+- 维护独立 help dict —— 会再次产生漂移，已拒绝。
+- 删除兼容 alias —— 违反已确认的 R5 兼容要求，已拒绝。

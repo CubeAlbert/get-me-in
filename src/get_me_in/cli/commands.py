@@ -91,10 +91,15 @@ class CommandRegistry:
         return self._specs[target].handler(arguments.strip())
 
     def help_entries(self) -> tuple[tuple[str, str], ...]:
-        return tuple((spec.name, spec.description) for spec in self._specs.values())
+        entries = [
+            (name, spec.description if name == spec.name else f"兼容别名；请参见 {spec.name} 的参数说明")
+            for spec in self._specs.values()
+            for name in (spec.name, *spec.aliases)
+        ]
+        return tuple(sorted(entries, key=lambda entry: entry[0]))
 
     def completions(self) -> tuple[str, ...]:
-        return tuple(self._names)
+        return tuple(sorted(self._names))
 
 
 def build_command_registry(application: object, input_controller: object, renderer: object) -> CommandRegistry:
@@ -155,22 +160,25 @@ def build_command_registry(application: object, input_controller: object, render
         return CommandResult(CommandAction.HANDLED)
 
     def approval_command(arguments: str) -> CommandResult:
-        try:
-            mode = ApprovalMode(arguments.casefold())
-        except ValueError:
-            return handled("审批模式仅支持 prompt 或 auto。")
+        legacy_modes = {"on": ApprovalMode.AUTO, "off": ApprovalMode.PROMPT}
+        mode = legacy_modes.get(arguments.casefold())
+        if mode is None:
+            try:
+                mode = ApprovalMode(arguments.casefold())
+            except ValueError:
+                return handled("审批模式参数必填：prompt|auto（兼容 on|off）。")
         return CommandResult(CommandAction.SET_APPROVAL, approval_mode=mode)
 
     registry = CommandRegistry()
     registry.register(CommandSpec("/help", "显示可用命令", help_command))
     registry.register(CommandSpec("/edit", "使用编辑器输入长文本", edit_command))
     registry.register(CommandSpec("/dump", "导出当前会话", dump_command))
-    registry.register(CommandSpec("/restore", "按 session_id 恢复会话", restore_command))
-    registry.register(CommandSpec("/rewind", "回退到指定用户回合", rewind_command))
-    registry.register(CommandSpec("/ragreload", "重载知识库（R6 前不可用）", unavailable_command))
+    registry.register(CommandSpec("/restore", "恢复会话（可选 session_id）", restore_command))
+    registry.register(CommandSpec("/rewind", "选择或指定 turn_id 回退到用户回合", rewind_command))
+    registry.register(CommandSpec("/ragreload", "重载知识库（可选 target；R6 前不可用）", unavailable_command))
     registry.register(CommandSpec("/build-memory", "构建记忆（R6 前不可用）", unavailable_command))
     registry.register(CommandSpec("/exit_sub", "退出当前子 Agent", exit_subagent_command))
-    registry.register(CommandSpec("/approval", "设置审批模式：prompt 或 auto", approval_command, ("/auto-approve-switch",)))
+    registry.register(CommandSpec("/approval", "设置审批模式（参数：prompt|auto；兼容 on|off）", approval_command, ("/auto-approve-switch",)))
     registry.register(CommandSpec("/exit", "退出 CLI", lambda _: CommandResult(CommandAction.EXIT)))
     return registry
 

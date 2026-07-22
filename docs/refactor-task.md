@@ -214,7 +214,7 @@
 
 ### 2. 命令迁移
 
-- 🔄 `/help`
+- 🔄 `/help`；从当前注册表按命令名排序，列出 alias 与参数说明。
 - 🔄 `/edit`
 - 🔄 `/dump`
 - 🔄 `/restore [session_id]`；无参数时显示序号、最新用户输入预览与保存时间，通过 InputController 选择 session 并映射回 session_id。
@@ -222,7 +222,7 @@
 - 🔄 `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/exit_sub`
-- 🔄 `/approval prompt|auto`；保留 `/auto-approve-switch` 兼容 alias，策略只决定 ApprovalRequested 是否自动 Approve。
+- 🔄 `/approval prompt|auto`；保留 `/auto-approve-switch` 兼容 alias，并接受旧 `on|off`；策略只决定 ApprovalRequested 是否自动 Approve。
 - 🔄 `/exit`
 
 ### 3. Interaction 与跨平台
