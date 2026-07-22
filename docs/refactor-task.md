@@ -221,7 +221,7 @@
 - ✅ `/rewind`；无参数时显示序号与用户输入预览，通过 InputController 选择公开 rewind point，并映射回精确 turn_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application；回退前保存目标文本，成功后预填到下一次 CLI 输入框，不能从回退后的投影反查目标。
 - ✅ `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - ✅ `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
-- ✅ `/exit_sub`
+- ✅ `/exit_sub`；`ExitSubAgent` 返回的 RuntimeEvent 通过 `CommandAction.DRIVE` 交回 CliApp，`ToolFinished` 会继续发送 `Continue` 直至终态；主 Agent 下的无效调用以可读错误返回输入框。
 - ✅ `/approval`；无参数切换 `prompt/auto`，或用参数显式设置；策略只决定 ApprovalRequested 是否自动 Approve，且不保留 `/auto-approve-switch`。
 - ✅ `/exit`
 
@@ -235,9 +235,10 @@
 - ✅ Completed/Failed/Cancelled 后自动 snapshot；保存失败单独渲染且不得覆盖原终态。
 - ✅ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
 - ✅ 工具开始显示脱敏参数摘要，工具结束显示截断结果预览；Plan 工具结束后显示只读 Plan 表格，不解析工具输出字符串。
+- ✅ 命令 handler 的预期异常由 CliApp 统一渲染，`/restore`、`/rewind`、`/exit_sub` 等无效参数或状态不会终止 CLI；补充 CommandRegistry → CliApp → Continue 的跨组件回归测试。
 - ✅ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
-- ✅ 完成 G5 验收；用户确认 V50–V56 人工 smoke 可接受，132 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过。
+- ✅ 完成 G5 验收并通过审查修复复验；用户确认 V50–V56 人工 smoke 可接受，134 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过。
 
 ## R6 —— Knowledge/RAG 与 Memory
 

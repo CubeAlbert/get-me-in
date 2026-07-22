@@ -182,6 +182,7 @@
 - [决策 165 — /rewind 在回退前捕获预填文本](#决策-165---rewind-在回退前捕获预填文本)
 - [决策 166 — /restore 与 /rewind 的选择菜单提供取消项](#决策-166---restore-与-rewind-的选择菜单提供取消项)
 - [决策 167 — G5 已通过且 R6 暂停](#决策-167--g5-已通过且-r6-暂停)
+- [决策 168 — R5 审查修复命令事件闭合与错误边界](#决策-168--r5-审查修复命令事件闭合与错误边界)
 
 ---
 
@@ -3701,3 +3702,29 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 删除 Runner 后立即开始 R6 —— 超出用户授权，且绕过 R6 清单确认门禁。
 - 保留 Runner 以备后续使用 —— 与 R5/R8 的单一 v2 CLI 入口约定冲突。
+
+---
+
+### 决策 168 —— R5 审查修复命令事件闭合与错误边界
+
+**背景：** G5 通过后的代码复审发现，`/exit_sub` handler 直接渲染 `ExitSubAgent` 返回的 RuntimeEvent，却没有交回 CliApp 继续驱动。主 Agent 下调用会抛出 `ValueError` 并终止 CLI；活动 handoff 下调用会留下处于待继续阶段的源 Runtime。相同的命令异常边界也会让无效 restore/rewind 参数直接退出 CLI。既有测试只验证 handler 调用了 Application，没有贯通 CommandRegistry、CliApp 和后续 Continue。
+
+**决定：**
+
+- `CommandAction` 增加 `DRIVE`，`CommandResult` 增加可选 RuntimeEvent；会产生运行事件的 CLI 命令必须把事件交回 CliApp 的统一事件循环。
+- `/exit_sub` 不再在 handler 内自行渲染事件；CliApp 收到 `DRIVE` 后按现有 RuntimeEvent 规则继续推进并在终态 snapshot。
+- CliApp 在命令 dispatch 边界捕获预期异常，调用 Renderer 显示错误后返回输入循环；不捕获 `KeyboardInterrupt` 之外的进程控制异常。
+- 增加命令事件继续驱动和命令失败后继续输入的跨组件测试；完整核心回归增至 134 项。
+- 修正 R5 设计文档中“不修改 RuntimeEvent/Session 投影”的过期描述，明确实际扩展及对应决策；不借修复进入 R6 编码。
+
+**理由：**
+
+- RuntimeEvent 的下一步只能由 CliApp 决定，handler 渲染后丢弃会破坏 pull-driven 状态机。
+- 用户输入的无效命令或参数属于可恢复 CLI 错误，不应形成进程级失败。
+- 以强类型 `DRIVE` 表达事件转交，继续避免魔法 dict，同时保持 CommandRegistry 不复制 RuntimeEvent 分支逻辑。
+
+**曾考虑的替代方案：**
+
+- 在 `/exit_sub` handler 内循环调用 Continue —— 会复制 CliApp 的审批、选择、终态与 snapshot 规则，已拒绝。
+- 只为 `/exit_sub` 捕获 `ValueError` —— 无法覆盖 restore/rewind 等同类用户可控错误，已拒绝。
+- 提前建立 R6 通用 ApplicationCommand worker 协议 —— 超出本次 R5 修复范围，留待 R6 设计整理，已拒绝。

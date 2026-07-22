@@ -364,13 +364,13 @@ R4 新增文件、类和公开方法清单如下，编码前仍需用户确认�
 
 CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触 AgentRuntime、PlanService、CancellationToken 实例、完整 SessionSnapshot 或任何私有 history。拆分职责如下：
 
-- `CliApp`：唯一外层输入循环；把普通文本转换为 `UserMessage`，驱动 RuntimeEvent → 下一条 RuntimeCommand，并在终态触发 session snapshot。
+- `CliApp`：唯一外层输入循环；把普通文本转换为 `UserMessage`，驱动 RuntimeEvent → 下一条 RuntimeCommand，并在终态触发 session snapshot；命令 handler 的预期异常统一渲染为错误并返回输入循环，不允许用户可控的命令参数终止 CLI。
 - `CommandRegistry`：命令解析、帮助文本、alias 与 handler 映射；R6 可替换已注册的 unavailable handler，无需修改 CliApp。
 - `InputController`：autocomplete、进程内输入导航历史、prefill、editor、confirm/select；其中 `confirm()` 使用 questionary 选项列表呈现“✅ 执行 / ❌ 取消”，不使用 `y/N` 确认框；不增加独立 CLI 持久化 schema。restore 后可从 `SessionView.rewind_points` 重建导航历史。
 - `Renderer`：Markdown、Plan、spinner、错误、命令结果和 `SessionView` context recap；工具开始时以脱敏、截断后的 arguments 摘要展示调用，工具结束时显示截断结果预览；Plan 工具结束时直接渲染只读 Plan 表格，不解析输出字符串；不决定下一条业务 command。
 - `WorkerRunner`：使用单 worker 串行执行一个 `Application.handle(RuntimeCommand)`，轮询 Esc/Ctrl+C 并只通过 `Application.request_cancel()` 跨线程取消；不得并发执行 snapshot/restore/另一条 command。
 
-事件推进由 `CliApp` 明确处理：`Progress`、`ToolStarted`、`ToolFinished`、`HandoffRequested` 转为 `Continue`；`ApprovalRequested` 转为 `Approve/Reject`；`SelectionRequested` 转为 `SubmitSelection/Cancel`；`Completed/Failed/Cancelled` 结束内层循环。`Reject` 是用户对该次审批的明确否决：Runtime 必须写入已拒绝的 tool result 闭合 pending call，再直接返回 `Cancelled`，不得自动 `Continue` 或把拒绝结果交回模型重试；只有实际工具执行的技术/业务失败才以 `ToolFinished` 交回模型自修复。终态后调用 `Application.snapshot()` 保留旧 CLI 自动保存能力，保存失败单独渲染，不覆盖原终态。
+事件推进由 `CliApp` 明确处理：`Progress`、`ToolStarted`、`ToolFinished`、`HandoffRequested` 转为 `Continue`；`ApprovalRequested` 转为 `Approve/Reject`；`SelectionRequested` 转为 `SubmitSelection/Cancel`；`Completed/Failed/Cancelled` 结束内层循环。会返回 RuntimeEvent 的 CLI 命令（当前为 `/exit_sub`）使用 `CommandAction.DRIVE` 将事件交回 `CliApp`，不得只在 handler 内渲染后丢弃；这样 `FailHandoff` 产生的 `ToolFinished` 仍会继续驱动源 Agent。`Reject` 是用户对该次审批的明确否决：Runtime 必须写入已拒绝的 tool result 闭合 pending call，再直接返回 `Cancelled`，不得自动 `Continue` 或把拒绝结果交回模型重试；只有实际工具执行的技术/业务失败才以 `ToolFinished` 交回模型自修复。终态后调用 `Application.snapshot()` 保留旧 CLI 自动保存能力，保存失败单独渲染，不覆盖原终态。
 
 审批策略属于 CLI 偏好：`/approval` 无参数时在 `prompt` 与 `auto` 间切换，使用 `/approval prompt|auto` 可显式设置；该策略只决定 `ApprovalRequested` 是否自动发送 `Approve`，不修改 ToolDefinition 或 Runtime 状态。`/auto-approve-switch` 不向前兼容。基础 Plan 表格在每次 Plan 工具变更后显示；持续驻留的 Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
 
@@ -392,9 +392,9 @@ R5 新文件、对象与公开边界清单如下，已由用户在决策 154 中
 | `tests/get_me_in/test_cli_commands.py` | CommandRegistry tests | 覆盖 parse/help/alias/replace、restore/rewind、unavailable handler 与审批策略 |
 | `tests/get_me_in/test_cli_worker.py` | WorkerRunner tests | 覆盖单 worker、取消、关闭与禁止并发 |
 
-其中 `ApprovalMode` 只包含 `PROMPT/AUTO`；`CommandAction` 只包含 `HANDLED/EXIT/SUBMIT/PREFILL/SET_APPROVAL`。`CommandResult` 由 `action`、可选 `text` 和可选 `approval_mode` 组成：`SUBMIT` 用于 `/edit` 产生普通用户输入，`PREFILL` 用于 `/rewind` 回退后预填，`SET_APPROVAL` 只修改 CliApp 的进程内审批偏好。`CommandSpec` 包含 `name/description/handler/aliases`，handler 接收命令参数文本并返回 `CommandResult`；非命令输入时 `dispatch()` 返回 `None`。`help_entries()` 与 `completions()` 都从当前注册表派生并按命令名排序；帮助单列 alias，避免显示与实际可补全命令不一致。`CompletionProvider = Callable[[], tuple[str, ...]]` 由 `InputController.set_completions()` 注入；CliApp 在装配时传入 `CommandRegistry.completions`，`read()` 每次打开输入框时读取 provider 的最新结果。InputController 不持有或依赖 CommandRegistry；未注入 provider 时使用空补全列表。
+其中 `ApprovalMode` 只包含 `PROMPT/AUTO`；`CommandAction` 包含 `HANDLED/EXIT/SUBMIT/PREFILL/SET_APPROVAL/DRIVE`。`CommandResult` 由 `action`、可选 `text`、可选 `approval_mode` 和可选 `event` 组成：`SUBMIT` 用于 `/edit` 产生普通用户输入，`PREFILL` 用于 `/rewind` 回退后预填，`SET_APPROVAL` 只修改 CliApp 的进程内审批偏好，`DRIVE` 必须携带 RuntimeEvent 并交给 CliApp 的既有事件循环。`CommandSpec` 包含 `name/description/handler/aliases`，handler 接收命令参数文本并返回 `CommandResult`；非命令输入时 `dispatch()` 返回 `None`。`help_entries()` 与 `completions()` 都从当前注册表派生并按命令名排序；帮助单列 alias，避免显示与实际可补全命令不一致。`CompletionProvider = Callable[[], tuple[str, ...]]` 由 `InputController.set_completions()` 注入；CliApp 在装配时传入 `CommandRegistry.completions`，`read()` 每次打开输入框时读取 provider 的最新结果。InputController 不持有或依赖 CommandRegistry；未注入 provider 时使用空补全列表。
 
-R5 复用既有 `build_application()`，不改变 `bootstrap.py` 的 Runtime/Session 装配边界；`cli/main.py` 负责 Settings 加载和 CLI 组件装配。R5 只调整 `docs/legacy-cli-smoke-checklist.md`，不修改 RuntimeCommand/RuntimeEvent、Session snapshot schema、ToolDefinition 或 R6/R7 service。真实 questionary/Rich、Windows UTF-8、Esc、Ctrl+C、EOF 与 editor-not-found 仍使用人工 smoke 验证。
+R5 复用既有 `build_application()`，不改变 `bootstrap.py` 的 Runtime/Session 装配边界；`cli/main.py` 负责 Settings 加载和 CLI 组件装配。R5 没有修改 RuntimeCommand、Session snapshot schema、ToolDefinition 或 R6/R7 service；为满足真实 CLI 展示与交互闭合，已显式扩展 `ToolStarted.arguments`、`ToolFinished.plan`、`SessionPreview.preview` 和 Reject 的终止语义，这些投影与转换分别由决策 158、162、163 约束。真实 questionary/Rich、Windows UTF-8、Esc、Ctrl+C、EOF 与 editor-not-found 仍使用人工 smoke 验证。
 
 推荐实施顺序固定为：
 
