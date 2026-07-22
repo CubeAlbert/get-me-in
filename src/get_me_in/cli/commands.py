@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from src.get_me_in.application.app_commands import DumpSession, ExitSubAgent, RestoreSession, RewindSession
+from src.get_me_in.application.events import RuntimeEvent
 
 
 class ApprovalMode(StrEnum):
@@ -22,6 +23,7 @@ class CommandAction(StrEnum):
     SUBMIT = "submit"
     PREFILL = "prefill"
     SET_APPROVAL = "set_approval"
+    DRIVE = "drive"
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,7 @@ class CommandResult:
     action: CommandAction
     text: str | None = None
     approval_mode: ApprovalMode | None = None
+    event: RuntimeEvent | None = None
 
 
 CommandHandler = Callable[[str], CommandResult]
@@ -157,8 +160,9 @@ def build_command_registry(application: object, input_controller: object, render
 
     def exit_subagent_command(_: str) -> CommandResult:
         event = application.handle(ExitSubAgent())
-        renderer.render_event(event)
-        return CommandResult(CommandAction.HANDLED)
+        if not isinstance(event, RuntimeEvent):
+            raise TypeError("ExitSubAgent must return a RuntimeEvent")
+        return CommandResult(CommandAction.DRIVE, event=event)
 
     def approval_command(arguments: str) -> CommandResult:
         if not arguments:

@@ -39,7 +39,11 @@ class CliApp:
                 text = text.strip()
                 if not text:
                     continue
-                result = self._commands.dispatch(text)
+                try:
+                    result = self._commands.dispatch(text)
+                except Exception as error:
+                    self._renderer.render_error(f"命令执行失败：{error}")
+                    continue
                 if result is None:
                     self._input.remember(text)
                     self._drive(self._worker.run(UserMessage(text)))
@@ -60,6 +64,12 @@ class CliApp:
                         or (ApprovalMode.AUTO if self._approval_mode is ApprovalMode.PROMPT else ApprovalMode.PROMPT)
                     )
                     self._renderer.render_notice(f"审批模式：{self._approval_mode}")
+                    continue
+                if result.action is CommandAction.DRIVE:
+                    if result.event is None:
+                        self._renderer.render_error("命令未返回可驱动的运行事件。")
+                    else:
+                        self._drive(result.event)
                     continue
                 if result.text:
                     self._renderer.render_notice(result.text)

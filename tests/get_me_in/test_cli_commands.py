@@ -128,10 +128,12 @@ class CoreCommandTests(unittest.TestCase):
 
         self.assertEqual(CommandResult(CommandAction.SUBMIT, "long input"), self.registry.dispatch("/edit"))
         self.registry.dispatch("/dump")
-        self.registry.dispatch("/exit_sub")
+        result = self.registry.dispatch("/exit_sub")
 
         self.assertEqual([DumpSession(), ExitSubAgent()], self.application.commands)
         self.assertEqual([], self.renderer.notices)
+        self.assertEqual(CommandAction.DRIVE, result.action)
+        self.assertEqual(ToolFinished("call", "switch_to_subagent", "closed"), result.event)
 
 
 class InputControllerTests(unittest.TestCase):
@@ -228,7 +230,7 @@ class _Application:
         if isinstance(command, DumpSession):
             return "export.md"
         if isinstance(command, ExitSubAgent):
-            return "event"
+            return ToolFinished("call", "switch_to_subagent", "closed")
         return _View()
 
     def view(self) -> _View:

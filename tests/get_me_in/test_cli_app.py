@@ -3,7 +3,7 @@
 import unittest
 
 from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
-from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress
+from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress, ToolFinished
 from src.get_me_in.cli.app import CliApp
 from src.get_me_in.cli.commands import ApprovalMode, CommandAction, CommandResult
 from src.get_me_in.domain.messages import MessageRecord, Role
@@ -65,6 +65,37 @@ class CliAppTests(unittest.TestCase):
 
         self.assertEqual([None, "rewound input"], input_controller.prefills)
 
+    def test_command_runtime_event_is_driven_until_terminal(self) -> None:
+        application = _Application()
+        event = ToolFinished("call", "switch_to_subagent", "closed")
+        worker = _Worker((Completed(_message()),))
+        app = CliApp(
+            application,
+            _Commands((CommandResult(CommandAction.DRIVE, event=event), CommandResult(CommandAction.EXIT))),
+            _Input(("/exit_sub", "/exit")),
+            _Renderer(),
+            worker,
+        )
+
+        app.run()
+
+        self.assertEqual((Continue(),), worker.commands)
+        self.assertEqual(1, application.snapshots)
+
+    def test_command_failure_is_rendered_and_input_loop_remains_available(self) -> None:
+        renderer = _Renderer()
+        app = CliApp(
+            _Application(),
+            _FailingCommands(),
+            _Input(("/exit_sub", "/exit")),
+            renderer,
+            _Worker(()),
+        )
+
+        self.assertEqual(0, app.run())
+
+        self.assertEqual(["命令执行失败：No sub-agent handoff is active"], renderer.errors)
+
     def test_approval_without_argument_toggles_from_prompt_to_auto(self) -> None:
         application = _Application()
         renderer = _Renderer()
@@ -112,6 +143,17 @@ class _Commands:
 
     def dispatch(self, text: str) -> CommandResult | None:
         return self.results.pop(0)
+
+
+class _FailingCommands:
+    def __init__(self) -> None:
+        self._failed = False
+
+    def dispatch(self, text: str) -> CommandResult:
+        if not self._failed:
+            self._failed = True
+            raise ValueError("No sub-agent handoff is active")
+        return CommandResult(CommandAction.EXIT)
 
 
 class _Input:
