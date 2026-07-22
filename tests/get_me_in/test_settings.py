@@ -13,11 +13,15 @@ class SettingsTests(unittest.TestCase):
                 "LLM_PRO_MODEL": "pro",
                 "LLM_FLASH_MODEL": "flash",
                 "LLM_TIMEOUT": "12.5",
+                "AGENT_MAX_MODEL_CALLS": "9",
+                "CANCEL_GRACE_SECONDS": "1.5",
             },
             project_root=Path("project"),
         )
 
         self.assertEqual(12.5, settings.llm_timeout_seconds)
+        self.assertEqual(9, settings.max_model_calls_per_run)
+        self.assertEqual(1.5, settings.cancel_grace_seconds)
         self.assertTrue(settings.llm_thinking_enabled)
         self.assertEqual(Path("project/data/prompts"), settings.prompts_dir)
         self.assertEqual(Path("project/data/workspace"), settings.workspace_dir)

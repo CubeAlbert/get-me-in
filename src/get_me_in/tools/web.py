@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from typing import Protocol
 
+from src.get_me_in.domain.agents import Capability
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandlerContext, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.web_search import WebSearchPort
 
@@ -13,7 +14,7 @@ class WebToolContext(ToolHandlerContext, Protocol):
 
 
 def build_web_tools() -> tuple[ToolDefinition, ...]:
-    return (ToolDefinition("web_search", "搜索网络中的最新信息并返回整理结果。", ToolSchema({"query": str}, frozenset({"query"})), ToolPolicy(confirmation=ConfirmationMode.ALWAYS), _search),)
+    return (ToolDefinition("web_search", "搜索网络中的最新信息并返回整理结果。", ToolSchema({"query": str}, frozenset({"query"})), ToolPolicy(frozenset({Capability.WEB_SEARCH}), ConfirmationMode.ALWAYS), _search),)
 
 
 def _search(arguments: Mapping[str, object], context: WebToolContext) -> ToolSuccess | ToolFailure:

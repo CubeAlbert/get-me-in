@@ -11,6 +11,7 @@ from src.get_me_in.domain.tools import (
     ToolSchema,
     ToolSuccess,
 )
+from src.get_me_in.domain.agents import Capability
 from src.get_me_in.ports.clock import Clock
 from src.get_me_in.ports.workspace import WorkspacePort
 
@@ -28,14 +29,14 @@ def build_system_tools(clock: Clock) -> tuple[ToolDefinition, ...]:
             name="get_current_datetime",
             description="获取当前带时区的日期与时间。",
             schema=ToolSchema(properties={}),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.SYSTEM})),
             handler=lambda arguments, context: _get_current_datetime(clock, arguments, context),
         ),
         ToolDefinition(
             name="get_working_dir",
             description="获取当前受限工作区的绝对根目录。",
             schema=ToolSchema(properties={}),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.SYSTEM})),
             handler=_get_working_dir,
         ),
     )

@@ -2,8 +2,8 @@ import unittest
 from pathlib import Path
 
 from src.get_me_in.bootstrap import build_application
-from src.get_me_in.application.commands import UserMessage
-from src.get_me_in.application.events import Completed, ToolFinished
+from src.get_me_in.application.commands import Continue, UserMessage
+from src.get_me_in.application.events import Completed, Progress, ToolFinished, ToolStarted
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult
@@ -43,11 +43,14 @@ class BootstrapTests(unittest.TestCase):
         llm = _FakeLlm("completed")
         application = build_application(_settings(), llm=llm)
 
-        events = application.handle(UserMessage("Help me prepare for an interview"))
+        events = _pump(application, UserMessage("Help me prepare for an interview"))
 
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual("completed", events[-1].message.content)
         self.assertIn("Help me prepare for an interview", llm.request.messages[-1].content)
+        self.assertIn("get_current_datetime", llm.request.messages[0].content)
+        self.assertNotIn("workspace_write", llm.request.messages[0].content)
+        self.assertNotIn("copy_template", llm.request.messages[0].content)
         self.assertFalse(llm.cancellation.is_cancelled)
 
     def test_application_executes_its_explicit_system_tool_catalog(self) -> None:
@@ -61,7 +64,7 @@ class BootstrapTests(unittest.TestCase):
             ),
         )
 
-        events = application.handle(UserMessage("What time is it?"))
+        events = _pump(application, UserMessage("What time is it?"))
 
         self.assertTrue(any(isinstance(event, ToolFinished) for event in events))
         self.assertIsInstance(events[-1], Completed)
@@ -85,6 +88,31 @@ class BootstrapTests(unittest.TestCase):
             },
             set(names),
         )
+
+    def test_main_agent_cannot_see_workspace_or_resume_tools(self) -> None:
+        application = build_application(_settings(), llm=_FakeLlm("unused"))
+        main = application.catalog.get(AgentKey.MAIN)
+
+        names = {
+            tool.name
+            for tool in application.tool_catalog.list_for_capabilities(main.capabilities)
+        }
+
+        self.assertIn("switch_to_subagent", names)
+        self.assertNotIn("workspace_read", names)
+        self.assertNotIn("copy_template", names)
+        self.assertNotIn("switch_to_mainagent", names)
+
+    def test_every_production_tool_declares_capabilities(self) -> None:
+        application = build_application(_settings(), llm=_FakeLlm("unused"))
+
+        missing = [
+            item["name"]
+            for item in application.tool_catalog.export_descriptors()
+            if not item["required_capabilities"]
+        ]
+
+        self.assertEqual([], missing)
 
     def test_application_close_releases_its_llm_adapter(self) -> None:
         llm = _FakeLlm("unused")
@@ -114,3 +142,10 @@ class _FakeLlm:
 
     def close(self) -> None:
         self.closed = True
+
+
+def _pump(application, command) -> list[object]:
+    events = [application.handle(command)]
+    while isinstance(events[-1], (Progress, ToolStarted, ToolFinished)):
+        events.append(application.handle(Continue()))
+    return events

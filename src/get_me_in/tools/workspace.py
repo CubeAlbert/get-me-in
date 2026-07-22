@@ -13,13 +13,15 @@ from src.get_me_in.domain.tools import (
     ToolSchema,
     ToolSuccess,
 )
-from src.get_me_in.ports.workspace import WorkspaceError, WorkspacePort
+from src.get_me_in.domain.agents import Capability
+from src.get_me_in.ports.workspace import RevisionMismatchError, WorkspaceError, WorkspacePort
 from src.get_me_in.ports.frontend import FrontendPort
 
 
 class WorkspaceToolContext(ToolHandlerContext, Protocol):
     workspace: WorkspacePort | None
     frontend: FrontendPort | None
+    workspace_access: object | None
 
 
 def build_workspace_tools() -> tuple[ToolDefinition, ...]:
@@ -29,14 +31,14 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
             name="workspace_read",
             description="读取工作区文本文件，返回一基行号与文件 revision。",
             schema=ToolSchema({"path": str, "offset": int, "limit": int}, frozenset({"path"})),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
             handler=_read,
         ),
         ToolDefinition(
             name="workspace_list",
             description="列出工作区目录的单层文件与子目录。",
             schema=ToolSchema({"path": str}),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
             handler=_list,
         ),
         ToolDefinition(
@@ -46,56 +48,56 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
                 {"pattern": str, "path": str, "glob": str, "regex": bool, "max_matches": int},
                 frozenset({"pattern"}),
             ),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
             handler=_grep,
         ),
         ToolDefinition(
             name="workspace_search_file",
             description="按文件名 glob 递归搜索受限工作区文件。",
             schema=ToolSchema({"pattern": str, "path": str, "max_results": int}, frozenset({"pattern"})),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
             handler=_search_file,
         ),
         ToolDefinition(
             name="workspace_replace",
             description="原子替换文件内全部匹配文本。",
             schema=ToolSchema({"path": str, "old_str": str, "new_str": str}, frozenset({"path", "old_str", "new_str"})),
-            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_replace,
         ),
         ToolDefinition(
             name="workspace_write",
             description="创建新的工作区文本文件，拒绝覆盖已有文件。",
             schema=ToolSchema({"path": str, "content": str}, frozenset({"path", "content"})),
-            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_write,
         ),
         ToolDefinition(
             name="workspace_delete",
             description="批量删除工作区文件或空目录，并返回逐路径结果。",
             schema=ToolSchema({"paths": list}, frozenset({"paths"})),
-            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_delete,
         ),
         ToolDefinition(
             name="workspace_move",
             description="移动或重命名工作区路径，拒绝覆盖已有目标。",
             schema=ToolSchema({"src": str, "dst": str}, frozenset({"src", "dst"})),
-            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_move,
         ),
         ToolDefinition(
             name="workspace_edit",
             description="按读取时返回的 revision 精确编辑多行；任一校验失败则不写入。",
             schema=ToolSchema({"path": str, "revision": str, "edits": list}, frozenset({"path", "revision", "edits"})),
-            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_edit,
         ),
         ToolDefinition(
             name="workspace_open",
             description="用前端或操作系统默认程序打开工作区中的已有文件。",
             schema=ToolSchema({"path": str}, frozenset({"path"})),
-            policy=ToolPolicy(confirmation=ConfirmationMode.ALWAYS),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_OPEN}), ConfirmationMode.ALWAYS),
             handler=_open,
         ),
     )
@@ -113,6 +115,10 @@ def _read(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
     try:
         snapshot = workspace.read(path)
         lines = workspace.read_lines(path, offset=offset - 1, limit=limit)
+        if context.workspace_access is not None:
+            context.workspace_access.authorize_read(
+                context.session_id, snapshot.path, snapshot.revision
+            )
     except (OSError, UnicodeError, WorkspaceError, ValueError) as error:
         return ToolFailure("workspace_read_failed", str(error))
     return ToolSuccess(
@@ -233,7 +239,15 @@ def _edit(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
     if isinstance(workspace, ToolFailure): return workspace
     path = Path(arguments["path"])
     try:
+        if context.workspace_access is None:
+            return ToolFailure(
+                "workspace_access_unavailable",
+                "Revision-aware edit requires session-scoped workspace access state",
+            )
         snapshot = workspace.read(path)
+        context.workspace_access.require_revision(
+            context.session_id, snapshot.path, arguments["revision"]
+        )
         if snapshot.revision != arguments["revision"]:
             return ToolFailure("workspace_revision_mismatch", "Read the file again before editing")
         lines = snapshot.content.splitlines()
@@ -246,10 +260,15 @@ def _edit(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
                 return ToolFailure("workspace_edit_content_mismatch", f"Line {line} no longer matches")
             lines[line - 1 : line] = content.split("\n") if content else []
             applied.append({"line": line, "status": "applied"})
-        workspace.edit(path, snapshot.revision, "\n".join(lines))
+        updated = workspace.edit(path, snapshot.revision, "\n".join(lines))
+        context.workspace_access.authorize_read(
+            context.session_id, updated.path, updated.revision
+        )
+    except RevisionMismatchError:
+        return ToolFailure("workspace_revision_mismatch", "Read the file again before editing")
     except (KeyError, TypeError, OSError, WorkspaceError) as error:
         return ToolFailure("workspace_edit_failed", str(error))
-    return ToolSuccess({"path": str(path), "edits_applied": len(applied), "edits": tuple(applied)})
+    return ToolSuccess({"path": str(path), "revision": updated.revision, "edits_applied": len(applied), "edits": tuple(applied)})
 
 
 def _open(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:

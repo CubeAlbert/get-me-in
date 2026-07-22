@@ -13,10 +13,18 @@ class AgentKey(StrEnum):
 
 
 class Capability(StrEnum):
-    """Capabilities used later by ToolCatalog visibility rules."""
+    """Fine-grained capabilities used by ToolCatalog visibility rules."""
 
+    SYSTEM = "system"
+    PLAN = "plan"
+    INTERACTION = "interaction"
+    WEB_SEARCH = "web.search"
+    EXTERNAL_FILE_READ = "external_file.read"
     ROUTE = "route"
-    RESUME_WORKSPACE = "resume.workspace"
+    RETURN_TO_MAIN = "return_to_main"
+    WORKSPACE_READ = "workspace.read"
+    WORKSPACE_WRITE = "workspace.write"
+    WORKSPACE_OPEN = "workspace.open"
     RESUME_ARTIFACT = "resume.artifact"
     KNOWLEDGE_QUERY = "knowledge.query"
 

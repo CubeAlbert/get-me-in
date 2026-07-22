@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.tool_catalog import ToolCatalog
+from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey, Capability
 from src.get_me_in.domain.tools import (
     ConfirmationMode,
@@ -35,6 +36,7 @@ class ToolContext:
     external_files: ExternalFileReaderPort | None = None
     retrieval: RetrievalPort | None = None
     resume_artifacts: ResumeArtifactPort | None = None
+    workspace_access: WorkspaceAccessState | None = None
     approved: bool = False
     rejected: bool = False
 

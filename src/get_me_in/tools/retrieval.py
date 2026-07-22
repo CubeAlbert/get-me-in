@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Protocol
 
+from src.get_me_in.domain.agents import Capability
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandlerContext, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.retrieval import RetrievalPort
 
@@ -32,12 +33,12 @@ def build_retrieval_tools() -> tuple[ToolDefinition, ...]:
         ToolDefinition(
             "query_memory", "查询已保存的用户事实或偏好。",
             ToolSchema({"query": str, "memory_type": str, "top_k": int}, frozenset({"query"})),
-            ToolPolicy(confirmation=ConfirmationMode.NEVER), _query_memory,
+            ToolPolicy(frozenset({Capability.KNOWLEDGE_QUERY}), ConfirmationMode.NEVER), _query_memory,
         ),
         ToolDefinition(
             "query_reference_data", "查询已导入的求职参考资料。",
             ToolSchema({"query": str, "category": str, "top_k": int}, frozenset({"query"})),
-            ToolPolicy(confirmation=ConfirmationMode.NEVER), _query_reference_data,
+            ToolPolicy(frozenset({Capability.KNOWLEDGE_QUERY}), ConfirmationMode.NEVER), _query_reference_data,
         ),
     )
 

@@ -37,11 +37,17 @@ class Application:
         self._web_search = web_search
         self._closed = False
 
-    def handle(self, command: RuntimeCommand) -> tuple[RuntimeEvent, ...]:
+    def handle(self, command: RuntimeCommand) -> RuntimeEvent:
         """Run one typed command without exposing runtime internals."""
         if self._closed:
             raise RuntimeError("Application is closed")
         return self._runtime.handle(command)
+
+    def request_cancel(self, reason: str = "Cancelled by user") -> None:
+        """Cancel an active blocking call without mutating Runtime state cross-thread."""
+        if self._closed:
+            raise RuntimeError("Application is closed")
+        self._runtime.request_cancel(reason)
 
     def close(self) -> None:
         self._closed = True

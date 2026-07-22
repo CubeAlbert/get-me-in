@@ -8,6 +8,7 @@ from src.get_me_in.adapters.local_workspace import LocalWorkspace
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
+from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.tools import ToolSuccess
 from src.get_me_in.tools.workspace import build_workspace_tools
@@ -18,7 +19,14 @@ class WorkspaceToolTests(unittest.TestCase):
         self.temporary_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_dir.cleanup)
         self.workspace = LocalWorkspace(Path(self.temporary_dir.name))
-        self.context = ToolContext("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace)
+        self.access = WorkspaceAccessState()
+        self.context = ToolContext(
+            "session",
+            AgentKey.MAIN,
+            CancellationToken(),
+            workspace=self.workspace,
+            workspace_access=self.access,
+        )
         self.executor = ToolExecutor(ToolCatalog(build_workspace_tools()))
 
     def test_read_returns_one_based_lines_and_revision(self) -> None:
@@ -60,11 +68,12 @@ class WorkspaceToolTests(unittest.TestCase):
     def test_approved_write_replace_delete_and_move_operations(self) -> None:
         write = self.executor.execute("write", "workspace_write", {"path": "one.txt", "content": "old old"}, self.context)
         self.assertEqual("approval", write.kind)
-        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, approved=True)
+        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, workspace_access=self.access, approved=True)
         self.executor.execute("write", "workspace_write", {"path": "one.txt", "content": "old old"}, approved)
         replaced = self.executor.execute("replace", "workspace_replace", {"path": "one.txt", "old_str": "old", "new_str": "new"}, approved)
         moved = self.executor.execute("move", "workspace_move", {"src": "one.txt", "dst": "folder/two.txt"}, approved)
         deleted = self.executor.execute("delete", "workspace_delete", {"paths": ["folder/two.txt", "missing.txt"]}, approved)
+        self.assertIsInstance(replaced, ToolSuccess, replaced)
         self.assertEqual(2, replaced.output["replacements"])
         self.assertTrue(moved.output["moved"])
         self.assertEqual(("folder\\two.txt",), deleted.output["deleted"])
@@ -72,14 +81,17 @@ class WorkspaceToolTests(unittest.TestCase):
 
     def test_edit_requires_current_revision_and_applies_multiple_original_lines(self) -> None:
         self.workspace.write(Path("edit.txt"), "one\ntwo\nthree")
-        snapshot = self.workspace.read(Path("edit.txt"))
-        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, approved=True)
+        read = self.executor.execute(
+            "read", "workspace_read", {"path": "edit.txt"}, self.context
+        )
+        revision = read.output["revision"]
+        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, workspace_access=self.access, approved=True)
         outcome = self.executor.execute(
-            "edit", "workspace_edit", {"path": "edit.txt", "revision": snapshot.revision,
+            "edit", "workspace_edit", {"path": "edit.txt", "revision": revision,
               "edits": [{"line": 1, "old_content": "one", "content": "ONE"}, {"line": 3, "old_content": "three", "content": ""}]}, approved
         )
         stale = self.executor.execute(
-            "stale", "workspace_edit", {"path": "edit.txt", "revision": snapshot.revision, "edits": []}, approved
+            "stale", "workspace_edit", {"path": "edit.txt", "revision": revision, "edits": []}, approved
         )
         self.assertEqual("ONE\ntwo", self.workspace.read(Path("edit.txt")).content.replace("\r\n", "\n"))
         self.assertEqual(2, outcome.output["edits_applied"])
@@ -88,7 +100,7 @@ class WorkspaceToolTests(unittest.TestCase):
     def test_open_uses_the_injected_frontend(self) -> None:
         self.workspace.write(Path("preview.pdf"), "placeholder")
         frontend = _Frontend()
-        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, frontend=frontend, approved=True)
+        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, frontend=frontend, workspace_access=self.access, approved=True)
         outcome = self.executor.execute("open", "workspace_open", {"path": "preview.pdf"}, approved)
         self.assertTrue(outcome.output["opened"])
         self.assertEqual(Path(self.temporary_dir.name).resolve() / "preview.pdf", frontend.opened)

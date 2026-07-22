@@ -1,9 +1,12 @@
 """Rendering of static agent prompt templates."""
 
 import re
+import json
+from collections.abc import Iterable
 from pathlib import Path
 
-from src.get_me_in.domain.agents import AgentSpec
+from src.get_me_in.domain.agents import AgentDescriptor, AgentSpec
+from src.get_me_in.domain.tools import ToolDefinition
 
 
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
@@ -51,8 +54,8 @@ class PromptRenderer:
         self,
         spec: AgentSpec,
         *,
-        addition_tools: str = "",
-        sub_agents_list: str = "",
+        tools: Iterable[ToolDefinition] = (),
+        agents: Iterable[AgentDescriptor] = (),
     ) -> str:
         files = sorted(self._general_agent_dir.glob("*.md"))
         if not files:
@@ -76,8 +79,8 @@ class PromptRenderer:
             "PRIORITIES": "\n".join(spec.priorities),
             "HARD_CONSTRAINTS": "\n".join(spec.hard_constraints),
             "SOFT_CONSTRAINTS": "\n".join(spec.soft_constraints),
-            "ADDITION_TOOLS": addition_tools,
-            "SUB_AGENTS_LIST": sub_agents_list,
+            "ADDITION_TOOLS": self._render_tools(tools),
+            "SUB_AGENTS_LIST": self._render_agents(spec, agents),
             "TONE": spec.style.tone,
             "VERBOSITY": spec.style.verbosity,
             "EXPLANATION_STYLE": spec.style.explanation_style,
@@ -90,3 +93,33 @@ class PromptRenderer:
                 f"Missing prompt variables: {', '.join(sorted(missing))}"
             )
         return _PLACEHOLDER_RE.sub(lambda match: values[match.group(1)], template)
+
+    @staticmethod
+    def _render_tools(tools: Iterable[ToolDefinition]) -> str:
+        descriptors = (
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": {
+                    "properties": {
+                        name: value.__name__ for name, value in tool.schema.properties.items()
+                    },
+                    "required": sorted(tool.schema.required),
+                },
+            }
+            for tool in tools
+        )
+        return "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in descriptors)
+
+    @staticmethod
+    def _render_agents(spec: AgentSpec, agents: Iterable[AgentDescriptor]) -> str:
+        descriptors = (
+            {
+                "key": agent.key.value,
+                "name": agent.display_name,
+                "description": agent.description,
+            }
+            for agent in agents
+            if agent.key is not spec.key
+        )
+        return "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in descriptors)

@@ -1,33 +1,43 @@
-"""Provider-independent conversation records."""
+"""Provider-independent, strongly typed conversation records."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
 
 class Role(StrEnum):
-    """The speaker represented by a conversation event."""
+    """Speaker roles used by ordinary conversation messages."""
 
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
-    TOOL = "tool"
-
-
-class EventKind(StrEnum):
-    """Semantic kind of a conversation event."""
-
-    MESSAGE = "message"
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
 
 
 @dataclass(frozen=True)
-class ConversationEvent:
-    """Immutable message data that can be passed to an LLM port."""
-
+class MessageRecord:
     event_id: str
     role: Role
-    kind: EventKind
     content: str
     timestamp: datetime
+
+
+@dataclass(frozen=True)
+class ToolCallRecord:
+    event_id: str
+    call_id: str
+    tool_name: str
+    arguments: Mapping[str, object]
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
+class ToolResultRecord:
+    event_id: str
+    call_id: str
+    tool_name: str
+    output: object
+    timestamp: datetime
+
+
+ConversationRecord = MessageRecord | ToolCallRecord | ToolResultRecord

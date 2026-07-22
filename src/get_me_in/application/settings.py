@@ -24,6 +24,8 @@ class Settings:
     prompts_dir: Path
     resume_template_dir: Path
     workspace_dir: Path
+    max_model_calls_per_run: int = 12
+    cancel_grace_seconds: float = 2.0
 
     @classmethod
     def from_env(cls, env: Mapping[str, str], *, project_root: Path) -> "Settings":
@@ -49,6 +51,26 @@ class Settings:
         if timeout <= 0:
             raise SettingsValidationError("LLM_TIMEOUT must be greater than zero")
 
+        max_calls_raw = env.get("AGENT_MAX_MODEL_CALLS", "12")
+        try:
+            max_calls = int(max_calls_raw)
+        except ValueError as error:
+            raise SettingsValidationError(
+                f"AGENT_MAX_MODEL_CALLS must be an integer: {max_calls_raw!r}"
+            ) from error
+        if max_calls < 1:
+            raise SettingsValidationError("AGENT_MAX_MODEL_CALLS must be at least one")
+
+        cancel_grace_raw = env.get("CANCEL_GRACE_SECONDS", "2")
+        try:
+            cancel_grace = float(cancel_grace_raw)
+        except ValueError as error:
+            raise SettingsValidationError(
+                f"CANCEL_GRACE_SECONDS must be a number: {cancel_grace_raw!r}"
+            ) from error
+        if cancel_grace < 0:
+            raise SettingsValidationError("CANCEL_GRACE_SECONDS must not be negative")
+
         thinking_raw = env.get("LLM_THINKING_ENABLED", "true").strip().lower()
         boolean_values = {"true": True, "1": True, "false": False, "0": False}
         if thinking_raw not in boolean_values:
@@ -68,4 +90,6 @@ class Settings:
             prompts_dir=project_root / "data" / "prompts",
             resume_template_dir=project_root / "data" / "resume" / "template",
             workspace_dir=Path(env.get("WORKSPACE_DIR", project_root / "data" / "workspace")),
+            max_model_calls_per_run=max_calls,
+            cancel_grace_seconds=cancel_grace,
         )

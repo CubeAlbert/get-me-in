@@ -14,12 +14,14 @@ from src.get_me_in.adapters.subprocess_runner import SubprocessRunner
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
+from src.get_me_in.application.conversation_codec import ConversationCodec
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
+from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 from src.get_me_in.ports.llm import LLMPort, ModelProfile
 from src.get_me_in.tools.system import build_system_tools
@@ -56,7 +58,17 @@ def build_application(
             explanation_style="先给结论，再给必要说明",
         ),
         model_profile="pro",
-        capabilities=frozenset({Capability.ROUTE}),
+        capabilities=frozenset(
+            {
+                Capability.SYSTEM,
+                Capability.PLAN,
+                Capability.INTERACTION,
+                Capability.WEB_SEARCH,
+                Capability.EXTERNAL_FILE_READ,
+                Capability.ROUTE,
+                Capability.KNOWLEDGE_QUERY,
+            }
+        ),
         priorities=("先明确用户当前目标，再选择下一步。",),
     )
     catalog = AgentCatalog((main_spec,))
@@ -69,7 +81,11 @@ def build_application(
     web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
     external_files = AuthorizedFileReader()
     retrieval = DeferredRetrievalAdapter()
-    resume_artifacts = LocalResumeArtifacts(settings.resume_template_dir, SubprocessRunner())
+    resume_artifacts = LocalResumeArtifacts(
+        settings.resume_template_dir,
+        SubprocessRunner(cancel_grace_seconds=settings.cancel_grace_seconds),
+    )
+    workspace_access = WorkspaceAccessState()
     plan_service = PlanService(id_generator)
     tool_catalog = ToolCatalog(
         (*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools(), *build_resume_tools())
@@ -91,6 +107,11 @@ def build_application(
         clock=clock,
         id_generator=id_generator,
         cancellation=cancellation,
+        agent_catalog=catalog,
+        tool_catalog=tool_catalog,
+        conversation_codec=ConversationCodec(),
+        max_model_calls=settings.max_model_calls_per_run,
+        model_timeout_seconds=settings.llm_timeout_seconds,
         tool_executor=tool_executor,
         tool_context=ToolContext(
             session_id="application",
@@ -103,6 +124,7 @@ def build_application(
             external_files=external_files,
             retrieval=retrieval,
             resume_artifacts=resume_artifacts,
+            workspace_access=workspace_access,
         ),
     )
     return Application(

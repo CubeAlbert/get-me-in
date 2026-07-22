@@ -7,6 +7,7 @@ from src.get_me_in.application.prompt_renderer import (
     UnexpectedPromptVariableError,
 )
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
+from src.get_me_in.domain.tools import ToolDefinition, ToolPolicy, ToolSchema, ToolSuccess
 
 
 def _spec() -> AgentSpec:
@@ -56,3 +57,23 @@ class PromptRendererTests(unittest.TestCase):
             rendered = PromptRenderer(root.parent).render(_spec())
 
         self.assertEqual("优先级", rendered)
+
+    def test_renders_only_supplied_catalog_descriptors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir) / "general_agent"
+            root.mkdir()
+            (root / "01.md").write_text(
+                "{{ADDITION_TOOLS}}\n{{SUB_AGENTS_LIST}}", encoding="utf-8"
+            )
+            visible = ToolDefinition(
+                "clock",
+                "time",
+                ToolSchema({}),
+                ToolPolicy(),
+                lambda arguments, context: ToolSuccess("ok"),
+            )
+
+            rendered = PromptRenderer(root.parent).render(_spec(), tools=(visible,))
+
+        self.assertIn('"name": "clock"', rendered)
+        self.assertNotIn("workspace_write", rendered)

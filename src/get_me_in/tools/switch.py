@@ -9,8 +9,8 @@ from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFai
 def build_switch_tools() -> tuple[ToolDefinition, ...]:
     return (
         ToolDefinition("switch_to_subagent", "将任务交给指定子 Agent。", ToolSchema({"agent_name": str, "context": str}, frozenset({"agent_name"})), ToolPolicy(frozenset({Capability.ROUTE}), ConfirmationMode.ALWAYS), _to_subagent),
-        ToolDefinition("switch_to_mainagent", "携带总结退回主 Agent。", ToolSchema({"summary": str}, frozenset({"summary"})), ToolPolicy(confirmation=ConfirmationMode.ALWAYS), _to_mainagent),
-        ToolDefinition("provide_choices", "请求用户从多个选项中选择。", ToolSchema({"question": str, "choices": list}, frozenset({"question", "choices"})), ToolPolicy(), _choices),
+        ToolDefinition("switch_to_mainagent", "携带总结退回主 Agent。", ToolSchema({"summary": str}, frozenset({"summary"})), ToolPolicy(frozenset({Capability.RETURN_TO_MAIN}), ConfirmationMode.ALWAYS), _to_mainagent),
+        ToolDefinition("provide_choices", "请求用户从多个选项中选择。", ToolSchema({"question": str, "choices": list}, frozenset({"question", "choices"})), ToolPolicy(frozenset({Capability.INTERACTION})), _choices),
     )
 
 

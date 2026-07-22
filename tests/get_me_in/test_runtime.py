@@ -1,21 +1,32 @@
-"""Tests for R2's synchronous typed agent runtime."""
+"""Tests for the pull-driven typed agent runtime."""
 
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
 
+from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.application.commands import Approve, Cancel, Reject, SubmitSelection, ToolResult, UserMessage
-from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, Failed, Handoff, SelectionRequested, ToolFinished, ToolStarted
+from src.get_me_in.application.commands import Approve, Cancel, Continue, Reject, SubmitSelection, UserMessage
+from src.get_me_in.application.events import (
+    ApprovalRequested,
+    Cancelled,
+    Completed,
+    Failed,
+    HandoffRequested,
+    Progress,
+    SelectionRequested,
+    ToolFinished,
+    ToolStarted,
+)
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolPolicy, ToolSchema, ToolSuccess
-from src.get_me_in.tools.switch import build_switch_tools
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
+from src.get_me_in.tools.switch import build_switch_tools
 
 
 class RuntimeTests(unittest.TestCase):
@@ -23,7 +34,7 @@ class RuntimeTests(unittest.TestCase):
         runtime, llm, temporary_dir = _runtime(['{"content": "answer", "thinking": "private"}'])
         self.addCleanup(temporary_dir.cleanup)
 
-        events = runtime.handle(UserMessage("question"))
+        events = _pump(runtime, UserMessage("question"))
 
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual("answer", events[-1].message.content)
@@ -33,7 +44,7 @@ class RuntimeTests(unittest.TestCase):
         runtime, llm, temporary_dir = _runtime(["broken", '{"content": "repaired"}'])
         self.addCleanup(temporary_dir.cleanup)
 
-        events = runtime.handle(UserMessage("question"))
+        events = _pump(runtime, UserMessage("question"))
 
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual(2, len(llm.requests))
@@ -42,203 +53,197 @@ class RuntimeTests(unittest.TestCase):
         runtime, _, temporary_dir = _runtime(["broken", "still broken"])
         self.addCleanup(temporary_dir.cleanup)
 
-        events = runtime.handle(UserMessage("question"))
+        events = _pump(runtime, UserMessage("question"))
 
         self.assertEqual("invalid_model_reply", events[-1].code)
 
-    def test_unknown_catalog_tool_returns_structured_result_to_model(self) -> None:
+    def test_unknown_tool_returns_structured_result_to_model(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            [
-                '{"content": "", "tool_call": {"name": "missing"}}',
-                '{"content": "recovered"}',
-            ],
-            tool_executor=_executor(_tool("other")),
+            ['{"content": "", "tool_call": {"name": "missing"}}', '{"content": "recovered"}'],
+            definitions=(_tool("other"),),
         )
         self.addCleanup(temporary_dir.cleanup)
 
-        events = runtime.handle(UserMessage("question"))
+        events = _pump(runtime, UserMessage("question"))
 
-        self.assertTrue(any(isinstance(event, ToolStarted) for event in events))
-        self.assertTrue(any(isinstance(event, ToolFinished) for event in events))
         finished = next(event for event in events if isinstance(event, ToolFinished))
         self.assertIn('"code": "unknown_tool"', finished.output)
         self.assertIsInstance(events[-1], Completed)
 
-    def test_catalog_tool_executes_and_resumes_model(self) -> None:
+    def test_multiple_tools_can_run_in_one_user_request(self) -> None:
         runtime, _, temporary_dir = _runtime(
             [
-                '{"content": "", "tool_call": {"name": "search"}}',
-                '{"content": "final answer"}',
+                '{"content": "", "tool_call": {"name": "first"}}',
+                '{"content": "", "tool_call": {"name": "second"}}',
+                '{"content": "done"}',
             ],
-            tool_executor=_executor(_tool("search")),
+            definitions=(_tool("first"), _tool("second")),
         )
         self.addCleanup(temporary_dir.cleanup)
 
-        events = runtime.handle(UserMessage("question"))
+        events = _pump(runtime, UserMessage("question"))
 
-        self.assertTrue(any(isinstance(event, ToolStarted) for event in events))
-        self.assertTrue(any(isinstance(event, ToolFinished) for event in events))
+        self.assertEqual(2, sum(isinstance(event, ToolFinished) for event in events))
         self.assertIsInstance(events[-1], Completed)
 
-    def test_approval_round_trip_executes_after_explicit_approval(self) -> None:
-        runtime, _, temporary_dir = _runtime(
-            [
-                '{"content": "", "tool_call": {"name": "delete"}}',
-                '{"content": "final answer"}',
-            ],
-            tool_executor=_executor(_tool("delete", confirmation=ConfirmationMode.ALWAYS)),
+    def test_approval_and_rejection_close_the_matching_call(self) -> None:
+        approved_runtime, _, approved_dir = _runtime(
+            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done"}'],
+            definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
-        self.addCleanup(temporary_dir.cleanup)
+        rejected_runtime, _, rejected_dir = _runtime(
+            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "declined"}'],
+            definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
+        )
+        self.addCleanup(approved_dir.cleanup)
+        self.addCleanup(rejected_dir.cleanup)
 
-        requested = runtime.handle(UserMessage("question"))
-        approved = runtime.handle(Approve(requested[-1].call_id))
+        approval = _pump(approved_runtime, UserMessage("question"))[-1]
+        approved = _pump(approved_runtime, Approve(approval.call_id))
+        rejection = _pump(rejected_runtime, UserMessage("question"))[-1]
+        rejected = _pump(rejected_runtime, Reject(rejection.call_id))
 
-        self.assertIsInstance(requested[-1], ApprovalRequested)
-        self.assertTrue(any(isinstance(event, ToolFinished) for event in approved))
+        self.assertIsInstance(approval, ApprovalRequested)
         self.assertIsInstance(approved[-1], Completed)
+        self.assertIn('"code": "rejected"', next(event for event in rejected if isinstance(event, ToolFinished)).output)
 
-    def test_rejection_returns_tool_failure_to_the_model(self) -> None:
-        runtime, _, temporary_dir = _runtime(
-            [
-                '{"content": "", "tool_call": {"name": "delete"}}',
-                '{"content": "declined"}',
-            ],
-            tool_executor=_executor(_tool("delete", confirmation=ConfirmationMode.ALWAYS)),
-        )
-        self.addCleanup(temporary_dir.cleanup)
-
-        requested = runtime.handle(UserMessage("question"))
-        rejected = runtime.handle(Reject(requested[-1].call_id))
-
-        self.assertIsInstance(rejected[0], ToolFinished)
-        self.assertIn('"code": "rejected"', rejected[0].output)
-        self.assertIsInstance(rejected[-1], Completed)
-
-    def test_catalog_filters_tools_by_agent_capability(self) -> None:
-        runtime, _, temporary_dir = _runtime(
-            [
-                '{"content": "", "tool_call": {"name": "resume_read"}}',
-                '{"content": "not available"}',
-            ],
-            tool_executor=_executor(
-                _tool("resume_read", capabilities=frozenset({Capability.RESUME_WORKSPACE}))
-            ),
-        )
-        self.addCleanup(temporary_dir.cleanup)
-
-        events = runtime.handle(UserMessage("question"))
-
-        finished = next(event for event in events if isinstance(event, ToolFinished))
-        self.assertIn('"code": "tool_not_permitted"', finished.output)
-        self.assertIsInstance(events[-1], Completed)
-
-    def test_selection_interaction_resumes_with_selected_value(self) -> None:
+    def test_selection_resumes_with_selected_value(self) -> None:
         runtime, _, temporary_dir = _runtime(
             ['{"content": "", "tool_call": {"name": "provide_choices", "arguments": {"question": "pick", "choices": ["a", "b"]}}}', '{"content": "selected"}'],
-            tool_executor=ToolExecutor(ToolCatalog(build_switch_tools())),
+            definitions=build_switch_tools(),
         )
         self.addCleanup(temporary_dir.cleanup)
-        requested = runtime.handle(UserMessage("question"))
-        completed = runtime.handle(SubmitSelection(requested[-1].request_id, "b"))
-        self.assertIsInstance(requested[-1], SelectionRequested)
+
+        requested = _pump(runtime, UserMessage("question"))[-1]
+        completed = _pump(runtime, SubmitSelection(requested.request_id, "b"))
+
+        self.assertIsInstance(requested, SelectionRequested)
         self.assertIsInstance(completed[-1], Completed)
 
-    def test_subagent_switch_emits_typed_handoff(self) -> None:
+    def test_handoff_preserves_call_id_and_waits_for_orchestrator(self) -> None:
         runtime, _, temporary_dir = _runtime(
             ['{"content": "", "tool_call": {"name": "switch_to_subagent", "arguments": {"agent_name": "resume", "context": "resume help"}}}'],
-            tool_executor=ToolExecutor(ToolCatalog(build_switch_tools())),
+            definitions=build_switch_tools(),
         )
         self.addCleanup(temporary_dir.cleanup)
-        requested = runtime.handle(UserMessage("question"))
-        events = runtime.handle(Approve(requested[-1].call_id))
-        self.assertIsInstance(events[-1], Handoff)
-        self.assertEqual(AgentKey.RESUME, events[-1].target)
 
-    def test_approval_rejects_the_wrong_call_id(self) -> None:
+        requested = _pump(runtime, UserMessage("question"))[-1]
+        handoff = runtime.handle(Approve(requested.call_id))
+
+        self.assertIsInstance(handoff, HandoffRequested)
+        self.assertEqual(requested.call_id, handoff.call_id)
+        self.assertEqual(AgentKey.RESUME, handoff.target)
+        self.assertEqual("run_in_progress", runtime.handle(UserMessage("new")).code)
+
+    def test_cancel_closes_pending_tool_before_cancelled_notice(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "search"}}'],
-            tool_executor=_executor(_tool("search", confirmation=ConfirmationMode.ALWAYS)),
+            ['{"content": "", "tool_call": {"name": "delete"}}'],
+            definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
         self.addCleanup(temporary_dir.cleanup)
-        runtime.handle(UserMessage("question"))
 
-        events = runtime.handle(Approve(call_id="wrong"))
+        approval = _pump(runtime, UserMessage("question"))[-1]
+        closed = runtime.handle(Cancel("stop"))
+        cancelled = runtime.handle(Continue())
 
-        self.assertEqual("tool_call_mismatch", events[-1].code)
+        self.assertIsInstance(approval, ApprovalRequested)
+        self.assertIsInstance(closed, ToolFinished)
+        self.assertEqual(approval.call_id, closed.call_id)
+        self.assertIsInstance(cancelled, Cancelled)
 
-    def test_timeout_and_provider_failures_are_typed(self) -> None:
+    def test_wrong_call_id_and_new_message_do_not_mutate_pending_state(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done"}'],
+            definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        approval = _pump(runtime, UserMessage("question"))[-1]
+
+        self.assertEqual("tool_call_mismatch", runtime.handle(Approve("wrong")).code)
+        self.assertEqual("run_in_progress", runtime.handle(UserMessage("new")).code)
+        self.assertIsInstance(_pump(runtime, Approve(approval.call_id))[-1], Completed)
+
+    def test_timeout_provider_failure_and_cancel_are_typed(self) -> None:
         timeout_runtime, _, timeout_dir = _runtime([TimeoutError()])
         failure_runtime, _, failure_dir = _runtime([RuntimeError("provider down")])
+        cancel_runtime, _, cancel_dir = _runtime([_cancel_during_completion])
         self.addCleanup(timeout_dir.cleanup)
         self.addCleanup(failure_dir.cleanup)
+        self.addCleanup(cancel_dir.cleanup)
 
-        self.assertEqual("timeout", timeout_runtime.handle(UserMessage("q"))[-1].code)
-        self.assertEqual("provider_failure", failure_runtime.handle(UserMessage("q"))[-1].code)
+        self.assertEqual("timeout", _pump(timeout_runtime, UserMessage("q"))[-1].code)
+        self.assertEqual("provider_failure", _pump(failure_runtime, UserMessage("q"))[-1].code)
+        self.assertIsInstance(_pump(cancel_runtime, UserMessage("q"))[-1], Cancelled)
 
-    def test_cancel_resets_for_the_next_user_message(self) -> None:
-        runtime, _, temporary_dir = _runtime(['{"content": "after cancel"}'])
+    def test_format_repair_respects_model_call_limit(self) -> None:
+        runtime, _, temporary_dir = _runtime(["broken"], max_model_calls=1)
         self.addCleanup(temporary_dir.cleanup)
 
-        cancelled = runtime.handle(Cancel())
-        completed = runtime.handle(UserMessage("question"))
+        events = _pump(runtime, UserMessage("question"))
 
-        self.assertIsInstance(cancelled[-1], Cancelled)
-        self.assertIsInstance(completed[-1], Completed)
+        self.assertEqual("max_model_calls_exceeded", events[-1].code)
 
-    def test_cancellation_during_completion_allows_the_next_request(self) -> None:
-        runtime, _, temporary_dir = _runtime(
-            [_cancel_during_completion, '{"content": "after cancellation"}']
-        )
+    def test_configured_timeout_is_forwarded_to_llm(self) -> None:
+        runtime, llm, temporary_dir = _runtime(['{"content": "ok"}'], timeout_seconds=17)
         self.addCleanup(temporary_dir.cleanup)
 
-        cancelled = runtime.handle(UserMessage("first"))
-        completed = runtime.handle(UserMessage("second"))
+        _pump(runtime, UserMessage("question"))
 
-        self.assertIsInstance(cancelled[-1], Cancelled)
-        self.assertIsInstance(completed[-1], Completed)
+        self.assertEqual(17, llm.requests[0].timeout_seconds)
 
-    def test_format_repair_respects_max_rounds(self) -> None:
-        runtime, _, temporary_dir = _runtime(["broken"], max_rounds=1)
-        self.addCleanup(temporary_dir.cleanup)
 
-        events = runtime.handle(UserMessage("question"))
-
-        self.assertEqual("max_rounds_exceeded", events[-1].code)
+def _pump(runtime: AgentRuntime, command: object) -> list[object]:
+    events = [runtime.handle(command)]
+    while isinstance(events[-1], (Progress, ToolStarted, ToolFinished)):
+        events.append(runtime.handle(Continue()))
+    return events
 
 
 def _runtime(
     responses: list[object],
     *,
-    max_rounds: int = 2,
-    tool_executor: ToolExecutor | None = None,
+    max_model_calls: int = 12,
+    timeout_seconds: float = 60,
+    definitions: tuple[ToolDefinition, ...] = (),
 ) -> tuple[AgentRuntime, "_FakeLlm", tempfile.TemporaryDirectory[str]]:
     temporary_dir = tempfile.TemporaryDirectory()
     root = Path(temporary_dir.name) / "general_agent"
     root.mkdir()
-    (root / "01.md").write_text("You are {{AGENT_NAME}}.", encoding="utf-8")
+    (root / "01.md").write_text(
+        "You are {{AGENT_NAME}}. <Tools>{{ADDITION_TOOLS}}</Tools> <Agents>{{SUB_AGENTS_LIST}}</Agents>",
+        encoding="utf-8",
+    )
     llm = _FakeLlm(responses)
+    capabilities = frozenset(Capability)
+    spec = AgentSpec(
+        key=AgentKey.MAIN,
+        display_name="main",
+        description="routes",
+        responsibilities=("route",),
+        primary_goal="help",
+        success_criteria=("answer",),
+        hard_constraints=(),
+        soft_constraints=(),
+        style=AgentStyle("clear", "brief", "direct"),
+        model_profile=ModelProfile.PRO,
+        capabilities=capabilities,
+    )
+    catalog = ToolCatalog(definitions)
+    cancellation = CancellationToken()
     runtime = AgentRuntime(
-        spec=AgentSpec(
-            key=AgentKey.MAIN,
-            display_name="main",
-            description="routes",
-            responsibilities=("route",),
-            primary_goal="help",
-            success_criteria=("answer",),
-            hard_constraints=(),
-            soft_constraints=(),
-            style=AgentStyle("clear", "brief", "direct"),
-            model_profile=ModelProfile.PRO,
-            capabilities=frozenset({Capability.ROUTE}),
-        ),
+        spec=spec,
         prompt_renderer=PromptRenderer(root.parent),
         llm=llm,
         clock=_Clock(),
         id_generator=_Ids(),
-        cancellation=CancellationToken(),
-        max_rounds=max_rounds,
-        tool_executor=tool_executor,
-        tool_context=ToolContext("session", AgentKey.MAIN, CancellationToken()),
+        cancellation=cancellation,
+        agent_catalog=AgentCatalog((spec,)),
+        tool_catalog=catalog,
+        max_model_calls=max_model_calls,
+        model_timeout_seconds=timeout_seconds,
+        tool_executor=ToolExecutor(catalog),
+        tool_context=ToolContext("session", AgentKey.MAIN, cancellation),
     )
     return runtime, llm, temporary_dir
 
@@ -254,7 +259,7 @@ class _FakeLlm:
         if isinstance(response, Exception):
             raise response
         if callable(response):
-            response(cancellation)
+            response = response(cancellation)
         return LLMResult(content=response)
 
     def close(self) -> None:
@@ -280,20 +285,15 @@ class _Ids:
         return f"id-{self._number}"
 
 
-def _executor(definition: ToolDefinition) -> ToolExecutor:
-    return ToolExecutor(ToolCatalog((definition,)))
-
-
 def _tool(
     name: str,
     *,
     confirmation: ConfirmationMode = ConfirmationMode.NEVER,
-    capabilities: frozenset[Capability] = frozenset(),
 ) -> ToolDefinition:
     return ToolDefinition(
         name=name,
         description=name,
         schema=ToolSchema(properties={}),
-        policy=ToolPolicy(required_capabilities=capabilities, confirmation=confirmation),
+        policy=ToolPolicy(confirmation=confirmation),
         handler=lambda arguments, context: ToolSuccess({"tool": name}),
     )

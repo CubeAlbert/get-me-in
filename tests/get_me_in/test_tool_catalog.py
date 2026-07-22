@@ -22,7 +22,7 @@ class ToolCatalogTests(unittest.TestCase):
         self.public = _tool("clock")
         self.resume_only = _tool(
             "resume_read",
-            capabilities=frozenset({Capability.RESUME_WORKSPACE}),
+            capabilities=frozenset({Capability.WORKSPACE_READ}),
         )
         self.catalog = ToolCatalog((self.public, self.resume_only))
 
@@ -71,7 +71,7 @@ class ToolExecutorTests(unittest.TestCase):
     def test_execution_respects_agent_capabilities(self) -> None:
         definition = _tool(
             "resume_read",
-            capabilities=frozenset({Capability.RESUME_WORKSPACE}),
+            capabilities=frozenset({Capability.WORKSPACE_READ}),
         )
         executor = ToolExecutor(ToolCatalog((definition,)))
 

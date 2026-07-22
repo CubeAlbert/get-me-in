@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
+from src.get_me_in.domain.agents import Capability
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandlerContext, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.resume_artifacts import ResumeArtifactPort
 from src.get_me_in.ports.workspace import WorkspacePort
@@ -20,12 +21,12 @@ def build_resume_tools() -> tuple[ToolDefinition, ...]:
         ToolDefinition(
             "copy_template", "复制中文、英文或双语 LaTeX 简历模板及说明文件。",
             ToolSchema({"template": str, "prefix": str, "target_dir": str}, frozenset({"template", "prefix"})),
-            ToolPolicy(confirmation=ConfirmationMode.ALWAYS), _copy_template,
+            ToolPolicy(frozenset({Capability.RESUME_ARTIFACT, Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS), _copy_template,
         ),
         ToolDefinition(
             "build_pdf", "使用 pdflatex 编译工作区内的 LaTeX 简历。",
             ToolSchema({"path": str}, frozenset({"path"})),
-            ToolPolicy(confirmation=ConfirmationMode.ALWAYS), _build_pdf,
+            ToolPolicy(frozenset({Capability.RESUME_ARTIFACT, Capability.WORKSPACE_READ}), ConfirmationMode.ALWAYS), _build_pdf,
         ),
     )
 

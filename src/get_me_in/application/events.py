@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from src.get_me_in.domain.agents import AgentKey
-from src.get_me_in.domain.messages import ConversationEvent
+from src.get_me_in.domain.messages import MessageRecord
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,8 @@ class ToolFinished(RuntimeEvent):
 
 
 @dataclass(frozen=True)
-class Handoff(RuntimeEvent):
+class HandoffRequested(RuntimeEvent):
+    call_id: str
     source: AgentKey
     target: AgentKey
     context: str
@@ -51,7 +52,7 @@ class Handoff(RuntimeEvent):
 
 @dataclass(frozen=True)
 class Completed(RuntimeEvent):
-    message: ConversationEvent
+    message: MessageRecord
 
 
 @dataclass(frozen=True)

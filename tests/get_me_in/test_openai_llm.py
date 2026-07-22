@@ -1,83 +1,101 @@
-"""Lifecycle tests for the concrete OpenAI adapter without network calls."""
+"""Lifecycle tests for the request-scoped OpenAI adapter."""
 
+import threading
 import unittest
-from datetime import datetime, timezone
 
 from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.domain.messages import ConversationEvent, EventKind, Role
-from src.get_me_in.ports.llm import LLMRequest, ModelProfile
+from src.get_me_in.domain.messages import Role
+from src.get_me_in.ports.llm import LLMMessage, LLMRequest, ModelProfile
 
 
 class OpenAILLMAdapterTests(unittest.TestCase):
-    def test_closed_adapter_rejects_new_completion_without_network(self) -> None:
-        adapter = OpenAILLMAdapter(
-            api_key="key",
-            base_url="https://example.test",
-            model_names={ModelProfile.PRO: "pro", ModelProfile.FLASH: "flash"},
-            thinking_enabled=True,
-        )
+    def test_closed_adapter_rejects_new_completion_without_creating_client(self) -> None:
+        created: list[object] = []
+        adapter = _adapter(lambda: created.append(object()))
         adapter.close()
 
         with self.assertRaises(RuntimeError):
-            adapter.complete(
-                LLMRequest(messages=(), profile=ModelProfile.PRO, timeout_seconds=1),
-                CancellationToken(),
-            )
+            adapter.complete(_request(), CancellationToken())
 
-    def test_disabled_thinking_is_forwarded_to_the_provider(self) -> None:
+        self.assertEqual([], created)
+
+    def test_request_client_receives_settings_and_is_closed(self) -> None:
         client = _FakeClient()
-        adapter = _adapter(client=client, thinking_enabled=False)
+        adapter = _adapter(lambda: client, thinking_enabled=False)
 
         adapter.complete(_request(), CancellationToken())
 
-        self.assertEqual(
-            {"thinking": {"type": "disabled"}},
-            client.create_kwargs["extra_body"],
+        self.assertEqual({"thinking": {"type": "disabled"}}, client.create_kwargs["extra_body"])
+        self.assertEqual(1, client.close_calls)
+        self.assertEqual([{"role": "user", "content": "hello"}], client.create_kwargs["messages"])
+
+    def test_cancellation_closes_the_active_request_and_adapter_remains_reusable(self) -> None:
+        blocking = _BlockingClient()
+        succeeding = _FakeClient()
+        clients = iter((blocking, succeeding))
+        adapter = _adapter(lambda: next(clients))
+        token = CancellationToken()
+        errors: list[BaseException] = []
+
+        worker = threading.Thread(
+            target=lambda: _capture_error(errors, lambda: adapter.complete(_request(), token))
         )
+        worker.start()
+        self.assertTrue(blocking.started.wait(timeout=1))
+        token.cancel()
+        worker.join(timeout=1)
 
-    def test_enabled_thinking_uses_the_provider_default(self) -> None:
-        client = _FakeClient()
-        adapter = _adapter(client=client, thinking_enabled=True)
-
-        adapter.complete(_request(), CancellationToken())
-
-        self.assertNotIn("extra_body", client.create_kwargs)
+        self.assertFalse(worker.is_alive())
+        self.assertGreaterEqual(blocking.close_calls, 1)
+        token.reset()
+        self.assertEqual('{"content": "ok"}', adapter.complete(_request(), token).content)
 
 
-def _adapter(*, client: "_FakeClient", thinking_enabled: bool) -> OpenAILLMAdapter:
+def _adapter(factory, *, thinking_enabled: bool = True) -> OpenAILLMAdapter:
     return OpenAILLMAdapter(
         api_key="key",
         base_url="https://example.test",
         model_names={ModelProfile.PRO: "pro", ModelProfile.FLASH: "flash"},
         thinking_enabled=thinking_enabled,
-        client=client,
+        client_factory=factory,
     )
 
 
 def _request() -> LLMRequest:
     return LLMRequest(
-        messages=(
-            ConversationEvent(
-                event_id="event",
-                role=Role.USER,
-                kind=EventKind.MESSAGE,
-                content="hello",
-                timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-            ),
-        ),
+        messages=(LLMMessage(Role.USER, "hello"),),
         profile=ModelProfile.PRO,
         timeout_seconds=1,
     )
+
+
+def _capture_error(errors: list[BaseException], callback) -> None:
+    try:
+        callback()
+    except BaseException as error:
+        errors.append(error)
 
 
 class _FakeClient:
     def __init__(self) -> None:
         self.chat = _FakeChat(self)
         self.create_kwargs: dict = {}
+        self.close_calls = 0
 
     def close(self) -> None:
-        pass
+        self.close_calls += 1
+
+
+class _BlockingClient(_FakeClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = threading.Event()
+        self.closed = threading.Event()
+
+    def close(self) -> None:
+        super().close()
+        self.closed.set()
 
 
 class _FakeChat:
@@ -91,6 +109,10 @@ class _FakeCompletions:
 
     def create(self, **kwargs):
         self._client.create_kwargs = kwargs
+        if isinstance(self._client, _BlockingClient):
+            self._client.started.set()
+            self._client.closed.wait(timeout=2)
+            raise InterruptedError("closed")
         return _FakeResponse()
 
 

@@ -1,67 +1,94 @@
-"""Synchronous, typed state machine for one declarative agent."""
+"""Synchronous, pull-driven state machine for one declarative agent."""
 
 import json
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
+from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import (
     Approve,
     Cancel,
+    Continue,
     Reject,
-    SubmitSelection,
     RuntimeCommand,
+    SubmitSelection,
     ToolResult,
     UserMessage,
 )
+from src.get_me_in.application.conversation_codec import ConversationCodec
 from src.get_me_in.application.events import (
     ApprovalRequested,
-    Handoff,
-    SelectionRequested,
     Cancelled,
     Completed,
     Failed,
+    HandoffRequested,
     Progress,
     RuntimeEvent,
+    SelectionRequested,
     ToolFinished,
     ToolStarted,
 )
-from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.application.model_reply import ModelReplyParseError, ModelReplyParser
 from src.get_me_in.application.prompt_renderer import PromptRenderer
+from src.get_me_in.application.tool_catalog import ToolCatalog
+from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentSpec
-from src.get_me_in.domain.messages import ConversationEvent, EventKind, Role
-from src.get_me_in.domain.tools import ToolFailure, ToolHandoff, ToolInteraction, ToolOutcome, ToolSuccess
+from src.get_me_in.domain.messages import (
+    ConversationRecord,
+    MessageRecord,
+    Role,
+    ToolCallRecord,
+    ToolResultRecord,
+)
+from src.get_me_in.domain.tools import (
+    ToolFailure,
+    ToolHandoff,
+    ToolInteraction,
+    ToolOutcome,
+    ToolSuccess,
+)
 from src.get_me_in.ports.clock import Clock
 from src.get_me_in.ports.ids import IdGenerator
 from src.get_me_in.ports.llm import LLMPort, LLMRequest, ModelProfile
 
 
 class RuntimePhase(StrEnum):
-    """The single active phase of an R2 runtime instance."""
-
     READY = "ready"
-    WAITING_FOR_TOOL = "waiting_for_tool"
+    MODEL_PENDING = "model_pending"
+    MODEL_QUEUED = "model_queued"
+    TOOL_READY = "tool_ready"
+    WAITING_FOR_TOOL_RESULT = "waiting_for_tool_result"
+    WAITING_FOR_APPROVAL = "waiting_for_approval"
+    WAITING_FOR_SELECTION = "waiting_for_selection"
+    WAITING_FOR_HANDOFF = "waiting_for_handoff"
+    CANCELLED_NOTICE = "cancelled_notice"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     FAILED = "failed"
 
 
 @dataclass(frozen=True)
-class AgentState:
-    """Internal runtime state; R4 moves its ownership into SessionState."""
+class PendingToolCall:
+    call_id: str
+    tool_name: str
+    arguments: dict[str, object]
+
+
+@dataclass(frozen=True)
+class RuntimeState:
+    """Runtime-owned state; R4 will compose it into the session AgentState."""
 
     phase: RuntimePhase = RuntimePhase.READY
-    history: tuple[ConversationEvent, ...] = ()
-    rounds: int = 0
-    pending_call_id: str | None = None
-    pending_tool_name: str | None = None
-    pending_tool_arguments: str | None = None
-    pending_interaction: str | None = None
+    history: tuple[ConversationRecord, ...] = ()
+    model_calls: int = 0
+    pending_tool: PendingToolCall | None = None
+    repair_attempted: bool = False
+    cancel_reason: str = "Cancelled by user"
 
 
 class AgentRuntime:
-    """Run one agent without CLI coupling, tools, or magic control values."""
+    """Advance exactly one externally observable state transition per command."""
 
     def __init__(
         self,
@@ -72,364 +99,305 @@ class AgentRuntime:
         clock: Clock,
         id_generator: IdGenerator,
         cancellation: CancellationToken,
-        max_rounds: int = 2,
+        agent_catalog: AgentCatalog,
+        tool_catalog: ToolCatalog,
+        conversation_codec: ConversationCodec | None = None,
+        max_model_calls: int = 12,
+        model_timeout_seconds: float = 60,
         tool_executor: ToolExecutor | None = None,
         tool_context: ToolContext | None = None,
     ) -> None:
-        if max_rounds < 1:
-            raise ValueError("max_rounds must be at least one")
+        if max_model_calls < 1:
+            raise ValueError("max_model_calls must be at least one")
+        if model_timeout_seconds <= 0:
+            raise ValueError("model_timeout_seconds must be positive")
         self._spec = spec
         self._prompt_renderer = prompt_renderer
         self._llm = llm
         self._clock = clock
         self._id_generator = id_generator
         self._cancellation = cancellation
-        self._max_rounds = max_rounds
+        self._agent_catalog = agent_catalog
+        self._tool_catalog = tool_catalog
+        self._conversation_codec = conversation_codec or ConversationCodec()
+        self._max_model_calls = max_model_calls
+        self._model_timeout_seconds = model_timeout_seconds
         self._tool_executor = tool_executor
         self._tool_context = tool_context
-        self._state = AgentState()
+        self._state = RuntimeState()
+        self._requested_cancel_reason = "Cancelled by user"
 
-    def handle(self, command: RuntimeCommand) -> tuple[RuntimeEvent, ...]:
-        """Apply one command and return deterministic typed events."""
+    def handle(self, command: RuntimeCommand) -> RuntimeEvent:
         if isinstance(command, Cancel):
-            self._cancellation.cancel()
-            self._state = AgentState(
-                phase=RuntimePhase.CANCELLED,
-                history=self._state.history,
-                rounds=self._state.rounds,
-                pending_call_id=self._state.pending_call_id,
-                pending_tool_name=self._state.pending_tool_name,
-            )
-            return (Cancelled(command.reason),)
+            return self._cancel(command.reason)
+        if isinstance(command, UserMessage):
+            return self._start(command)
+        if isinstance(command, Continue):
+            return self._continue()
         if isinstance(command, ToolResult):
-            return self._resume_after_tool(command)
+            return self._resume_external_tool(command)
         if isinstance(command, Approve):
-            return self._approve_tool(command)
+            return self._approve(command)
         if isinstance(command, Reject):
-            return self._reject_tool(command)
+            return self._reject(command)
         if isinstance(command, SubmitSelection):
             return self._submit_selection(command)
-        if not isinstance(command, UserMessage):
-            return (
-                Failed(
-                    code="unsupported_command",
-                    message=f"R2 runtime cannot handle {type(command).__name__}",
-                ),
-            )
-        if not command.text.strip():
-            return (Failed(code="invalid_input", message="User message must not be blank"),)
+        return Failed("unsupported_command", f"Unsupported command: {type(command).__name__}")
 
-        self._cancellation.reset()
-        user_event = self._conversation_event(Role.USER, command.text)
-        self._state = AgentState(
-            phase=RuntimePhase.READY,
-            history=(*self._state.history, user_event),
-            rounds=0,
-        )
-        return self._complete_once()
+    def request_cancel(self, reason: str = "Cancelled by user") -> None:
+        """Thread-safe side channel used while a blocking Continue is active."""
+        self._requested_cancel_reason = reason
+        self._cancellation.cancel()
 
     def close(self) -> None:
-        """Cancel active work and release the request-scoped model adapter."""
         self._cancellation.cancel()
         self._llm.close()
 
-    def _complete_once(self) -> tuple[RuntimeEvent, ...]:
-        events: list[RuntimeEvent] = [Progress("Calling model")]
-        raw_reply = self._request_reply()
-        if isinstance(raw_reply, tuple):
-            return (*events, *raw_reply)
+    def _start(self, command: UserMessage) -> RuntimeEvent:
+        if self._state.phase not in {
+            RuntimePhase.READY,
+            RuntimePhase.COMPLETED,
+            RuntimePhase.CANCELLED,
+            RuntimePhase.FAILED,
+        }:
+            return Failed("run_in_progress", "Finish or cancel the active run before sending a new message")
+        if not command.text.strip():
+            return Failed("invalid_input", "User message must not be blank")
+        self._cancellation.reset()
+        self._requested_cancel_reason = "Cancelled by user"
+        user_record = self._message(Role.USER, command.text)
+        self._state = RuntimeState(
+            phase=RuntimePhase.MODEL_PENDING,
+            history=(*self._state.history, user_record),
+        )
+        return Progress("Calling model")
+
+    def _continue(self) -> RuntimeEvent:
+        if self._state.phase is RuntimePhase.MODEL_PENDING:
+            return self._complete_model()
+        if self._state.phase is RuntimePhase.MODEL_QUEUED:
+            self._state = replace(self._state, phase=RuntimePhase.MODEL_PENDING)
+            return Progress("Calling model")
+        if self._state.phase is RuntimePhase.TOOL_READY:
+            return self._execute_pending()
+        if self._state.phase is RuntimePhase.CANCELLED_NOTICE:
+            self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
+            return Cancelled(self._state.cancel_reason)
+        return Failed("continue_not_allowed", f"Continue is not allowed in phase {self._state.phase.value}")
+
+    def _complete_model(self) -> RuntimeEvent:
+        if self._cancellation.is_cancelled:
+            self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
+            return Cancelled(self._requested_cancel_reason)
+        if self._state.model_calls >= self._max_model_calls:
+            self._state = replace(self._state, phase=RuntimePhase.FAILED)
+            return Failed(
+                "max_model_calls_exceeded",
+                f"Runtime exceeded {self._max_model_calls} model calls",
+            )
+
+        tools = self._tool_catalog.list_for_capabilities(self._spec.capabilities)
+        prompt = self._prompt_renderer.render(
+            self._spec,
+            tools=tools,
+            agents=self._agent_catalog.list_descriptors(),
+        )
+        request = LLMRequest(
+            messages=self._conversation_codec.encode(prompt, self._state.history),
+            profile=ModelProfile(self._spec.model_profile),
+            timeout_seconds=self._model_timeout_seconds,
+        )
+        self._state = replace(self._state, model_calls=self._state.model_calls + 1)
+        try:
+            result = self._llm.complete(request, self._cancellation)
+        except TimeoutError:
+            self._state = replace(self._state, phase=RuntimePhase.FAILED)
+            return Failed("timeout", "Model completion timed out")
+        except InterruptedError:
+            self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
+            return Cancelled(self._requested_cancel_reason)
+        except Exception as error:
+            if self._cancellation.is_cancelled:
+                self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
+                return Cancelled(self._requested_cancel_reason)
+            self._state = replace(self._state, phase=RuntimePhase.FAILED)
+            return Failed("provider_failure", str(error))
+        if self._cancellation.is_cancelled:
+            self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
+            return Cancelled(self._requested_cancel_reason)
 
         try:
-            reply = ModelReplyParser().parse(raw_reply)
+            reply = ModelReplyParser().parse(result.content)
         except ModelReplyParseError:
-            events.append(Progress("Repairing model response format"))
-            repair_event = self._conversation_event(
+            if self._state.repair_attempted:
+                self._state = replace(self._state, phase=RuntimePhase.FAILED)
+                return Failed(
+                    "invalid_model_reply",
+                    "Model response remained invalid after one repair attempt",
+                )
+            repair = self._message(
                 Role.SYSTEM,
                 "Return exactly one JSON object with a string content field.",
             )
-            raw_reply = self._request_reply(extra=(repair_event,))
-            if isinstance(raw_reply, tuple):
-                return (*events, *raw_reply)
-            try:
-                reply = ModelReplyParser().parse(raw_reply)
-            except ModelReplyParseError:
-                self._state = AgentState(
-                    phase=RuntimePhase.FAILED,
-                    history=self._state.history,
-                    rounds=self._state.rounds,
-                )
-                return (
-                    *events,
-                    Failed(
-                        code="invalid_model_reply",
-                        message="Model response remained invalid after one repair attempt",
-                    ),
-                )
+            self._state = replace(
+                self._state,
+                phase=RuntimePhase.MODEL_PENDING,
+                history=(*self._state.history, repair),
+                repair_attempted=True,
+            )
+            return Progress("Repairing model response format")
 
         if reply.tool_name is not None:
             call_id = self._id_generator.new_id()
-            tool_call_event = self._conversation_event(
-                Role.ASSISTANT,
-                json.dumps(
-                    {"name": reply.tool_name, "arguments": reply.tool_arguments or {}},
-                    ensure_ascii=False,
-                    sort_keys=True,
-                ),
-                kind=EventKind.TOOL_CALL,
+            tool_call = ToolCallRecord(
+                event_id=self._id_generator.new_id(),
+                call_id=call_id,
+                tool_name=reply.tool_name,
+                arguments=dict(reply.tool_arguments or {}),
+                timestamp=self._clock.now(),
             )
-            self._state = AgentState(
-                phase=RuntimePhase.READY,
-                history=(*self._state.history, tool_call_event),
-                rounds=self._state.rounds,
+            self._state = replace(
+                self._state,
+                phase=RuntimePhase.TOOL_READY,
+                history=(*self._state.history, tool_call),
+                pending_tool=PendingToolCall(call_id, reply.tool_name, dict(reply.tool_arguments or {})),
             )
-            if self._tool_executor is None or self._tool_context is None:
-                return (
-                    *events,
-                    ToolStarted(call_id=call_id, tool_name=reply.tool_name),
-                    ToolFinished(
-                        call_id=call_id,
-                        tool_name=reply.tool_name,
-                        output="Tool execution is not configured",
-                    ),
-                    Failed(
-                        code="tool_runtime_unconfigured",
-                        message="AgentRuntime requires a ToolExecutor and ToolContext",
-                    ),
-                )
-            outcome = self._tool_executor.execute(
-                call_id,
-                reply.tool_name,
-                reply.tool_arguments or {},
-                self._tool_context,
-                self._spec.capabilities,
-            )
-            return (
-                *events,
-                ToolStarted(call_id=call_id, tool_name=reply.tool_name),
-                *self._handle_tool_outcome(call_id, reply.tool_name, reply.tool_arguments or {}, outcome),
-            )
+            return ToolStarted(call_id, reply.tool_name)
 
-        assistant_event = self._conversation_event(Role.ASSISTANT, reply.content)
-        self._state = AgentState(
+        assistant = self._message(Role.ASSISTANT, reply.content)
+        self._state = replace(
+            self._state,
             phase=RuntimePhase.COMPLETED,
-            history=(*self._state.history, assistant_event),
-            rounds=self._state.rounds,
+            history=(*self._state.history, assistant),
+            pending_tool=None,
         )
-        return (*events, Completed(assistant_event))
+        return Completed(assistant)
 
-    def _resume_after_tool(self, command: ToolResult) -> tuple[RuntimeEvent, ...]:
-        if self._state.phase is not RuntimePhase.WAITING_FOR_TOOL:
-            return (
-                Failed(
-                    code="unexpected_tool_result",
-                    message="Runtime is not waiting for a tool result",
-                ),
-            )
-        if command.call_id != self._state.pending_call_id:
-            return (
-                Failed(
-                    code="tool_call_mismatch",
-                    message="Tool result does not match the pending call",
-                ),
-            )
-        tool_name = self._state.pending_tool_name
-        assert tool_name is not None
-        tool_event = self._conversation_event(
-            Role.TOOL,
-            command.output,
-            kind=EventKind.TOOL_RESULT,
-        )
-        self._state = AgentState(
-            phase=RuntimePhase.READY,
-            history=(*self._state.history, tool_event),
-            rounds=self._state.rounds,
-        )
-        return (
-            ToolFinished(
-                call_id=command.call_id,
-                tool_name=tool_name,
-                output=command.output,
-            ),
-            *self._complete_once(),
-        )
-
-    def _approve_tool(self, command: Approve) -> tuple[RuntimeEvent, ...]:
-        if command.call_id != self._state.pending_call_id:
-            return (Failed(code="tool_call_mismatch", message="Approval does not match the pending call"),)
-        return self._resume_pending_tool(approved=True)
-
-    def _reject_tool(self, command: Reject) -> tuple[RuntimeEvent, ...]:
-        if command.call_id != self._state.pending_call_id:
-            return (Failed(code="tool_call_mismatch", message="Rejection does not match the pending call"),)
-        return self._resume_pending_tool(rejected=True)
-
-    def _resume_pending_tool(
-        self,
-        *,
-        approved: bool = False,
-        rejected: bool = False,
-    ) -> tuple[RuntimeEvent, ...]:
-        if self._state.phase is not RuntimePhase.WAITING_FOR_TOOL:
-            return (Failed(code="unexpected_tool_decision", message="Runtime is not waiting for tool approval"),)
+    def _execute_pending(self, *, approved: bool = False, rejected: bool = False) -> RuntimeEvent:
+        pending = self._state.pending_tool
+        if pending is None:
+            return Failed("pending_tool_missing", "Runtime has no pending tool call")
         if self._tool_executor is None or self._tool_context is None:
-            return (Failed(code="tool_runtime_unconfigured", message="Tool execution is not configured"),)
-        call_id = self._state.pending_call_id
-        tool_name = self._state.pending_tool_name
-        arguments = self._state.pending_tool_arguments
-        assert call_id is not None and tool_name is not None and arguments is not None
+            self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_TOOL_RESULT)
+            return Progress("Waiting for external tool result")
+        context = replace(self._tool_context, approved=approved, rejected=rejected)
         outcome = self._tool_executor.execute(
-            call_id,
-            tool_name,
-            json.loads(arguments),
-            replace(self._tool_context, approved=approved, rejected=rejected),
+            pending.call_id,
+            pending.tool_name,
+            pending.arguments,
+            context,
             self._spec.capabilities,
         )
-        return self._handle_tool_outcome(call_id, tool_name, json.loads(arguments), outcome)
+        return self._handle_tool_outcome(pending, outcome)
 
-    def _submit_selection(self, command: SubmitSelection) -> tuple[RuntimeEvent, ...]:
-        if self._state.phase is not RuntimePhase.WAITING_FOR_TOOL or self._state.pending_interaction != "selection":
-            return (Failed(code="unexpected_selection", message="Runtime is not waiting for a selection"),)
-        if command.request_id != self._state.pending_call_id:
-            return (Failed(code="selection_mismatch", message="Selection does not match the pending request"),)
-        assert self._state.pending_tool_name is not None
-        return self._finish_tool(command.request_id, self._state.pending_tool_name, {"selected": command.value})
-
-    def _handle_tool_outcome(
-        self,
-        call_id: str,
-        tool_name: str,
-        arguments: dict[str, object],
-        outcome: ToolOutcome,
-    ) -> tuple[RuntimeEvent, ...]:
+    def _handle_tool_outcome(self, pending: PendingToolCall, outcome: ToolOutcome) -> RuntimeEvent:
         if isinstance(outcome, ToolInteraction):
+            if outcome.kind == "approval":
+                self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_APPROVAL)
+                return ApprovalRequested(pending.call_id, outcome.prompt)
             if outcome.kind == "selection":
-                self._state = AgentState(
-                    phase=RuntimePhase.WAITING_FOR_TOOL,
-                    history=self._state.history,
-                    rounds=self._state.rounds,
-                    pending_call_id=call_id,
-                    pending_tool_name=tool_name,
-                    pending_interaction="selection",
-                )
-                return (SelectionRequested(call_id, outcome.prompt, outcome.choices),)
-            if outcome.kind != "approval":
-                return (Failed(code="unsupported_interaction", message=f"Unsupported tool interaction: {outcome.kind}"),)
-            self._state = AgentState(
-                phase=RuntimePhase.WAITING_FOR_TOOL,
-                history=self._state.history,
-                rounds=self._state.rounds,
-                pending_call_id=call_id,
-                pending_tool_name=tool_name,
-                pending_tool_arguments=json.dumps(arguments, ensure_ascii=False, sort_keys=True),
-                pending_interaction="approval",
-            )
-            return (ApprovalRequested(call_id, outcome.prompt),)
+                self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_SELECTION)
+                return SelectionRequested(pending.call_id, outcome.prompt, outcome.choices)
+            return Failed("unsupported_interaction", f"Unsupported interaction: {outcome.kind}")
         if isinstance(outcome, ToolHandoff):
-            self._state = AgentState(phase=RuntimePhase.COMPLETED, history=self._state.history, rounds=self._state.rounds)
-            return (Handoff(self._spec.key, outcome.target, outcome.context),)
+            self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_HANDOFF)
+            return HandoffRequested(
+                pending.call_id,
+                self._spec.key,
+                outcome.target,
+                outcome.context,
+            )
         if isinstance(outcome, ToolSuccess):
-            return self._finish_tool(call_id, tool_name, outcome.output)
+            return self._finish_tool(pending, outcome.output)
         assert isinstance(outcome, ToolFailure)
         return self._finish_tool(
-            call_id,
-            tool_name,
+            pending,
             {"code": outcome.code, "message": outcome.message, "suggestion": outcome.suggestion},
         )
 
-    def _finish_tool(
-        self,
-        call_id: str,
-        tool_name: str,
-        output: object,
-    ) -> tuple[RuntimeEvent, ...]:
+    def _finish_tool(self, pending: PendingToolCall, output: object) -> RuntimeEvent:
+        record = ToolResultRecord(
+            event_id=self._id_generator.new_id(),
+            call_id=pending.call_id,
+            tool_name=pending.tool_name,
+            output=output,
+            timestamp=self._clock.now(),
+        )
         rendered = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False, sort_keys=True)
-        tool_event = self._conversation_event(Role.TOOL, rendered, kind=EventKind.TOOL_RESULT)
-        self._state = AgentState(
-            phase=RuntimePhase.READY,
-            history=(*self._state.history, tool_event),
-            rounds=self._state.rounds,
+        self._state = replace(
+            self._state,
+            phase=RuntimePhase.MODEL_QUEUED,
+            history=(*self._state.history, record),
+            pending_tool=None,
         )
-        return (ToolFinished(call_id, tool_name, rendered), *self._complete_once())
+        return ToolFinished(pending.call_id, pending.tool_name, rendered)
 
-    def _request_reply(
-        self,
-        *,
-        extra: tuple[ConversationEvent, ...] = (),
-    ) -> str | tuple[RuntimeEvent, ...]:
-        if self._cancellation.is_cancelled:
-            self._state = AgentState(
-                phase=RuntimePhase.CANCELLED,
-                history=self._state.history,
-                rounds=self._state.rounds,
-            )
-            return (Cancelled("Cancelled before model completion"),)
-        if self._state.rounds >= self._max_rounds:
-            self._state = AgentState(
-                phase=RuntimePhase.FAILED,
-                history=self._state.history,
-                rounds=self._state.rounds,
-            )
-            return (
-                Failed(
-                    code="max_rounds_exceeded",
-                    message=f"Runtime exceeded {self._max_rounds} model rounds",
-                ),
-            )
+    def _approve(self, command: Approve) -> RuntimeEvent:
+        failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_APPROVAL)
+        return failure or self._execute_pending(approved=True)
 
-        system_prompt = self._prompt_renderer.render(self._spec)
-        messages = (
-            self._conversation_event(Role.SYSTEM, system_prompt),
-            *self._state.history,
-            *extra,
-        )
-        self._state = AgentState(
-            phase=RuntimePhase.READY,
-            history=self._state.history,
-            rounds=self._state.rounds + 1,
-        )
-        try:
-            result = self._llm.complete(
-                LLMRequest(
-                    messages=messages,
-                    profile=ModelProfile(self._spec.model_profile),
-                    timeout_seconds=60,
-                ),
-                self._cancellation,
-            )
-        except TimeoutError:
-            self._state = AgentState(
-                phase=RuntimePhase.FAILED,
-                history=self._state.history,
-                rounds=self._state.rounds,
-            )
-            return (Failed(code="timeout", message="Model completion timed out"),)
-        except Exception as error:
-            self._state = AgentState(
-                phase=RuntimePhase.FAILED,
-                history=self._state.history,
-                rounds=self._state.rounds,
-            )
-            return (Failed(code="provider_failure", message=str(error)),)
-        if self._cancellation.is_cancelled:
-            self._state = AgentState(
-                phase=RuntimePhase.CANCELLED,
-                history=self._state.history,
-                rounds=self._state.rounds,
-            )
-            return (Cancelled("Cancelled during model completion"),)
-        return result.content
+    def _reject(self, command: Reject) -> RuntimeEvent:
+        failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_APPROVAL)
+        return failure or self._execute_pending(rejected=True)
 
-    def _conversation_event(
-        self,
-        role: Role,
-        content: str,
-        *,
-        kind: EventKind = EventKind.MESSAGE,
-    ) -> ConversationEvent:
-        return ConversationEvent(
+    def _submit_selection(self, command: SubmitSelection) -> RuntimeEvent:
+        failure = self._validate_pending(command.request_id, RuntimePhase.WAITING_FOR_SELECTION)
+        if failure is not None:
+            return failure
+        assert self._state.pending_tool is not None
+        return self._finish_tool(self._state.pending_tool, {"selected": command.value})
+
+    def _resume_external_tool(self, command: ToolResult) -> RuntimeEvent:
+        failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_TOOL_RESULT)
+        if failure is not None:
+            return failure
+        assert self._state.pending_tool is not None
+        return self._finish_tool(self._state.pending_tool, command.output)
+
+    def _validate_pending(self, call_id: str, phase: RuntimePhase) -> Failed | None:
+        if self._state.phase is not phase:
+            return Failed("command_not_allowed", f"Command is not allowed in phase {self._state.phase.value}")
+        if self._state.pending_tool is None or self._state.pending_tool.call_id != call_id:
+            return Failed("tool_call_mismatch", "Command does not match the pending tool call")
+        return None
+
+    def _cancel(self, reason: str) -> RuntimeEvent:
+        self._cancellation.cancel()
+        pending = self._state.pending_tool
+        if pending is not None and self._state.phase in {
+            RuntimePhase.TOOL_READY,
+            RuntimePhase.WAITING_FOR_TOOL_RESULT,
+            RuntimePhase.WAITING_FOR_APPROVAL,
+            RuntimePhase.WAITING_FOR_SELECTION,
+            RuntimePhase.WAITING_FOR_HANDOFF,
+        }:
+            output = {"code": "cancelled", "message": reason}
+            record = ToolResultRecord(
+                event_id=self._id_generator.new_id(),
+                call_id=pending.call_id,
+                tool_name=pending.tool_name,
+                output=output,
+                timestamp=self._clock.now(),
+            )
+            self._state = replace(
+                self._state,
+                phase=RuntimePhase.CANCELLED_NOTICE,
+                history=(*self._state.history, record),
+                pending_tool=None,
+                cancel_reason=reason,
+            )
+            return ToolFinished(
+                pending.call_id,
+                pending.tool_name,
+                json.dumps(output, ensure_ascii=False, sort_keys=True),
+            )
+        self._state = replace(self._state, phase=RuntimePhase.CANCELLED, cancel_reason=reason)
+        return Cancelled(reason)
+
+    def _message(self, role: Role, content: str) -> MessageRecord:
+        return MessageRecord(
             event_id=self._id_generator.new_id(),
             role=role,
-            kind=kind,
             content=content,
             timestamp=self._clock.now(),
         )

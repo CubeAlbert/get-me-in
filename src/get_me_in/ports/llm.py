@@ -1,39 +1,44 @@
 """Provider-independent synchronous model-completion contract."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from src.get_me_in.domain.messages import ConversationEvent
+from src.get_me_in.domain.messages import Role
+
+
+class CancellationRegistrationPort(Protocol):
+    def close(self) -> None: ...
 
 
 class CancellationSignal(Protocol):
-    """Read-only cancellation view accepted by blocking adapters."""
-
     @property
     def is_cancelled(self) -> bool: ...
 
+    def register(self, callback: Callable[[], None]) -> CancellationRegistrationPort: ...
+
 
 class ModelProfile(StrEnum):
-    """Configured model tiers used by declarative agent specifications."""
-
     PRO = "pro"
     FLASH = "flash"
 
 
 @dataclass(frozen=True)
-class LLMRequest:
-    """Complete provider-neutral request for one synchronous model call."""
+class LLMMessage:
+    role: Role
+    content: str
 
-    messages: tuple[ConversationEvent, ...]
+
+@dataclass(frozen=True)
+class LLMRequest:
+    messages: tuple[LLMMessage, ...]
     profile: ModelProfile
     timeout_seconds: float
 
 
 @dataclass(frozen=True)
 class LLMResult:
-    """Raw assistant payload returned by a provider adapter."""
-
     content: str
 
 

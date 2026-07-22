@@ -5,6 +5,7 @@ from typing import Protocol
 
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.domain.plans import Plan, PlanStatus
+from src.get_me_in.domain.agents import Capability
 from src.get_me_in.domain.tools import (
     ToolDefinition,
     ToolFailure,
@@ -28,7 +29,7 @@ def build_plan_tools() -> tuple[ToolDefinition, ...]:
             name="create_plan",
             description="创建有序执行计划，首项自动进入进行中状态。",
             schema=ToolSchema({"items": list}, frozenset({"items"})),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.PLAN})),
             handler=_create_plan,
         ),
         ToolDefinition(
@@ -38,21 +39,21 @@ def build_plan_tools() -> tuple[ToolDefinition, ...]:
                 {"id": str, "status": str},
                 frozenset({"id", "status"}),
             ),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.PLAN})),
             handler=_update_plan_status,
         ),
         ToolDefinition(
             name="cancel_all_plans",
             description="取消当前计划中全部未完成项。",
             schema=ToolSchema({}),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.PLAN})),
             handler=_cancel_all_plans,
         ),
         ToolDefinition(
             name="replan",
             description="保留已完成项，并以新的步骤替换未完成项。",
             schema=ToolSchema({"items": list}, frozenset({"items"})),
-            policy=ToolPolicy(),
+            policy=ToolPolicy(frozenset({Capability.PLAN})),
             handler=_replan,
         ),
     )

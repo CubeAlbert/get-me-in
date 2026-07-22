@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
+from src.get_me_in.domain.agents import Capability
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandlerContext, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.external_files import ExternalFileReaderPort
 
@@ -13,7 +14,7 @@ class CustomerFileContext(ToolHandlerContext, Protocol):
 
 
 def build_customer_file_tools() -> tuple[ToolDefinition, ...]:
-    return (ToolDefinition("read_customer_file", "读取用户显式授权的 txt、md、pdf 或 docx 文件。", ToolSchema({"path": str, "offset": int, "limit": int}, frozenset({"path"})), ToolPolicy(confirmation=ConfirmationMode.ALWAYS), _read),)
+    return (ToolDefinition("read_customer_file", "读取用户显式授权的 txt、md、pdf 或 docx 文件。", ToolSchema({"path": str, "offset": int, "limit": int}, frozenset({"path"})), ToolPolicy(frozenset({Capability.EXTERNAL_FILE_READ}), ConfirmationMode.ALWAYS), _read),)
 
 
 def _read(arguments: Mapping[str, object], context: CustomerFileContext) -> ToolSuccess | ToolFailure:

@@ -36,6 +36,10 @@ class ToolCatalog:
                 "description": definition.description,
                 "required": tuple(sorted(definition.schema.required)),
                 "properties": tuple(sorted(definition.schema.properties)),
+                "required_capabilities": tuple(
+                    sorted(capability.value for capability in definition.policy.required_capabilities)
+                ),
+                "confirmation": definition.policy.confirmation.value,
             }
             for definition in self._definitions.values()
         )
