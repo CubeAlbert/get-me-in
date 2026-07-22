@@ -107,7 +107,7 @@ LLM provider：
 | V52 | 输入普通文本，触发 Progress、工具、handoff 或终态 | CliApp 以 typed event 驱动 Continue；handoff 后目标 Runtime 可继续；终态后生成 v2 snapshot | [ ] |
 | V53 | 触发审批并使用 `/approval prompt`、`/approval auto` | prompt 模式询问确认；auto 模式自动发送 Approve；均不修改 ToolDefinition | [ ] |
 | V54 | 触发 SelectionRequested，分别选择预置项、自定义输入和取消 | 分别发送 SubmitSelection 或 Cancel；后续请求仍可运行 | [ ] |
-| V55 | 输入 `/restore`、`/rewind` | 使用公开 SessionView/list API 选择；`/rewind` 显示序号与用户输入预览而非 turn_id；恢复后输入历史重建；回退预填文本 | [ ] |
+| V55 | 输入 `/restore`、`/rewind` | 使用公开 SessionView/list API 选择；`/restore` 显示序号、最近用户输入预览与保存时间而非 session_id；`/rewind` 显示序号与用户输入预览而非 turn_id；恢复后输入历史重建；回退预填文本 | [ ] |
 | V56 | 运行期间按 Esc/Ctrl+C | WorkerRunner 仅调用 Application.request_cancel()；取消后可再次输入 | [ ] |
 
 本节的 Windows UTF-8、EOF、编辑器不存在与真实 provider 结果需要人工记录；自动化测试仅覆盖 CLI 的 typed protocol 和隔离边界。

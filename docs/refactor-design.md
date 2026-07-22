@@ -331,7 +331,7 @@ Repository 必须原子写入临时文件后 replace，磁盘 `SessionSnapshotCo
 
 Snapshot 只记录可恢复的稳定状态。正在执行的 LLM/Process 调用先归一化为 interrupted/cancelled；`TOOL_READY` 不允许作为可自动重放状态持久化，避免恢复后重复副作用。等待 approval、selection 或 handoff 的状态可以保存，但 handoff frame 必须与 active agent、源 Agent 的 `WAITING_FOR_HANDOFF`、pending call id 和 turn id 一致。restore 必须先确认 snapshot 中的 Agent 均已由当前 Application 装配，再替换活动 Session；restore/rewind 必须清除 `WorkspaceAccessState`，编辑前重新读取文件。
 
-`SessionView` 通过只读 `SessionTurnView` 投影公开主 Agent 用户回合的 `turn_id`、文本和时间，用于 R5 context recap 与 `/rewind` 选择；CLI 不读取完整 `SessionSnapshot` 或私有 history。CLI 自己的输入导航历史仍归 `InputController`，不进入 domain Session。
+`SessionView` 通过只读 `SessionTurnView` 投影公开主 Agent 用户回合的 `turn_id`、文本和时间，用于 R5 context recap 与 `/rewind` 选择；`SessionPreview` 同时提供从最新主 Agent 用户输入派生的短 `preview`，用于 `/restore` 会话选择。CLI 不读取完整 `SessionSnapshot` 或私有 history。CLI 自己的输入导航历史仍归 `InputController`，不进入 domain Session。
 
 R4 新增文件、类和公开方法清单如下，编码前仍需用户确认：
 

@@ -120,9 +120,11 @@ def build_command_registry(application: object, input_controller: object, render
             sessions = application.list_sessions()
             if not sessions:
                 return handled("没有可恢复的会话。")
-            arguments = input_controller.select("选择要恢复的会话:", tuple(session.session_id for session in sessions))
-            if arguments is None:
+            choices = _restore_choices(sessions)
+            selected = input_controller.select("选择要恢复的会话:", tuple(choices))
+            if selected is None:
                 return CommandResult(CommandAction.HANDLED)
+            arguments = choices[selected]
         view = application.handle(RestoreSession(arguments))
         renderer.render_session(view)
         input_controller.replace_history(tuple(point.user_text for point in view.rewind_points))
@@ -188,4 +190,14 @@ def _rewind_choices(points: Iterable[object]) -> dict[str, str]:
         if len(preview) > 80:
             preview = f"{preview[:79]}…"
         choices[f"{index}. {preview}"] = point.turn_id
+    return choices
+
+
+def _restore_choices(sessions: Iterable[object]) -> dict[str, str]:
+    """Build session labels from the public preview without exposing raw history."""
+    choices: dict[str, str] = {}
+    for index, session in enumerate(sessions, start=1):
+        preview = session.preview or "（没有用户输入）"
+        timestamp = session.updated_at.strftime("%Y-%m-%d %H:%M")
+        choices[f"{index}. {preview}  [{timestamp}]"] = session.session_id
     return choices

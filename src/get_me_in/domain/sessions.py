@@ -91,3 +91,4 @@ class SessionPreview:
     session_id: str
     active_agent: AgentKey
     updated_at: datetime
+    preview: str = ""

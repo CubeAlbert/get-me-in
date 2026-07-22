@@ -5,6 +5,8 @@ from pathlib import Path
 import tempfile
 
 from src.get_me_in.domain.sessions import SessionPreview
+from src.get_me_in.domain.messages import MessageRecord, Role
+from src.get_me_in.domain.agents import AgentKey
 
 
 class JsonSessionRepository:
@@ -46,7 +48,7 @@ class JsonSessionRepository:
         for path in self._root.glob("*.json"):
             snapshot = self.load(path.stem)
             session = snapshot.session
-            previews.append(SessionPreview(session.session_id, session.active_agent, session.updated_at))
+            previews.append(SessionPreview(session.session_id, session.active_agent, session.updated_at, _latest_user_preview(session)))
         return tuple(sorted(previews, key=lambda item: item.updated_at, reverse=True))
 
     def close(self) -> None:
@@ -56,3 +58,12 @@ class JsonSessionRepository:
         if not session_id or Path(session_id).name != session_id:
             raise ValueError("Session id must be a plain file name")
         return self._root / f"{session_id}.json"
+
+
+def _latest_user_preview(session: object) -> str:
+    history = session.agents.get(AgentKey.MAIN).history if AgentKey.MAIN in session.agents else ()
+    for record in reversed(history):
+        if isinstance(record, MessageRecord) and record.role is Role.USER:
+            preview = " ".join(record.content.split())
+            return f"{preview[:79]}…" if len(preview) > 80 else preview
+    return ""

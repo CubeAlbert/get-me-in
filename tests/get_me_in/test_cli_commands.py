@@ -22,6 +22,7 @@ from src.get_me_in.cli.renderer import Renderer
 from src.get_me_in.application.events import Completed, Failed
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role
+from src.get_me_in.domain.sessions import SessionPreview
 
 
 class CommandRegistryTests(unittest.TestCase):
@@ -72,6 +73,18 @@ class CoreCommandTests(unittest.TestCase):
         self.assertEqual(CommandResult(CommandAction.PREFILL, "second"), rewound)
         self.assertEqual(("1. first", "2. second"), self.input_controller.selection_choices)
         self.assertEqual([RewindSession("turn-2")], self.application.commands)
+
+    def test_interactive_restore_displays_preview_but_uses_the_matching_session_id(self) -> None:
+        self.input_controller.selected = "2. second session  [2026-07-22 09:00]"
+
+        restored = self.registry.dispatch("/restore")
+
+        self.assertEqual(CommandAction.HANDLED, restored.action)
+        self.assertEqual(
+            ("1. first session  [2026-07-22 08:00]", "2. second session  [2026-07-22 09:00]"),
+            self.input_controller.selection_choices,
+        )
+        self.assertEqual([RestoreSession("session-2")], self.application.commands)
 
     def test_unavailable_approval_and_exit_commands_have_typed_results(self) -> None:
         self.assertIn("R6", self.registry.dispatch("/ragreload references").text)
@@ -156,6 +169,12 @@ class _Application:
 
     def view(self) -> _View:
         return _View()
+
+    def list_sessions(self) -> tuple[SessionPreview, ...]:
+        return (
+            SessionPreview("session-1", AgentKey.MAIN, datetime(2026, 7, 22, 8, tzinfo=timezone.utc), "first session"),
+            SessionPreview("session-2", AgentKey.MAIN, datetime(2026, 7, 22, 9, tzinfo=timezone.utc), "second session"),
+        )
 
 
 class _InputController:

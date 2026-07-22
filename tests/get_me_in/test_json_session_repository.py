@@ -19,7 +19,9 @@ class JsonSessionRepositoryTests(unittest.TestCase):
             loaded = repository.load("session-1")
 
             self.assertEqual("session-1", loaded.session.session_id)
-            self.assertEqual(("session-1",), tuple(item.session_id for item in repository.list()))
+            previews = repository.list()
+            self.assertEqual(("session-1",), tuple(item.session_id for item in previews))
+            self.assertEqual("hello", previews[0].preview)
 
     def test_rejects_path_like_session_ids(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

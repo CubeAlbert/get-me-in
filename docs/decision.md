@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 158 — /restore 选择显示会话预览而非内部 session_id](#决策-158--restore-选择显示会话预览而非内部-session_id)
 - [决策 157 — /rewind 选择显示用户输入预览而非内部 turn_id](#决策-157--rewind-选择显示用户输入预览而非内部-turn_id)
 - [决策 156 — InputController 通过 CompletionProvider 获取动态命令补全](#决策-156--inputcontroller-通过-completionprovider-获取动态命令补全)
 - [决策 155 — R5 第一切片已审查并保持交互职责后置](#决策-155--r5-第一切片已审查并保持交互职责后置)
@@ -3461,3 +3462,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 继续展示 UUID —— 人工 smoke 已证明不可用，已拒绝。
 - 将 UUID 与预览同时展示 —— 会造成冗长噪声，且不改善用户选择，已拒绝。
+
+---
+
+### 决策 158 — /restore 选择显示会话预览而非内部 session_id
+
+**背景：** `/restore` 的会话列表同样只显示 `session_id` UUID，无法说明各存档会话的内容。与 `/rewind` 不同，CLI 不能读取持久化 snapshot 或私有 history，因此现有 `SessionPreview` 投影缺少所需信息。
+
+**决策：**
+
+- `SessionPreview` 增加 `preview`，由 session repository 从 snapshot 中最新主 Agent 用户输入派生，最长 80 个字符。
+- 无参数 `/restore` 显示“序号 + preview + 保存时间”，在 CommandRegistry 内部映射选项到精确 `session_id`。
+- preview 仅为公开 projection，不写入或修改 snapshot schema；不存在用户输入的会话显示明确占位文本。
+
+**理由：**
+
+- 用户可依据自己的请求文本识别会话，同时保持 CLI 不读取 SessionSnapshot 的分层边界。
+- 运行时派生避免引入新的持久化字段与 schema migration。
+
+**曾考虑的替代方案：**
+
+- 继续仅显示 session_id —— 人工 smoke 已证明不可用，已拒绝。
+- 在 CLI 直接读取 snapshot 文件 —— 会破坏 application/session 与 frontend 的公开边界，已拒绝。
