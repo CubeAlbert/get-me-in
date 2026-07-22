@@ -210,7 +210,7 @@
 - ✅ 创建 InputController，管理 autocomplete/history/prefill/editor；使用 `set_completions(CompletionProvider)` 动态读取 CommandRegistry 的最新补全。
 - ✅ 创建 Renderer，管理 Markdown/Plan/spinner/error/recap。
 - ✅ 创建 WorkerRunner，使用单 worker 串行调用 Application，跨线程只调用公开 `request_cancel()`；覆盖并发拒绝、取消与关闭。
-- ⬜ 创建 `cli/main.py` 与 `cli/__main__.py`，提供 `python -m src.get_me_in.cli` 独立入口。
+- ✅ 创建 `cli/__init__.py`、`cli/main.py` 与 `cli/__main__.py`，提供 `python -m src.get_me_in.cli` 独立入口；保持旧 `main.py` 不变。
 
 ### 2. 命令迁移
 
@@ -236,7 +236,7 @@
 - ⬜ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
 - ⬜ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
-- ⬜ 完成 G5 验收。
+- 🔄 完成 G5 验收；已通过 119 项核心自动化测试与 CLI 编译验证，待 V50–V56 人工 smoke 和用户审查。
 
 ## R6 —— Knowledge/RAG 与 Memory
 

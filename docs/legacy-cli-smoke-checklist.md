@@ -95,3 +95,19 @@ LLM provider：
 ## 9. R0 判定范围
 
 本清单仅记录 v1 的可观察能力，供后续 R2–R8 使用。它不要求 v2 保留 `UIBridge`、全局 Registry、私有字段访问、旧存档格式或任何魔法控制字典；这些实现机制将在 v2 中由强类型协议和显式装配替代。
+
+## 10. R5 v2 CLI 增量 Smoke
+
+> 在旧入口仍保留期间，使用 `uv run python -m src.get_me_in.cli` 运行本节；不要用本节结果替代上方 v1 基线。R5 尚未接入真实 Knowledge/Memory 服务，因此 `/ragreload` 与 `/build-memory` 预期明确报告 R6 前不可用。
+
+| 编号 | 操作 | 预期可见结果 | 结果 |
+|---|---|---|---|
+| V50 | 启动 `uv run python -m src.get_me_in.cli` | 出现 v2 输入提示；缺少必填配置时以可读错误退出，不显示 traceback | [ ] |
+| V51 | 输入 `/help`，再输入未知命令 | 帮助来自 CommandRegistry；未知命令作为提示显示，CLI 保持可用 | [ ] |
+| V52 | 输入普通文本，触发 Progress、工具、handoff 或终态 | CliApp 以 typed event 驱动 Continue；handoff 后目标 Runtime 可继续；终态后生成 v2 snapshot | [ ] |
+| V53 | 触发审批并使用 `/approval prompt`、`/approval auto` | prompt 模式询问确认；auto 模式自动发送 Approve；均不修改 ToolDefinition | [ ] |
+| V54 | 触发 SelectionRequested，分别选择预置项、自定义输入和取消 | 分别发送 SubmitSelection 或 Cancel；后续请求仍可运行 | [ ] |
+| V55 | 输入 `/restore`、`/rewind` | 使用公开 SessionView/list API 选择；恢复后输入历史重建；回退预填文本 | [ ] |
+| V56 | 运行期间按 Esc/Ctrl+C | WorkerRunner 仅调用 Application.request_cancel()；取消后可再次输入 | [ ] |
+
+本节的 Windows UTF-8、EOF、编辑器不存在与真实 provider 结果需要人工记录；自动化测试仅覆盖 CLI 的 typed protocol 和隔离边界。
