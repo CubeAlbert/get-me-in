@@ -350,7 +350,29 @@ class AgentRuntime:
 
     def _reject(self, command: Reject) -> RuntimeEvent:
         failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_APPROVAL)
-        return failure or self._execute_pending(rejected=True)
+        if failure is not None:
+            return failure
+
+        pending = self._state.pending_tool
+        assert pending is not None
+        reason = command.reason or f"Tool call {pending.tool_name} was rejected"
+        output = {"code": "rejected", "message": reason}
+        record = ToolResultRecord(
+            event_id=self._id_generator.new_id(),
+            call_id=pending.call_id,
+            tool_name=pending.tool_name,
+            output=output,
+            timestamp=self._clock.now(),
+            turn_id=self._state.turn_id,
+        )
+        self._state = replace(
+            self._state,
+            phase=RuntimePhase.CANCELLED,
+            history=(*self._state.history, record),
+            pending_tool=None,
+            cancel_reason=reason,
+        )
+        return Cancelled(reason)
 
     def _submit_selection(self, command: SubmitSelection) -> RuntimeEvent:
         failure = self._validate_pending(command.request_id, RuntimePhase.WAITING_FOR_SELECTION)

@@ -169,6 +169,15 @@
 - [决策 152 — R4 复审补齐 handoff 启动、失败闭合与 frontend 回合投影](#决策-152--r4-复审补齐-handoff-启动失败闭合与-frontend-回合投影)
 - [决策 153 — R5 使用薄 CLI、单 WorkerRunner 与可替换命令注册](#决策-153--r5-使用薄-cli单-workerrunner-与可替换命令注册)
 - [决策 154 — R5 清单获确认并固定新会话实施入口](#决策-154--r5-清单获确认并固定新会话实施入口)
+- [决策 155 — R5 第一切片已审查并保持交互职责后置](#决策-155--r5-第一切片已审查并保持交互职责后置)
+- [决策 156 — InputController 通过 CompletionProvider 获取动态命令补全](#决策-156--inputcontroller-通过-completionprovider-获取动态命令补全)
+- [决策 157 — /rewind 选择显示用户输入预览而非内部 turn_id](#决策-157---rewind-选择显示用户输入预览而非内部-turn_id)
+- [决策 158 — /restore 选择显示会话预览而非内部 session_id](#决策-158---restore-选择显示会话预览而非内部-session_id)
+- [决策 159 — 帮助从真实命令注册表排序并列出 alias](#决策-159--帮助从真实命令注册表排序并列出-alias)
+- [决策 160 — 不保留 /auto-approve-switch 向前兼容](#决策-160--不保留-auto-approve-switch-向前兼容)
+- [决策 161 — 恢复 DeepSeek Web Search 的旧版请求契约并拒绝未执行调用](#决策-161--恢复-deepseek-web-search-的旧版请求契约并拒绝未执行调用)
+- [决策 162 — R5 工具可见性使用强类型事件投影](#决策-162--r5-工具可见性使用强类型事件投影)
+- [决策 163 — 用户拒绝审批立即结束当前 Agent 回合](#决策-163--用户拒绝审批立即结束当前-agent-回合)
 
 ---
 
@@ -3576,3 +3585,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - Renderer 解析 `ToolFinished.output` 中的 JSON — 耦合工具 payload，且失败/格式变化会破坏展示。
 - 每次工具完成都输出完整原始结果 — 对搜索、文件和长文本工具会造成终端噪声并可能暴露敏感内容。
+
+---
+
+### 决策 163 —— 用户拒绝审批立即结束当前 Agent 回合
+
+**背景：** 用户在 CLI 中对 `ApprovalRequested` 选择 No 后，Runtime 曾将其统一编码为普通 `ToolFailure("rejected")`，随后发出 `ToolFinished`。CliApp 按一般工具完成事件继续发送 `Continue`，模型收到拒绝结果后可能再次请求同一工具，用户无法立即取回输入控制权。
+
+**决定：**
+
+- `Reject` 表示用户对当前 pending tool call 的明确否决，不属于可由模型自行修复的工具执行失败。
+- Runtime 仍须生成带 `code: "rejected"` 的 `ToolResultRecord`，以闭合 call 并保持 session codec 与 snapshot 的完整性；随后清除 pending call、进入 `CANCELLED` 并返回 `Cancelled`。
+- CliApp 收到该终态后执行既有 snapshot 逻辑并退出内层 Agent loop，立即显示下一次输入框；不发送 `Continue`，不把拒绝结果交回模型。
+- 网络、provider、参数或业务层面的实际工具失败继续维持 `ToolFinished` → `Continue`，让模型获得错误上下文并尝试自修复。
+
+**理由：**
+
+- 用户的明确拒绝是交互边界上的终止意图，不能被模型重试覆盖。
+- 保留结构化 tool result 可维护每个已发起 call 都有闭合记录的 Runtime 与持久化不变量。
+- 将“拒绝”和“执行失败”分开后，既保证用户可控，也不牺牲模型对技术失败的修复能力。
+
+**曾考虑的替代方案：**
+
+- 继续把拒绝作为普通 `ToolFailure`，仅由提示词要求模型不重试 —— 无法保证行为，且 CLI 仍不能立刻归还输入。
+- 不记录 tool result 直接取消 —— 会留下未闭合的已声明调用，破坏会话记录与 snapshot 的一致性。

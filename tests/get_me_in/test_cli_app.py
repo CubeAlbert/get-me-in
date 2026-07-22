@@ -2,8 +2,8 @@
 
 import unittest
 
-from src.get_me_in.application.commands import Approve, Continue, UserMessage
-from src.get_me_in.application.events import ApprovalRequested, Completed, HandoffRequested, Progress
+from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
+from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress
 from src.get_me_in.cli.app import CliApp
 from src.get_me_in.cli.commands import ApprovalMode, CommandAction, CommandResult
 from src.get_me_in.domain.messages import MessageRecord, Role
@@ -30,6 +30,26 @@ class CliAppTests(unittest.TestCase):
 
         self.assertEqual((UserMessage("hello"), Approve("call")), worker.commands)
         self.assertEqual(0, input_controller.confirms)
+
+    def test_rejected_approval_returns_to_input_without_continuing_model_loop(self) -> None:
+        application = _Application()
+        worker = _Worker((ApprovalRequested("call", "web search"), Cancelled("Tool call web_search was rejected")))
+        input_controller = _Input(("hello", "/exit"), approved=False)
+        app = CliApp(
+            application,
+            _Commands((None, CommandResult(CommandAction.EXIT))),
+            input_controller,
+            _Renderer(),
+            worker,
+        )
+
+        app.run()
+
+        self.assertEqual(
+            (UserMessage("hello"), Reject("call", "User rejected approval")),
+            worker.commands,
+        )
+        self.assertEqual(1, application.snapshots)
 
     def test_approval_without_argument_toggles_from_prompt_to_auto(self) -> None:
         application = _Application()
@@ -81,8 +101,9 @@ class _Commands:
 
 
 class _Input:
-    def __init__(self, values: tuple[str, ...]) -> None:
+    def __init__(self, values: tuple[str, ...], *, approved: bool = True) -> None:
         self.values = list(values)
+        self.approved = approved
         self.confirms = 0
 
     def read(self, prefill: str | None) -> str | None:
@@ -93,7 +114,7 @@ class _Input:
 
     def confirm(self, prompt: str) -> bool:
         self.confirms += 1
-        return True
+        return self.approved
 
     def select(self, prompt: str, choices: tuple[str, ...], allow_custom: bool = False) -> str | None:
         return None

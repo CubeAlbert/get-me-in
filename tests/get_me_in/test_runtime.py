@@ -112,7 +112,7 @@ class RuntimeTests(unittest.TestCase):
             ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done"}'],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
-        rejected_runtime, _, rejected_dir = _runtime(
+        rejected_runtime, rejected_llm, rejected_dir = _runtime(
             ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "declined"}'],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
@@ -126,7 +126,9 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertIsInstance(approval, ApprovalRequested)
         self.assertIsInstance(approved[-1], Completed)
-        self.assertIn('"code": "rejected"', next(event for event in rejected if isinstance(event, ToolFinished)).output)
+        self.assertIsInstance(rejected[-1], Cancelled)
+        self.assertEqual("Tool call delete was rejected", rejected[-1].reason)
+        self.assertEqual(1, len(rejected_llm.requests))
 
     def test_selection_resumes_with_selected_value(self) -> None:
         runtime, _, temporary_dir = _runtime(
