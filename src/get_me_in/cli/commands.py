@@ -136,8 +136,8 @@ def build_command_registry(application: object, input_controller: object, render
         return CommandResult(CommandAction.HANDLED)
 
     def rewind_command(arguments: str) -> CommandResult:
+        points = application.view().rewind_points
         if not arguments:
-            points = application.view().rewind_points
             if not points:
                 return handled("没有可回退的用户输入。")
             choices = _rewind_choices(points)
@@ -145,11 +145,11 @@ def build_command_registry(application: object, input_controller: object, render
             if selected is None:
                 return CommandResult(CommandAction.HANDLED)
             arguments = choices[selected]
+        prefill = next((point.user_text for point in points if point.turn_id == arguments), None)
         view = application.handle(RewindSession(arguments))
         renderer.render_session(view)
         input_controller.replace_history(tuple(point.user_text for point in view.rewind_points))
-        text = next((point.user_text for point in view.rewind_points if point.turn_id == arguments), None)
-        return CommandResult(CommandAction.PREFILL, text=text) if text is not None else CommandResult(CommandAction.HANDLED)
+        return CommandResult(CommandAction.PREFILL, text=prefill) if prefill is not None else CommandResult(CommandAction.HANDLED)
 
     def unavailable_command(_: str) -> CommandResult:
         return handled("该命令将在 R6 提供，目前不可用。")

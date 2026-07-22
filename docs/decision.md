@@ -179,6 +179,7 @@
 - [决策 162 — R5 工具可见性使用强类型事件投影](#决策-162--r5-工具可见性使用强类型事件投影)
 - [决策 163 — 用户拒绝审批立即结束当前 Agent 回合](#决策-163--用户拒绝审批立即结束当前-agent-回合)
 - [决策 164 — 审批交互使用明确选项而非 y/N](#决策-164--审批交互使用明确选项而非-yn)
+- [决策 165 — /rewind 在回退前捕获预填文本](#决策-165---rewind-在回退前捕获预填文本)
 
 ---
 
@@ -3632,3 +3633,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 继续使用 `questionary.confirm()` 并调整提示文本 —— 仍会保留 `y/N` 交互，不符合目标。
 - 复用旧 `ConfirmChoice` —— 会让 v2 CLI 反向依赖 legacy 代码，违反受控重构边界。
+
+---
+
+### 决策 165 —— `/rewind` 在回退前捕获预填文本
+
+**背景：** `/rewind` 的 handler 在执行 `RewindSession(turn_id)` 后，才从返回的 `SessionView.rewind_points` 查找目标回合并生成 `PREFILL`。回退会截断目标回合及其之后的记录，目标文本因此常常不在新投影中，导致 CLI 无法预填。
+
+**决定：**
+
+- CommandRegistry 在发送 `RewindSession(turn_id)` 前，从当前公开 `SessionView.rewind_points` 找到目标 `turn_id` 对应的用户文本。
+- 回退成功后用已捕获的文本返回 `CommandResult(CommandAction.PREFILL, text)`；CliApp 将其传给下一次 `InputController.read(prefill)`。
+- 回退后的 `SessionView` 仅用于刷新输入历史和渲染会话摘要，不用于反查已截断的目标文本。
+
+**理由：**
+
+- 预填文本是用户选择回退目标时已公开的稳定数据，无需访问私有 history 或 snapshot。
+- 保持 CLI 薄层职责：CommandRegistry 只编排公开 Application API，InputController 只负责展示预填。
+
+**曾考虑的替代方案：**
+
+- 让 Application 在 rewind 返回值中新增 target text —— 当前 `SessionView` 已能在操作前提供所需投影，扩展 application 协议没有必要。
+- 从 Session 私有 history 或磁盘 snapshot 读取目标文本 —— 破坏既定的 CLI/Application 边界。

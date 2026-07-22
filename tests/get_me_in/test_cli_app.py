@@ -51,6 +51,20 @@ class CliAppTests(unittest.TestCase):
         )
         self.assertEqual(1, application.snapshots)
 
+    def test_prefill_command_passes_rewound_input_to_the_next_prompt(self) -> None:
+        input_controller = _Input(("/rewind", "/exit"))
+        app = CliApp(
+            _Application(),
+            _Commands((CommandResult(CommandAction.PREFILL, "rewound input"), CommandResult(CommandAction.EXIT))),
+            input_controller,
+            _Renderer(),
+            _Worker(()),
+        )
+
+        app.run()
+
+        self.assertEqual([None, "rewound input"], input_controller.prefills)
+
     def test_approval_without_argument_toggles_from_prompt_to_auto(self) -> None:
         application = _Application()
         renderer = _Renderer()
@@ -105,8 +119,10 @@ class _Input:
         self.values = list(values)
         self.approved = approved
         self.confirms = 0
+        self.prefills: list[str | None] = []
 
     def read(self, prefill: str | None) -> str | None:
+        self.prefills.append(prefill)
         return self.values.pop(0)
 
     def remember(self, text: str) -> None:

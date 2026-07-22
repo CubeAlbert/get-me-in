@@ -301,7 +301,7 @@ Agent 可见工具由已经落地的通用 capability 决定，例如 `workspace
 
 `SessionState` 是 active agent、所有 `AgentSessionState`、handoff stack 和会话时间信息的唯一规范所有者。`AgentSessionState` 直接承接当前 `RuntimeState` 的 history、phase、pending tool、model call/repair 状态，并持有该 Agent 的 Plan；不得在 Session 与 Runtime 中复制同一组字段。长期存活的 `PlanService` 不再独立拥有另一份 plan，执行工具时从 AgentSessionState 恢复，转换完成后立即写回。
 
-CLI input history 属于 R5 `InputController`，不进入 domain SessionState。R5 复审决定只保留进程内导航状态，并从 `SessionView.rewind_points` 重建 restore 后的历史，不增加独立 CLI snapshot schema。Artifact 由 R7 `ArtifactRepository` 管理，R4 的 SessionSnapshot 不提前定义 Artifact/ArtifactRef schema。
+CLI input history 属于 R5 `InputController`，不进入 domain SessionState。R5 复审决定只保留进程内导航状态，并从 `SessionView.rewind_points` 重建 restore 后的历史，不增加独立 CLI snapshot schema。`/rewind` 必须在发出 `RewindSession(turn_id)` 前从当前只读 rewind point 保存目标用户文本，并通过 `CommandAction.PREFILL` 传回 CliApp 的下一次输入框；不得在回退后的投影中反查，因为目标回合可能已被截断。Artifact 由 R7 `ArtifactRepository` 管理，R4 的 SessionSnapshot 不提前定义 Artifact/ArtifactRef schema。
 
 Hub-and-Spoke 规则保留：只有 Orchestrator 能进行 handoff。Main Runtime 只接收可路由的 Agent descriptor；子 Agent Runtime 不持有完整 `AgentCatalog`，也不直接调用其他子 Agent。
 

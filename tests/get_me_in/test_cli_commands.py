@@ -78,6 +78,15 @@ class CoreCommandTests(unittest.TestCase):
         self.assertEqual(("1. first", "2. second"), self.input_controller.selection_choices)
         self.assertEqual([RewindSession("turn-2")], self.application.commands)
 
+    def test_rewind_prefills_the_target_even_when_it_is_absent_from_the_rewound_view(self) -> None:
+        self.application.rewound_view = _View(())
+
+        rewound = self.registry.dispatch("/rewind turn-1")
+
+        self.assertEqual(CommandResult(CommandAction.PREFILL, "first"), rewound)
+        self.assertEqual([RewindSession("turn-1")], self.application.commands)
+        self.assertEqual((), self.input_controller.history)
+
     def test_interactive_restore_displays_preview_but_uses_the_matching_session_id(self) -> None:
         self.input_controller.selected = "2. second session  [2026-07-22 09:00]"
 
@@ -200,9 +209,12 @@ class _View:
 class _Application:
     def __init__(self) -> None:
         self.commands: list[object] = []
+        self.rewound_view: _View | None = None
 
     def handle(self, command: object) -> object:
         self.commands.append(command)
+        if isinstance(command, RewindSession) and self.rewound_view is not None:
+            return self.rewound_view
         if isinstance(command, DumpSession):
             return "export.md"
         if isinstance(command, ExitSubAgent):
