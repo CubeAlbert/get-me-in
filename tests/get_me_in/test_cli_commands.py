@@ -219,6 +219,10 @@ class RendererTests(unittest.TestCase):
         self.assertIn("思考摘要", shown_output.getvalue())
         self.assertIn("tool summary", shown_output.getvalue())
         self.assertIn("final summary", shown_output.getvalue())
+        self.assertLess(
+            shown_output.getvalue().index("final summary"),
+            shown_output.getvalue().index("done"),
+        )
 
 
 @dataclass(frozen=True)

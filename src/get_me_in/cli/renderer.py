@@ -55,8 +55,8 @@ class Renderer:
         elif isinstance(event, HandoffRequested):
             self._console.print(f"[dim]正在转交给 {event.target}[/]")
         elif isinstance(event, Completed):
-            self._console.print(Markdown(event.message.content))
             self._render_thinking(event.message.thinking)
+            self._console.print(Markdown(event.message.content))
         elif isinstance(event, Failed):
             self.render_error(f"{event.code}: {event.message}")
         elif isinstance(event, Cancelled):
