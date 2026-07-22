@@ -301,7 +301,7 @@ Agent 可见工具由已经落地的通用 capability 决定，例如 `workspace
 
 `SessionState` 是 active agent、所有 `AgentSessionState`、handoff stack 和会话时间信息的唯一规范所有者。`AgentSessionState` 直接承接当前 `RuntimeState` 的 history、phase、pending tool、model call/repair 状态，并持有该 Agent 的 Plan；不得在 Session 与 Runtime 中复制同一组字段。长期存活的 `PlanService` 不再独立拥有另一份 plan，执行工具时从 AgentSessionState 恢复，转换完成后立即写回。
 
-CLI input history 属于 R5 `InputController`，不进入 domain SessionState；如需随会话保存，使用独立的可选 CLI snapshot。Artifact 由 R7 `ArtifactRepository` 管理，R4 的 SessionSnapshot 不提前定义 Artifact/ArtifactRef schema。
+CLI input history 属于 R5 `InputController`，不进入 domain SessionState。R5 复审决定只保留进程内导航状态，并从 `SessionView.rewind_points` 重建 restore 后的历史，不增加独立 CLI snapshot schema。Artifact 由 R7 `ArtifactRepository` 管理，R4 的 SessionSnapshot 不提前定义 Artifact/ArtifactRef schema。
 
 Hub-and-Spoke 规则保留：只有 Orchestrator 能进行 handoff。Main Runtime 只接收可路由的 Agent descriptor；子 Agent Runtime 不持有完整 `AgentCatalog`，也不直接调用其他子 Agent。
 
@@ -362,17 +362,37 @@ R4 新增文件、类和公开方法清单如下，编码前仍需用户确认�
 
 ### 6.7 CLI
 
-CLI 拆为：
+CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触 AgentRuntime、PlanService、CancellationToken 实例、完整 SessionSnapshot 或任何私有 history。拆分职责如下：
 
-- `CliApp`：外层输入循环和 command/event 转发。
-- `CommandRegistry`：命令解析、帮助文本和 handler 映射，取代连续 if/elif。
-- `InputController`：autocomplete、历史、prefill、editor。
-- `Renderer`：Markdown、Plan、spinner、错误和上下文 recap。
-- `WorkerRunner`：阻塞调用、事件轮询、cancel token；不含 Agent 业务规则。
+- `CliApp`：唯一外层输入循环；把普通文本转换为 `UserMessage`，驱动 RuntimeEvent → 下一条 RuntimeCommand，并在终态触发 session snapshot。
+- `CommandRegistry`：命令解析、帮助文本、alias 与 handler 映射；R6 可替换已注册的 unavailable handler，无需修改 CliApp。
+- `InputController`：autocomplete、进程内输入导航历史、prefill、editor、confirm/select；不增加独立 CLI 持久化 schema。restore 后可从 `SessionView.rewind_points` 重建导航历史。
+- `Renderer`：Markdown、Plan、spinner、错误、命令结果和 `SessionView` context recap；不决定下一条业务 command。
+- `WorkerRunner`：使用单 worker 串行执行一个 `Application.handle(RuntimeCommand)`，轮询 Esc/Ctrl+C 并只通过 `Application.request_cancel()` 跨线程取消；不得并发执行 snapshot/restore/另一条 command。
 
-UI 交互由 `ApprovalRequested`/`SelectionRequested` event 驱动。Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
+事件推进由 `CliApp` 明确处理：`Progress`、`ToolStarted`、`ToolFinished`、`HandoffRequested` 转为 `Continue`；`ApprovalRequested` 转为 `Approve/Reject`；`SelectionRequested` 转为 `SubmitSelection/Cancel`；`Completed/Failed/Cancelled` 结束内层循环。终态后调用 `Application.snapshot()` 保留旧 CLI 自动保存能力，保存失败单独渲染，不覆盖原终态。
 
-`/ragreload` 与 `/build-memory` 在 R5 只进入 CommandRegistry 并明确报告 R6 尚不可用；真实 handler 随 R6 服务落地。临时 `scripts/v2_runtime_smoke.py` 仅作为 WorkerRunner 行为参考，R5 正式 CLI 通过 G5 后删除。
+审批策略属于 CLI 偏好：正式命令使用 `/approval prompt|auto`，并保留 `/auto-approve-switch` 兼容 alias；该策略只决定 `ApprovalRequested` 是否自动发送 `Approve`，不修改 ToolDefinition 或 Runtime 状态。Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
+
+`/ragreload` 与 `/build-memory` 在 R5 只进入 CommandRegistry 并明确报告 R6 尚不可用；R6 通过 `CommandRegistry.replace()` 接入真实 handler。R5 提供 `python -m src.get_me_in.cli` 独立入口；正式 CLI 通过 G5 后删除临时 `scripts/v2_runtime_smoke.py`，因此 R8 切换 `main.py` 前仍有唯一可验证的 v2 CLI 入口。
+
+R5 新文件、对象与公开边界清单如下；获得用户确认前不得创建：
+
+| 文件 | 新增对象 | 公开边界 |
+|------|----------|----------|
+| `src/get_me_in/cli/__init__.py` | v2 CLI package | 不导出可变全局实例 |
+| `src/get_me_in/cli/app.py` | `CliApp` | `run() -> int`；内部持有审批模式并驱动 command/event，不暴露业务状态 |
+| `src/get_me_in/cli/commands.py` | `ApprovalMode`、`CommandAction`、`CommandResult`、`CommandSpec`、`CommandRegistry` | `register(spec)`、`replace(spec)`、`dispatch(text)`、`help_entries()`、`completions()`；结果使用强类型 action，不返回魔法 dict |
+| `src/get_me_in/cli/input.py` | `InputController` | `read(prefill=None)`、`edit()`、`confirm()`、`select()`、`remember()`、`replace_history()` |
+| `src/get_me_in/cli/renderer.py` | `Renderer` | `render_event()`、`render_session()`、`render_help()`、`render_error()`、`render_notice()`、`status()` |
+| `src/get_me_in/cli/worker.py` | `WorkerRunner` | `run(command) -> RuntimeEvent`、`close()`；只管理单 worker、轮询和取消 |
+| `src/get_me_in/cli/main.py` | CLI composition function | `main() -> int`；构造 Application 与 CLI 组件，按 worker → application 顺序关闭 |
+| `src/get_me_in/cli/__main__.py` | 模块入口 | 只调用 `main()`，不含业务逻辑 |
+| `tests/get_me_in/test_cli_app.py` | CliApp protocol tests | 覆盖事件推进、handoff continue、终态自动保存与保存失败 |
+| `tests/get_me_in/test_cli_commands.py` | CommandRegistry tests | 覆盖 parse/help/alias/replace、restore/rewind、unavailable handler 与审批策略 |
+| `tests/get_me_in/test_cli_worker.py` | WorkerRunner tests | 覆盖单 worker、取消、关闭与禁止并发 |
+
+R5 调整既有 `bootstrap.py` 的装配复用方式和 `docs/legacy-cli-smoke-checklist.md`；不修改 RuntimeCommand/RuntimeEvent、Session snapshot schema、ToolDefinition 或 R6/R7 service。真实 questionary/Rich、Windows UTF-8、Esc、Ctrl+C、EOF 与 editor-not-found 仍使用人工 smoke 验证。
 
 ### 6.8 Workspace 与 Artifact
 

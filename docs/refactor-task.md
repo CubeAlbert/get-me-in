@@ -161,7 +161,7 @@
 - ✅ AgentRuntime 改为 `advance(state, command) -> RuntimeTransition`，不得保留第二份长期状态；Application 对外仍一次返回一个 RuntimeEvent。
 - ✅ 每个 Application 同时只管理一个活动 Session；生成真实 session id，并按 session/agent 构造 ToolContext、CancellationToken、Plan 绑定与 WorkspaceAccessState。
 - ✅ Settings 增加 `sessions_dir`，默认使用全新 `data/v2/sessions/`，不得读取旧 `data/save/`。
-- ✅ CLI input history 留在 R5 InputController；如需持久化，使用独立 CLI snapshot，不进入 domain SessionState。
+- ✅ CLI input history 留在 R5 InputController，不进入 domain SessionState；R5 复审决定不增加独立持久化 schema，restore 后从 SessionView rewind_points 重建。
 - ✅ 提供公开 `view/snapshot/restore/rewind(turn_id)/list_sessions/dump` API。
 - ✅ 禁止 CLI 直接访问 `_history`、`_plan` 或 Agent 私有方法。
 
@@ -196,10 +196,11 @@
 
 ### 0. 启动前复审门禁
 
-- ⬜ G4 完成并 checkpoint 后，基于实际 Application/Session/Command/Event/cancellation API 重新 Review R5～R8。
-- ⬜ 复核 R5 CliApp、CommandRegistry、InputController、Renderer、WorkerRunner 的职责和新文件/公开方法清单，确保 CLI 不吸收业务编排。
-- ⬜ 复核 R6 命令接入与资源清理、R6/R7 并行及验收依赖、R8 删除/回退/临时 Runner 清理范围。
-- ⬜ 将复审结论同步到 refactor design/plan/task/decision，并获得 R5 清单确认；未完成前不得开始 R5 coding。
+- ✅ G4 完成并 checkpoint 后，基于实际 Application/Session/Command/Event/cancellation API 重新 Review R5～R8。
+- ✅ 复核 R5 CliApp、CommandRegistry、InputController、Renderer、WorkerRunner 的职责和新文件/公开方法清单，确保 CLI 不吸收业务编排。
+- ✅ 复核 R6 命令接入与资源清理、R6/R7 并行及验收依赖、R8 删除/回退/临时 Runner 清理范围。
+- ✅ 将复审结论与 R5 清单同步到 refactor design/plan/task/decision。
+- ⬜ 获得 R5 新文件、类与公开方法清单确认；确认前不得开始 R5 coding。
 
 ### 1. CLI shell
 
@@ -207,7 +208,8 @@
 - ⬜ 创建 CommandRegistry，命令帮助与 handler 同源。
 - ⬜ 创建 InputController，管理 autocomplete/history/prefill/editor。
 - ⬜ 创建 Renderer，管理 Markdown/Plan/spinner/error/recap。
-- ⬜ 创建 WorkerRunner，管理后台线程、事件和 CancellationToken。
+- ⬜ 创建 WorkerRunner，使用单 worker 串行调用 Application，跨线程只调用公开 `request_cancel()`。
+- ⬜ 创建 `cli/main.py` 与 `cli/__main__.py`，提供 `python -m src.get_me_in.cli` 独立入口。
 
 ### 2. 命令迁移
 
@@ -219,7 +221,7 @@
 - ⬜ `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - ⬜ `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - ⬜ `/exit_sub`
-- ⬜ `/auto-approve-switch`：重命名为更准确的审批策略命令或保留兼容 alias。
+- ⬜ `/approval prompt|auto`；保留 `/auto-approve-switch` 兼容 alias，策略只决定 ApprovalRequested 是否自动 Approve。
 - ⬜ `/exit`
 
 ### 3. Interaction 与跨平台
@@ -228,7 +230,9 @@
 - ⬜ SelectionRequested → 选择/自定义输入 → SubmitSelection command。
 - ⬜ 删除 UIBridge 和模块级 current bridge 的 v2 依赖。
 - ⬜ Windows UTF-8、Esc、Ctrl+C、EOF 和 editor-not-found 行为验证。
-- ⬜ Input history 使用 CLI-owned snapshot，SessionView 只提供 context recap 所需的公开业务状态。
+- ⬜ Input history 使用进程内 CLI-owned state；restore 后从 `SessionView.rewind_points` 重建，不增加独立持久化 schema。
+- ⬜ Completed/Failed/Cancelled 后自动 snapshot；保存失败单独渲染且不得覆盖原终态。
+- ⬜ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
 - ⬜ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
 - ⬜ 完成 G5 验收。
@@ -245,7 +249,7 @@
 - ⬜ 正确处理新增、修改、删除和重命名。
 - ⬜ 明确 loading/error/ready 状态的并发语义。
 - ⬜ 实现 close 和后台任务等待。
-- ⬜ 让 KnowledgeService 适配现有 RetrievalPort，并把 `/ragreload` 真实 handler 接入 CommandRegistry。
+- ⬜ 让 KnowledgeService 适配现有 RetrievalPort，并通过 `CommandRegistry.replace()` 接入 `/ragreload` 真实 handler。
 - ⬜ composition root 使用统一逆序资源清理栈，不在 Application.close() 逐项硬编码 adapter。
 
 ### 2. Memory
@@ -255,7 +259,7 @@
 - ⬜ MemoryService 显式执行 extract → write → index。
 - ⬜ 索引失败记录 pending/error，并支持重试。
 - ⬜ search/delete 通过公开 service，不延迟 import RAG facade。
-- ⬜ 将 `/build-memory` 真实 handler 接入 CommandRegistry。
+- ⬜ 通过 `CommandRegistry.replace()` 接入 `/build-memory` 真实 handler。
 - ⛔ 保持 v1 Markdown memory 可读 —— R-D6 明确不迁移旧 Memory。
 - ⬜ 完成 G6 验收。
 
@@ -292,10 +296,11 @@
 ### 1. 入口切换
 
 - ⬜ `main.py` 切到 v2 bootstrap，单独提交。
+- ⬜ 确认 G6、G7 均已通过；不得仅因 Resume 主路径通过而跳过 Knowledge/Memory 门禁。
 - ⬜ 运行完整 capability parity matrix。
 - ⬜ 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可直接作为 v2 静态输入。
 - ⬜ 确认 v2 不读取 `data/save/`、`data/memories/`、`data/chroma/` 或 `data/temp/`。
-- ⬜ 保留明确回退点并由用户审查。
+- ⬜ 将入口切换与遗留删除拆为两个独立提交；入口切换提交是删除前回退点并由用户审查。
 
 ### 2. 遗留删除
 

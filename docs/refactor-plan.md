@@ -136,11 +136,12 @@
 
 **产出：**
 
-- CliApp、CommandRegistry、InputController、Renderer、WorkerRunner。
-- `/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/exit_sub`、`/exit`、审批开关迁移；`/ragreload`、`/build-memory` 先注册为明确 unavailable，真实 handler 在 R6 接入。
+- CliApp、CommandRegistry、InputController、Renderer、WorkerRunner，以及 `python -m src.get_me_in.cli` 独立入口。
+- `/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/exit_sub`、`/exit`、`/approval prompt|auto` 迁移；保留 `/auto-approve-switch` alias；`/ragreload`、`/build-memory` 先注册为明确 unavailable，真实 handler 在 R6 通过 registry replace 接入。
 - RuntimeEvent 驱动 confirm/select，不再使用 UIBridge。
-- Spinner 与 Esc cancel 只存在于 WorkerRunner/Renderer。
-- CLI input history 使用独立 CLI snapshot；context recap 来自公开 SessionView。
+- 单 WorkerRunner 串行调用 Application；Spinner 与 Esc/Ctrl+C cancel 只存在于 WorkerRunner/Renderer，跨线程只调用 `request_cancel()`。
+- CLI input history 只使用进程内 CLI-owned state；restore/rewind 与 context recap 来自公开 `SessionView.rewind_points`，不增加独立持久化 schema。
+- `Completed/Failed/Cancelled` 后自动 snapshot；保存失败不覆盖原 RuntimeEvent。
 - G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 
 **验收门禁 G5：**
@@ -148,6 +149,8 @@
 - 所有当前 CLI 命令有明确迁移状态和帮助文本。
 - 命令新增不需要修改 CliApp 主循环分支。
 - UI interaction 不阻塞或污染业务 Runtime 状态。
+- HandoffRequested 后可直接 Continue 已启动的目标 Runtime；WorkerRunner 不并发访问 Application。
+- 终态自动保存、restore/rewind、审批策略与 unavailable R6 commands 通过自动化测试。
 - Windows UTF-8、Ctrl+C、Esc、编辑器失败路径行为明确。
 
 **依赖：** G4。
@@ -163,7 +166,7 @@
 - 内容 hash 增量索引，正确处理新增、更新、删除和重命名。
 - MemoryRepository、MemoryExtractor、MemoryService。
 - build/query/delete 与 lifecycle close。
-- `/ragreload`、`/build-memory` 的真实 CLI handler 接入 R5 CommandRegistry。
+- `/ragreload`、`/build-memory` 的真实 CLI handler 通过 `CommandRegistry.replace()` 替换 R5 unavailable spec。
 - Application 使用统一逆序资源清理栈关闭 loader/index 等资源。
 - v2 Memory 使用全新 repository；不读取或迁移 v1 Memory 文件。
 
@@ -216,7 +219,7 @@
 - 旧入口删除前有独立可回退提交；删除后工作区与数据迁移说明完整。
 - 文档工具数、Agent 数和实际 Catalog 一致。
 
-**依赖：** G7。
+**依赖：** G6、G7。
 
 ### R9 —— 新功能恢复
 
@@ -241,7 +244,7 @@ R0 → R1 → R2 → R3 → R4 → R5 → R7 → R8 → R9
                          └────→ R6 ────┘
 ```
 
-R6 的内部设计可在 R4/R5 期间进行，但 Resume 纵向验收需要 Knowledge/Memory 完成。R8 之前旧实现保持可运行。
+R6 的内部设计可在 R4/R5 期间进行；R6 与 R7 可在 G5 后并行，但 R8 必须等待 G6、G7 均完成。R8 之前旧实现保持可运行。
 
 ## 4. 风险与控制
 

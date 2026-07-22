@@ -159,6 +159,8 @@
 - [决策 149 — 后续设计按当前 Runtime 重新校准](#决策-149--后续设计按当前-runtime-重新校准)
 - [决策 150 — G4 后强制重新 Review R5 至 R8](#决策-150--g4-后强制重新-review-r5-至-r8)
 - [决策 151 — R4/G4 完成后先进入 R5 前复审](#决策-151--r4g4-完成后先进入-r5-前复审)
+- [决策 152 — R4 复审补齐 handoff 启动、失败闭合与 frontend 回合投影](#决策-152--r4-复审补齐-handoff-启动失败闭合与-frontend-回合投影)
+- [决策 153 — R5 使用薄 CLI、单 WorkerRunner 与可替换命令注册](#决策-153--r5-使用薄-cli单-workerrunner-与可替换命令注册)
 
 ---
 
@@ -3335,3 +3337,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 由 CLI 在收到 `HandoffRequested` 后向子 Agent 发送 `UserMessage(context)` —— 会让 CLI 吸收业务编排，已拒绝。
 - 让 CLI 从 `SessionSnapshot` 扫描 user record —— 暴露持久化内部结构并耦合 codec，已拒绝。
+
+---
+
+### 决策 153 — R5 使用薄 CLI、单 WorkerRunner 与可替换命令注册
+
+**背景：** R4 复验后，Application 已提供 typed command/event、`request_cancel()`、SessionView rewind projection 和公开 Session API。R5 必须迁移旧 App 的输入、命令、渲染、线程、审批与自动保存能力，同时不能重新吸收 Agent 编排、完整 Session 状态或后续 Knowledge/Resume service。R8 前旧 `main.py` 仍需保持可运行，因此删除临时 Runner 前还需要正式 v2 CLI 的独立入口。
+
+**决策：**
+
+- R5 新建 `src/get_me_in/cli/`，只包含 `CliApp`、`CommandRegistry`、`InputController`、`Renderer`、`WorkerRunner` 与模块入口；具体文件、对象和公开方法以 `docs/refactor-design.md#67-cli` 的清单为唯一编码边界。
+- CliApp 负责 RuntimeEvent → RuntimeCommand 推进；HandoffRequested 只渲染并 Continue，不在 CLI 构造子 Agent context。WorkerRunner 使用单 worker 串行调用 Application，跨线程取消只调用 `Application.request_cancel()`。
+- CommandRegistry 公开 `register/replace/dispatch/help_entries/completions`；R5 注册 `/ragreload` 与 `/build-memory` unavailable spec，R6 以 replace 接入真实 handler，不修改 CliApp 主循环。
+- InputController 只维护进程内导航历史；restore 后由 `SessionView.rewind_points` 重建，不增加 CLI snapshot schema。终态由 CliApp 调用 `Application.snapshot()` 自动保存，失败单独渲染。
+- 审批命令使用 `/approval prompt|auto`，保留 `/auto-approve-switch` alias；审批模式是 CLI 偏好，不修改 ToolDefinition 或 Runtime。
+- R5 提供 `python -m src.get_me_in.cli`；G5 通过后删除临时 Runner。R6/R7 可在 G5 后并行，但 R8 必须等待 G6、G7 均完成，并将入口切换与遗留删除拆为两个独立提交。
+
+**理由：**
+
+- 单线程串行推进符合 Application 当前“一个活动 Session、一个活动 command”的状态边界，并把唯一安全的跨线程动作限制为取消。
+- 可替换 command spec 让 R6 服务接入不需要修改 CLI 主循环，也不需要 Application 知道 CLI 命令名。
+- 复用 SessionView 投影可以完成 restore/rewind 与 context recap，同时避免建立第二套 history 持久化和暴露 snapshot 内部结构。
+- 独立模块入口使 G5 能验证正式 CLI，又不提前切换 R8 生产入口。
+
+**曾考虑的替代方案：**
+
+- 直接把临时 `scripts/v2_runtime_smoke.py` 演进为正式 CLI —— 缺少命令、输入、渲染与 worker 边界，已拒绝。
+- 让 CommandRegistry handler 直接修改 Agent/Runtime 或读取 SessionSnapshot —— 重新制造跨层耦合，已拒绝。
+- 在 R5 新增独立 CLI history snapshot —— 当前 SessionView 已提供 rewind projection，没有足够收益支撑第二套 schema，已拒绝。
