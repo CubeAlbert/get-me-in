@@ -11,6 +11,10 @@ from src.get_me_in.domain.knowledge import (
     ManifestStatus,
     PendingIndexOperation,
 )
+from src.get_me_in.application.background_worker import BackgroundWorker
+from src.get_me_in.application.knowledge_service import KnowledgeService
+from src.get_me_in.application.cancellation import CancellationToken
+from src.get_me_in.domain.knowledge import IndexHit, KnowledgeDocument, KnowledgeState
 
 
 class ManifestDiffTests(unittest.TestCase):
@@ -85,6 +89,61 @@ class ManifestDiffTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "unique source_key"):
             manifest.diff((_source("references/a.md", "one"), _source("references/a.md", "two")))
+
+
+class KnowledgeServiceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.worker = BackgroundWorker("knowledge-test", 1)
+        self.index = _Index()
+        self.manifests = _Manifests()
+        self.source = _source("references/a.md", "hash")
+        self.service = KnowledgeService((_Sources((self.source,)),), _Chunker(), self.index, self.manifests, self.worker)
+
+    def tearDown(self) -> None:
+        self.service.close()
+        self.worker.close()
+
+    def test_reload_sets_ready_and_search_uses_existing_retrieval_contract(self) -> None:
+        self.assertEqual(KnowledgeState.IDLE, self.service.state)
+        self.service.start()
+
+        result = self.service.search("query", collection="references", category=None, top_k=1, cancellation=CancellationToken())
+
+        self.assertEqual(KnowledgeState.READY, self.service.state)
+        self.assertEqual(("found",), tuple(item.content for item in result))
+
+    def test_search_is_unavailable_before_first_successful_load(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "retrieval_unavailable"):
+            self.service.search("query", collection="references", category=None, top_k=1, cancellation=CancellationToken())
+
+    def test_index_and_delete_are_serialized_and_report_results(self) -> None:
+        document = KnowledgeDocument(self.source, "content")
+
+        self.assertEqual(("references/a.md",), self.service.index_document(document).updated)
+        self.assertEqual(("references/a.md",), self.service.delete_source("references/a.md").deleted)
+
+
+class _Sources:
+    def __init__(self, sources): self.sources = sources
+    def scan(self, target=None): return self.sources
+    def read(self, source): return KnowledgeDocument(source, "content")
+
+
+class _Chunker:
+    def chunk(self, document): return ()
+
+
+class _Index:
+    def replace_source(self, source, chunks, cancellation): pass
+    def delete_source(self, source_key, *, cancellation): pass
+    def search(self, query, *, collection, category, top_k, cancellation): return (IndexHit("chunk", "found", {}, 1.0),)
+    def close(self): pass
+
+
+class _Manifests:
+    def load(self): return _manifest()
+    def save(self, manifest): pass
+    def close(self): pass
 
 
 def _now() -> datetime:

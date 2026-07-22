@@ -91,6 +91,8 @@ class ReloadReport:
     renamed: tuple[tuple[str, str], ...] = ()
     retried: tuple[str, ...] = ()
     unchanged: tuple[str, ...] = ()
+    busy: bool = False
+    failures: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
