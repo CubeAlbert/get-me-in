@@ -244,7 +244,7 @@
 
 ### 1. 输出、domain 与事件契约
 
-- ✅ 对齐 `07_output_format.md`：finish 必须包含 string `thinking` 摘要，tool_call 可省略；missing/type error 走既有一次格式修复。
+- ✅ 对齐 `07_output_format.md`：finish 必须包含 string `thinking` 字段但允许空字符串，tool_call 可省略或为空；missing/type error 注入“具体错误 + 完整 canonical output format”并最多修复一次。
 - ✅ 为 assistant `MessageRecord` 与 `ToolCallRecord` 增加可选 thinking；user/system/tool result 不产生 thinking。
 - ✅ AgentRuntime 不再丢弃 `ModelReply.thinking`；Completed 通过 MessageRecord、ToolStarted 通过显式字段向前端投影。
 - ✅ 保持 provider-neutral 边界：不得读取或保存 OpenAI/DeepSeek 原生 `reasoning_content`。
@@ -258,9 +258,9 @@
 
 ### 3. 范围与 G5-F
 
-- ✅ 只修改 `data/prompts/general_agent/07_output_format.md`、`domain/messages.py`、`application/model_reply.py`、`application/runtime.py`、`application/events.py`、`application/conversation_codec.py`、`application/session_codec.py`、`application/settings.py`、`cli/renderer.py`、`cli/main.py` 与对应既有测试；未创建新代码文件。
-- ✅ 运行完整核心自动化测试、CLI 编译与 SHOW_THINKING 开／关 smoke，独立提交修复证据：`da530dc`、`937c4ea`；140 项核心测试通过。
-- ✅ 已执行 `/project-checkpoint` 保存 G5-F 结论；R6 coding 现可按已确认清单启动。
+- ✅ 初始 G5-F 只修改既有协议、Runtime、snapshot、Settings、Renderer 与测试；真实 CLI 复验后以独立 follow-up 新增 `logging_setup.py`，恢复 v2 显式日志装配与格式失败诊断，未进入 R6 范围。
+- ✅ 运行完整核心自动化测试、CLI 编译与 SHOW_THINKING 开／关 smoke，独立提交修复证据：`da530dc`、`937c4ea`、`123281d`、`abae597`；最终 146 项核心测试通过，真实 v2 CLI 启停日志 smoke 通过。
+- ✅ 已执行 `/project-checkpoint` 保存 G5-F 及 follow-up 结论；R6 coding 现可按已确认清单启动。
 
 ## R6 —— Knowledge/RAG 与 Memory
 

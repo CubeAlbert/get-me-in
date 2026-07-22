@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。R6 已获清单确认并通过 G5-F；G6 后仍必须停在 R6-T，未经用户明确授权不得进入 R7 或 R8
 
-**会话交接说明：** R5-F/G5-F 已完成。`da530dc` 恢复 finish 必需、tool call 可选的 JSON `thinking` 摘要：assistant `MessageRecord`／`ToolCallRecord`、`ToolStarted`、snapshot 和 Renderer 均保留该投影；ConversationCodec 始终剥离它，且继续禁止读取 provider 原生 `reasoning_content`。`SHOW_THINKING` 与 `LLM_THINKING_ENABLED` 已分离；`937c4ea` 将最终回复渲染为先显示“思考摘要”、再显示 LLM message。完整核心自动化测试 140 项通过，CLI 编译及开／关渲染验证通过。R6 设计、清单和第一切片不变，且 R6 MemoryBuildSource 仍必须剥离 thinking。
+**会话交接说明：** R5-F/G5-F 及真实 CLI follow-up 已完成。`da530dc`／`937c4ea` 恢复用户可见 `thinking` 的保存、展示和不回放；`123281d` 将最终契约固定为 finish 必须出现 string `thinking` 但允许 `""`，tool_call 可省略或为空，首次格式失败把具体解析错误与 `PromptRenderer.render_output_format()` 读取的完整 canonical 规则作为 system message 注入，最多修复一次。`abae597` 以 `logging_setup.configure_logging()` 恢复 v2 显式日志装配：默认写 `LOG_DIR/app.log`，INFO/WARNING 记录生命周期与格式失败诊断，DEBUG 额外记录完整模型原始回复。v2 只读取 typed Settings 声明的环境变量；旧 `AGENT_MAX_ROUNDS` 不生效，当前整体调用限制为 `AGENT_MAX_MODEL_CALLS`（未配置时默认 12），旧 RAG/Memory/WORKING_DIR/SAVE_DIR 配置在对应 v2 阶段迁移前不生效。完整核心自动化测试 146 项、编译检查及真实 CLI 启停日志 smoke 均通过；ConversationCodec 与 R6 MemoryBuildSource 仍必须剥离 thinking。R6 设计、清单和第一切片不变。
 
 **下一步：** 在新会话执行 `/project-bootstrap` 后，按 `docs/refactor-design.md#69-knowledge-与-memory` 的已确认清单，仅创建并独立验证 R6 第一切片：`domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`。完成后独立提交；G6 后必须 checkpoint 并停在 R6-T，不得进入 R7。
 
@@ -53,3 +53,5 @@
 169. **R6 重设一致性边界并增加强制终止门禁** — 保留 RetrievalPort，删除重复搜索 DTO 和旧 Facade/observer/daemon 形状；新增 RUN command path、immutable MemoryBuildSource、observed/indexed manifest、BackgroundWorker、ResourceStack 与 typed close report。R6/R7 不再并行；G6 后必须 checkpoint 并停在 R6-T，未经用户授权不得进入 R7/R8。当前只完成设计文档，R6 coding 未启动。
 170. **R6 清单获确认并固定新会话实施入口** — 用户确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 文件、对象、构造依赖与公开方法清单；本会话只做文档 checkpoint，不写代码。新会话 bootstrap 后从 domain/ports/manifest diff 第一切片开始，每步独立验证提交；G6 后仍强制停在 R6-T，不得进入 R7。
 171. **R6 前增加独立 `thinking` 契约修复门禁** — v2 必须保留静态 JSON 输出中的用户可见 thinking 摘要并按 `SHOW_THINKING` 展示和持久化，但 ConversationCodec 与 R6 MemoryBuildSource 必须剥离该字段；不得捕获 provider 原生 `reasoning_content`。R6 清单不变，但 coding 必须等待 G5-F 通过。
+172. **R5-F follow-up 统一格式修复的唯一契约与重试边界** — finish 必须出现 string `thinking` 但允许空字符串，tool_call 可省略或为空；格式失败注入具体解析错误与完整 canonical output format，只允许一次修复，第二次失败立即返回 `invalid_model_reply`。
+173. **v2 显式装配日志并固定环境变量所有权** — v2 日志仅配置 `src.get_me_in` 命名空间并写入 `LOG_DIR/app.log`；DEBUG 才记录完整模型原始回复。v2 只消费 typed Settings 声明的变量，旧 `AGENT_MAX_ROUNDS` 不生效，实际调用上限由 `AGENT_MAX_MODEL_CALLS` 控制。

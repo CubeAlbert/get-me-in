@@ -186,6 +186,8 @@
 - [决策 169 — R6 重设一致性边界并增加强制终止门禁](#决策-169--r6-重设一致性边界并增加强制终止门禁)
 - [决策 170 — R6 清单获确认并固定新会话实施入口](#决策-170--r6-清单获确认并固定新会话实施入口)
 - [决策 171 — R6 前增加独立 thinking 契约修复门禁](#决策-171--r6-前增加独立-thinking-契约修复门禁)
+- [决策 172 — R5-F follow-up 统一格式修复的唯一契约与重试边界](#决策-172--r5-f-follow-up-统一格式修复的唯一契约与重试边界)
+- [决策 173 — v2 显式装配日志并固定环境变量所有权](#决策-173--v2-显式装配日志并固定环境变量所有权)
 
 ---
 
@@ -3818,3 +3820,56 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保持 parser 接收后丢弃 —— 继续浪费输出 token，并违反已确认的可展示/可 dump 行为，已拒绝。
 - 将 provider reasoning_content 用作 thinking —— 决策 136 已因安全和 prompt injection 风险拒绝，继续不采用。
 - 让 MemoryExtractor 自行忽略 thinking —— 会把展示数据泄漏到后台 LLM 输入，边界过晚，已拒绝。
+
+---
+
+### 决策 172 —— R5-F follow-up 统一格式修复的唯一契约与重试边界
+
+**背景：** G5-F 首次 checkpoint 后运行真实 v2 CLI，模型在工具结果后的回复连续两次解析失败。会话 snapshot 只能看到旧 Runtime 注入了 `Return exactly one JSON object with a string content field.`，既没有完整 output format，也没有保存具体解析错误或原始失败回复。该提示与 G5-F 新增的 finish `thinking` 约束冲突：模型即使按提示只返回 content，仍会再次失败。
+
+**决定：**
+
+- finish 必须出现 string `thinking` 字段，但允许值为 `""`；tool_call 可省略 `thinking`，也允许值为 `""`。
+- `07_output_format.md` 使用条件 schema 表达 finish 的字段要求；`PromptRenderer.render_output_format()` 是 repair 规则的唯一读取入口，Runtime 不再维护简化副本。
+- 首次 `ModelReplyParseError` 将“具体解析错误 + 完整 canonical output format”作为 `Role.SYSTEM` 消息注入；不把无效原始回复写回会话历史。
+- 每个用户回合最多进行一次格式修复。修复后的回复仍无效时立即返回 `invalid_model_reply`；整个回合还受 `AGENT_MAX_MODEL_CALLS` 总上限约束，不允许无限重试。
+- 完整原始回复只进入 DEBUG 日志，正常日志和 system repair message 只保留必要诊断信息。
+
+**理由：**
+
+- 条件字段要求与 parser、prompt、repair message 使用同一契约，避免“提示模型修成另一种仍非法的格式”。
+- 具体错误可让模型定向修复，完整规则避免遗漏 `thinking`、event_type 或工具字段。
+- 单次 repair 在容错和成本可控之间保持明确边界，也防止格式错误形成无限模型循环。
+- 不回放无效原文可避免污染会话；DEBUG 日志仍为人工诊断保留完整证据。
+
+**曾考虑的替代方案：**
+
+- 继续注入只要求 content 的简化提示 —— 与 finish 契约冲突，已拒绝。
+- 将无效原始回复和错误一起注入模型 —— 会扩大上下文污染和敏感信息暴露，当前没有必要。
+- 持续重试直到解析成功 —— 成本和终止时间不可控，已拒绝。
+
+---
+
+### 决策 173 —— v2 显式装配日志并固定环境变量所有权
+
+**背景：** 独立入口 `python -m src.get_me_in.cli` 没有导入旧 `src.logger`，因此旧 `data/logs/app.log` 在 v2 运行期间不会更新。格式修复失败时 Runtime 又丢弃 `ModelReplyParseError` 细节和原始回复，CLI 只能显示通用 `invalid_model_reply`。同时 `.env` 同时保留 legacy 与 v2 配置，容易误以为 `AGENT_MAX_ROUNDS`、`WORKING_DIR` 或旧 RAG/Memory 路径已经控制 v2。
+
+**决定：**
+
+- 新增 v2 `logging_setup.configure_logging(log_dir, level)`，由 CLI composition 阶段显式调用；只配置 `src.get_me_in` logger 命名空间，不接管 root logger 或第三方 SDK 日志。
+- 使用 `RotatingFileHandler` 写入 `LOG_DIR/app.log`，10MB × 5；stderr 只显示 ERROR+。INFO 记录 CLI 生命周期，WARNING 记录 provider/timeout/格式错误及最多 500 字符预览，DEBUG 记录完整模型原始回复。
+- v2 Settings 显式读取并校验 `LOG_LEVEL`、`LOG_DIR`。当前 `.env` 的 `LOG_LEVEL=DEBUG` 会记录完整模型回复，日常使用可改回 INFO。
+- v2 只消费 `Settings.from_env()` 声明的变量。legacy `AGENT_MAX_ROUNDS` 不控制 v2；v2 使用 `AGENT_MAX_MODEL_CALLS`，未配置时默认 12。`WORKSPACE_DIR`、`SESSIONS_DIR` 未配置时分别使用 `data/workspace/`、`data/v2/sessions/`。
+- legacy RAG/Memory、`WORKING_DIR` 与 `SAVE_DIR` 配置在对应 v2 阶段正式迁移前不生效；后续阶段新增 typed Settings 时必须同步 `.env.example` 与 checkpoint 说明。
+
+**理由：**
+
+- 显式 CLI 装配符合 v2 禁止 import-time 全局副作用的边界，也能保证真实入口一定启用诊断。
+- 仅捕获 v2 namespace 避免 DEBUG 模式重新引入 httpx/OpenAI 等第三方噪声。
+- 把“环境中存在”与“v2 当前消费”明确分开，可防止调错无效变量并误判运行限制或数据路径。
+
+**曾考虑的替代方案：**
+
+- 直接复用 legacy `src.logger` —— 会让独立 v2 反向依赖旧基础设施，已拒绝。
+- 配置 root logger —— 会收集大量第三方 DEBUG 日志并降低可读性，已拒绝。
+- 只在 CLI 显示更多错误而不落盘 —— 无法保留模型原始回复和跨运行诊断证据，已拒绝。
