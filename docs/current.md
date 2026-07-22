@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R5 —— CLI 拆分与交互迁移（前两切片已完成）
+**当前阶段：** R5 —— CLI 拆分与交互迁移（前三切片已完成）
 
 **当前任务：** 按已确认清单继续实施 R5 CLI
 
-**当前子任务：** 第三实施切片：创建 `worker.py` 与 `test_cli_worker.py`，完成单 worker、轮询取消和关闭（⬜）
+**当前子任务：** 第四实施切片：创建 `app.py` 与 `test_cli_app.py`，完成 command/event 驱动、handoff continue、交互和终态自动 snapshot（⬜）
 
 **当前阻塞：** 无；R5 清单已获用户确认，读取本文件的后续会话可按五步顺序小步实施
 
-**会话交接说明：** 已完成第二切片 `input.py`、`renderer.py`，并补充动态命令补全：InputController 通过 `CompletionProvider` 在每次 read 时获取最新命令，不依赖 CommandRegistry。尚未创建 WorkerRunner、CliApp 或模块入口；命令和交互尚未由 CliApp 集成。
+**会话交接说明：** 已完成第三切片 `worker.py` 与 `test_cli_worker.py`：WorkerRunner 只串行执行一个 RuntimeCommand，Esc/Ctrl+C 与 close 都仅调用 Application.request_cancel()，拒绝并发运行。尚未创建 CliApp 或模块入口；命令、输入、渲染与 worker 尚未整合为交互循环。
 
-**下一步：** 只创建 `src/get_me_in/cli/worker.py` 与 `tests/get_me_in/test_cli_worker.py`，按 `docs/refactor-design.md#67-cli` 的公开方法清单实现单 worker、轮询取消和关闭，验证并独立提交；不得提前创建 CliApp 或模块入口。
+**下一步：** 只创建 `src/get_me_in/cli/app.py` 与 `tests/get_me_in/test_cli_app.py`，按 `docs/refactor-design.md#67-cli` 实现 command/event 驱动、handoff continue、交互与终态自动 snapshot，验证并独立提交；不得提前创建模块入口。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 

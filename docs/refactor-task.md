@@ -209,7 +209,7 @@
 - ✅ 创建 CommandRegistry，命令帮助与 handler 同源。
 - ✅ 创建 InputController，管理 autocomplete/history/prefill/editor；使用 `set_completions(CompletionProvider)` 动态读取 CommandRegistry 的最新补全。
 - ✅ 创建 Renderer，管理 Markdown/Plan/spinner/error/recap。
-- ⬜ 创建 WorkerRunner，使用单 worker 串行调用 Application，跨线程只调用公开 `request_cancel()`。
+- ✅ 创建 WorkerRunner，使用单 worker 串行调用 Application，跨线程只调用公开 `request_cancel()`；覆盖并发拒绝、取消与关闭。
 - ⬜ 创建 `cli/main.py` 与 `cli/__main__.py`，提供 `python -m src.get_me_in.cli` 独立入口。
 
 ### 2. 命令迁移
