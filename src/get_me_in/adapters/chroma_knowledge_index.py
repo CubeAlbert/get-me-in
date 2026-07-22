@@ -1,0 +1,60 @@
+"""Explicit v2 vector adapters; models and persistence are constructor-owned."""
+
+from collections.abc import Callable
+
+from src.get_me_in.domain.knowledge import IndexChunk, IndexHit, KnowledgeSource
+from src.get_me_in.ports.llm import CancellationSignal
+
+
+class SentenceTransformerEmbedder:
+    def __init__(self, model_name: str, batch_size: int, model: object | None = None) -> None:
+        self._batch_size = batch_size
+        if model is None:
+            from sentence_transformers import SentenceTransformer
+            model = SentenceTransformer(model_name)
+        self._model = model
+
+    def embed(self, texts: tuple[str, ...]) -> tuple[list[float], ...]:
+        values = self._model.encode(list(texts), batch_size=self._batch_size, normalize_embeddings=True, show_progress_bar=False)
+        return tuple(value.tolist() for value in values)
+
+
+class CrossEncoderReranker:
+    def __init__(self, model_name: str, batch_size: int, top_k: int, model: object | None = None) -> None:
+        self._batch_size, self._top_k = batch_size, top_k
+        if model is None:
+            from sentence_transformers import CrossEncoder
+            model = CrossEncoder(model_name)
+        self._model = model
+
+    def rerank(self, query: str, hits: tuple[IndexHit, ...]) -> tuple[IndexHit, ...]:
+        scores = self._model.predict([(query, hit.content) for hit in hits], batch_size=self._batch_size, show_progress_bar=False)
+        ranked = tuple(sorted((IndexHit(hit.chunk_id, hit.content, hit.metadata | {"rerank_score": float(score)}, float(score)) for hit, score in zip(hits, scores)), key=lambda hit: hit.score, reverse=True))
+        return ranked[:self._top_k]
+
+
+class ChromaKnowledgeIndex:
+    def __init__(self, client: object, embedder: SentenceTransformerEmbedder, reranker: CrossEncoderReranker) -> None:
+        self._client, self._embedder, self._reranker = client, embedder, reranker
+
+    def replace_source(self, source: KnowledgeSource, chunks: tuple[IndexChunk, ...], cancellation: CancellationSignal) -> None:
+        if cancellation.is_cancelled: raise InterruptedError
+        collection = self._client.get_or_create_collection(source.collection.value)
+        collection.delete(where={"source_key": source.source_key})
+        if chunks:
+            collection.add(ids=[chunk.chunk_id for chunk in chunks], embeddings=self._embedder.embed(tuple(chunk.content for chunk in chunks)), documents=[chunk.content for chunk in chunks], metadatas=[dict(chunk.metadata) | {"source_key": source.source_key} for chunk in chunks])
+
+    def delete_source(self, source_key: str, *, cancellation: CancellationSignal) -> None:
+        if cancellation.is_cancelled: raise InterruptedError
+        for name in ("references", "memories"):
+            try: self._client.get_collection(name).delete(where={"source_key": source_key})
+            except Exception: pass
+
+    def search(self, query: str, *, collection: str, category: str | None, top_k: int, cancellation: CancellationSignal) -> tuple[IndexHit, ...]:
+        if cancellation.is_cancelled: raise InterruptedError
+        result = self._client.get_collection(collection).query(query_embeddings=self._embedder.embed((query,)), n_results=top_k, where={"category": category} if category else None, include=["documents", "metadatas", "distances"])
+        hits = tuple(IndexHit(identifier, result["documents"][0][index], result["metadatas"][0][index], 1 - float(result["distances"][0][index])) for index, identifier in enumerate(result.get("ids", [[]])[0]))
+        return self._reranker.rerank(query, hits)
+
+    def close(self) -> None:
+        pass

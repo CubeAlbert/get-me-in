@@ -8,6 +8,7 @@ import unittest
 from src.get_me_in.adapters.json_manifest_repository import JsonManifestRepository
 from src.get_me_in.adapters.local_knowledge_sources import LocalKnowledgeSourceRepository
 from src.get_me_in.adapters.markdown_chunker import MarkdownChunker
+from src.get_me_in.adapters.chroma_knowledge_index import ChromaKnowledgeIndex
 from src.get_me_in.domain.knowledge import IndexManifest, KnowledgeCollection, KnowledgeDocument, KnowledgeSource, ManifestEntry
 
 
@@ -45,6 +46,39 @@ class KnowledgeAdapterTests(unittest.TestCase):
             path.write_text('{"schema_version": 9}', encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "schema"):
                 repository.load()
+
+    def test_chroma_index_uses_injected_client_and_reranker(self) -> None:
+        index = ChromaKnowledgeIndex(_Client(), _Embedder(), _Reranker())
+        source = KnowledgeSource(KnowledgeCollection.REFERENCES, "references/a.md", "hash", _now())
+        token = _Token()
+
+        index.replace_source(source, MarkdownChunker().chunk(KnowledgeDocument(source, "text")), token)
+        hits = index.search("query", collection="references", category=None, top_k=1, cancellation=token)
+
+        self.assertEqual(("found",), tuple(hit.content for hit in hits))
+
+
+class _Token:
+    is_cancelled = False
+
+
+class _Embedder:
+    def embed(self, texts): return ([0.1],) * len(texts)
+
+
+class _Reranker:
+    def rerank(self, query, hits): return hits
+
+
+class _Collection:
+    def delete(self, **kwargs): pass
+    def add(self, **kwargs): pass
+    def query(self, **kwargs): return {"ids": [["id"]], "documents": [["found"]], "metadatas": [[{}]], "distances": [[0.2]]}
+
+
+class _Client:
+    def get_or_create_collection(self, name): return _Collection()
+    def get_collection(self, name): return _Collection()
 
 
 def _now() -> datetime:
