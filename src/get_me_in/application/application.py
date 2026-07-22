@@ -1,6 +1,15 @@
 """v2 application container exposing the typed runtime boundary."""
 
+from pathlib import Path
+
 from src.get_me_in.application.agent_catalog import AgentCatalog
+from src.get_me_in.application.app_commands import (
+    ApplicationCommand,
+    DumpSession,
+    ExitSubAgent,
+    RestoreSession,
+    RewindSession,
+)
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
@@ -42,10 +51,18 @@ class Application:
         self._web_search = web_search
         self._closed = False
 
-    def handle(self, command: RuntimeCommand) -> RuntimeEvent:
+    def handle(self, command: RuntimeCommand | ApplicationCommand) -> RuntimeEvent | SessionView | Path:
         """Run one typed command without exposing runtime internals."""
         if self._closed:
             raise RuntimeError("Application is closed")
+        if isinstance(command, RestoreSession):
+            return self.restore(command.session_id)
+        if isinstance(command, RewindSession):
+            return self._sessions.rewind(command.turn_id)
+        if isinstance(command, ExitSubAgent):
+            return self._sessions.exit_subagent()
+        if isinstance(command, DumpSession):
+            return self._sessions.dump()
         return self._sessions.handle(command)
 
     def view(self) -> SessionView:

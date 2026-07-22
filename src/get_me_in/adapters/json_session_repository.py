@@ -14,8 +14,15 @@ class JsonSessionRepository:
 
     def save(self, snapshot: object) -> None:
         target = self._path(snapshot.session.session_id)
+        self._write(target, self._codec.encode(snapshot))
+
+    def dump(self, snapshot: object) -> Path:
+        target = self._root / f"{snapshot.session.session_id}.dump.json"
+        self._write(target, self._codec.encode(snapshot))
+        return target
+
+    def _write(self, target: Path, payload: object) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
-        payload = self._codec.encode(snapshot)
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, delete=False) as handle:
             temporary = Path(handle.name)
             json.dump(payload, handle, ensure_ascii=False, sort_keys=True)

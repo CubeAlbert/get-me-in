@@ -147,6 +147,7 @@ def build_application(
         plans={AgentKey.MAIN: plan_service},
         repository=JsonSessionRepository(settings.sessions_dir, codec=SessionSnapshotCodec()),
         clock=clock,
+        id_generator=id_generator,
         workspace_access=workspace_access,
     )
     return Application(

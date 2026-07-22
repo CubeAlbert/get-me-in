@@ -1,6 +1,7 @@
 """Application service owning exactly one active session aggregate."""
 
 from dataclasses import replace
+from pathlib import Path
 
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
@@ -9,8 +10,11 @@ from src.get_me_in.application.orchestration import Orchestrator
 from src.get_me_in.application.session_codec import SessionSnapshot
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.messages import ToolResultRecord
+from src.get_me_in.domain.sessions import RuntimePhase
 from src.get_me_in.domain.sessions import AgentSessionState, SessionPreview, SessionState, SessionView
 from src.get_me_in.ports.clock import Clock
+from src.get_me_in.ports.ids import IdGenerator
 from src.get_me_in.ports.sessions import SessionRepository
 
 
@@ -25,6 +29,7 @@ class SessionService:
         plans: dict[AgentKey, PlanService],
         repository: SessionRepository,
         clock: Clock,
+        id_generator: IdGenerator,
         workspace_access: WorkspaceAccessState,
     ) -> None:
         self._session = session
@@ -32,6 +37,7 @@ class SessionService:
         self._plans = plans
         self._repository = repository
         self._clock = clock
+        self._id_generator = id_generator
         self._workspace_access = workspace_access
 
     def handle(self, command: RuntimeCommand) -> RuntimeEvent:
@@ -48,6 +54,7 @@ class SessionService:
         return SessionView(self._session.session_id, self._session.active_agent, active.phase, active.plan)
 
     def snapshot(self) -> SessionSnapshot:
+        self._session = self._normalise_snapshot_state(self._session)
         snapshot = SessionSnapshot(self._session, self._clock.now())
         self._repository.save(snapshot)
         return snapshot
@@ -65,6 +72,36 @@ class SessionService:
     def list_sessions(self) -> tuple[SessionPreview, ...]:
         return self._repository.list()
 
+    def dump(self) -> Path:
+        snapshot = self.snapshot()
+        return self._repository.dump(snapshot)
+
+    def rewind(self, turn_id: str) -> SessionView:
+        matching = [
+            record.timestamp
+            for state in self._session.agents.values()
+            for record in state.history
+            if record.turn_id == turn_id
+        ]
+        if not matching:
+            raise KeyError(turn_id)
+        boundary = min(matching)
+        agents = {
+            key: AgentSessionState(history=tuple(record for record in state.history if record.timestamp < boundary))
+            for key, state in self._session.agents.items()
+        }
+        self._workspace_access.clear_session(self._session.session_id)
+        self._session = replace(
+            self._session,
+            agents=agents,
+            active_agent=AgentKey.MAIN,
+            handoff_stack=(),
+            updated_at=self._clock.now(),
+        )
+        for plan in self._plans.values():
+            plan.restore(None)
+        return self.view()
+
     def exit_subagent(self) -> RuntimeEvent:
         transition = self._orchestrator.exit_subagent(self._session)
         self._session = replace(transition.session, updated_at=self._clock.now())
@@ -76,3 +113,38 @@ class SessionService:
     def close(self) -> None:
         self._orchestrator.close()
         self._repository.close()
+
+    def _normalise_snapshot_state(self, session: SessionState) -> SessionState:
+        safe = {
+            RuntimePhase.READY,
+            RuntimePhase.WAITING_FOR_APPROVAL,
+            RuntimePhase.WAITING_FOR_SELECTION,
+            RuntimePhase.WAITING_FOR_HANDOFF,
+            RuntimePhase.COMPLETED,
+            RuntimePhase.CANCELLED,
+            RuntimePhase.FAILED,
+        }
+        agents: dict[AgentKey, AgentSessionState] = {}
+        for key, state in session.agents.items():
+            if state.phase in safe:
+                agents[key] = state
+                continue
+            history = state.history
+            if state.pending_tool is not None:
+                pending = state.pending_tool
+                history = (*history, ToolResultRecord(
+                    event_id=self._id_generator.new_id(),
+                    call_id=pending.call_id,
+                    tool_name=pending.tool_name,
+                    output={"code": "cancelled", "message": "Interrupted before snapshot"},
+                    timestamp=self._clock.now(),
+                    turn_id=state.turn_id,
+                ))
+            agents[key] = replace(
+                state,
+                phase=RuntimePhase.CANCELLED,
+                history=history,
+                pending_tool=None,
+                cancel_reason="Interrupted before snapshot",
+            )
+        return replace(session, agents=agents, updated_at=self._clock.now())

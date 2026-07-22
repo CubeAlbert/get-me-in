@@ -1,15 +1,18 @@
 import unittest
 from pathlib import Path
+import tempfile
 
 from src.get_me_in.bootstrap import build_application
 from src.get_me_in.application.commands import Continue, UserMessage
+from src.get_me_in.application.app_commands import DumpSession, RestoreSession, RewindSession
 from src.get_me_in.application.events import Completed, Progress, ToolFinished, ToolStarted
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.sessions import RuntimePhase
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult
 
 
-def _settings() -> Settings:
+def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
     return Settings(
         openai_api_key="key",
         openai_base_url="https://example.test",
@@ -22,7 +25,7 @@ def _settings() -> Settings:
         prompts_dir=Path("data/prompts"),
         resume_template_dir=Path("data/resume/template"),
         workspace_dir=Path("data/workspace"),
-        sessions_dir=Path("data/v2/sessions"),
+        sessions_dir=sessions_dir,
     )
 
 
@@ -124,6 +127,34 @@ class BootstrapTests(unittest.TestCase):
         self.assertTrue(llm.closed)
         with self.assertRaises(RuntimeError):
             application.handle(UserMessage("hello"))
+
+    def test_snapshot_normalises_active_work_and_dump_is_written(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            application = build_application(
+                _settings(sessions_dir=Path(temporary)), llm=_FakeLlm("unused")
+            )
+            self.assertIsInstance(application.handle(UserMessage("start")), Progress)
+
+            snapshot = application.snapshot()
+            dump_path = application.handle(DumpSession())
+
+            self.assertEqual(RuntimePhase.CANCELLED, snapshot.session.agents[AgentKey.MAIN].phase)
+            self.assertTrue(dump_path.exists())
+
+    def test_rewind_and_restore_use_public_session_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            application = build_application(
+                _settings(sessions_dir=Path(temporary)), llm=_FakeLlm("finished")
+            )
+            _pump(application, UserMessage("first"))
+            snapshot = application.snapshot()
+            turn_id = snapshot.session.agents[AgentKey.MAIN].history[0].turn_id
+
+            rewound = application.handle(RewindSession(turn_id))
+            restored = application.handle(RestoreSession(snapshot.session.session_id))
+
+            self.assertEqual(RuntimePhase.READY, rewound.phase)
+            self.assertEqual(RuntimePhase.COMPLETED, restored.phase)
 
 
 class _FakeLlm:
