@@ -22,6 +22,7 @@ def _settings() -> Settings:
         prompts_dir=Path("data/prompts"),
         resume_template_dir=Path("data/resume/template"),
         workspace_dir=Path("data/workspace"),
+        sessions_dir=Path("data/v2/sessions"),
     )
 
 

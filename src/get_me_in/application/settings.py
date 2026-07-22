@@ -24,6 +24,7 @@ class Settings:
     prompts_dir: Path
     resume_template_dir: Path
     workspace_dir: Path
+    sessions_dir: Path
     max_model_calls_per_run: int = 12
     cancel_grace_seconds: float = 2.0
 
@@ -90,6 +91,7 @@ class Settings:
             prompts_dir=project_root / "data" / "prompts",
             resume_template_dir=project_root / "data" / "resume" / "template",
             workspace_dir=Path(env.get("WORKSPACE_DIR", project_root / "data" / "workspace")),
+            sessions_dir=Path(env.get("SESSIONS_DIR", project_root / "data" / "v2" / "sessions")),
             max_model_calls_per_run=max_calls,
             cancel_grace_seconds=cancel_grace,
         )
