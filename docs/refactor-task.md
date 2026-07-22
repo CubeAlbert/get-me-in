@@ -264,6 +264,8 @@
 
 ## R6 —— Knowledge/RAG 与 Memory
 
+> ✅ G6 已通过：六个固定切片均已完成并提交；171 项核心自动化测试、编译检查和真实 Chroma/embedder/reranker 临时目录 smoke 通过。R6-T 已生效，以下历史待办仅保留为验收追溯，不得据此自动进入 R7 或 R8。
+
 ### 0. 启动确认与范围
 
 - ✅ 基于 R5 修复后的 Application/CLI/Worker/Session 边界重新审查 R6。

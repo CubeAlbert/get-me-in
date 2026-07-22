@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R6 —— Knowledge/RAG 与 Memory（已通过 G5-F checkpoint；第一切片尚未启动）
+**当前阶段：** R6 —— Knowledge/RAG 与 Memory（G6 已通过；R7 未启动）
 
-**当前任务：** 按已确认清单实施 R6 第一切片的 domain/ports/manifest diff 纯逻辑
+**当前任务：** R6-T 强制终止门禁：等待用户审查 R6 成果
 
-**当前子任务：** 仅创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，实现 domain/ports/manifest diff 纯逻辑；独立验证、独立提交（⬜）
+**当前子任务：** 无。已完成 checkpoint；未经用户后续明确授权不得进入 R7 或 R8。
 
-**当前阻塞：** 无。R6 已获清单确认并通过 G5-F；G6 后仍必须停在 R6-T，未经用户明确授权不得进入 R7 或 R8
+**当前阻塞：** 等待用户审查。R6-T 生效，未经用户明确授权不得进入 R7 或 R8。
 
-**会话交接说明：** R5-F/G5-F 及真实 CLI follow-up 已完成。`da530dc`／`937c4ea` 恢复用户可见 `thinking` 的保存、展示和不回放；`123281d` 将最终契约固定为 finish 必须出现 string `thinking` 但允许 `""`，tool_call 可省略或为空，首次格式失败把具体解析错误与 `PromptRenderer.render_output_format()` 读取的完整 canonical 规则作为 system message 注入，最多修复一次。`abae597` 以 `logging_setup.configure_logging()` 恢复 v2 显式日志装配：默认写 `LOG_DIR/app.log`，INFO/WARNING 记录生命周期与格式失败诊断，DEBUG 额外记录完整模型原始回复。v2 只读取 typed Settings 声明的环境变量；旧 `AGENT_MAX_ROUNDS` 不生效，当前整体调用限制为 `AGENT_MAX_MODEL_CALLS`（未配置时默认 12），旧 RAG/Memory/WORKING_DIR/SAVE_DIR 配置在对应 v2 阶段迁移前不生效。完整核心自动化测试 146 项、编译检查及真实 CLI 启停日志 smoke 均通过；ConversationCodec 与 R6 MemoryBuildSource 仍必须剥离 thinking。R6 设计、清单和第一切片不变。
+**会话交接说明：** R6 已按确认清单完成六个切片。`da62776` 固定 knowledge/memory DTO、ports 与 manifest diff；`3840b1d`、`569d5bc`、`3fd5fe0`、`82a4ead` 分别落地 application command/worker、KnowledgeService、本地/Chroma adapter 与 memory service；`66c6e1c` 完成 Settings/bootstrap/CLI/资源生命周期集成；`3b6c4b7` 用真实 `KnowledgeService` 替换并删除 `DeferredRetrievalAdapter`。`IndexManifest.diff()` 为纯函数、确定排序、拒绝重复 key；manifest 对 index 操作写入 pending/error/ready 状态；Memory 输入副本剥离 thinking；关闭顺序由 ResourceStack 保证。完整自动化测试 171 项通过，`compileall` 通过，真实 Chroma + embedding + rerank 临时目录 smoke 通过。未修改 R7 文件、旧 `main.py` 或执行 R8 清理。
 
-**下一步：** 在新会话执行 `/project-bootstrap` 后，按 `docs/refactor-design.md#69-knowledge-与-memory` 的已确认清单，仅创建并独立验证 R6 第一切片：`domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`。完成后独立提交；G6 后必须 checkpoint 并停在 R6-T，不得进入 R7。
+**下一步：** 用户审查 R6 代码、测试与 smoke 证据；只有获得后续明确授权，才可讨论 R7 的新文件、类和公开方法清单。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
