@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import sys
+import logging
 
 from dotenv import load_dotenv
 
@@ -13,6 +14,10 @@ from src.get_me_in.cli.commands import build_command_registry
 from src.get_me_in.cli.input import InputController
 from src.get_me_in.cli.renderer import Renderer
 from src.get_me_in.cli.worker import WorkerRunner
+from src.get_me_in.logging_setup import configure_logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> int:
@@ -28,6 +33,8 @@ def main() -> int:
         return 2
 
     renderer = Renderer(show_thinking=settings.show_thinking)
+    log_path = configure_logging(settings.log_dir, settings.log_level)
+    logger.info("v2 CLI starting; log=%s level=%s", log_path, settings.log_level)
 
     application = build_application(settings)
     input_controller = InputController()
@@ -40,6 +47,7 @@ def main() -> int:
     finally:
         worker.close()
         application.close()
+        logger.info("v2 CLI stopped")
 
 
 def _ensure_utf8() -> None:

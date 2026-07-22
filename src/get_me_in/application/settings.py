@@ -25,6 +25,8 @@ class Settings:
     resume_template_dir: Path
     workspace_dir: Path
     sessions_dir: Path
+    log_dir: Path = Path("data/logs")
+    log_level: str = "INFO"
     max_model_calls_per_run: int = 12
     cancel_grace_seconds: float = 2.0
     show_thinking: bool = False
@@ -73,6 +75,15 @@ class Settings:
         if cancel_grace < 0:
             raise SettingsValidationError("CANCEL_GRACE_SECONDS must not be negative")
 
+        log_level = env.get("LOG_LEVEL", "INFO").strip().upper()
+        if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            raise SettingsValidationError(
+                "LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
+            )
+        log_dir = Path(env.get("LOG_DIR", "data/logs"))
+        if not log_dir.is_absolute():
+            log_dir = project_root / log_dir
+
         thinking_raw = env.get("LLM_THINKING_ENABLED", "true").strip().lower()
         boolean_values = {"true": True, "1": True, "false": False, "0": False}
         if thinking_raw not in boolean_values:
@@ -98,6 +109,8 @@ class Settings:
             resume_template_dir=project_root / "data" / "resume" / "template",
             workspace_dir=Path(env.get("WORKSPACE_DIR", project_root / "data" / "workspace")),
             sessions_dir=Path(env.get("SESSIONS_DIR", project_root / "data" / "v2" / "sessions")),
+            log_dir=log_dir,
+            log_level=log_level,
             max_model_calls_per_run=max_calls,
             cancel_grace_seconds=cancel_grace,
             show_thinking=boolean_values[show_thinking_raw],

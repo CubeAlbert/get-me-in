@@ -26,6 +26,8 @@ class SettingsTests(unittest.TestCase):
         self.assertFalse(settings.show_thinking)
         self.assertEqual(Path("project/data/prompts"), settings.prompts_dir)
         self.assertEqual(Path("project/data/workspace"), settings.workspace_dir)
+        self.assertEqual(Path("project/data/logs"), settings.log_dir)
+        self.assertEqual("INFO", settings.log_level)
 
     def test_from_env_accepts_a_workspace_override(self) -> None:
         settings = Settings.from_env(
@@ -66,6 +68,35 @@ class SettingsTests(unittest.TestCase):
                     "LLM_PRO_MODEL": "pro",
                     "LLM_FLASH_MODEL": "flash",
                     "SHOW_THINKING": "sometimes",
+                },
+                project_root=Path("project"),
+            )
+
+    def test_from_env_parses_logging_settings(self) -> None:
+        settings = Settings.from_env(
+            {
+                "OPENAI_API_KEY": "key",
+                "OPENAI_BASE_URL": "https://example.test",
+                "LLM_PRO_MODEL": "pro",
+                "LLM_FLASH_MODEL": "flash",
+                "LOG_DIR": "runtime-logs",
+                "LOG_LEVEL": "debug",
+            },
+            project_root=Path("project"),
+        )
+
+        self.assertEqual(Path("project/runtime-logs"), settings.log_dir)
+        self.assertEqual("DEBUG", settings.log_level)
+
+    def test_from_env_rejects_invalid_log_level(self) -> None:
+        with self.assertRaisesRegex(SettingsValidationError, "LOG_LEVEL"):
+            Settings.from_env(
+                {
+                    "OPENAI_API_KEY": "key",
+                    "OPENAI_BASE_URL": "https://example.test",
+                    "LLM_PRO_MODEL": "pro",
+                    "LLM_FLASH_MODEL": "flash",
+                    "LOG_LEVEL": "verbose",
                 },
                 project_root=Path("project"),
             )

@@ -1,6 +1,7 @@
 """Synchronous, pull-driven state machine for one declarative agent."""
 
 import json
+import logging
 from dataclasses import dataclass, replace
 
 from src.get_me_in.application.agent_catalog import AgentCatalog
@@ -54,6 +55,9 @@ from src.get_me_in.domain.tools import (
 from src.get_me_in.ports.clock import Clock
 from src.get_me_in.ports.ids import IdGenerator
 from src.get_me_in.ports.llm import LLMPort, LLMRequest, ModelProfile
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -200,27 +204,70 @@ class AgentRuntime:
             timeout_seconds=self._model_timeout_seconds,
         )
         self._state = replace(self._state, model_calls=self._state.model_calls + 1)
+        logger.debug(
+            "Calling model: agent=%s turn=%s call=%d profile=%s messages=%d",
+            self._spec.key.value,
+            self._state.turn_id,
+            self._state.model_calls,
+            request.profile.value,
+            len(request.messages),
+        )
         try:
             result = self._llm.complete(request, self._cancellation)
         except TimeoutError:
+            logger.warning(
+                "Model completion timed out: agent=%s turn=%s timeout=%ss",
+                self._spec.key.value,
+                self._state.turn_id,
+                self._model_timeout_seconds,
+            )
             self._state = replace(self._state, phase=RuntimePhase.FAILED)
             return Failed("timeout", "Model completion timed out")
         except InterruptedError:
+            logger.info(
+                "Model completion cancelled: agent=%s turn=%s",
+                self._spec.key.value,
+                self._state.turn_id,
+            )
             self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
             return Cancelled(self._requested_cancel_reason)
         except Exception as error:
             if self._cancellation.is_cancelled:
                 self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
                 return Cancelled(self._requested_cancel_reason)
+            logger.warning(
+                "Model provider failure: agent=%s turn=%s error=%s: %s",
+                self._spec.key.value,
+                self._state.turn_id,
+                type(error).__name__,
+                error,
+            )
             self._state = replace(self._state, phase=RuntimePhase.FAILED)
             return Failed("provider_failure", str(error))
         if self._cancellation.is_cancelled:
             self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
             return Cancelled(self._requested_cancel_reason)
 
+        logger.debug(
+            "Model raw reply: agent=%s turn=%s chars=%d\n%s",
+            self._spec.key.value,
+            self._state.turn_id,
+            len(result.content),
+            result.content,
+        )
         try:
             reply = ModelReplyParser().parse(result.content)
         except ModelReplyParseError as error:
+            logger.warning(
+                "Invalid model reply: agent=%s turn=%s repair_attempted=%s error=%s "
+                "chars=%d preview=%r",
+                self._spec.key.value,
+                self._state.turn_id,
+                self._state.repair_attempted,
+                error,
+                len(result.content),
+                result.content[:500],
+            )
             if self._state.repair_attempted:
                 self._state = replace(self._state, phase=RuntimePhase.FAILED)
                 return Failed(
