@@ -5,7 +5,7 @@ import unittest
 
 from src.get_me_in.application.session_codec import SessionSnapshot, SessionSnapshotCodec
 from src.get_me_in.domain.agents import AgentKey
-from src.get_me_in.domain.messages import MessageRecord, Role
+from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, RuntimePhase, SessionState
 
 
@@ -16,10 +16,25 @@ class SessionSnapshotCodecTests(unittest.TestCase):
 
         restored = codec.decode(codec.encode(snapshot))
 
-        record = restored.session.agents[AgentKey.MAIN].history[0]
+        record = restored.session.agents[AgentKey.MAIN].history[1]
         self.assertIsInstance(record, MessageRecord)
         self.assertEqual("turn-1", record.turn_id)
+        self.assertEqual("summary", record.thinking)
         self.assertEqual("session-1", restored.session.session_id)
+
+    def test_round_trip_preserves_tool_call_thinking_and_accepts_missing_fields(self) -> None:
+        codec = SessionSnapshotCodec()
+        snapshot = _snapshot(tool_thinking=True)
+        payload = codec.encode(snapshot)
+
+        restored = codec.decode(payload)
+        tool_call = restored.session.agents[AgentKey.MAIN].history[2]
+        self.assertIsInstance(tool_call, ToolCallRecord)
+        self.assertEqual("tool summary", tool_call.thinking)
+
+        del payload["agents"]["main"]["history"][1]["thinking"]
+        restored_without_thinking = codec.decode(payload)
+        self.assertIsNone(restored_without_thinking.session.agents[AgentKey.MAIN].history[1].thinking)
 
     def test_rejects_old_schema_and_unsafe_phase(self) -> None:
         codec = SessionSnapshotCodec()
@@ -64,13 +79,19 @@ class SessionSnapshotCodecTests(unittest.TestCase):
             SessionSnapshotCodec().encode(inconsistent)
 
 
-def _snapshot(*, phase: RuntimePhase = RuntimePhase.READY) -> SessionSnapshot:
+def _snapshot(*, phase: RuntimePhase = RuntimePhase.READY, tool_thinking: bool = False) -> SessionSnapshot:
+    history = [
+        MessageRecord("event-1", Role.USER, "hello", _now(), "turn-1"),
+        MessageRecord("event-2", Role.ASSISTANT, "answer", _now(), "turn-1", "summary"),
+    ]
+    if tool_thinking:
+        history.append(ToolCallRecord("event-3", "call-1", "search", {}, _now(), "turn-1", "tool summary"))
     session = SessionState(
         session_id="session-1",
         active_agent=AgentKey.MAIN,
         agents={AgentKey.MAIN: AgentSessionState(
             phase=phase,
-            history=(MessageRecord("event-1", Role.USER, "hello", _now(), "turn-1"),),
+            history=tuple(history),
         )},
         handoff_stack=(),
         created_at=_now(),

@@ -159,9 +159,15 @@ class SessionSnapshotCodec:
     def _encode_record(record: MessageRecord | ToolCallRecord | ToolResultRecord) -> dict[str, object]:
         base = {"event_id": record.event_id, "timestamp": record.timestamp.isoformat(), "turn_id": record.turn_id}
         if isinstance(record, MessageRecord):
-            return {**base, "kind": "message", "role": record.role.value, "content": record.content}
+            payload = {**base, "kind": "message", "role": record.role.value, "content": record.content}
+            if record.role is Role.ASSISTANT and record.thinking is not None:
+                payload["thinking"] = record.thinking
+            return payload
         if isinstance(record, ToolCallRecord):
-            return {**base, "kind": "tool_call", "call_id": record.call_id, "tool_name": record.tool_name, "arguments": dict(record.arguments)}
+            payload = {**base, "kind": "tool_call", "call_id": record.call_id, "tool_name": record.tool_name, "arguments": dict(record.arguments)}
+            if record.thinking is not None:
+                payload["thinking"] = record.thinking
+            return payload
         return {**base, "kind": "tool_result", "call_id": record.call_id, "tool_name": record.tool_name, "output": record.output}
 
     @staticmethod
@@ -169,9 +175,13 @@ class SessionSnapshotCodec:
         common = (_text(payload["event_id"], "event_id"), _time(payload["timestamp"], "timestamp"), _text(payload["turn_id"], "turn_id"))
         kind = _text(payload["kind"], "kind")
         if kind == "message":
-            return MessageRecord(common[0], Role(_text(payload["role"], "role")), _text(payload["content"], "content"), common[1], common[2])
+            role = Role(_text(payload["role"], "role"))
+            thinking = _optional_thinking(payload) if role is Role.ASSISTANT else None
+            if role is not Role.ASSISTANT and "thinking" in payload:
+                raise ValueError("Only assistant messages may contain thinking")
+            return MessageRecord(common[0], role, _text(payload["content"], "content"), common[1], common[2], thinking)
         if kind == "tool_call":
-            return ToolCallRecord(common[0], _text(payload["call_id"], "call_id"), _text(payload["tool_name"], "tool_name"), _mapping(payload["arguments"], "arguments"), common[1], common[2])
+            return ToolCallRecord(common[0], _text(payload["call_id"], "call_id"), _text(payload["tool_name"], "tool_name"), _mapping(payload["arguments"], "arguments"), common[1], common[2], _optional_thinking(payload))
         if kind == "tool_result":
             return ToolResultRecord(common[0], _text(payload["call_id"], "call_id"), _text(payload["tool_name"], "tool_name"), payload["output"], common[1], common[2])
         raise ValueError(f"Unknown conversation record kind: {kind}")
@@ -226,6 +236,13 @@ def _boolean(value: object, label: str) -> bool:
     if not isinstance(value, bool):
         raise TypeError(f"{label} must be a boolean")
     return value
+
+
+def _optional_thinking(payload: Mapping[str, object]) -> str | None:
+    thinking = payload.get("thinking")
+    if thinking is not None and not isinstance(thinking, str):
+        raise TypeError("thinking must be a string when present")
+    return thinking
 
 
 def _time(value: object, label: str) -> datetime:

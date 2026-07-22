@@ -206,6 +206,20 @@ class RendererTests(unittest.TestCase):
         self.assertIn("执行计划", text)
         self.assertIn("查询广州 Java 薪资", text)
 
+    def test_renders_thinking_only_when_enabled(self) -> None:
+        hidden_output = StringIO()
+        shown_output = StringIO()
+        message = MessageRecord("event", Role.ASSISTANT, "done", _now(), "turn", "final summary")
+
+        Renderer(console=_console(hidden_output)).render_event(Completed(message))
+        Renderer(console=_console(shown_output), show_thinking=True).render_event(ToolStarted("call", "search", thinking="tool summary"))
+        Renderer(console=_console(shown_output), show_thinking=True).render_event(Completed(message))
+
+        self.assertNotIn("final summary", hidden_output.getvalue())
+        self.assertIn("思考摘要", shown_output.getvalue())
+        self.assertIn("tool summary", shown_output.getvalue())
+        self.assertIn("final summary", shown_output.getvalue())
+
 
 @dataclass(frozen=True)
 class _Turn:

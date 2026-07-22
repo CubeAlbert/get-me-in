@@ -14,7 +14,7 @@ class ModelReply:
     """The provider-neutral result consumed by ``AgentRuntime``."""
 
     content: str
-    thinking: str = ""
+    thinking: str | None = None
     tool_name: str | None = None
     tool_arguments: dict[str, Any] | None = None
 
@@ -34,10 +34,6 @@ class ModelReplyParser:
         if not isinstance(content, str):
             raise ModelReplyParseError("Model response requires string content or message")
 
-        thinking = payload.get("thinking", "")
-        if not isinstance(thinking, str):
-            raise ModelReplyParseError("thinking must be a string")
-
         tool_call = payload.get("tool_call")
         if tool_call is None and payload.get("event_type") == "tool_call":
             tool_call = {
@@ -45,7 +41,15 @@ class ModelReplyParser:
                 "arguments": payload.get("event_payload", {}),
             }
         if tool_call is None:
+            if "thinking" not in payload:
+                raise ModelReplyParseError("finish requires a string thinking field")
+            thinking = payload["thinking"]
+            if not isinstance(thinking, str):
+                raise ModelReplyParseError("thinking must be a string")
             return ModelReply(content=content, thinking=thinking)
+        thinking = payload.get("thinking")
+        if thinking is not None and not isinstance(thinking, str):
+            raise ModelReplyParseError("thinking must be a string")
         if not isinstance(tool_call, dict):
             raise ModelReplyParseError("tool_call must be an object")
         name = tool_call.get("name")

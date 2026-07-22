@@ -36,6 +36,7 @@ class ToolStarted(RuntimeEvent):
     call_id: str
     tool_name: str
     arguments: Mapping[str, object] = field(default_factory=dict)
+    thinking: str | None = None
 
 
 @dataclass(frozen=True)

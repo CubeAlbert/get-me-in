@@ -27,6 +27,7 @@ class Settings:
     sessions_dir: Path
     max_model_calls_per_run: int = 12
     cancel_grace_seconds: float = 2.0
+    show_thinking: bool = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str], *, project_root: Path) -> "Settings":
@@ -78,6 +79,11 @@ class Settings:
             raise SettingsValidationError(
                 "LLM_THINKING_ENABLED must be true, false, 1, or 0"
             )
+        show_thinking_raw = env.get("SHOW_THINKING", "false").strip().lower()
+        if show_thinking_raw not in boolean_values:
+            raise SettingsValidationError(
+                "SHOW_THINKING must be true, false, 1, or 0"
+            )
 
         return cls(
             openai_api_key=env["OPENAI_API_KEY"],
@@ -94,4 +100,5 @@ class Settings:
             sessions_dir=Path(env.get("SESSIONS_DIR", project_root / "data" / "v2" / "sessions")),
             max_model_calls_per_run=max_calls,
             cancel_grace_seconds=cancel_grace,
+            show_thinking=boolean_values[show_thinking_raw],
         )

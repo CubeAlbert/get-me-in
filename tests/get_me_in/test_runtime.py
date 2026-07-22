@@ -41,10 +41,11 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual("answer", events[-1].message.content)
+        self.assertEqual("private", events[-1].message.thinking)
         self.assertFalse(any("private" in item.content for item in llm.requests[0].messages))
 
     def test_invalid_reply_is_repaired_once(self) -> None:
-        runtime, llm, temporary_dir = _runtime(["broken", '{"content": "repaired"}'])
+        runtime, llm, temporary_dir = _runtime(["broken", '{"content": "repaired", "thinking": "fixed"}'])
         self.addCleanup(temporary_dir.cleanup)
 
         events = _pump(runtime, UserMessage("question"))
@@ -62,7 +63,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_unknown_tool_returns_structured_result_to_model(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "missing"}}', '{"content": "recovered"}'],
+            ['{"content": "", "tool_call": {"name": "missing"}}', '{"content": "recovered", "thinking": "fixed"}'],
             definitions=(_tool("other"),),
         )
         self.addCleanup(temporary_dir.cleanup)
@@ -78,7 +79,7 @@ class RuntimeTests(unittest.TestCase):
             [
                 '{"content": "", "tool_call": {"name": "first"}}',
                 '{"content": "", "tool_call": {"name": "second"}}',
-                '{"content": "done"}',
+                '{"content": "done", "thinking": "done"}',
             ],
             definitions=(_tool("first"), _tool("second")),
         )
@@ -92,8 +93,8 @@ class RuntimeTests(unittest.TestCase):
     def test_tool_events_expose_arguments_and_plan_projection(self) -> None:
         runtime, _, temporary_dir = _runtime(
             [
-                '{"content": "", "tool_call": {"name": "create_plan", "arguments": {"items": ["查询广州", "查询杭州"]}}}',
-                '{"content": "done"}',
+                '{"content": "", "thinking": "planning", "tool_call": {"name": "create_plan", "arguments": {"items": ["查询广州", "查询杭州"]}}}',
+                '{"content": "done", "thinking": "done"}',
             ],
             definitions=build_plan_tools(),
         )
@@ -104,16 +105,17 @@ class RuntimeTests(unittest.TestCase):
         finished = next(event for event in events if isinstance(event, ToolFinished))
 
         self.assertEqual({"items": ["查询广州", "查询杭州"]}, started.arguments)
+        self.assertEqual("planning", started.thinking)
         self.assertIsNotNone(finished.plan)
         self.assertEqual("查询广州", finished.plan.items[0].description)
 
     def test_approval_and_rejection_close_the_matching_call(self) -> None:
         approved_runtime, _, approved_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done"}'],
+            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done", "thinking": "done"}'],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
         rejected_runtime, rejected_llm, rejected_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "declined"}'],
+            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "declined", "thinking": "declined"}'],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
         self.addCleanup(approved_dir.cleanup)
@@ -132,7 +134,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_selection_resumes_with_selected_value(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "provide_choices", "arguments": {"question": "pick", "choices": ["a", "b"]}}}', '{"content": "selected"}'],
+            ['{"content": "", "tool_call": {"name": "provide_choices", "arguments": {"question": "pick", "choices": ["a", "b"]}}}', '{"content": "selected", "thinking": "selected"}'],
             definitions=build_switch_tools(),
         )
         self.addCleanup(temporary_dir.cleanup)
@@ -176,7 +178,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_wrong_call_id_and_new_message_do_not_mutate_pending_state(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done"}'],
+            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done", "thinking": "done"}'],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
         self.addCleanup(temporary_dir.cleanup)
@@ -208,7 +210,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("max_model_calls_exceeded", events[-1].code)
 
     def test_configured_timeout_is_forwarded_to_llm(self) -> None:
-        runtime, llm, temporary_dir = _runtime(['{"content": "ok"}'], timeout_seconds=17)
+        runtime, llm, temporary_dir = _runtime(['{"content": "ok", "thinking": "ok"}'], timeout_seconds=17)
         self.addCleanup(temporary_dir.cleanup)
 
         _pump(runtime, UserMessage("question"))
@@ -305,7 +307,7 @@ class _FakeLlm:
 
 def _cancel_during_completion(cancellation: CancellationSignal) -> str:
     cancellation.cancel()
-    return '{"content": "discarded"}'
+    return '{"content": "discarded", "thinking": "discarded"}'
 
 
 class _Clock:

@@ -23,6 +23,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(9, settings.max_model_calls_per_run)
         self.assertEqual(1.5, settings.cancel_grace_seconds)
         self.assertTrue(settings.llm_thinking_enabled)
+        self.assertFalse(settings.show_thinking)
         self.assertEqual(Path("project/data/prompts"), settings.prompts_dir)
         self.assertEqual(Path("project/data/workspace"), settings.workspace_dir)
 
@@ -48,11 +49,26 @@ class SettingsTests(unittest.TestCase):
                 "LLM_PRO_MODEL": "pro",
                 "LLM_FLASH_MODEL": "flash",
                 "LLM_THINKING_ENABLED": "false",
+                "SHOW_THINKING": "true",
             },
             project_root=Path("project"),
         )
 
         self.assertFalse(settings.llm_thinking_enabled)
+        self.assertTrue(settings.show_thinking)
+
+    def test_from_env_rejects_invalid_show_thinking(self) -> None:
+        with self.assertRaisesRegex(SettingsValidationError, "SHOW_THINKING"):
+            Settings.from_env(
+                {
+                    "OPENAI_API_KEY": "key",
+                    "OPENAI_BASE_URL": "https://example.test",
+                    "LLM_PRO_MODEL": "pro",
+                    "LLM_FLASH_MODEL": "flash",
+                    "SHOW_THINKING": "sometimes",
+                },
+                project_root=Path("project"),
+            )
 
     def test_from_env_reports_missing_required_values(self) -> None:
         with self.assertRaisesRegex(SettingsValidationError, "OPENAI_API_KEY"):

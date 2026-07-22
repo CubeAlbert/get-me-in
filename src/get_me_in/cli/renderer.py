@@ -32,14 +32,16 @@ _PREVIEW_LIMIT = 500
 class Renderer:
     """Renders typed events and frontend projections without business decisions."""
 
-    def __init__(self, console: Console | None = None) -> None:
+    def __init__(self, console: Console | None = None, *, show_thinking: bool = False) -> None:
         self._console = console or Console(force_terminal=True)
+        self._show_thinking = show_thinking
 
     def render_event(self, event: RuntimeEvent) -> None:
         if isinstance(event, Progress):
             self._console.print(f"[dim]🔄 {event.message}[/]")
         elif isinstance(event, ToolStarted):
             self._console.print(f"[dim]正在执行工具：{event.tool_name}{self._arguments_summary(event.arguments)}[/]")
+            self._render_thinking(event.thinking)
         elif isinstance(event, ToolFinished):
             self._console.print(f"[dim]工具完成：{event.tool_name}[/]")
             if event.plan is not None:
@@ -54,6 +56,7 @@ class Renderer:
             self._console.print(f"[dim]正在转交给 {event.target}[/]")
         elif isinstance(event, Completed):
             self._console.print(Markdown(event.message.content))
+            self._render_thinking(event.message.thinking)
         elif isinstance(event, Failed):
             self.render_error(f"{event.code}: {event.message}")
         elif isinstance(event, Cancelled):
@@ -96,6 +99,10 @@ class Renderer:
 
     def render_notice(self, message: str) -> None:
         self._console.print(f"[dim]{message}[/]")
+
+    def _render_thinking(self, thinking: str | None) -> None:
+        if self._show_thinking and thinking:
+            self._console.print(Panel(thinking, title="思考摘要", border_style="dim"))
 
     def status(self, message: str) -> AbstractContextManager[Any]:
         return self._console.status(message)

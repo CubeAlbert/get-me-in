@@ -21,6 +21,7 @@ class MessageRecord:
     content: str
     timestamp: datetime
     turn_id: str = ""
+    thinking: str | None = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class ToolCallRecord:
     arguments: Mapping[str, object]
     timestamp: datetime
     turn_id: str = ""
+    thinking: str | None = None
 
 
 @dataclass(frozen=True)

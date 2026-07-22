@@ -27,6 +27,8 @@ def main() -> int:
         renderer.render_error(str(error))
         return 2
 
+    renderer = Renderer(show_thinking=settings.show_thinking)
+
     application = build_application(settings)
     input_controller = InputController()
     commands = build_command_registry(application, input_controller, renderer)

@@ -18,7 +18,7 @@ JSON
     },
     "thinking": {
       "type": "string",
-      "description": "LLM 内部推理过程。event_type 为 finish 时必填，tool_call 时可省略"
+      "description": "供用户查看的思考摘要。event_type 为 finish 时必填，tool_call 时可省略"
     },
     "event_type": {
       "type": "string",

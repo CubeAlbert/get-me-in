@@ -30,7 +30,16 @@ class ConversationCodecTests(unittest.TestCase):
     def test_thinking_is_not_part_of_any_conversation_record(self) -> None:
         now = datetime(2026, 1, 1, tzinfo=timezone.utc)
         messages = ConversationCodec().encode(
-            "system", (MessageRecord("assistant", Role.ASSISTANT, "answer", now),)
+            "system", (MessageRecord("assistant", Role.ASSISTANT, "answer", now, thinking="summary"),)
+        )
+
+        self.assertNotIn("thinking", messages[1].content)
+
+    def test_tool_call_thinking_is_not_replayed(self) -> None:
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        messages = ConversationCodec().encode(
+            "system",
+            (ToolCallRecord("event", "call", "search", {}, now, thinking="summary"),),
         )
 
         self.assertNotIn("thinking", messages[1].content)

@@ -249,6 +249,7 @@ class AgentRuntime:
                 arguments=dict(reply.tool_arguments or {}),
                 timestamp=self._clock.now(),
                 turn_id=self._state.turn_id,
+                thinking=reply.thinking,
             )
             self._state = replace(
                 self._state,
@@ -256,9 +257,19 @@ class AgentRuntime:
                 history=(*self._state.history, tool_call),
                 pending_tool=PendingToolCall(call_id, reply.tool_name, dict(reply.tool_arguments or {})),
             )
-            return ToolStarted(call_id, reply.tool_name, dict(reply.tool_arguments or {}))
+            return ToolStarted(
+                call_id,
+                reply.tool_name,
+                dict(reply.tool_arguments or {}),
+                reply.thinking,
+            )
 
-        assistant = self._message(Role.ASSISTANT, reply.content, self._state.turn_id)
+        assistant = self._message(
+            Role.ASSISTANT,
+            reply.content,
+            self._state.turn_id,
+            thinking=reply.thinking,
+        )
         self._state = replace(
             self._state,
             phase=RuntimePhase.COMPLETED,
@@ -446,11 +457,19 @@ class AgentRuntime:
         self._state = replace(self._state, phase=RuntimePhase.CANCELLED, cancel_reason=reason)
         return Cancelled(reason)
 
-    def _message(self, role: Role, content: str, turn_id: str) -> MessageRecord:
+    def _message(
+        self,
+        role: Role,
+        content: str,
+        turn_id: str,
+        *,
+        thinking: str | None = None,
+    ) -> MessageRecord:
         return MessageRecord(
             event_id=self._id_generator.new_id(),
             role=role,
             content=content,
             timestamp=self._clock.now(),
             turn_id=turn_id,
+            thinking=thinking if role is Role.ASSISTANT else None,
         )

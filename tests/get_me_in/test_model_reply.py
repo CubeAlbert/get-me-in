@@ -12,7 +12,7 @@ class ModelReplyParserTests(unittest.TestCase):
     def setUp(self) -> None:
         self.parser = ModelReplyParser()
 
-    def test_parses_content_and_ignores_thinking_for_runtime_output(self) -> None:
+    def test_parses_finish_thinking_for_runtime_output(self) -> None:
         reply = self.parser.parse('{"content": "hello", "thinking": "internal"}')
 
         self.assertEqual("hello", reply.content)
@@ -25,13 +25,26 @@ class ModelReplyParserTests(unittest.TestCase):
 
         self.assertEqual("search", reply.tool_name)
         self.assertEqual({"q": "x"}, reply.tool_arguments)
+        self.assertIsNone(reply.thinking)
 
     def test_parses_the_legacy_static_prompt_finish_shape(self) -> None:
         reply = self.parser.parse(
-            '{"role": "assistant", "event_type": "finish", "message": "answer"}'
+            '{"role": "assistant", "event_type": "finish", "message": "answer", "thinking": "summary"}'
         )
 
         self.assertEqual("answer", reply.content)
+        self.assertEqual("summary", reply.thinking)
+
+    def test_rejects_finish_without_thinking_but_allows_tool_call_without_it(self) -> None:
+        with self.assertRaisesRegex(ModelReplyParseError, "thinking"):
+            self.parser.parse('{"content": "answer"}')
+
+        reply = self.parser.parse('{"content": "", "tool_call": {"name": "search"}}')
+        self.assertIsNone(reply.thinking)
+
+    def test_rejects_non_string_thinking(self) -> None:
+        with self.assertRaisesRegex(ModelReplyParseError, "thinking"):
+            self.parser.parse('{"content": "answer", "thinking": 1}')
 
     def test_parses_the_legacy_static_prompt_tool_shape(self) -> None:
         reply = self.parser.parse(

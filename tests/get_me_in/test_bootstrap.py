@@ -63,7 +63,7 @@ class BootstrapTests(unittest.TestCase):
             llm=_FakeLlm(
                 [
                     '{"content": "", "tool_call": {"name": "get_current_datetime"}}',
-                    '{"content": "done"}',
+                    '{"content": "done", "thinking": "done"}',
                 ]
             ),
         )
@@ -172,7 +172,7 @@ class _FakeLlm:
         response = self._responses.pop(0)
         if response.startswith("{"):
             return LLMResult(content=response)
-        return LLMResult(content=f'{{"content": "{response}"}}')
+        return LLMResult(content=f'{{"content": "{response}", "thinking": "summary"}}')
 
     def close(self) -> None:
         self.closed = True
