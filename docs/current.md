@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R5 —— CLI 拆分与交互迁移（清单已确认，待新会话编码）
+**当前阶段：** R5 —— CLI 拆分与交互迁移（第一切片已完成）
 
-**当前任务：** 在下一编码会话按已确认清单实施 R5 CLI
+**当前任务：** 按已确认清单继续实施 R5 CLI
 
-**当前子任务：** 新会话先执行 project-bootstrap，再实施第一切片：`commands.py` + `test_cli_commands.py`（⬜）
+**当前子任务：** 第二实施切片：创建 `input.py` 与 `renderer.py`，迁移纯终端输入/输出职责，不访问 Application 私有状态（⬜）
 
 **当前阻塞：** 无；R5 清单已获用户确认，读取本文件的后续会话可按五步顺序小步实施
 
-**会话交接说明：** 记录本状态的确认会话不编码；执行下一步的后续会话已获 R5 编码授权，无需再次请求清单确认
+**会话交接说明：** 已完成并审查第一切片 `commands.py` + `test_cli_commands.py`；命令注册、强类型结果、alias、replace 与核心 handler 已落地。未创建其他 CLI 模块；命令的真实终端输入、渲染与无参数选择交互仍由后续切片实现。
 
-**下一步：** 新会话使用 project-bootstrap 恢复状态，读取 `docs/refactor-design.md#67-cli` 的精确契约；只创建 `src/get_me_in/cli/commands.py` 与 `tests/get_me_in/test_cli_commands.py`，验证并独立提交
+**下一步：** 只创建 `src/get_me_in/cli/input.py` 与 `src/get_me_in/cli/renderer.py`，并按 `docs/refactor-design.md#67-cli` 的公开方法清单实现、验证和独立提交；不得提前创建 WorkerRunner、CliApp 或模块入口。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -36,3 +36,4 @@
 152. **R4 复审补齐 handoff 启动、失败闭合与 frontend 回合投影** — Orchestrator 切换时用 context 启动目标 Runtime，子 Agent 取消/失败通过 FailHandoff 闭合原 call id；snapshot 严格校验 frame，restore 拒绝未装配 Agent，SessionView 公开只读 rewind_points。104 项核心自动化测试通过，G4 复验完成。
 153. **R5 使用薄 CLI、单 WorkerRunner 与可替换命令注册** — CliApp 只驱动 typed command/event 并在终态自动 snapshot；WorkerRunner 单线程串行调用 Application，跨线程只 request_cancel；CommandRegistry 支持 R6 replace handler；输入历史不新增持久化 schema；提供独立模块入口，R8 等待 G6/G7 并拆分入口切换与遗留删除提交。
 154. **R5 清单获确认并固定新会话实施入口** — 用户确认 `docs/refactor-design.md#67-cli` 的文件、对象、构造依赖与公开方法；新会话可编码，第一切片仅创建 commands.py 与 test_cli_commands.py。当前会话不编码，每步独立验证提交，不跨入 R6/R7。
+155. **R5 第一切片已审查并保持交互职责后置** — `CommandRegistry`、核心 command handlers 及测试已独立提交；命令注册层可调用 Application 公开 API，但 `/edit`、`/help`、`/restore`、`/rewind` 的真实输入、渲染与无参数选择交互仍由 InputController/Renderer/CliApp 后续切片完成，不能因 handler 已登记而跳过这些任务。

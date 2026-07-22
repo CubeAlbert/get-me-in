@@ -204,9 +204,9 @@
 
 ### 1. CLI shell
 
-- ⬜ 第一实施切片：创建 `commands.py` 与 `test_cli_commands.py`，固定强类型 command spec/result、解析、alias、replace 和核心 command handlers；验证并独立提交。
+- ✅ 第一实施切片：创建 `commands.py` 与 `test_cli_commands.py`，固定强类型 command spec/result、解析、alias、replace 和核心 command handlers；110 项 v2 核心自动化测试通过，独立提交 `151b04a`。
 - ⬜ 创建 CliApp，仅保留输入循环和 application command/event 转发。
-- ⬜ 创建 CommandRegistry，命令帮助与 handler 同源。
+- ✅ 创建 CommandRegistry，命令帮助与 handler 同源。
 - ⬜ 创建 InputController，管理 autocomplete/history/prefill/editor。
 - ⬜ 创建 Renderer，管理 Markdown/Plan/spinner/error/recap。
 - ⬜ 创建 WorkerRunner，使用单 worker 串行调用 Application，跨线程只调用公开 `request_cancel()`。
@@ -214,16 +214,16 @@
 
 ### 2. 命令迁移
 
-- ⬜ `/help`
-- ⬜ `/edit`
-- ⬜ `/dump`
-- ⬜ `/restore [session_id]`
-- ⬜ `/rewind`
-- ⬜ `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
-- ⬜ `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
-- ⬜ `/exit_sub`
-- ⬜ `/approval prompt|auto`；保留 `/auto-approve-switch` 兼容 alias，策略只决定 ApprovalRequested 是否自动 Approve。
-- ⬜ `/exit`
+- 🔄 `/help`
+- 🔄 `/edit`
+- 🔄 `/dump`
+- 🔄 `/restore [session_id]`
+- 🔄 `/rewind`
+- 🔄 `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
+- 🔄 `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
+- 🔄 `/exit_sub`
+- 🔄 `/approval prompt|auto`；保留 `/auto-approve-switch` 兼容 alias，策略只决定 ApprovalRequested 是否自动 Approve。
+- 🔄 `/exit`
 
 ### 3. Interaction 与跨平台
 

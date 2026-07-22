@@ -8,6 +8,8 @@
 
 ## 目录
 
+- [决策 155 — R5 第一切片已审查并保持交互职责后置](#决策-155--r5-第一切片已审查并保持交互职责后置)
+
 - [决策 1 — 架构模式：Hub-and-Spoke + 自研轻量 Agent 框架](#决策-1--架构模式hub-and-spoke--自研轻量-agent-框架)
 - [决策 2 — 同步代码，不使用 asyncio](#决策-2--同步代码不使用-asyncio)
 - [决策 3 — RAG 技术选型：Chroma + sentence_transformers](#决策-3--rag-技术选型chroma--sentence_transformers)
@@ -3389,3 +3391,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 只在本次对话中确认、不更新 current.md —— 新会话无法可靠恢复授权状态，已拒绝。
 - 新会话直接创建全部 R5 文件 —— 违反小步验证和独立提交约定，已拒绝。
+
+---
+
+### 决策 155 — R5 第一切片已审查并保持交互职责后置
+
+**背景：** R5 第一切片已创建 `commands.py` 与 `test_cli_commands.py`，以 `CommandRegistry` 固定强类型 command spec/result、解析、alias、replace 和核心 command handlers，并通过 110 项 v2 核心自动化测试。用户审查认为当前实现可接受，但要求同步项目文档，避免后续把已登记 handler 误认为完整 CLI 交互。
+
+**决策：**
+
+- 将第一实施切片标记完成，提交为 `151b04a refactor: add CLI command registry`。
+- `/help`、`/edit`、`/dump`、`/restore`、`/rewind`、R6 unavailable commands、`/exit_sub`、审批模式与 `/exit` 已在注册表中登记为核心 handler，但命令迁移任务保持进行中。
+- 第二切片仍必须实现 `InputController` 与 `Renderer`；无参数 restore/rewind 的选择、编辑器、帮助和通知的真实终端交互不得遗漏或提前塞入 CommandRegistry。
+- 后续仍严格按既定五步顺序实施，不创建 WorkerRunner、CliApp 或模块入口，直到相应切片开始。
+
+**理由：**
+
+- 注册层只负责解析与强类型结果；终端 I/O 和渲染属于后续明确的职责边界。
+- 将命令迁移保留为进行中，可使任务文档同时反映已验证的协议基础和未落地的真实交互，避免后续阶段遗漏。
+
+**曾考虑的替代方案：**
+
+- 将所有已登记命令直接标记完成 —— 会掩盖 InputController、Renderer 与 CliApp 尚未实现的交互和集成任务，已拒绝。
+- 在第一切片补齐所有输入和渲染逻辑 —— 违反已确认的小步实施顺序，已拒绝。
