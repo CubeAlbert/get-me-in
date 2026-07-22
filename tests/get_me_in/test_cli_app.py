@@ -31,6 +31,15 @@ class CliAppTests(unittest.TestCase):
         self.assertEqual((UserMessage("hello"), Approve("call")), worker.commands)
         self.assertEqual(0, input_controller.confirms)
 
+    def test_approval_without_argument_toggles_from_prompt_to_auto(self) -> None:
+        application = _Application()
+        renderer = _Renderer()
+        app = CliApp(application, _Commands((CommandResult(CommandAction.SET_APPROVAL), CommandResult(CommandAction.EXIT))), _Input(("/approval", "/exit")), renderer, _Worker(()))
+
+        app.run()
+
+        self.assertEqual(["审批模式：auto"], renderer.notices)
+
     def test_snapshot_failure_is_rendered_without_replacing_completed_event(self) -> None:
         application = _Application(fail_snapshot=True)
         renderer = _Renderer()
@@ -93,12 +102,13 @@ class _Input:
 class _Renderer:
     def __init__(self) -> None:
         self.errors: list[str] = []
+        self.notices: list[str] = []
 
     def render_event(self, event: object) -> None:
         pass
 
     def render_notice(self, message: str) -> None:
-        pass
+        self.notices.append(message)
 
     def render_error(self, message: str) -> None:
         self.errors.append(message)

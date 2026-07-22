@@ -222,7 +222,7 @@
 - 🔄 `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/exit_sub`
-- 🔄 `/approval prompt|auto`；保留 `/auto-approve-switch` 兼容 alias，并接受旧 `on|off`；策略只决定 ApprovalRequested 是否自动 Approve。
+- 🔄 `/approval`；无参数切换 `prompt/auto`，或用参数显式设置；策略只决定 ApprovalRequested 是否自动 Approve，且不保留 `/auto-approve-switch`。
 - 🔄 `/exit`
 
 ### 3. Interaction 与跨平台

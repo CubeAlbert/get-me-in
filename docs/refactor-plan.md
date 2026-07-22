@@ -137,7 +137,7 @@
 **产出：**
 
 - CliApp、CommandRegistry、InputController、Renderer、WorkerRunner，以及 `python -m src.get_me_in.cli` 独立入口。
-- `/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/exit_sub`、`/exit`、`/approval prompt|auto` 迁移；保留 `/auto-approve-switch` alias；`/ragreload`、`/build-memory` 先注册为明确 unavailable，真实 handler 在 R6 通过 registry replace 接入。
+- `/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/exit_sub`、`/exit`、`/approval`（无参数切换，或显式 `prompt|auto`）迁移；不保留 `/auto-approve-switch`；`/ragreload`、`/build-memory` 先注册为明确 unavailable，真实 handler 在 R6 通过 registry replace 接入。
 - RuntimeEvent 驱动 confirm/select，不再使用 UIBridge。
 - 单 WorkerRunner 串行调用 Application；Spinner 与 Esc/Ctrl+C cancel 只存在于 WorkerRunner/Renderer，跨线程只调用 `request_cancel()`。
 - CLI input history 只使用进程内 CLI-owned state；restore/rewind 与 context recap 来自公开 `SessionView.rewind_points`，不增加独立持久化 schema。

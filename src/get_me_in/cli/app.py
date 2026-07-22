@@ -55,7 +55,10 @@ class CliApp:
                     prefill = result.text
                     continue
                 if result.action is CommandAction.SET_APPROVAL:
-                    self._approval_mode = result.approval_mode or ApprovalMode.PROMPT
+                    self._approval_mode = (
+                        result.approval_mode
+                        or (ApprovalMode.AUTO if self._approval_mode is ApprovalMode.PROMPT else ApprovalMode.PROMPT)
+                    )
                     self._renderer.render_notice(f"审批模式：{self._approval_mode}")
                     continue
                 if result.text:

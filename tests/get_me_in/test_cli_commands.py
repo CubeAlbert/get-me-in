@@ -91,17 +91,17 @@ class CoreCommandTests(unittest.TestCase):
 
     def test_unavailable_approval_and_exit_commands_have_typed_results(self) -> None:
         self.assertIn("R6", self.registry.dispatch("/ragreload references").text)
-        self.assertEqual(ApprovalMode.AUTO, self.registry.dispatch("/auto-approve-switch auto").approval_mode)
-        self.assertEqual(ApprovalMode.AUTO, self.registry.dispatch("/auto-approve-switch on").approval_mode)
-        self.assertIn("参数必填", self.registry.dispatch("/approval").text)
+        self.assertEqual(CommandResult(CommandAction.SET_APPROVAL), self.registry.dispatch("/approval"))
+        self.assertEqual(ApprovalMode.AUTO, self.registry.dispatch("/approval auto").approval_mode)
+        self.assertIn("仅支持", self.registry.dispatch("/approval on").text)
         self.assertEqual(CommandAction.EXIT, self.registry.dispatch("/exit").action)
 
-    def test_help_entries_are_alphabetical_and_include_the_compatibility_alias(self) -> None:
+    def test_help_entries_are_alphabetical_and_describe_approval_toggle(self) -> None:
         entries = self.registry.help_entries()
 
         self.assertEqual(tuple(sorted(command for command, _ in entries)), tuple(command for command, _ in entries))
-        self.assertIn(("/auto-approve-switch", "兼容别名；请参见 /approval 的参数说明"), entries)
-        self.assertIn(("/approval", "设置审批模式（参数：prompt|auto；兼容 on|off）"), entries)
+        self.assertNotIn("/auto-approve-switch", tuple(command for command, _ in entries))
+        self.assertIn(("/approval", "切换审批模式（可选参数：prompt|auto）"), entries)
 
     def test_edit_dump_and_exit_subagent_delegate_only_to_public_dependencies(self) -> None:
         self.input_controller.editor_result = "long input"

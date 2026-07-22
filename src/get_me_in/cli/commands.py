@@ -160,13 +160,12 @@ def build_command_registry(application: object, input_controller: object, render
         return CommandResult(CommandAction.HANDLED)
 
     def approval_command(arguments: str) -> CommandResult:
-        legacy_modes = {"on": ApprovalMode.AUTO, "off": ApprovalMode.PROMPT}
-        mode = legacy_modes.get(arguments.casefold())
-        if mode is None:
-            try:
-                mode = ApprovalMode(arguments.casefold())
-            except ValueError:
-                return handled("审批模式参数必填：prompt|auto（兼容 on|off）。")
+        if not arguments:
+            return CommandResult(CommandAction.SET_APPROVAL)
+        try:
+            mode = ApprovalMode(arguments.casefold())
+        except ValueError:
+            return handled("审批模式仅支持 prompt 或 auto；不带参数可直接切换。")
         return CommandResult(CommandAction.SET_APPROVAL, approval_mode=mode)
 
     registry = CommandRegistry()
@@ -178,7 +177,7 @@ def build_command_registry(application: object, input_controller: object, render
     registry.register(CommandSpec("/ragreload", "重载知识库（可选 target；R6 前不可用）", unavailable_command))
     registry.register(CommandSpec("/build-memory", "构建记忆（R6 前不可用）", unavailable_command))
     registry.register(CommandSpec("/exit_sub", "退出当前子 Agent", exit_subagent_command))
-    registry.register(CommandSpec("/approval", "设置审批模式（参数：prompt|auto；兼容 on|off）", approval_command, ("/auto-approve-switch",)))
+    registry.register(CommandSpec("/approval", "切换审批模式（可选参数：prompt|auto）", approval_command))
     registry.register(CommandSpec("/exit", "退出 CLI", lambda _: CommandResult(CommandAction.EXIT)))
     return registry
 

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 160 — 不保留 /auto-approve-switch 向前兼容](#决策-160--不保留-auto-approve-switch-向前兼容)
 - [决策 159 — 帮助从真实命令注册表排序并列出 alias](#决策-159--帮助从真实命令注册表排序并列出-alias)
 - [决策 158 — /restore 选择显示会话预览而非内部 session_id](#决策-158--restore-选择显示会话预览而非内部-session_id)
 - [决策 157 — /rewind 选择显示用户输入预览而非内部 turn_id](#决策-157--rewind-选择显示用户输入预览而非内部-turn_id)
@@ -3507,3 +3508,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 维护独立 help dict —— 会再次产生漂移，已拒绝。
 - 删除兼容 alias —— 违反已确认的 R5 兼容要求，已拒绝。
+
+---
+
+### 决策 160 — 不保留 /auto-approve-switch 向前兼容
+
+**背景：** 用户指出 `/auto-approve-switch` 的命名语义应当是无参数切换；要求它携带 `prompt|auto` 或 `on|off` 参数会造成命令名与实际行为矛盾。维护 alias 也让帮助和补全承担不必要的旧行为说明。
+
+**决策：**
+
+- 删除 `/auto-approve-switch`，不做向前兼容。
+- `/approval` 无参数时在 `prompt` 与 `auto` 间切换；携带 `prompt` 或 `auto` 时显式设置。
+- 审批模式继续仅为 CliApp 进程内偏好，不写入 ToolDefinition、Runtime 或 snapshot。
+
+**理由：**
+
+- 单一命令同时提供符合名称的快捷切换和可预测的显式设置。
+- 移除 alias 可让帮助、补全和实际行为保持一一对应。
+
+**曾考虑的替代方案：**
+
+- 保留 alias 并让其无参数切换 —— 仍保留无价值的旧入口，已拒绝。
+- 保留 alias 并要求参数 —— 与 switch 语义矛盾，已拒绝。

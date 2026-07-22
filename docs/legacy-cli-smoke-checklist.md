@@ -105,7 +105,7 @@ LLM provider：
 | V50 | 启动 `uv run python -m src.get_me_in.cli` | 出现 v2 输入提示；缺少必填配置时以可读错误退出，不显示 traceback | [ ] |
 | V51 | 输入 `/help`，再输入未知命令 | 帮助来自 CommandRegistry、按命令名排序，并列出 alias 和参数说明；未知命令作为提示显示，CLI 保持可用 | [ ] |
 | V52 | 输入普通文本，触发 Progress、工具、handoff 或终态 | CliApp 以 typed event 驱动 Continue；handoff 后目标 Runtime 可继续；终态后生成 v2 snapshot | [ ] |
-| V53 | 触发审批并使用 `/approval prompt`、`/approval auto` 与兼容 alias 的 `on/off` | prompt 模式询问确认；auto 模式自动发送 Approve；均不修改 ToolDefinition | [ ] |
+| V53 | 触发审批并使用 `/approval`、`/approval prompt`、`/approval auto` | 无参数在 prompt/auto 间切换；prompt 模式询问确认；auto 模式自动发送 Approve；均不修改 ToolDefinition | [ ] |
 | V54 | 触发 SelectionRequested，分别选择预置项、自定义输入和取消 | 分别发送 SubmitSelection 或 Cancel；后续请求仍可运行 | [ ] |
 | V55 | 输入 `/restore`、`/rewind` | 使用公开 SessionView/list API 选择；`/restore` 显示序号、最近用户输入预览与保存时间而非 session_id；`/rewind` 显示序号与用户输入预览而非 turn_id；恢复后输入历史重建；回退预填文本 | [ ] |
 | V56 | 运行期间按 Esc/Ctrl+C | WorkerRunner 仅调用 Application.request_cancel()；取消后可再次输入 | [ ] |
