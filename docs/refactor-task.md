@@ -234,9 +234,10 @@
 - 🔄 Input history 使用进程内 CLI-owned state；restore 后从 `SessionView.rewind_points` 重建，不增加独立持久化 schema；待真实终端 smoke。
 - ✅ Completed/Failed/Cancelled 后自动 snapshot；保存失败单独渲染且不得覆盖原终态。
 - ✅ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
+- ✅ 工具开始显示脱敏参数摘要，工具结束显示截断结果预览；Plan 工具结束后显示只读 Plan 表格，不解析工具输出字符串。
 - ⬜ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
-- 🔄 完成 G5 验收；125 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过；仍待 V50–V56 人工 smoke 和用户审查。
+- 🔄 完成 G5 验收；127 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过；仍待 V50–V56 人工 smoke 和用户审查。
 
 ## R6 —— Knowledge/RAG 与 Memory
 

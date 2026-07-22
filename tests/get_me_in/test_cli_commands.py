@@ -19,9 +19,10 @@ from src.get_me_in.cli.commands import (
 )
 from src.get_me_in.cli.input import InputController
 from src.get_me_in.cli.renderer import Renderer
-from src.get_me_in.application.events import Completed, Failed
+from src.get_me_in.application.events import Completed, Failed, ToolFinished, ToolStarted
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role
+from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
 from src.get_me_in.domain.sessions import SessionPreview
 
 
@@ -154,6 +155,23 @@ class RendererTests(unittest.TestCase):
         text = output.getvalue()
         self.assertIn("done", text)
         self.assertIn("bad: problem", text)
+
+    def test_renders_redacted_arguments_result_preview_and_plan_projection(self) -> None:
+        output = StringIO()
+        renderer = Renderer(console=_console(output))
+        plan = Plan("plan", (PlanItem("item", "查询广州 Java 薪资", PlanStatus.IN_PROGRESS),))
+
+        renderer.render_event(ToolStarted("call", "web_search", {"query": "广州 Java 薪资", "api_key": "secret"}))
+        renderer.render_event(ToolFinished("call", "web_search", "搜索结果 " * 200))
+        renderer.render_event(ToolFinished("plan", "create_plan", "ignored", plan))
+
+        text = output.getvalue()
+        self.assertIn("query=广州 Java 薪资", text)
+        self.assertIn("api_key=***", text)
+        self.assertNotIn("secret", text)
+        self.assertIn("工具结果 · web_search", text)
+        self.assertIn("执行计划", text)
+        self.assertIn("查询广州 Java 薪资", text)
 
 
 @dataclass(frozen=True)

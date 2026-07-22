@@ -20,6 +20,7 @@ from src.get_me_in.application.events import (
     ToolStarted,
 )
 from src.get_me_in.application.prompt_renderer import PromptRenderer
+from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
@@ -28,6 +29,7 @@ from src.get_me_in.domain.sessions import AgentSessionState
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
 from src.get_me_in.tools.switch import build_switch_tools
+from src.get_me_in.tools.plan import build_plan_tools
 
 
 class RuntimeTests(unittest.TestCase):
@@ -86,6 +88,24 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertEqual(2, sum(isinstance(event, ToolFinished) for event in events))
         self.assertIsInstance(events[-1], Completed)
+
+    def test_tool_events_expose_arguments_and_plan_projection(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [
+                '{"content": "", "tool_call": {"name": "create_plan", "arguments": {"items": ["查询广州", "查询杭州"]}}}',
+                '{"content": "done"}',
+            ],
+            definitions=build_plan_tools(),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("create a plan"))
+        started = next(event for event in events if isinstance(event, ToolStarted))
+        finished = next(event for event in events if isinstance(event, ToolFinished))
+
+        self.assertEqual({"items": ["查询广州", "查询杭州"]}, started.arguments)
+        self.assertIsNotNone(finished.plan)
+        self.assertEqual("查询广州", finished.plan.items[0].description)
 
     def test_approval_and_rejection_close_the_matching_call(self) -> None:
         approved_runtime, _, approved_dir = _runtime(
@@ -232,6 +252,7 @@ def _runtime(
     )
     catalog = ToolCatalog(definitions)
     cancellation = CancellationToken()
+    plan_service = PlanService(_Ids())
     runtime = AgentRuntime(
         spec=spec,
         prompt_renderer=PromptRenderer(root.parent),
@@ -244,7 +265,7 @@ def _runtime(
         max_model_calls=max_model_calls,
         model_timeout_seconds=timeout_seconds,
         tool_executor=ToolExecutor(catalog),
-        tool_context=ToolContext("session", AgentKey.MAIN, cancellation),
+        tool_context=ToolContext("session", AgentKey.MAIN, cancellation, plan=plan_service),
     )
     return _RuntimeDriver(runtime), llm, temporary_dir
 

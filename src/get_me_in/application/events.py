@@ -1,9 +1,11 @@
 """Typed output events emitted by the v2 runtime."""
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord
+from src.get_me_in.domain.plans import Plan
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,7 @@ class SelectionRequested(RuntimeEvent):
 class ToolStarted(RuntimeEvent):
     call_id: str
     tool_name: str
+    arguments: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,7 @@ class ToolFinished(RuntimeEvent):
     call_id: str
     tool_name: str
     output: str
+    plan: Plan | None = None
 
 
 @dataclass(frozen=True)

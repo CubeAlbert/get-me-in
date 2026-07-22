@@ -3553,3 +3553,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 接入第三方搜索供应商 —— 当前没有必要；会改变既有 provider 边界、配置和计费方式。
 - 接受 DSML 文本并让后续模型继续处理 —— 已被真实 session 证明会产生无依据回答。
+
+---
+
+### 决策 162 — R5 工具可见性使用强类型事件投影
+
+**背景：** 当前 CLI 仅显示 `正在执行工具：<name>` 与 `工具完成：<name>`。`ToolStarted` 未携带参数，`ToolFinished.output` 未被 Renderer 显示；Plan 工具虽更新了领域状态，但用户看不到具体计划项和进度。复杂任务的执行过程因此不可审阅。
+
+**决策：**
+
+- `ToolStarted` 新增只读 arguments 映射，Renderer 负责按敏感字段脱敏、按长度截断后显示摘要。
+- `ToolFinished` 新增可选只读 `Plan` 投影。只有成功的 Plan 工具调用携带该投影，Renderer 直接渲染计划项、状态和当前项，不反解析字符串化的工具结果。
+- 普通工具完成时展示截断结果预览；完整内容仍留在 session dump，避免终端被大结果淹没。
+- 不新增 RuntimeEvent 种类、不让 CLI 读取 Session 或 PlanService。持续驻留的 Sticky Plan 继续暂缓，基础 Plan 表格不再暂缓。
+
+**理由：**
+
+- 参数、结果与计划进度是用户审阅工具行为的最小证据；强类型投影既保持 CLI 薄层，也避免 JSON 字符串协议漂移。
+- 统一在 Renderer 做脱敏和截断，避免各工具自行拼装面向终端的展示文本。
+
+**曾考虑的替代方案：**
+
+- Renderer 解析 `ToolFinished.output` 中的 JSON — 耦合工具 payload，且失败/格式变化会破坏展示。
+- 每次工具完成都输出完整原始结果 — 对搜索、文件和长文本工具会造成终端噪声并可能暴露敏感内容。

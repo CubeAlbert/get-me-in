@@ -42,6 +42,7 @@ from src.get_me_in.domain.messages import (
     ToolCallRecord,
     ToolResultRecord,
 )
+from src.get_me_in.domain.plans import Plan
 from src.get_me_in.domain.sessions import AgentSessionState, PendingToolCall, RuntimePhase
 from src.get_me_in.domain.tools import (
     ToolFailure,
@@ -255,7 +256,7 @@ class AgentRuntime:
                 history=(*self._state.history, tool_call),
                 pending_tool=PendingToolCall(call_id, reply.tool_name, dict(reply.tool_arguments or {})),
             )
-            return ToolStarted(call_id, reply.tool_name)
+            return ToolStarted(call_id, reply.tool_name, dict(reply.tool_arguments or {}))
 
         assistant = self._message(Role.ASSISTANT, reply.content, self._state.turn_id)
         self._state = replace(
@@ -301,14 +302,24 @@ class AgentRuntime:
                 outcome.context,
             )
         if isinstance(outcome, ToolSuccess):
-            return self._finish_tool(pending, outcome.output)
+            return self._finish_tool(
+                pending,
+                outcome.output,
+                plan=self._plan_projection(pending.tool_name),
+            )
         assert isinstance(outcome, ToolFailure)
         return self._finish_tool(
             pending,
             {"code": outcome.code, "message": outcome.message, "suggestion": outcome.suggestion},
         )
 
-    def _finish_tool(self, pending: PendingToolCall, output: object) -> RuntimeEvent:
+    def _finish_tool(
+        self,
+        pending: PendingToolCall,
+        output: object,
+        *,
+        plan: Plan | None = None,
+    ) -> RuntimeEvent:
         record = ToolResultRecord(
             event_id=self._id_generator.new_id(),
             call_id=pending.call_id,
@@ -324,7 +335,14 @@ class AgentRuntime:
             history=(*self._state.history, record),
             pending_tool=None,
         )
-        return ToolFinished(pending.call_id, pending.tool_name, rendered)
+        return ToolFinished(pending.call_id, pending.tool_name, rendered, plan)
+
+    def _plan_projection(self, tool_name: str) -> Plan | None:
+        if tool_name not in {"create_plan", "update_plan_status", "cancel_all_plans", "replan"}:
+            return None
+        if self._tool_context is None or self._tool_context.plan is None:
+            return None
+        return self._tool_context.plan.snapshot()
 
     def _approve(self, command: Approve) -> RuntimeEvent:
         failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_APPROVAL)

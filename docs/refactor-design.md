@@ -255,7 +255,7 @@ PromptRenderer 接收 AgentSpec、ToolCatalog 和 AgentCatalog，统一生成 sy
 
 Runtime command 保持：`UserMessage`、`Continue`、`Approve`、`Reject`、`SubmitSelection`、`ToolResult`、`Cancel`；R4 增加 `CompleteHandoff(call_id, summary)` 与 `FailHandoff(call_id, code, message)`，专门闭合 `WAITING_FOR_HANDOFF`。
 
-Runtime event 保持：`Progress`、`ApprovalRequested`、`SelectionRequested`、`ToolStarted`、`ToolFinished`、`HandoffRequested`、`Completed`、`Failed`、`Cancelled`。
+Runtime event 保持：`Progress`、`ApprovalRequested`、`SelectionRequested`、`ToolStarted`、`ToolFinished`、`HandoffRequested`、`Completed`、`Failed`、`Cancelled`。`ToolStarted` 携带只读 arguments 映射，`ToolFinished` 可携带 Plan 投影；二者均不要求 CLI 读取 Session 或反解析工具输出字符串。
 
 一个 Application 只暴露一个活动 Session，公开边界调整为：
 
@@ -367,12 +367,12 @@ CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触
 - `CliApp`：唯一外层输入循环；把普通文本转换为 `UserMessage`，驱动 RuntimeEvent → 下一条 RuntimeCommand，并在终态触发 session snapshot。
 - `CommandRegistry`：命令解析、帮助文本、alias 与 handler 映射；R6 可替换已注册的 unavailable handler，无需修改 CliApp。
 - `InputController`：autocomplete、进程内输入导航历史、prefill、editor、confirm/select；不增加独立 CLI 持久化 schema。restore 后可从 `SessionView.rewind_points` 重建导航历史。
-- `Renderer`：Markdown、Plan、spinner、错误、命令结果和 `SessionView` context recap；不决定下一条业务 command。
+- `Renderer`：Markdown、Plan、spinner、错误、命令结果和 `SessionView` context recap；工具开始时以脱敏、截断后的 arguments 摘要展示调用，工具结束时显示截断结果预览；Plan 工具结束时直接渲染只读 Plan 表格，不解析输出字符串；不决定下一条业务 command。
 - `WorkerRunner`：使用单 worker 串行执行一个 `Application.handle(RuntimeCommand)`，轮询 Esc/Ctrl+C 并只通过 `Application.request_cancel()` 跨线程取消；不得并发执行 snapshot/restore/另一条 command。
 
 事件推进由 `CliApp` 明确处理：`Progress`、`ToolStarted`、`ToolFinished`、`HandoffRequested` 转为 `Continue`；`ApprovalRequested` 转为 `Approve/Reject`；`SelectionRequested` 转为 `SubmitSelection/Cancel`；`Completed/Failed/Cancelled` 结束内层循环。终态后调用 `Application.snapshot()` 保留旧 CLI 自动保存能力，保存失败单独渲染，不覆盖原终态。
 
-审批策略属于 CLI 偏好：`/approval` 无参数时在 `prompt` 与 `auto` 间切换，使用 `/approval prompt|auto` 可显式设置；该策略只决定 `ApprovalRequested` 是否自动发送 `Approve`，不修改 ToolDefinition 或 Runtime 状态。`/auto-approve-switch` 不向前兼容。Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
+审批策略属于 CLI 偏好：`/approval` 无参数时在 `prompt` 与 `auto` 间切换，使用 `/approval prompt|auto` 可显式设置；该策略只决定 `ApprovalRequested` 是否自动发送 `Approve`，不修改 ToolDefinition 或 Runtime 状态。`/auto-approve-switch` 不向前兼容。基础 Plan 表格在每次 Plan 工具变更后显示；持续驻留的 Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
 
 `/ragreload` 与 `/build-memory` 在 R5 只进入 CommandRegistry 并明确报告 R6 尚不可用；R6 通过 `CommandRegistry.replace()` 接入真实 handler。R5 提供 `python -m src.get_me_in.cli` 独立入口；正式 CLI 通过 G5 后删除临时 `scripts/v2_runtime_smoke.py`，因此 R8 切换 `main.py` 前仍有唯一可验证的 v2 CLI 入口。
 
