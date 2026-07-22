@@ -2,13 +2,13 @@
 
 **当前阶段：** R4 —— Session Aggregate 与编排（设计确认门禁）
 
-**当前任务：** 确认 R4 的新文件、类、公开方法与职责边界清单
+**当前任务：** 审查并确认已修订的 R4 新文件、类、公开方法与职责边界清单
 
-**当前子任务：** 提交 Session model、SessionRepository、编排服务及其公开 API 清单供用户确认（⬜）
+**当前子任务：** 用户审查 `docs/refactor-design.md#65-持久化` 中的 R4 文件、对象与公开边界清单（⬜）
 
-**当前阻塞：** R4 编码尚未获得新文件、类和公开方法清单确认；临时 v2 Runtime Runner 仅用于 R2/R3 人工验证，不作为 R5 正式 CLI，也不提前实现 Session 或 handoff 编排
+**当前阻塞：** R4 编码尚未获得修订后清单的用户确认；必须先确认单 Session Application、Session 唯一状态所有权、CompleteHandoff/FailHandoff、turn_id rewind 与安全 snapshot phase
 
-**下一步：** 审查当前 G2/G3 修复与临时 Runner；准备并提交 R4 Session Aggregate 与编排的完整设计清单，获得用户确认后再编码
+**下一步：** 用户审查修订后的 R4 设计清单；确认后才能创建 `domain/sessions.py`、orchestration/session service/codec、JSON repository 等文件并调整现有 Runtime/Application
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -28,3 +28,4 @@
 146. **R3 简历工具使用临时 ResumeArtifactPort** — copy_template 与 build_pdf 在 R3 经显式端口装配为可测试工具；R7 以 ArtifactService 替换适配器并记录 artifact/version，不改变工具与 Runtime 的闭合协议。
 147. **架构复审撤销 G2/G3 完成结论并暂停 R4** — 现有 80 个测试虽通过，但未覆盖真实 Prompt 工具发现、消息与 call-id codec、pending call 闭合、阻塞取消、capability 隔离、session-scoped revision 和连续多工具回合；上述缺口修复并重新验收前不进入 R4 编码。
 148. **G2/G3 修复完成并恢复门禁结论** — Runtime 改为 pull-driven 单事件状态机并补齐 provider-neutral conversation codec、call closure、多工具回合、真实取消、capability 隔离与 session-scoped workspace revision；86 项核心自动化测试通过，临时 v2 Runtime Runner 经用户确认可用；下一步停在 R4 设计清单确认门禁。
+149. **后续设计按当前 Runtime 重新校准** — 每个 Application 同时只管理一个活动 Session；SessionState 唯一持有 AgentSessionState，Runtime 以状态转换器工作；handoff 由 CompleteHandoff/FailHandoff 闭合，rewind 使用 turn_id，snapshot 禁止重放活动副作用；CLI input history 与 Artifact schema 分别留在 R5/R7，R6/R7 可在 G5 后并行。

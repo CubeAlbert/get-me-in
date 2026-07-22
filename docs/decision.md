@@ -156,6 +156,7 @@
 - [决策 146 — R3 简历工具使用临时 ResumeArtifactPort](#决策-146--r3-简历工具使用临时-resumeartifactport)
 - [决策 147 — 架构复审撤销 G2/G3 完成结论并暂停 R4](#决策-147--架构复审撤销-g2g3-完成结论并暂停-r4)
 - [决策 148 — G2/G3 修复完成并恢复门禁结论](#决策-148--g2g3-修复完成并恢复门禁结论)
+- [决策 149 — 后续设计按当前 Runtime 重新校准](#决策-149--后续设计按当前-runtime-重新校准)
 
 ---
 
@@ -3232,3 +3233,34 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 保持 G2/G3 为未完成直到 R5 正式 CLI 落地 —— 会把 Runtime/Tool 门禁与 CLI 迁移门禁混为一谈，已拒绝。
 - 将临时 Runner 直接演进为正式 CLI —— 会越过 R4 Session 与 R5 CLI 拆分设计，已拒绝。
+
+---
+
+### 决策 149 — 后续设计按当前 Runtime 重新校准
+
+**背景：** G2/G3 修复后，Runtime 已采用 pull-driven 单事件状态机，并由 `RuntimeState` 持有 history、phase、pending tool 和单次运行控制状态。原 R4 设计仍要求 SessionState 另行持有 AgentState、pending action 与 plan，同时提出 `AgentStateRepository` 和 `handle(session_id, command)`；直接实现会产生双重状态源，并与当前一个 Application 持有一个 Runtime 的结构冲突。复审同时发现 handoff 缺少成功/失败完成命令、rewind 缺少用户回合关联、R5/R6 命令依赖倒置，以及 R6/R7 部分任务已经在 R3 提前建立端口或工具契约。
+
+**决策：**
+
+- 一个 `Application` 同时只管理一个活动 `ApplicationSession`，对外保留 `handle(command)`；单个 Application 内多会话并行继续留在 R9。
+- `SessionState` 是唯一规范状态所有者；`AgentSessionState` 承接当前 RuntimeState 与 Plan。`AgentRuntime.advance(state, command)` 返回内部 `RuntimeTransition`，不再保存第二份长期状态，也不增加进程内 `AgentStateRepository`。
+- 增加 `CompleteHandoff` 与 `FailHandoff`，由 Orchestrator 按原 call id 闭合 WAITING_FOR_HANDOFF；HandoffFrame 同时记录 turn id 与 call id。
+- ConversationRecord 增加 turn id，rewind 只允许用户回合边界。Snapshot 只保存稳定状态，不自动重放活动 LLM/Process 或 TOOL_READY；restore/rewind 清除 WorkspaceAccessState。
+- CLI input history 归 R5 InputController，可单独持久化但不进入 domain SessionState；Artifact/ArtifactRef schema 推迟到 R7。
+- G4 使用测试专用 sub Agent 验证 main→sub→main，真实 Resume AgentSpec 保留在 R7。
+- R5 先注册 `/ragreload` 与 `/build-memory` 的 unavailable handler，R6 再接真实服务；现有 RetrievalPort 保持 tool-facing 契约，不在 R6 重复定义。
+- R7 保留 R3 已迁移的 Resume 工具签名，以 ArtifactService-backed adapter 替换临时实现；R6 与 R7 可在 G5 后并行，最终 G7 仅对实际使用 knowledge/memory 的路径依赖 G6。
+
+**理由：**
+
+- 单一规范状态能避免 Session、Runtime 和 PlanService 各自持有可漂移副本，并让 snapshot/restore/rewind 在一个 aggregate 中校验。
+- 专用 handoff completion command 将 active agent、handoff stack 与源 tool call closure 收敛为原子编排操作。
+- turn id 和稳定 snapshot phase 可以防止 rewind 切断多工具回合、恢复重复执行有副作用工具。
+- 把 CLI 状态、Artifact schema 和 Knowledge 实现留在各自里程碑，可以缩小 R4 范围并保持依赖方向清晰。
+
+**曾考虑的替代方案：**
+
+- 保留 Runtime 内部状态，再由 Session 复制一份用于持久化 —— 会形成双重事实来源，已拒绝。
+- 让 AgentRuntime 直接读写 AgentStateRepository —— 增加不必要的进程内 repository，并隐藏状态转换，已拒绝。
+- 一个 Application 同时管理多个活动 Session —— 超出当前 CLI 和 R4 需求，与 R9 暂缓范围冲突，已拒绝。
+- 允许 restore 自动继续 TOOL_READY —— 可能重复文件写入、编译或外部调用，已拒绝。

@@ -81,14 +81,14 @@
 
 ### 1. Domain event
 
-- ✅ 定义 ConversationEvent、Role、EventKind。
+- ✅ 定义 provider-neutral ConversationRecord union 与 Role；不再使用 ConversationEvent/EventKind。
 - ✅ 定义 RuntimeCommand：UserMessage/Continue/Approve/Reject/Selection/Cancel/ToolResult。
 - ✅ 定义 RuntimeEvent：Progress/Approval/Selection/ToolStarted/ToolFinished/Handoff/Completed/Failed/Cancelled。
 - ✅ 删除 v2 中对 `__switch__`、`__reject__`、`__cancelled__` 的需求。
 
 ### 2. Agent state machine
 
-- ✅ 定义 AgentState 和单一 phase 枚举，替代 `_pending_tool/_pending_switch/_pending_reject` 组合。
+- ✅ 定义 RuntimeState 和单一 phase 枚举，替代 `_pending_tool/_pending_switch/_pending_reject` 组合；R4 将其并入 AgentSessionState。
 - ✅ 实现 user input → LLM → finish 基本路径。
 - ✅ 实现 tool call → pause → tool result → LLM 路径。
 - ✅ 实现 output format 修复与最多一次格式提示注入。
@@ -156,27 +156,37 @@
 
 ### 1. Session model
 
-- ⬜ 定义 SessionState、AgentState、HandoffFrame、ArtifactRef。
-- ⬜ SessionState 统一持有 active agent、Agent histories、plans、pending action 和 input history。
-- ⬜ 提供公开 view/snapshot/restore/rewind API。
+- ⬜ 定义 `AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionView`、`SessionPreview`；R4 不提前定义 Artifact schema。
+- ⬜ 将现有 RuntimeState 的 history/phase/pending/model-call/repair 状态并入 AgentSessionState，SessionState 成为唯一规范状态源。
+- ⬜ AgentRuntime 改为 `advance(state, command) -> RuntimeTransition`，不得保留第二份长期状态；Application 对外仍一次返回一个 RuntimeEvent。
+- ⬜ 每个 Application 同时只管理一个活动 Session；生成真实 session id，并按 session/agent 构造 ToolContext、CancellationToken、Plan 绑定与 WorkspaceAccessState。
+- ⬜ Settings 增加 `sessions_dir`，默认使用全新 `data/v2/sessions/`，不得读取旧 `data/save/`。
+- ⬜ CLI input history 留在 R5 InputController；如需持久化，使用独立 CLI snapshot，不进入 domain SessionState。
+- ⬜ 提供公开 `view/snapshot/restore/rewind(turn_id)/list_sessions/dump` API。
 - ⬜ 禁止 CLI 直接访问 `_history`、`_plan` 或 Agent 私有方法。
 
 ### 2. Orchestrator
 
 - ⬜ 实现 Hub-and-Spoke 路由约束。
-- ⬜ 实现 main→sub handoff frame。
-- ⬜ 实现 sub→main summary 与 tool call closure。
+- ⬜ Main Runtime 只注入可路由 descriptor；子 Agent Runtime 不持有完整 AgentCatalog。
+- ⬜ 定义 `CompleteHandoff` 与 `FailHandoff`，使 WAITING_FOR_HANDOFF 可以按原 call id 闭合。
+- ⬜ 实现带 turn_id/call_id 的 main→sub handoff frame。
+- ⬜ 实现 sub→main summary、frame pop、active agent 恢复与源 tool call 原子闭合。
 - ⬜ 实现 `/exit_sub` 的 application command，不向 Agent 私有 history 直接 append。
-- ⬜ 处理未知 Agent、嵌套切换和中断中的 handoff。
+- ⬜ 处理未知 Agent、嵌套切换和中断中的 handoff；所有失败路径均闭合原 call id。
+- ⬜ 使用测试专用 sub Agent 完成 G4；真实 Resume AgentSpec 不提前从 R7 移入。
 
 ### 3. Snapshot repository
 
 - ⬜ 定义 `schema_version=2` SessionSnapshot DTO。
-- ⬜ 分离 domain codec 与 JSON file repository。
+- ⬜ 每条 ConversationRecord 增加 turn_id；rewind 只允许用户回合边界，不截断在 tool call/result 中间。
+- ⬜ 分离 provider-facing ConversationCodec、磁盘 SessionSnapshotCodec 与 JSON file repository。
+- ⬜ 明确定义可恢复稳定 phase；活动 LLM/Process 归一化为 interrupted/cancelled，禁止自动重放 TOOL_READY 副作用。
 - ⬜ 原子写入并报告保存失败；保存失败不得触发旧 sub 数据清理。
 - ⛔ 实现 v1 session/meta/message/plan → v2 migration —— R-D6 明确不迁移。
 - ⬜ 实现 list、preview、dump。
-- ⬜ Rewind 同步修正 pending action、plan 和 handoff stack。
+- ⬜ Restore/Rewind 同步修正 pending action、plan 和 handoff stack，并清除 WorkspaceAccessState，编辑前重新读取。
+- ⬜ 增加 Session、Orchestrator、Snapshot codec 与 JSON repository 的核心自动化测试文件，覆盖 G4 失败路径。
 - ⬜ 完成 G4 验收。
 
 ## R5 —— CLI 拆分与交互迁移
@@ -196,8 +206,8 @@
 - ⬜ `/dump`
 - ⬜ `/restore [session_id]`
 - ⬜ `/rewind`
-- ⬜ `/ragreload [target]`
-- ⬜ `/build-memory`
+- ⬜ `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
+- ⬜ `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - ⬜ `/exit_sub`
 - ⬜ `/auto-approve-switch`：重命名为更准确的审批策略命令或保留兼容 alias。
 - ⬜ `/exit`
@@ -208,6 +218,8 @@
 - ⬜ SelectionRequested → 选择/自定义输入 → SubmitSelection command。
 - ⬜ 删除 UIBridge 和模块级 current bridge 的 v2 依赖。
 - ⬜ Windows UTF-8、Esc、Ctrl+C、EOF 和 editor-not-found 行为验证。
+- ⬜ Input history 使用 CLI-owned snapshot，SessionView 只提供 context recap 所需的公开业务状态。
+- ⬜ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
 - ⬜ 完成 G5 验收。
 
@@ -215,13 +227,16 @@
 
 ### 1. Knowledge/RAG
 
-- ⬜ 定义 RetrievalPort、KnowledgeSource、SearchQuery、SearchResult。
+- ✅ 保留 R3 已定义的 tool-facing RetrievalPort 与 RetrievalResult，不在 R6 重复创建。
+- ⬜ 定义 KnowledgeSource、SearchQuery、SearchResult、KnowledgeSourceRepository、KnowledgeIndexPort 与 ManifestRepository。
 - ⬜ 显式装配 ChromaStore/Embedder/Reranker/Loader。
 - ⬜ 将 start/is_ready/search/reload/load_file/delete 收敛到 KnowledgeService。
 - ⬜ 设计 manifest：source path、collection、content hash、mtime、chunk ids、status。
 - ⬜ 正确处理新增、修改、删除和重命名。
 - ⬜ 明确 loading/error/ready 状态的并发语义。
 - ⬜ 实现 close 和后台任务等待。
+- ⬜ 让 KnowledgeService 适配现有 RetrievalPort，并把 `/ragreload` 真实 handler 接入 CommandRegistry。
+- ⬜ composition root 使用统一逆序资源清理栈，不在 Application.close() 逐项硬编码 adapter。
 
 ### 2. Memory
 
@@ -230,6 +245,7 @@
 - ⬜ MemoryService 显式执行 extract → write → index。
 - ⬜ 索引失败记录 pending/error，并支持重试。
 - ⬜ search/delete 通过公开 service，不延迟 import RAG facade。
+- ⬜ 将 `/build-memory` 真实 handler 接入 CommandRegistry。
 - ⛔ 保持 v1 Markdown memory 可读 —— R-D6 明确不迁移旧 Memory。
 - ⬜ 完成 G6 验收。
 
@@ -238,16 +254,17 @@
 ### 1. Agent 与 capability
 
 - ⬜ 将 ResumeAgent 的 14 个方法转换为 AgentSpec。
-- ⬜ 绑定 workspace.read/search/write/edit 与 resume.template/build/open capabilities。
+- ⬜ 为 Resume AgentSpec 组合 R3 已有的 workspace.read/write/open、resume.artifact、interaction、plan 等 capability；仅在有明确最小权限收益时再拆 template.copy/pdf.build。
 - ⬜ 保留新建/修改/JD 定制三类入口行为。
 - ⬜ 保留“编辑前读取”和“不得编造经历”的约束。
 
 ### 2. Artifact service
 
 - ⬜ 定义 Artifact、ArtifactKind、ArtifactRepository。
-- ⬜ copy_template 记录源模板、目标 LaTeX 和 README。
-- ⬜ build_pdf 使用 ProcessRunner，记录 stdout/stderr/exit code 和 PDF artifact。
-- ⬜ workspace_open 通过 Frontend/OS adapter，不由 domain 直接启动 GUI。
+- ⬜ 以 ArtifactService-backed adapter 替换临时 ResumeArtifactPort 实现，保持既有工具签名和 ToolOutcome 闭合协议。
+- ⬜ copy_template 在现有模板复制结果上记录源模板、目标 LaTeX 和 README。
+- ⬜ build_pdf 复用现有 ProcessRunner，新增 stdout/stderr/exit code 和 PDF artifact 记录。
+- ✅ workspace_open 已在 R3 通过 Frontend/OS adapter 实现，不由 domain 直接启动 GUI；R7 只做端到端复验。
 - ⬜ 区分 user memory 与 resume artifact/version。
 
 ### 3. 端到端验证
@@ -278,6 +295,7 @@
 - ⬜ 删除旧 RAG/Memory 全局 Facade 和兼容 adapter。
 - ⬜ 删除废弃 PlanStatusInfo、CONFIRM_APPROVED、SELECT/CONFIRM 协议分支。
 - ⬜ 删除源码目录中的 `.ipynb_checkpoints`。
+- ⬜ 确认临时 `scripts/v2_runtime_smoke.py` 已随 R5 正式 CLI 落地删除。
 - ⬜ 移除所有 v2 → legacy imports。
 
 ### 3. 文档与状态

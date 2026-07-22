@@ -104,7 +104,7 @@ MainAgent、ResumeAgent 和 JobSearchAgent 都重复实现 `_get_agent_name()`�
 
 `App` 直接读取或覆盖 Handler 的 `_history`、`_plan`，直接调用 `_get_agent_key()`、`dump_history()`、`write_memory()`；AgentRegistry 也通过 `_get_*()` 私有方法抽取描述。这意味着 `Handler.process()` 并不是实际边界，换一个 Handler 实现仍需伪造 BaseAgent 私有结构。
 
-目标：`ApplicationSession` 是会话状态唯一所有者；CLI 只调用公开的 Application API；AgentRuntime 通过 `AgentStateRepository` 读写状态。
+目标：一个 `Application` 对应一个活动 `ApplicationSession`，Session aggregate 是会话状态唯一所有者；CLI 只调用公开的 Application API。`AgentRuntime` 接收一个 Agent 的规范状态并返回状态转换结果，不再持有第二份长期可变状态，也不增加进程内 `AgentStateRepository`。
 
 ### 3.6 UI 与执行线程互相侵入
 
@@ -136,7 +136,7 @@ MemoryStore 通过回调触发 MemoryIndexer，Indexer 再延迟 import RAG Faca
 
 1. 每个模块只有一个主要变化原因，核心对象控制在可审查范围内。
 2. 所有运行时依赖由 composition root 显式创建；禁止依赖导入副作用完成装配。
-3. 单个进程可创建多个相互隔离的 ApplicationSession。
+3. 单个进程可创建多个相互隔离的 Application；每个 Application 同时只管理一个活动 ApplicationSession。单个 Application 内的多会话并行留到 R9。
 4. CLI 不读取 Agent 私有字段，Agent 不导入 CLI。
 5. Agent 元数据声明式，新增普通 Agent 不再复制 14 个方法。
 6. 工具控制结果强类型化，工具上下文显式注入。
@@ -178,28 +178,30 @@ domain 和 application 不允许反向 import CLI、OpenAI、Chroma、questionar
 src/get_me_in/
 ├── domain/
 │   ├── agents.py          # AgentSpec / AgentKey / Capability
-│   ├── messages.py        # ConversationEvent / Role
+│   ├── messages.py        # ConversationRecord / Role
 │   ├── plans.py           # Plan / PlanItem / PlanStatus
-│   ├── sessions.py        # SessionState / AgentState / HandoffFrame
+│   ├── sessions.py        # SessionState / AgentSessionState / HandoffFrame
 │   └── tools.py           # ToolDefinition / ToolOutcome
 ├── application/
 │   ├── runtime.py         # AgentRuntime 状态机
 │   ├── orchestration.py   # Hub-and-Spoke handoff
 │   ├── commands.py        # RuntimeCommand
+│   ├── app_commands.py    # ApplicationCommand
 │   ├── events.py          # RuntimeEvent
 │   ├── session_service.py
+│   ├── session_codec.py
 │   ├── memory_service.py
 │   └── knowledge_service.py
 ├── ports/
 │   ├── llm.py
 │   ├── interaction.py
-│   ├── persistence.py
+│   ├── sessions.py
 │   ├── retrieval.py
 │   ├── workspace.py
 │   └── clock.py
 ├── adapters/
 │   ├── llm/openai.py
-│   ├── persistence/json_session.py
+│   ├── json_session_repository.py
 │   ├── retrieval/chroma.py
 │   ├── workspace/local.py
 │   └── resume/latex.py
@@ -251,21 +253,27 @@ PromptRenderer 接收 AgentSpec、ToolCatalog 和 AgentCatalog，统一生成 sy
 
 ### 6.2 RuntimeCommand 与 RuntimeEvent
 
-建议 command：`UserMessage`、`Continue`、`ApproveTool`、`RejectTool`、`SubmitSelection`、`CancelRun`。
+Runtime command 保持：`UserMessage`、`Continue`、`Approve`、`Reject`、`SubmitSelection`、`ToolResult`、`Cancel`；R4 增加 `CompleteHandoff(call_id, summary)` 与 `FailHandoff(call_id, code, message)`，专门闭合 `WAITING_FOR_HANDOFF`。
 
-建议 event：`AssistantProgress`、`ApprovalRequested`、`SelectionRequested`、`ToolStarted`、`ToolFinished`、`HandoffRequested`、`RunCompleted`、`RunFailed`、`RunCancelled`。
+Runtime event 保持：`Progress`、`ApprovalRequested`、`SelectionRequested`、`ToolStarted`、`ToolFinished`、`HandoffRequested`、`Completed`、`Failed`、`Cancelled`。
 
-ApplicationService 公开：
+一个 Application 只暴露一个活动 Session，公开边界调整为：
 
 ```python
-def handle(session_id: str, command: RuntimeCommand) -> RuntimeEvent
-def snapshot(session_id: str) -> SessionSnapshot
+def handle(command: RuntimeCommand) -> RuntimeEvent
+def view() -> SessionView
+def snapshot() -> SessionSnapshot
 def restore(session_id: str) -> SessionView
-def rewind(session_id: str, message_id: str) -> SessionView
+def rewind(turn_id: str) -> SessionView
+def list_sessions() -> tuple[SessionPreview, ...]
+def dump() -> Path
+def request_cancel(reason: str = "Cancelled by user") -> None
 def close() -> None
 ```
 
-该协议取代当前 Request/Response、UIBridge action 和 switch magic dict。Runtime 每次只推进一个明确状态，不使用多个松散 `_pending_*` 标志表达组合状态。
+`RestoreSession`、`RewindSession`、`ExitSubAgent`、`DumpSession` 等属于 `ApplicationCommand`，不混入模型回合使用的 `RuntimeCommand`。CLI 可以通过统一分发入口调用两类 command，但 Runtime 永远不解释 CLI/Session 命令。
+
+该协议取代当前 Request/Response、UIBridge action 和 switch magic dict。Runtime 每次只推进一个明确状态，不使用多个松散 `_pending_*` 标志表达组合状态。内部 `AgentRuntime.advance(state, command)` 返回 `RuntimeTransition(state, event)`；`RuntimeTransition` 只在 application 层使用，Application 对外仍一次返回一个 `RuntimeEvent`。
 
 ### 6.3 ToolCatalog、ToolContext 与 ToolOutcome
 
@@ -287,13 +295,19 @@ class ToolHandoff(ToolOutcome): ...
 class ToolInteraction(ToolOutcome): ...
 ```
 
-Agent 可见工具由 capability 决定，例如 `resume.workspace.read`、`resume.latex.build`，不再使用 `agent=["*"]` 和主 Agent 特判。
+Agent 可见工具由已经落地的通用 capability 决定，例如 `workspace.read`、`workspace.write`、`workspace.open` 与 `resume.artifact`，不再使用 `agent=["*"]` 和主 Agent 特判。若后续确有最小权限需要，再拆分 `resume.template.copy` 与 `resume.pdf.build`，R4 不提前扩展枚举。
 
 ### 6.4 Session aggregate 与编排
 
-SessionState 是活跃 Agent、所有 AgentState、handoff stack、plan、input history 和 artifact references 的唯一所有者。Hub-and-Spoke 规则保留：只有 Orchestrator 能进行 handoff，子 Agent 不能持有 AgentCatalog 或直接调用其他子 Agent。
+`SessionState` 是 active agent、所有 `AgentSessionState`、handoff stack 和会话时间信息的唯一规范所有者。`AgentSessionState` 直接承接当前 `RuntimeState` 的 history、phase、pending tool、model call/repair 状态，并持有该 Agent 的 Plan；不得在 Session 与 Runtime 中复制同一组字段。长期存活的 `PlanService` 不再独立拥有另一份 plan，执行工具时从 AgentSessionState 恢复，转换完成后立即写回。
 
-Handoff 使用 `HandoffFrame(source, target, call_id, context)`；返回主 Agent 时由 Orchestrator 闭合调用并写入 summary。CLI 不再补写 tool result。
+CLI input history 属于 R5 `InputController`，不进入 domain SessionState；如需随会话保存，使用独立的可选 CLI snapshot。Artifact 由 R7 `ArtifactRepository` 管理，R4 的 SessionSnapshot 不提前定义 Artifact/ArtifactRef schema。
+
+Hub-and-Spoke 规则保留：只有 Orchestrator 能进行 handoff。Main Runtime 只接收可路由的 Agent descriptor；子 Agent Runtime 不持有完整 `AgentCatalog`，也不直接调用其他子 Agent。
+
+Handoff 使用 `HandoffFrame(source, target, call_id, turn_id, context)`。Orchestrator 切换到子 Agent 时保留源 Agent 的 `WAITING_FOR_HANDOFF` pending call；子 Agent 返回 summary 后，Orchestrator 向源 Runtime 发送 `CompleteHandoff`，原子地写入 tool result、弹出 frame 并恢复 active agent。未知 Agent、失败、中断和 `/exit_sub` 均必须通过 `FailHandoff` 或 `CompleteHandoff` 闭合原 call id；CLI 不补写 conversation record。
+
+R4 以测试专用 sub Agent 完成 G4 编排门禁；真实 Resume AgentSpec 与领域能力仍在 R7 落地，避免 R4 反向依赖 R7。
 
 ### 6.5 持久化
 
@@ -303,16 +317,40 @@ SessionSnapshot 至少包含：
 {
   "schema_version": 2,
   "session_id": "...",
-  "active_agent": "resume",
-  "agents": {"main": {}, "resume": {}},
+  "active_agent": "main",
+  "agents": {"main": {}},
   "handoff_stack": [],
-  "artifacts": [],
   "created_at": "...",
   "saved_at": "..."
 }
 ```
 
-Repository 必须原子写入临时文件后 replace，codec 与文件 I/O 分离。v2 从全新 `schema_version=2` 会话开始，不读取或迁移旧 Session；Rewind 在 SessionState 上执行并同步修正 pending action、plan 与 handoff，不能只截断某个 Agent 的 `_history`。
+每条 `ConversationRecord` 增加同一用户回合共享的 `turn_id`；tool call/result 继续额外使用 `call_id`。Rewind 只接受 `turn_id`，默认回退到用户回合边界，并同步修正 Agent state、Plan、pending action 与 handoff stack，不能截断在 tool call/result 中间。
+
+Repository 必须原子写入临时文件后 replace，磁盘 `SessionSnapshotCodec` 与 provider-facing `ConversationCodec` 分离。v2 从全新 `schema_version=2` 会话开始，不读取或迁移旧 Session。
+
+Snapshot 只记录可恢复的稳定状态。正在执行的 LLM/Process 调用先归一化为 interrupted/cancelled；`TOOL_READY` 不允许作为可自动重放状态持久化，避免恢复后重复副作用。等待 approval、selection 或 handoff 的状态可以保存，但恢复后仍按原 call id 校验。restore/rewind 必须清除 `WorkspaceAccessState`，编辑前重新读取文件。
+
+R4 新增文件、类和公开方法清单如下，编码前仍需用户确认：
+
+| 文件 | 新增/调整对象 | 公开边界 |
+|------|---------------|----------|
+| `domain/sessions.py` | `RuntimePhase`、`PendingToolCall`、`AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionView`、`SessionPreview` | 不提供副作用方法；承接现有 runtime state 类型并只保存不可变规范状态，禁止 domain 反向 import application |
+| `application/runtime.py` | 调整 `RuntimeState` 所有权；新增 `RuntimeTransition` | `advance(state, command) -> RuntimeTransition`；移除长期内部状态副本 |
+| `application/commands.py` | `CompleteHandoff`、`FailHandoff` | 强类型字段按 call id 闭合 handoff |
+| `application/app_commands.py` | `ApplicationCommand`、`RestoreSession`、`RewindSession`、`ExitSubAgent`、`DumpSession` | 仅供 Application/CLI，不进入 AgentRuntime |
+| `application/orchestration.py` | `Orchestrator`、`SessionTransition` | `handle(session, command) -> SessionTransition` |
+| `application/session_service.py` | `SessionService` | 持有一个活动 SessionState，公开 `view/snapshot/restore/rewind/list_sessions/dump`；不再增加同义状态容器类 |
+| `application/session_codec.py` | `SessionSnapshot`、`SessionSnapshotCodec` | `encode/decode`，校验 `schema_version=2` 与 record/pending 对应关系 |
+| `ports/sessions.py` | 扩展 `SessionRepository` | `save/load/list/close`；不暴露 JSON 细节 |
+| `adapters/json_session_repository.py` | `JsonSessionRepository` | 原子 save 与只读 load/list；不迁移 v1 |
+| `application/application.py` | 调整现有 `Application` | 保留 `handle/request_cancel/close`，增加上述 Session 公共 API |
+| `tests/get_me_in/test_sessions.py` | Session domain/service tests | 覆盖唯一状态源、turn rewind、Plan/pending/handoff 同步与 revision grant 清理 |
+| `tests/get_me_in/test_orchestration.py` | Orchestrator tests | 覆盖 main→测试 sub→main、Complete/FailHandoff、未知/嵌套/取消路径 |
+| `tests/get_me_in/test_session_codec.py` | Snapshot codec tests | 覆盖 tagged records、schema version、稳定 phase 与损坏数据拒绝 |
+| `tests/get_me_in/test_json_session_repository.py` | Repository contract tests | 覆盖原子 save、load/list、失败不破坏旧 snapshot 与 v1 隔离 |
+
+`domain/messages.py`、`application/plan_service.py`、`application/tool_executor.py`、`application/settings.py`、`bootstrap.py` 属于既有文件调整：分别增加 `turn_id`、消除长期独立 Plan 副本、按 session/agent 生成 ToolContext、增加 `sessions_dir`（默认全新 `data/v2/sessions/`）、为每个 Application 创建真实 session id 与资源清理顺序；不新增第二套 Message、Plan 或 ToolContext 类型。
 
 ### 6.6 LLM 与取消
 
@@ -332,12 +370,15 @@ CLI 拆为：
 
 UI 交互由 `ApprovalRequested`/`SelectionRequested` event 驱动。Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
 
+`/ragreload` 与 `/build-memory` 在 R5 只进入 CommandRegistry 并明确报告 R6 尚不可用；真实 handler 随 R6 服务落地。临时 `scripts/v2_runtime_smoke.py` 仅作为 WorkerRunner 行为参考，R5 正式 CLI 通过 G5 后删除。
+
 ### 6.8 Workspace 与 Artifact
 
 WorkspacePort 提供 `resolve/read/list/search/write/edit/delete/move`；LocalWorkspace 统一：
 
 - 使用 `Path.resolve()` + `Path.is_relative_to(root)` 校验边界。
 - 使用 session-scoped revision 代替进程级 `_read_files`。
+- revision grant 是运行期安全状态，不写入 SessionSnapshot；restore/rewind 后必须清除。
 - 写入使用原子替换，错误统一为 domain error。
 - 编码检测集中处理，不在每个 tool 重复。
 
@@ -345,9 +386,11 @@ Resume 的模板复制、LaTeX 编译和 PDF 产物记录属于 ArtifactService�
 
 ### 6.9 Knowledge 与 Memory
 
-`KnowledgeService` 管理 source ingestion、query、reload、manifest 和生命周期；`MemoryService` 负责从会话提取 Memory、写 repository，再调用 KnowledgeService 建索引。两者通过 port 连接，不使用 observer callback 和延迟 import。
+现有 `RetrievalPort` 作为 tool-facing 查询端口保留，不在 R6 重复定义。`KnowledgeService` 实现或适配该端口，并管理 source ingestion、query、reload、manifest 和生命周期；内部写入边界拆为 source repository、index adapter 与 manifest repository，避免用含义模糊的单一 `KnowledgeRepository` 包揽三类职责。`MemoryService` 负责从会话提取 Memory、写 repository，再调用 KnowledgeService 建索引。两者通过 port 连接，不使用 observer callback 和延迟 import。
 
 索引 manifest 使用内容 hash 检测新增、修改、删除和重命名。索引失败时文件写入不能被报告为“全部成功”；应记录 pending/error 状态供重试。
+
+Application 使用统一的逆序资源清理栈管理 LLM、Web Search、Knowledge loader/index 和其他可关闭 adapter；`Application.close()` 不按模块逐项硬编码。R6 与 R7 可在 G5 后并行实现；只有 Resume 验收中实际使用 knowledge/memory 的路径依赖 G6。
 
 ## 7. 迁移策略
 

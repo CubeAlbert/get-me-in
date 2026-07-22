@@ -66,7 +66,7 @@
 
 **产出：**
 
-- AgentSpec、AgentState、ConversationEvent。
+- AgentSpec、RuntimeState、ConversationRecord union。
 - RuntimeCommand/RuntimeEvent tagged union。
 - ModelReplyParser 与 prompt/message codec。
 - AgentRuntime 单步状态机：LLM reply、格式修复、未知工具、最大轮数和错误返回。
@@ -108,17 +108,21 @@
 
 **产出：**
 
-- SessionState、AgentState、HandoffFrame、ArtifactRef。
-- Orchestrator 执行 main→sub→main，统一闭合 handoff tool call。
+- SessionState、AgentSessionState、HandoffFrame、SessionView；不提前定义 R7 Artifact schema，也不把 CLI input history 放入 domain Session。
+- 现有 RuntimeState 并入 AgentSessionState，AgentRuntime 改为接收规范状态并返回 RuntimeTransition，不保留第二份长期状态。
+- Orchestrator 执行 main→sub→main，通过 CompleteHandoff/FailHandoff 统一闭合 handoff tool call。
 - versioned SessionSnapshot、codec 和 JSON repository；v2 使用全新会话，不提供 v1 migration。
+- Session repository 默认写入全新 `data/v2/sessions/`，不读取旧 `data/save/`。
 - 原子 save、restore、rewind、dump。
-- Plan、pending action、handoff stack 随 snapshot 一致恢复。
+- Plan、pending action、handoff stack 随 snapshot 一致恢复；conversation records 使用 turn_id 作为 rewind 边界。
+- 每个 Application 同时管理一个活动 Session；ToolContext、CancellationToken、Plan 与 workspace revision grant 按 session/agent 装配。
 
 **验收门禁 G4：**
 
-- main→resume→main 的 context、call id 和 summary 完整闭环。
+- main→测试专用 sub Agent→main 的 context、turn id、call id 和 summary 完整闭环；真实 Resume Agent 留到 R7。
 - restore 后 active agent、plan、pending action 与切换栈一致。
 - rewind 不产生孤立 TOOL_CALL，也不遗留与截断历史不匹配的 Plan/pending state。
+- snapshot 不重放活动 LLM/Process 或 TOOL_READY 副作用；restore/rewind 清除 workspace revision grant。
 - CLI/application 只使用公开 Session API。
 
 **依赖：** G3。
@@ -130,10 +134,11 @@
 **产出：**
 
 - CliApp、CommandRegistry、InputController、Renderer、WorkerRunner。
-- `/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、`/exit`、审批开关迁移。
+- `/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/exit_sub`、`/exit`、审批开关迁移；`/ragreload`、`/build-memory` 先注册为明确 unavailable，真实 handler 在 R6 接入。
 - RuntimeEvent 驱动 confirm/select，不再使用 UIBridge。
 - Spinner 与 Esc cancel 只存在于 WorkerRunner/Renderer。
-- 恢复后的输入历史和 context recap。
+- CLI input history 使用独立 CLI snapshot；context recap 来自公开 SessionView。
+- G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 
 **验收门禁 G5：**
 
@@ -150,11 +155,13 @@
 
 **产出：**
 
-- RetrievalPort、KnowledgeRepository、IndexManifest、KnowledgeService。
+- 保留现有 tool-facing RetrievalPort；新增 KnowledgeSourceRepository、KnowledgeIndexPort、ManifestRepository、IndexManifest 与 KnowledgeService。
 - Chroma adapter、embedder、reranker 与 loader 显式装配。
 - 内容 hash 增量索引，正确处理新增、更新、删除和重命名。
 - MemoryRepository、MemoryExtractor、MemoryService。
 - build/query/delete 与 lifecycle close。
+- `/ragreload`、`/build-memory` 的真实 CLI handler 接入 R5 CommandRegistry。
+- Application 使用统一逆序资源清理栈关闭 loader/index 等资源。
 - v2 Memory 使用全新 repository；不读取或迁移 v1 Memory 文件。
 
 **验收门禁 G6：**
@@ -173,7 +180,7 @@
 **产出：**
 
 - 声明式 Resume AgentSpec 与 capability 集合。
-- copy template、README 读取、workspace edit/replace、build PDF、open preview 迁移。
+- 保留 R3 已迁移的 copy template、README 读取、workspace edit/replace、build PDF、open preview 工具契约，以 ArtifactService 替换临时 ResumeArtifactPort adapter。
 - ArtifactService/ArtifactRepository 记录 LaTeX 和 PDF 产物，不混入 Memory。
 - JD 输入、简历修改、编译错误修复的完整流程。
 
@@ -184,9 +191,9 @@
 - ResumeAgent 不含重复的 14 个 `_get_*()` 方法。
 - 当前 ResumeAgent 已实现能力达到等价后，才允许切换主入口。
 
-**依赖：** G3、G4、G5、G6。
+**依赖：** G3、G4、G5；可与 R6 并行实现。只有实际使用 knowledge/memory 的 Resume 验收路径依赖 G6，G7 最终验收仍需相关路径完成。
 
-### R8 —— 入口切换、兼容迁移与旧代码删除
+### R8 —— 入口切换与旧代码删除
 
 **目标：** 将生产入口切到 v2，完成一次可回退观察后删除遗留架构。
 
@@ -196,6 +203,7 @@
 - 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可被 v2 读取；不迁移旧 session/memory/temp/chroma 数据。
 - 更新 `docs/design.md`、`docs/plan.md`、`docs/task.md` 和 AGENTS.md 为已落地架构。
 - 删除旧 BaseAgent、App、Request/Response、UIBridge、全局 registries/facades 和兼容层。
+- 确认临时 `scripts/v2_runtime_smoke.py` 已在 R5 删除，不保留第二入口。
 - 清理 `.ipynb_checkpoints` 等不应进入源码树的文件。
 
 **验收门禁 G8：**
