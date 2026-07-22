@@ -6,6 +6,8 @@ import unittest
 from unittest.mock import patch
 
 from src.get_me_in.application.commands import Continue
+from src.get_me_in.application.app_commands import ReloadKnowledge
+from src.get_me_in.application.app_results import ApplicationResult
 from src.get_me_in.application.events import Progress
 from src.get_me_in.cli.worker import WorkerRunner
 
@@ -29,6 +31,15 @@ class WorkerRunnerTests(unittest.TestCase):
 
         self.assertEqual(["Cancelled by user"], application.cancellations)
 
+    def test_runs_application_command_and_returns_typed_result(self) -> None:
+        application = _Application(_Result())
+        runner = WorkerRunner(application, _Renderer())
+
+        result = runner.run(ReloadKnowledge("references"))
+
+        self.assertEqual(_Result(), result)
+        self.assertEqual([ReloadKnowledge("references")], application.commands)
+
     def test_rejects_concurrent_runs_and_close_cancels_active_work(self) -> None:
         application = _Application(Progress("done"), wait_for_cancel=True)
         runner = WorkerRunner(application, _Renderer(), poll_interval_seconds=0.001)
@@ -49,7 +60,7 @@ class WorkerRunnerTests(unittest.TestCase):
 
 
 class _Application:
-    def __init__(self, event: Progress, wait_for_cancel: bool = False) -> None:
+    def __init__(self, event: Progress | ApplicationResult, wait_for_cancel: bool = False) -> None:
         self.event = event
         self.wait_for_cancel = wait_for_cancel
         self.commands: list[object] = []
@@ -57,7 +68,7 @@ class _Application:
         self.started = Event()
         self._cancelled = Event()
 
-    def handle(self, command: object) -> Progress:
+    def handle(self, command: object) -> Progress | ApplicationResult:
         self.commands.append(command)
         self.started.set()
         if self.wait_for_cancel:
@@ -80,3 +91,7 @@ class _Status:
 
     def __exit__(self, *args: object) -> None:
         return None
+
+
+class _Result(ApplicationResult):
+    pass

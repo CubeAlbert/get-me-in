@@ -122,9 +122,10 @@ class BootstrapTests(unittest.TestCase):
         llm = _FakeLlm("unused")
         application = build_application(_settings(), llm=llm)
 
-        application.close()
+        report = application.close()
 
         self.assertTrue(llm.closed)
+        self.assertIs(report, application.close())
         with self.assertRaises(RuntimeError):
             application.handle(UserMessage("hello"))
 

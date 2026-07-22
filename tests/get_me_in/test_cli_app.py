@@ -3,6 +3,8 @@
 import unittest
 
 from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
+from src.get_me_in.application.app_commands import ReloadKnowledge
+from src.get_me_in.application.app_results import ApplicationResult
 from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress, ToolFinished
 from src.get_me_in.cli.app import CliApp
 from src.get_me_in.cli.commands import ApprovalMode, CommandAction, CommandResult
@@ -115,6 +117,23 @@ class CliAppTests(unittest.TestCase):
         self.assertEqual(1, application.snapshots)
         self.assertIn("会话保存失败", renderer.errors[0])
 
+    def test_run_command_renders_only_a_typed_application_result(self) -> None:
+        renderer = _Renderer()
+        result = _ApplicationResult()
+        worker = _Worker((result,))
+        app = CliApp(
+            _Application(),
+            _Commands((CommandResult(CommandAction.RUN, command=ReloadKnowledge()), CommandResult(CommandAction.EXIT))),
+            _Input(("/ragreload", "/exit")),
+            renderer,
+            worker,
+        )
+
+        app.run()
+
+        self.assertEqual((ReloadKnowledge(),), worker.commands)
+        self.assertEqual([result], renderer.application_results)
+
 
 class _Application:
     def __init__(self, fail_snapshot: bool = False) -> None:
@@ -182,6 +201,7 @@ class _Renderer:
     def __init__(self) -> None:
         self.errors: list[str] = []
         self.notices: list[str] = []
+        self.application_results: list[ApplicationResult] = []
 
     def render_event(self, event: object) -> None:
         pass
@@ -191,6 +211,13 @@ class _Renderer:
 
     def render_error(self, message: str) -> None:
         self.errors.append(message)
+
+    def render_application_result(self, result: ApplicationResult) -> None:
+        self.application_results.append(result)
+
+
+class _ApplicationResult(ApplicationResult):
+    pass
 
 
 def _message() -> MessageRecord:

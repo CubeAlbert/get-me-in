@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from src.get_me_in.application.app_commands import DumpSession, ExitSubAgent, RestoreSession, RewindSession
+from src.get_me_in.application.app_commands import ApplicationCommand, DumpSession, ExitSubAgent, RestoreSession, RewindSession
 from src.get_me_in.application.events import RuntimeEvent
 
 
@@ -24,6 +24,7 @@ class CommandAction(StrEnum):
     PREFILL = "prefill"
     SET_APPROVAL = "set_approval"
     DRIVE = "drive"
+    RUN = "run"
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class CommandResult:
     text: str | None = None
     approval_mode: ApprovalMode | None = None
     event: RuntimeEvent | None = None
+    command: ApplicationCommand | None = None
 
 
 CommandHandler = Callable[[str], CommandResult]

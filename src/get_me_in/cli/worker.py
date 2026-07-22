@@ -7,6 +7,8 @@ from threading import Lock, Thread
 from time import sleep
 from typing import Any
 
+from src.get_me_in.application.app_commands import ApplicationCommand
+from src.get_me_in.application.app_results import ApplicationResult
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
 
@@ -23,13 +25,13 @@ class WorkerRunner:
         self._run_lock = Lock()
         self._closed = False
 
-    def run(self, command: RuntimeCommand) -> RuntimeEvent:
+    def run(self, command: RuntimeCommand | ApplicationCommand) -> RuntimeEvent | ApplicationResult:
         """Run one command in the only worker, polling Esc and Ctrl+C for cancellation."""
         if self._closed:
             raise RuntimeError("WorkerRunner is closed")
         if not self._run_lock.acquire(blocking=False):
             raise RuntimeError("WorkerRunner already has an active command")
-        results: Queue[RuntimeEvent | BaseException] = Queue(maxsize=1)
+        results: Queue[RuntimeEvent | ApplicationResult | BaseException] = Queue(maxsize=1)
         worker = Thread(target=self._handle, args=(command, results), daemon=True)
         cancelled = False
         try:
@@ -58,11 +60,15 @@ class WorkerRunner:
         if self._run_lock.locked():
             self._application.request_cancel("CLI is closing")
 
-    def _handle(self, command: RuntimeCommand, results: Queue[RuntimeEvent | BaseException]) -> None:
+    def _handle(
+        self,
+        command: RuntimeCommand | ApplicationCommand,
+        results: Queue[RuntimeEvent | ApplicationResult | BaseException],
+    ) -> None:
         try:
             result = self._application.handle(command)
-            if not isinstance(result, RuntimeEvent):
-                raise TypeError("Application.handle(RuntimeCommand) must return RuntimeEvent")
+            if not isinstance(result, (RuntimeEvent, ApplicationResult)):
+                raise TypeError("Application.handle(command) must return RuntimeEvent or ApplicationResult")
             results.put(result)
         except BaseException as error:
             results.put(error)

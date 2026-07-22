@@ -14,6 +14,8 @@ from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
 from src.get_me_in.application.runtime import AgentRuntime
+from src.get_me_in.application.app_results import CloseReport
+from src.get_me_in.application.resources import ResourceStack
 from src.get_me_in.application.session_codec import SessionSnapshot
 from src.get_me_in.application.session_service import SessionService
 from src.get_me_in.application.settings import Settings
@@ -39,6 +41,7 @@ class Application:
         sessions: SessionService,
         tool_catalog: ToolCatalog,
         web_search: WebSearchPort | None = None,
+        resources: ResourceStack | None = None,
     ) -> None:
         self.settings = settings
         self.catalog = catalog
@@ -49,7 +52,9 @@ class Application:
         self._runtime = runtime
         self._sessions = sessions
         self._web_search = web_search
+        self._resources = resources
         self._closed = False
+        self._close_report: CloseReport | None = None
 
     def handle(self, command: RuntimeCommand | ApplicationCommand) -> RuntimeEvent | SessionView | Path:
         """Run one typed command without exposing runtime internals."""
@@ -92,8 +97,17 @@ class Application:
             raise RuntimeError("Application is closed")
         self._sessions.request_cancel(reason)
 
-    def close(self) -> None:
+    def close(self) -> CloseReport:
+        if self._close_report is not None:
+            return self._close_report
         self._closed = True
-        self._sessions.close()
-        if self._web_search is not None:
-            self._web_search.close()
+        if self._resources is not None:
+            self._close_report = self._resources.close()
+        else:
+            self._sessions.close()
+            if self._web_search is not None:
+                self._web_search.close()
+            self._close_report = CloseReport(
+                closed=("sessions", "web_search") if self._web_search is not None else ("sessions",)
+            )
+        return self._close_report

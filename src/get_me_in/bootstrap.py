@@ -26,6 +26,7 @@ from src.get_me_in.application.settings import Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
+from src.get_me_in.application.resources import ResourceStack
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 from src.get_me_in.domain.sessions import AgentSessionState, SessionState
 from src.get_me_in.ports.llm import LLMPort, ModelProfile
@@ -150,6 +151,9 @@ def build_application(
         id_generator=id_generator,
         workspace_access=workspace_access,
     )
+    resources = ResourceStack()
+    resources.register("web_search", web_search.close)
+    resources.register("sessions", sessions.close)
     return Application(
         settings=settings,
         catalog=catalog,
@@ -160,4 +164,5 @@ def build_application(
         sessions=sessions,
         tool_catalog=tool_catalog,
         web_search=web_search,
+        resources=resources,
     )

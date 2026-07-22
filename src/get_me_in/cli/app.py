@@ -1,6 +1,7 @@
 """The thin v2 CLI event driver."""
 
 from src.get_me_in.application.commands import Approve, Cancel, Continue, Reject, SubmitSelection, UserMessage
+from src.get_me_in.application.app_results import ApplicationResult
 from src.get_me_in.application.events import (
     ApprovalRequested,
     Cancelled,
@@ -70,6 +71,16 @@ class CliApp:
                         self._renderer.render_error("命令未返回可驱动的运行事件。")
                     else:
                         self._drive(result.event)
+                    continue
+                if result.action is CommandAction.RUN:
+                    if result.command is None:
+                        self._renderer.render_error("命令未返回可执行的应用命令。")
+                        continue
+                    application_result = self._worker.run(result.command)
+                    if not isinstance(application_result, ApplicationResult):
+                        self._renderer.render_error("应用命令未返回强类型结果。")
+                    else:
+                        self._renderer.render_application_result(application_result)
                     continue
                 if result.text:
                     self._renderer.render_notice(result.text)

@@ -21,6 +21,7 @@ from src.get_me_in.application.events import (
     ToolFinished,
     ToolStarted,
 )
+from src.get_me_in.application.app_results import ApplicationResult
 from src.get_me_in.domain.plans import Plan, PlanStatus
 from src.get_me_in.domain.sessions import SessionView
 
@@ -75,6 +76,10 @@ class Renderer:
         for command, description in entries:
             table.add_row(f"[bold]{command}[/]", f"[dim]{description}[/]")
         self._console.print(table)
+
+    def render_application_result(self, result: ApplicationResult) -> None:
+        """Render an already-computed application result without choosing follow-up work."""
+        self._console.print(Panel(str(result), title="应用命令结果", border_style="dim"))
 
     def _render_plan(self, plan: Plan) -> None:
         table = Table(title="执行计划", show_header=True, header_style="bold", box=None)

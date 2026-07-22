@@ -26,3 +26,13 @@ class ExitSubAgent(ApplicationCommand):
 @dataclass(frozen=True)
 class DumpSession(ApplicationCommand):
     pass
+
+
+@dataclass(frozen=True)
+class ReloadKnowledge(ApplicationCommand):
+    target: str | None = None
+
+
+@dataclass(frozen=True)
+class BuildMemory(ApplicationCommand):
+    pass
