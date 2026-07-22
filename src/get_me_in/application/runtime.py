@@ -220,7 +220,7 @@ class AgentRuntime:
 
         try:
             reply = ModelReplyParser().parse(result.content)
-        except ModelReplyParseError:
+        except ModelReplyParseError as error:
             if self._state.repair_attempted:
                 self._state = replace(self._state, phase=RuntimePhase.FAILED)
                 return Failed(
@@ -229,7 +229,11 @@ class AgentRuntime:
                 )
             repair = self._message(
                 Role.SYSTEM,
-                "Return exactly one JSON object with a string content field.",
+                (
+                    f"The previous response violated the required output format: {error}\n\n"
+                    "Follow this output format exactly:\n"
+                    f"{self._prompt_renderer.render_output_format()}"
+                ),
                 self._state.turn_id,
             )
             self._state = replace(

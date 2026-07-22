@@ -52,6 +52,19 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual(2, len(llm.requests))
+        repair_message = llm.requests[1].messages[-1]
+        self.assertEqual("system", repair_message.role.value)
+        self.assertIn("Model response is not valid JSON", repair_message.content)
+        self.assertIn("<OutputFormat>canonical contract</OutputFormat>", repair_message.content)
+
+    def test_finish_allows_empty_thinking(self) -> None:
+        runtime, _, temporary_dir = _runtime(['{"content": "answer", "thinking": ""}'])
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("question"))
+
+        self.assertIsInstance(events[-1], Completed)
+        self.assertEqual("", events[-1].message.thinking)
 
     def test_invalid_reply_after_repair_fails(self) -> None:
         runtime, _, temporary_dir = _runtime(["broken", "still broken"])
@@ -238,6 +251,9 @@ def _runtime(
     (root / "01.md").write_text(
         "You are {{AGENT_NAME}}. <Tools>{{ADDITION_TOOLS}}</Tools> <Agents>{{SUB_AGENTS_LIST}}</Agents>",
         encoding="utf-8",
+    )
+    (root / "07_output_format.md").write_text(
+        "<OutputFormat>canonical contract</OutputFormat>", encoding="utf-8"
     )
     llm = _FakeLlm(responses)
     capabilities = frozenset(Capability)

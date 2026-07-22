@@ -38,13 +38,26 @@ JSON
       "description": "工具参数。仅需提供已声明的参数，多余参数会被忽略，但必填参数不得缺失。event_type 为 finish 时必须为 null"
     }
   },
-  "required": ["id", "role", "event_type", "message"]
+  "required": ["id", "role", "event_type", "message"],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event_type": {"const": "finish"}
+        }
+      },
+      "then": {
+        "required": ["thinking"]
+      }
+    }
+  ]
 }
 </Schema>
 <Requirements>
 - 必须是合法的 JSON，严格符合上述 Schema。
 - **JSON 字符串内不得包含物理换行。** 多行文本中的换行必须转义为 `\n`，否则 JSON 将无法解析。
 - `tool` 只能使用 <Tools> 中已定义的工具名称。
-- `event_type` 为 `finish`（非 tool_call）时 **必须** 提供 `thinking` 字段，且内容需为对用户有意义的推理总结。
+- `event_type` 为 `finish`（非 tool_call）时 **必须** 提供 `thinking` 字段；允许使用空字符串，但有可说明的推理时应提供对用户有意义的摘要。
+- `event_type` 为 `tool_call` 时可省略 `thinking`，也可使用空字符串。
 </Requirements>
 </OutputFormat>

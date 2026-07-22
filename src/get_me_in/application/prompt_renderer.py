@@ -94,6 +94,13 @@ class PromptRenderer:
             )
         return _PLACEHOLDER_RE.sub(lambda match: values[match.group(1)], template)
 
+    def render_output_format(self) -> str:
+        """Return the canonical model-output contract used for format repair."""
+        path = self._general_agent_dir / "07_output_format.md"
+        if not path.is_file():
+            raise FileNotFoundError(f"Output format template not found: {path}")
+        return path.read_text(encoding="utf-8")
+
     @staticmethod
     def _render_tools(tools: Iterable[ToolDefinition]) -> str:
         descriptors = (

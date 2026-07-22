@@ -77,3 +77,15 @@ class PromptRendererTests(unittest.TestCase):
 
         self.assertIn('"name": "clock"', rendered)
         self.assertNotIn("workspace_write", rendered)
+
+    def test_reads_canonical_output_format_for_repair(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir) / "general_agent"
+            root.mkdir()
+            (root / "07_output_format.md").write_text(
+                "<OutputFormat>canonical</OutputFormat>", encoding="utf-8"
+            )
+
+            rendered = PromptRenderer(root.parent).render_output_format()
+
+        self.assertEqual("<OutputFormat>canonical</OutputFormat>", rendered)
