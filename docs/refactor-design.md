@@ -383,7 +383,7 @@ R5 新文件、对象与公开边界清单如下，已由用户在决策 154 中
 | `src/get_me_in/cli/__init__.py` | v2 CLI package | 不导出可变全局实例 |
 | `src/get_me_in/cli/app.py` | `CliApp` | `__init__(application, commands, input_controller, renderer, worker)`、`run() -> int`；内部持有审批模式并驱动 command/event，不暴露业务状态 |
 | `src/get_me_in/cli/commands.py` | `ApprovalMode`、`CommandAction`、`CommandResult`、`CommandSpec`、`CommandRegistry` | `CommandRegistry(specs=())`、`register(spec) -> None`、`replace(spec) -> None`、`dispatch(text) -> CommandResult | None`、`help_entries() -> tuple[tuple[str, str], ...]`、`completions() -> tuple[str, ...]`、`build_command_registry(application, input_controller, renderer) -> CommandRegistry`；结果使用强类型 action，不返回魔法 dict |
-| `src/get_me_in/cli/input.py` | `InputController` | `__init__(editor=None)`、`read(prefill=None) -> str | None`、`edit() -> str | None`、`confirm(prompt) -> bool | None`、`select(prompt, choices, allow_custom=False) -> str | None`、`remember(text) -> None`、`replace_history(entries) -> None` |
+| `src/get_me_in/cli/input.py` | `CompletionProvider`、`InputController` | `__init__(editor=None)`、`set_completions(provider: CompletionProvider) -> None`、`read(prefill=None) -> str | None`、`edit() -> str | None`、`confirm(prompt) -> bool | None`、`select(prompt, choices, allow_custom=False) -> str | None`、`remember(text) -> None`、`replace_history(entries) -> None` |
 | `src/get_me_in/cli/renderer.py` | `Renderer` | `__init__(console=None)`、`render_event(event) -> None`、`render_session(view) -> None`、`render_help(entries) -> None`、`render_error(message) -> None`、`render_notice(message) -> None`、`status(message)`；不返回下一条 command |
 | `src/get_me_in/cli/worker.py` | `WorkerRunner` | `__init__(application, renderer, poll_interval_seconds=0.1)`、`run(command: RuntimeCommand) -> RuntimeEvent`、`close() -> None`；只管理单 worker、轮询和取消 |
 | `src/get_me_in/cli/main.py` | CLI composition function | `main() -> int`；构造 Application 与 CLI 组件，按 worker → application 顺序关闭 |
@@ -392,7 +392,7 @@ R5 新文件、对象与公开边界清单如下，已由用户在决策 154 中
 | `tests/get_me_in/test_cli_commands.py` | CommandRegistry tests | 覆盖 parse/help/alias/replace、restore/rewind、unavailable handler 与审批策略 |
 | `tests/get_me_in/test_cli_worker.py` | WorkerRunner tests | 覆盖单 worker、取消、关闭与禁止并发 |
 
-其中 `ApprovalMode` 只包含 `PROMPT/AUTO`；`CommandAction` 只包含 `HANDLED/EXIT/SUBMIT/PREFILL/SET_APPROVAL`。`CommandResult` 由 `action`、可选 `text` 和可选 `approval_mode` 组成：`SUBMIT` 用于 `/edit` 产生普通用户输入，`PREFILL` 用于 `/rewind` 回退后预填，`SET_APPROVAL` 只修改 CliApp 的进程内审批偏好。`CommandSpec` 包含 `name/description/handler/aliases`，handler 接收命令参数文本并返回 `CommandResult`；非命令输入时 `dispatch()` 返回 `None`。
+其中 `ApprovalMode` 只包含 `PROMPT/AUTO`；`CommandAction` 只包含 `HANDLED/EXIT/SUBMIT/PREFILL/SET_APPROVAL`。`CommandResult` 由 `action`、可选 `text` 和可选 `approval_mode` 组成：`SUBMIT` 用于 `/edit` 产生普通用户输入，`PREFILL` 用于 `/rewind` 回退后预填，`SET_APPROVAL` 只修改 CliApp 的进程内审批偏好。`CommandSpec` 包含 `name/description/handler/aliases`，handler 接收命令参数文本并返回 `CommandResult`；非命令输入时 `dispatch()` 返回 `None`。`CompletionProvider = Callable[[], tuple[str, ...]]` 由 `InputController.set_completions()` 注入；CliApp 在装配时传入 `CommandRegistry.completions`，`read()` 每次打开输入框时读取 provider 的最新结果。InputController 不持有或依赖 CommandRegistry；未注入 provider 时使用空补全列表。
 
 R5 复用既有 `build_application()`，不改变 `bootstrap.py` 的 Runtime/Session 装配边界；`cli/main.py` 负责 Settings 加载和 CLI 组件装配。R5 只调整 `docs/legacy-cli-smoke-checklist.md`，不修改 RuntimeCommand/RuntimeEvent、Session snapshot schema、ToolDefinition 或 R6/R7 service。真实 questionary/Rich、Windows UTF-8、Esc、Ctrl+C、EOF 与 editor-not-found 仍使用人工 smoke 验证。
 

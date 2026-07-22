@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 156 — InputController 通过 CompletionProvider 获取动态命令补全](#决策-156--inputcontroller-通过-completionprovider-获取动态命令补全)
 - [决策 155 — R5 第一切片已审查并保持交互职责后置](#决策-155--r5-第一切片已审查并保持交互职责后置)
 
 - [决策 1 — 架构模式：Hub-and-Spoke + 自研轻量 Agent 框架](#决策-1--架构模式hub-and-spoke--自研轻量-agent-框架)
@@ -3414,3 +3415,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 将所有已登记命令直接标记完成 —— 会掩盖 InputController、Renderer 与 CliApp 尚未实现的交互和集成任务，已拒绝。
 - 在第一切片补齐所有输入和渲染逻辑 —— 违反已确认的小步实施顺序，已拒绝。
+
+---
+
+### 决策 156 — InputController 通过 CompletionProvider 获取动态命令补全
+
+**背景：** 已确认的 R5 `InputController` 负责 autocomplete，但原始公开方法清单没有接收 `CommandRegistry` 或命令补全列表的边界。静态注入列表会使后续 R6 的 `register()`/`replace()` 无法自动反映在输入补全中；让 InputController 直接依赖 CommandRegistry 则会破坏 CLI 组件的职责隔离。
+
+**决策：**
+
+- 新增 `CompletionProvider = Callable[[], tuple[str, ...]]` 和 `InputController.set_completions(provider) -> None`。
+- CLI 装配时调用 `input_controller.set_completions(command_registry.completions)`；`read()` 每次显示输入框时调用 provider 获取最新命令。
+- 未注入 provider 时使用空元组，支持独立构造和测试；InputController 不直接依赖或持有 CommandRegistry。
+
+**理由：**
+
+- provider 保持命令注册表的动态性，R6 替换 handler 或后续新增命令不需要刷新一份静态列表。
+- 单向的 callable 注入保留 InputController 对终端 I/O 的专注边界。
+
+**曾考虑的替代方案：**
+
+- 严格保持原公开清单并推迟 autocomplete —— 会使已确认职责无法闭合，已拒绝。
+- 注入静态命令列表 —— register()/replace() 后会产生过期补全，已拒绝。
+- 让 InputController import CommandRegistry —— 引入不必要的组件耦合，已拒绝。

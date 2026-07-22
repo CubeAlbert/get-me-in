@@ -1,7 +1,12 @@
 """Contract tests for the first R5 CLI command slice."""
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from io import StringIO
 import unittest
+from unittest.mock import patch
+
+from rich.console import Console
 
 from src.get_me_in.application.app_commands import DumpSession, ExitSubAgent, RestoreSession, RewindSession
 from src.get_me_in.cli.commands import (
@@ -12,6 +17,11 @@ from src.get_me_in.cli.commands import (
     CommandSpec,
     build_command_registry,
 )
+from src.get_me_in.cli.input import InputController
+from src.get_me_in.cli.renderer import Renderer
+from src.get_me_in.application.events import Completed, Failed
+from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.messages import MessageRecord, Role
 
 
 class CommandRegistryTests(unittest.TestCase):
@@ -70,6 +80,48 @@ class CoreCommandTests(unittest.TestCase):
         self.assertEqual(["会话已导出：export.md"], self.renderer.notices)
 
 
+class InputControllerTests(unittest.TestCase):
+    def test_read_uses_latest_completion_provider_value_each_time(self) -> None:
+        controller = InputController(editor=lambda: None)
+        completions = ("/first",)
+        controller.set_completions(lambda: completions)
+        prompts: list[object] = []
+
+        with patch("src.get_me_in.cli.input.questionary.autocomplete") as autocomplete:
+            autocomplete.return_value.ask.return_value = "/first"
+            controller.read()
+            completions = ("/second",)
+            autocomplete.return_value.ask.return_value = "/second"
+            controller.read()
+            prompts = autocomplete.call_args_list
+
+        self.assertEqual(("/first",), prompts[0].kwargs["choices"])
+        self.assertEqual(("/second",), prompts[1].kwargs["choices"])
+
+    def test_editor_and_history_remain_process_local(self) -> None:
+        controller = InputController(editor=lambda: "  long text  ")
+        controller.remember("first")
+        controller.remember("/help")
+        controller.replace_history(("restored", "/exit", "  "))
+
+        self.assertEqual("long text", controller.edit())
+        self.assertEqual(["restored"], controller._history)
+
+
+class RendererTests(unittest.TestCase):
+    def test_renders_typed_terminal_events_without_returning_commands(self) -> None:
+        output = StringIO()
+        renderer = Renderer(console=_console(output))
+        message = MessageRecord("event", Role.ASSISTANT, "**done**", _now(), "turn")
+
+        self.assertIsNone(renderer.render_event(Completed(message)))
+        self.assertIsNone(renderer.render_event(Failed("bad", "problem")))
+
+        text = output.getvalue()
+        self.assertIn("done", text)
+        self.assertIn("bad: problem", text)
+
+
 @dataclass(frozen=True)
 class _Turn:
     turn_id: str
@@ -121,3 +173,11 @@ class _Renderer:
 
     def render_event(self, event: object) -> None:
         pass
+
+
+def _console(output: StringIO) -> Console:
+    return Console(file=output, force_terminal=False, color_system=None)
+
+
+def _now() -> datetime:
+    return datetime(2026, 7, 22, tzinfo=timezone.utc)
