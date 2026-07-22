@@ -190,6 +190,7 @@
 - [决策 173 — v2 显式装配日志并固定环境变量所有权](#决策-173--v2-显式装配日志并固定环境变量所有权)
 - [决策 174 — G6 通过并停在 R6-T 审查门禁](#决策-174--g6-通过并停在-r6-t-审查门禁)
 - [决策 175 — 撤销 G6 通过结论并授权 R6-F 审查修复](#决策-175--撤销-g6-通过结论并授权-r6-f-审查修复)
+- [决策 176 — R6-F 完成并重新通过 G6](#决策-176--r6-f-完成并重新通过-g6)
 
 ---
 
@@ -3917,3 +3918,22 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保留 G6 通过并把问题延后到 R8 —— 会让错误的一致性与关闭契约成为后续迁移基础，已拒绝。
 - 让 MemoryBuildReceipt 持有 Future —— 会把运行时同步对象放入 immutable domain DTO，已拒绝。
 - Memory 删除先移除 repository 再尽力删除 index —— 无法满足 manifest delete intent 与可恢复重试约束，已拒绝。
+
+---
+
+### 决策 176 —— R6-F 完成并重新通过 G6
+
+**背景：** 决策 175 撤销了原 G6 结论，并授权四个独立修复切片。修复需要证明启动、取消、索引与 Memory 部分失败、关闭顺序和真实 adapter 链路均已闭合，且测试进程能够正常退出。
+
+**决定：**
+
+- 认定 R6-F 完成并重新通过 G6；再次进入 R6-T 强制终止门禁，R7/R8 仍未授权。
+- 四个修复切片分别提交为 `05c4956`、`73a1c79`、`79c0601`、`38708e2`，保持可独立审查与回滚。
+- 验收证据为 `uv run python -m unittest discover -s tests/get_me_in -t .` 正常退出并通过 187 项测试、`compileall` 通过，以及 `uv run python -m scripts.r6_knowledge_smoke` 输出 `R6_SMOKE_OK hits=1 score=0.961208`。
+- 真实 smoke 暴露的 Chroma query embedding 容器类型、Windows client 关闭和模型默认值漂移已纳入切片 4；Settings 恢复 BAAI 模型基线并兼容旧环境变量名。
+
+**理由：**
+
+- 自动化测试正常退出证明非 daemon worker 泄漏已闭合；真实 adapter smoke 证明查询、rerank、删除和资源释放在实际依赖上可运行。
+- typed background result、delete finalize 和 timeout-safe close 使 partial failure 与资源所有权能够被应用层观察并安全重试。
+- R6-T 继续隔离后续迁移风险；R6 验收不构成进入 R7 或清理旧实现的授权。

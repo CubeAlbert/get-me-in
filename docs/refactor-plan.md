@@ -225,6 +225,8 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **R6-F 验收：** 测试命令必须在打印结果后正常退出；启动后 reference/memory reload 可观察；Esc 可取消前台 reload；index/memory 任一步失败均不误报成功且可重试；worker timeout 不产生 use-after-close；真实 smoke 证据必须记录可复跑命令与结果。通过后重新认定 G6，并再次执行 R6-T checkpoint。R7 仍需后续明确授权。
 
+**完成状态：** R6-F 四个切片已独立提交；187 项核心自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 可复跑且通过。G6 已重新认定通过，当前再次停在 R6-T，R7 未启动。
+
 ### R7 —— Resume 纵向切片与产物管理
 
 **目标：** 用 ResumeAgent 验证 v2 的完整产品链路，而非只验证框架。

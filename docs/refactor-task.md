@@ -264,7 +264,7 @@
 
 ## R6 —— Knowledge/RAG 与 Memory
 
-> 🔄 G6 审查未通过：原六个切片已完成，但 R6-T 审查发现启动、取消、索引一致性、后台失败可见性、资源关闭和测试进程退出问题。R6-F 已获用户确认；R7 仍未授权。
+> ✅ R6-F 已完成并重新通过 G6：启动、取消、索引一致性、后台失败可见性、资源关闭和测试进程退出问题均已修复。当前再次停在 R6-T；R7 仍未授权。
 
 ### 0. 启动确认与范围
 
@@ -312,9 +312,9 @@
 
 - ✅ 通过 `CommandRegistry.replace()` 接入 `/ragreload [target]` 与 `/build-memory`；更新 help/completions，不修改 CliApp 的 Knowledge/Memory 业务分支。
 - ✅ 真实 KnowledgeService 与 retrieval contract tests 同一切片替换并删除 DeferredRetrievalAdapter。
-- 🔄 补齐 Application 隔离、reload 真正取消、后台 build partial failure、auto-memory、close error/timeout、无全局状态和 25 个工具契约。
-- 🔄 修复后重新使用真实 Chroma/embedder/reranker/reference fixture 完成可复跑 smoke；自动化 unit 不强制下载模型。
-- ⏸️ G6 验收暂停 —— 等待 R6-F 全部修复、完整测试正常退出和真实 smoke 复验。
+- ✅ 补齐 Application 隔离、reload 真正取消、后台 build partial failure、auto-memory、close error/timeout、无全局状态和 25 个工具契约。
+- ✅ 使用真实 Chroma/embedder/reranker/reference fixture 完成可复跑 smoke：`uv run python -m scripts.r6_knowledge_smoke` 输出 `R6_SMOKE_OK hits=1 score=0.961208`。
+- ✅ G6 重新通过：`uv run python -m unittest discover -s tests/get_me_in -t .` 正常退出，187 项测试通过；`compileall` 通过。
 
 ### 6. R6-T 强制终止门禁
 
@@ -325,13 +325,13 @@
 
 ### 7. R6-F 审查修复（已授权）
 
-- ⬜ 切片 1：接通后台启动加载与前台 reload cancellation；分离 Runtime/reload/Memory cancellation；串行保护 search/reload/index/delete。
-- ⬜ 切片 2：Chroma replace 先 embedding、失败回滚新 chunk 并保留旧 chunk；删除异常正确传播并保留 manifest retry 状态。
-- ⬜ 切片 3：增加 `BackgroundJobState`、`BackgroundJobResult`、`BackgroundWorker.result(job_id)` 与可取消 task callback；Memory build 返回 typed partial failure。
-- ⬜ 切片 3：Memory delete 按 manifest intent → index delete → repository finalize → manifest commit 执行，任一步失败可重试。
-- ⬜ 切片 4：worker timeout 时不关闭仍被使用的依赖；Memory/Knowledge 内部 close 失败隔离；修复 composition root 与测试 cleanup 泄漏。
-- ⬜ 切片 4：MemoryExtractor 改用静态 prompt；完整自动化测试与 `compileall` 正常结束，真实 Chroma/model smoke 留下可复跑证据。
-- ⬜ 重新执行 G6；通过后 checkpoint 并再次停在 R6-T，等待用户审查，不进入 R7。
+- ✅ 切片 1：接通后台启动加载与前台 reload cancellation；分离 Runtime/reload/Memory cancellation；串行保护 search/reload/index/delete。提交：`05c4956`。
+- ✅ 切片 2：Chroma replace 先 embedding、失败回滚新 chunk 并保留旧 chunk；删除异常正确传播并保留 manifest retry 状态。提交：`73a1c79`。
+- ✅ 切片 3：增加 `BackgroundJobState`、`BackgroundJobResult`、`BackgroundWorker.result(job_id)` 与可取消 task callback；Memory build 返回 typed partial failure。提交：`79c0601`。
+- ✅ 切片 3：Memory delete 按 manifest intent → index delete → repository finalize → manifest commit 执行，任一步失败可重试。提交：`79c0601`。
+- ✅ 切片 4：worker timeout 时不关闭仍被使用的依赖；Memory/Knowledge 内部 close 失败隔离；修复 composition root 与测试 cleanup 泄漏。提交：`38708e2`。
+- ✅ 切片 4：MemoryExtractor 改用静态 prompt；完整自动化测试与 `compileall` 正常结束，真实 Chroma/model smoke 留下可复跑证据。提交：`38708e2`。
+- ✅ 重新执行 G6 并通过；再次 checkpoint、停在 R6-T，等待用户审查，不进入 R7。
 
 ## R7 —— Resume 纵向切片
 
