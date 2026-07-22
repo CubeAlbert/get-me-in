@@ -20,6 +20,7 @@ class MessageRecord:
     role: Role
     content: str
     timestamp: datetime
+    turn_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class ToolCallRecord:
     tool_name: str
     arguments: Mapping[str, object]
     timestamp: datetime
+    turn_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,7 @@ class ToolResultRecord:
     tool_name: str
     output: object
     timestamp: datetime
+    turn_id: str = ""
 
 
 ConversationRecord = MessageRecord | ToolCallRecord | ToolResultRecord

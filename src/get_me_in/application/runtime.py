@@ -2,7 +2,6 @@
 
 import json
 from dataclasses import dataclass, replace
-from enum import StrEnum
 
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.cancellation import CancellationToken
@@ -41,6 +40,7 @@ from src.get_me_in.domain.messages import (
     ToolCallRecord,
     ToolResultRecord,
 )
+from src.get_me_in.domain.sessions import PendingToolCall, RuntimePhase
 from src.get_me_in.domain.tools import (
     ToolFailure,
     ToolHandoff,
@@ -53,28 +53,6 @@ from src.get_me_in.ports.ids import IdGenerator
 from src.get_me_in.ports.llm import LLMPort, LLMRequest, ModelProfile
 
 
-class RuntimePhase(StrEnum):
-    READY = "ready"
-    MODEL_PENDING = "model_pending"
-    MODEL_QUEUED = "model_queued"
-    TOOL_READY = "tool_ready"
-    WAITING_FOR_TOOL_RESULT = "waiting_for_tool_result"
-    WAITING_FOR_APPROVAL = "waiting_for_approval"
-    WAITING_FOR_SELECTION = "waiting_for_selection"
-    WAITING_FOR_HANDOFF = "waiting_for_handoff"
-    CANCELLED_NOTICE = "cancelled_notice"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-    FAILED = "failed"
-
-
-@dataclass(frozen=True)
-class PendingToolCall:
-    call_id: str
-    tool_name: str
-    arguments: dict[str, object]
-
-
 @dataclass(frozen=True)
 class RuntimeState:
     """Runtime-owned state; R4 will compose it into the session AgentState."""
@@ -85,6 +63,7 @@ class RuntimeState:
     pending_tool: PendingToolCall | None = None
     repair_attempted: bool = False
     cancel_reason: str = "Cancelled by user"
+    turn_id: str = ""
 
 
 class AgentRuntime:
@@ -165,10 +144,12 @@ class AgentRuntime:
             return Failed("invalid_input", "User message must not be blank")
         self._cancellation.reset()
         self._requested_cancel_reason = "Cancelled by user"
-        user_record = self._message(Role.USER, command.text)
+        turn_id = self._id_generator.new_id()
+        user_record = self._message(Role.USER, command.text, turn_id)
         self._state = RuntimeState(
             phase=RuntimePhase.MODEL_PENDING,
             history=(*self._state.history, user_record),
+            turn_id=turn_id,
         )
         return Progress("Calling model")
 
@@ -238,6 +219,7 @@ class AgentRuntime:
             repair = self._message(
                 Role.SYSTEM,
                 "Return exactly one JSON object with a string content field.",
+                self._state.turn_id,
             )
             self._state = replace(
                 self._state,
@@ -255,6 +237,7 @@ class AgentRuntime:
                 tool_name=reply.tool_name,
                 arguments=dict(reply.tool_arguments or {}),
                 timestamp=self._clock.now(),
+                turn_id=self._state.turn_id,
             )
             self._state = replace(
                 self._state,
@@ -264,7 +247,7 @@ class AgentRuntime:
             )
             return ToolStarted(call_id, reply.tool_name)
 
-        assistant = self._message(Role.ASSISTANT, reply.content)
+        assistant = self._message(Role.ASSISTANT, reply.content, self._state.turn_id)
         self._state = replace(
             self._state,
             phase=RuntimePhase.COMPLETED,
@@ -322,6 +305,7 @@ class AgentRuntime:
             tool_name=pending.tool_name,
             output=output,
             timestamp=self._clock.now(),
+            turn_id=self._state.turn_id,
         )
         rendered = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False, sort_keys=True)
         self._state = replace(
@@ -378,6 +362,7 @@ class AgentRuntime:
                 tool_name=pending.tool_name,
                 output=output,
                 timestamp=self._clock.now(),
+                turn_id=self._state.turn_id,
             )
             self._state = replace(
                 self._state,
@@ -394,10 +379,11 @@ class AgentRuntime:
         self._state = replace(self._state, phase=RuntimePhase.CANCELLED, cancel_reason=reason)
         return Cancelled(reason)
 
-    def _message(self, role: Role, content: str) -> MessageRecord:
+    def _message(self, role: Role, content: str, turn_id: str) -> MessageRecord:
         return MessageRecord(
             event_id=self._id_generator.new_id(),
             role=role,
             content=content,
             timestamp=self._clock.now(),
+            turn_id=turn_id,
         )
