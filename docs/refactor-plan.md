@@ -186,7 +186,7 @@
 - DeferredRetrievalAdapter 已删除，25 个工具签名与 retrieval_unavailable/cancelled 失败契约保持一致。
 - 核心 domain/application contract tests、adapter contract tests 与真实 Chroma/model smoke 均有验收证据。
 
-**依赖：** G3、G5；R6 设计清单必须先获用户确认。R6 与 R7 不再并行实施。
+**依赖：** G3、G5；R6 设计清单已由用户确认（决策 170），coding 从后续新会话 `/project-bootstrap` 后开始。R6 与 R7 不再并行实施。
 
 **R6-T 强制终止门禁：** G6 通过后执行 `/project-checkpoint`，将状态保存为“R6 完成、R7 未启动、等待用户审查”，然后立即停止。未经后续明确授权，不得提交 R7 设计清单、创建或修改 R7 文件、切换入口或执行 R8 清理。
 

@@ -457,9 +457,9 @@ Manifest 以规范化的 `collection + project-relative source path` 作为 sour
 
 Memory repository 每条记录使用独立、versioned JSON 文件。repository 写成功但 index 失败时，build report 必须返回 partial failure，manifest 保留 pending/error；不得报告“全部成功”。删除先写入 manifest delete intent，再删除 index，最后删除 repository 文件；中途失败保留可重试状态。MemoryExtractor 的输出只能包含 `fact/preference`，空白、未知 category 或无效 JSON 作为 typed extraction failure，不写 repository。
 
-#### 6.9.3 R6 文件、对象与公开边界清单（待用户确认）
+#### 6.9.3 R6 文件、对象与公开边界清单（已确认）
 
-下表是 R6 唯一允许创建的新代码范围；本次会话只记录设计，不创建这些文件。获得用户明确确认后，才允许按实施切片逐步编码。
+下表是 R6 唯一允许创建的新代码范围，已获用户明确确认。本次会话仍只更新文档并 checkpoint，不创建这些文件；后续新会话必须先执行 `/project-bootstrap`，再按实施切片逐步编码。
 
 | 文件 | 新增对象 | 构造依赖与公开方法 |
 |------|----------|--------------------|
@@ -488,6 +488,8 @@ Memory repository 每条记录使用独立、versioned JSON 文件。repository 
 #### 6.9.4 实施与终止门禁
 
 R6 固定按以下切片实施，每个切片独立验证、独立提交：domain/ports/manifest diff → ResourceStack 与 application command worker path → KnowledgeService fake-index contract → 本地 source/manifest/chunker/Chroma adapters → MemoryExtractor/MemoryService/background worker → Settings/bootstrap/CLI 接入与 DeferredRetrievalAdapter 删除 → G6 integration/smoke。
+
+新会话的第一切片范围固定为 `src/get_me_in/domain/knowledge.py`、`src/get_me_in/domain/memories.py`、`src/get_me_in/ports/knowledge.py`、`src/get_me_in/ports/memories.py` 与 `tests/get_me_in/test_knowledge_service.py`，只实现 domain/ports/manifest diff 纯逻辑。该切片验证并独立提交前，不得创建清单中的其他 R6 文件；不得借 R6 授权修改 R7 文件或旧 `main.py`。
 
 **R6-T 强制终止门禁：** G6 通过后，只允许整理验收证据并执行 `/project-checkpoint`，把 `docs/current.md` 保存为“R6 完成、R7 未启动、等待用户审查”。随后必须停止；未经用户在后续指令中明确确认，不得提交 R7 设计清单、创建 R7 文件、修改 R7 代码、切换入口或执行 R8 清理。
 
@@ -534,4 +536,4 @@ v2 只复用以下静态项目资产：
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。R0～R5 已完成；当前只完成 R6 设计复审和清单更新，没有创建或修改 R6 代码。R6 清单仍须用户明确确认后才能 coding；R6 完成后还必须停在 R6-T，未经后续授权不得进入 R7。
+R-D1～R-D6 已由用户确认。R0～R5 已完成；R6 设计复审与清单已获用户确认，但当前会话只执行文档 checkpoint，没有创建或修改 R6 代码。后续新会话可在 `/project-bootstrap` 后按 6.9.4 的第一切片开始 coding；R6 完成后还必须停在 R6-T，未经后续授权不得进入 R7。

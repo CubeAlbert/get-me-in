@@ -184,6 +184,7 @@
 - [决策 167 — G5 已通过且 R6 暂停](#决策-167--g5-已通过且-r6-暂停)
 - [决策 168 — R5 审查修复命令事件闭合与错误边界](#决策-168--r5-审查修复命令事件闭合与错误边界)
 - [决策 169 — R6 重设一致性边界并增加强制终止门禁](#决策-169--r6-重设一致性边界并增加强制终止门禁)
+- [决策 170 — R6 清单获确认并固定新会话实施入口](#决策-170--r6-清单获确认并固定新会话实施入口)
 
 ---
 
@@ -3762,3 +3763,29 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 让 `/ragreload` 和 `/build-memory` 在 CommandRegistry handler 中直接调用 service —— 会绕过 WorkerRunner、spinner/cancel 和强类型 ApplicationResult，已拒绝。
 - 让 CLI 读取 SessionSnapshot/history 构造 Memory —— 违反 R4/R5 的只读投影与私有状态边界，已拒绝。
 - 继续并行 R6/R7 —— 会绕过用户要求的 R6 完成后停顿，也会让 Resume 验收依赖尚未稳定的 Knowledge/Memory，已拒绝。
+
+---
+
+### 决策 170 —— R6 清单获确认并固定新会话实施入口
+
+**背景：** R6 设计复审已固定新增、删除、修改范围以及文件、对象、构造依赖和公开方法清单。用户确认该清单，同时明确当前会话不写 R6 代码，需要通过文档 checkpoint 让后续新会话 bootstrap 后获得完整实施边界。
+
+**决定：**
+
+- 用户确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 清单；R6 coding 门禁已解除，但本次确认不授权在当前会话编写代码。
+- 当前会话只更新 `docs/current.md`、活跃 refactor 文档与本决策记录，并创建独立 docs checkpoint 提交；不得创建或修改 R6 代码。
+- 后续新会话必须先执行 `/project-bootstrap`，以 `docs/current.md` 路由到活跃文档；第一切片仅创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，只实现 domain/ports/manifest diff 纯逻辑。
+- 第一切片须独立验证、独立提交，之后才按 6.9.4 的固定顺序继续 R6；清单确认不允许一次性创建其余文件，也不扩大 R6 修改范围。
+- R6-T 仍是强制终止门禁：G6 后只允许整理验收证据和 `/project-checkpoint`，状态必须保存为“R6 完成、R7 未启动、等待用户审查”，随后停止。未经用户后续明确授权不得进入 R7 或 R8。
+
+**理由：**
+
+- 把授权状态、第一切片和禁止越界项写入 `docs/current.md` 及活跃文档，可让新会话只依赖标准 bootstrap 流程恢复，不依赖本次聊天记录。
+- 将第一切片限制为 domain/ports/manifest diff，能先稳定纯逻辑与协议，再引入资源、线程、模型和 Chroma 等副作用边界。
+- 保留 R6-T 可以确保 R6 完成后的审查不会被“清单已确认”误解为继续推进 R7 的长期授权。
+
+**曾考虑的替代方案：**
+
+- 当前会话直接开始 R6 coding —— 与用户明确要求冲突，已拒绝。
+- 只修改 `current.md`，不更新 task/design/plan/decision —— 新会话可能读到相互矛盾的“待确认”状态，已拒绝。
+- 清单确认后一次性创建全部 R6 文件 —— 破坏逐切片验证与独立提交要求，已拒绝。

@@ -248,11 +248,11 @@
 - ✅ 删除重复 SearchQuery/SearchResult、v1 RagLoader Facade、MemoryService.search、observer/delayed import/daemon thread 等设计。
 - ✅ 增加 ApplicationCommand RUN path、MemoryBuildSource、ResourceStack、BackgroundWorker、versioned manifest 和 R6-T 终止门禁。
 - ✅ 记录 R6 新文件、对象、构造依赖和公开方法清单；当前会话只修改文档，未创建或修改 R6 代码。
-- ⬜ 用户确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 清单；确认前不得开始 coding。
+- ✅ 用户已确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 清单；本会话只做文档 checkpoint，R6 coding 从后续新会话 bootstrap 后开始。
 
 ### 1. Domain、ports 与 manifest diff
 
-- ⬜ 创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 及纯逻辑测试。
+- ⬜ 第一切片仅创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，实现 domain/ports/manifest diff 纯逻辑；独立验证、独立提交后才能进入下一切片。
 - ⬜ 保留 R3 tool-facing RetrievalPort/RetrievalResult；仅增加 index 内部 IndexHit，不建立第二套公开搜索 DTO。
 - ⬜ 定义 manifest schema_version、source key、observed/indexed hash、mtime、chunk ids、status、pending operation 与 error。
 - ⬜ 实现纯逻辑 scan diff：新增、修改、删除、同 hash 重命名、失败后重试和幂等 no-op。
