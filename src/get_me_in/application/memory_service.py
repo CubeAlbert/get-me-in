@@ -14,6 +14,9 @@ class MemoryService:
 
     def delete(self, memory_id: str) -> MemoryBuildReport:
         try:
+            report = self._knowledge.delete_source(f"memories/{memory_id}.json")
+            if report.failures:
+                return MemoryBuildReport("", deleted_memory_id=memory_id, error="; ".join(report.failures))
             self._repository.delete(memory_id)
             return MemoryBuildReport("", deleted_memory_id=memory_id)
         except Exception as error:
@@ -21,6 +24,9 @@ class MemoryService:
 
     def close(self) -> CloseReport:
         self._repository.close()
+        close = getattr(self._extractor, "close", None)
+        if close is not None:
+            close()
         return CloseReport(closed=("memory_service",))
 
     def _build(self, source: MemoryBuildSource) -> None:

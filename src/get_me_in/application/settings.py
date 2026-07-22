@@ -30,6 +30,16 @@ class Settings:
     max_model_calls_per_run: int = 12
     cancel_grace_seconds: float = 2.0
     show_thinking: bool = False
+    knowledge_manifest_path: Path = Path("data/v2/knowledge/manifest.json")
+    knowledge_chroma_dir: Path = Path("data/v2/knowledge/chroma")
+    memories_dir: Path = Path("data/v2/memories")
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    embedding_batch_size: int = 32
+    rerank_batch_size: int = 32
+    retrieval_top_k: int = 8
+    shutdown_timeout_seconds: float = 5.0
+    auto_memory_on_exit: bool = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str], *, project_root: Path) -> "Settings":
@@ -96,6 +106,32 @@ class Settings:
                 "SHOW_THINKING must be true, false, 1, or 0"
             )
 
+        def positive_int(name: str, default: int) -> int:
+            raw = env.get(name, str(default))
+            try:
+                value = int(raw)
+            except ValueError as error:
+                raise SettingsValidationError(f"{name} must be an integer: {raw!r}") from error
+            if value < 1:
+                raise SettingsValidationError(f"{name} must be at least one")
+            return value
+
+        shutdown_raw = env.get("SHUTDOWN_TIMEOUT_SECONDS", "5")
+        try:
+            shutdown_timeout = float(shutdown_raw)
+        except ValueError as error:
+            raise SettingsValidationError(
+                f"SHUTDOWN_TIMEOUT_SECONDS must be a number: {shutdown_raw!r}"
+            ) from error
+        if shutdown_timeout <= 0:
+            raise SettingsValidationError("SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
+
+        auto_memory_raw = env.get("AUTO_MEMORY_ON_EXIT", "false").strip().lower()
+        if auto_memory_raw not in boolean_values:
+            raise SettingsValidationError(
+                "AUTO_MEMORY_ON_EXIT must be true, false, 1, or 0"
+            )
+
         return cls(
             openai_api_key=env["OPENAI_API_KEY"],
             openai_base_url=env["OPENAI_BASE_URL"],
@@ -114,4 +150,14 @@ class Settings:
             max_model_calls_per_run=max_calls,
             cancel_grace_seconds=cancel_grace,
             show_thinking=boolean_values[show_thinking_raw],
+            knowledge_manifest_path=project_root / "data" / "v2" / "knowledge" / "manifest.json",
+            knowledge_chroma_dir=project_root / "data" / "v2" / "knowledge" / "chroma",
+            memories_dir=project_root / "data" / "v2" / "memories",
+            embedding_model=env.get("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+            reranker_model=env.get("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
+            embedding_batch_size=positive_int("EMBEDDING_BATCH_SIZE", 32),
+            rerank_batch_size=positive_int("RERANK_BATCH_SIZE", 32),
+            retrieval_top_k=positive_int("RETRIEVAL_TOP_K", 8),
+            shutdown_timeout_seconds=shutdown_timeout,
+            auto_memory_on_exit=boolean_values[auto_memory_raw],
         )

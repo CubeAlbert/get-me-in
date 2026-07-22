@@ -4,7 +4,7 @@ import unittest
 
 from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
 from src.get_me_in.application.app_commands import ReloadKnowledge
-from src.get_me_in.application.app_results import ApplicationResult
+from src.get_me_in.application.app_results import ApplicationResult, TurnFinalizationResult
 from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress, ToolFinished
 from src.get_me_in.cli.app import CliApp
 from src.get_me_in.cli.commands import ApprovalMode, CommandAction, CommandResult
@@ -140,10 +140,11 @@ class _Application:
         self.fail_snapshot = fail_snapshot
         self.snapshots = 0
 
-    def snapshot(self) -> None:
+    def finalize_turn(self) -> TurnFinalizationResult:
         self.snapshots += 1
         if self.fail_snapshot:
-            raise OSError("disk full")
+            return TurnFinalizationResult(snapshot_error="disk full")
+        return TurnFinalizationResult()
 
 
 class _Worker:

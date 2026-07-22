@@ -21,3 +21,6 @@ class MemoryExtractor:
             if not content: raise ValueError("empty memory content")
             records.append(MemoryRecord(1, self._ids.new_id(), source.agent_key, category, content, self._clock.now()))
         return tuple(records)
+
+    def close(self) -> None:
+        self._llm.close()

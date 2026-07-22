@@ -9,6 +9,14 @@ from src.get_me_in.application.app_commands import (
     ExitSubAgent,
     RestoreSession,
     RewindSession,
+    ReloadKnowledge,
+    BuildMemory,
+)
+from src.get_me_in.application.app_results import (
+    ApplicationResult,
+    KnowledgeReloaded,
+    MemoryBuildScheduled,
+    TurnFinalizationResult,
 )
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import RuntimeCommand
@@ -42,6 +50,8 @@ class Application:
         tool_catalog: ToolCatalog,
         web_search: WebSearchPort | None = None,
         resources: ResourceStack | None = None,
+        knowledge: object | None = None,
+        memory: object | None = None,
     ) -> None:
         self.settings = settings
         self.catalog = catalog
@@ -53,10 +63,12 @@ class Application:
         self._sessions = sessions
         self._web_search = web_search
         self._resources = resources
+        self._knowledge = knowledge
+        self._memory = memory
         self._closed = False
         self._close_report: CloseReport | None = None
 
-    def handle(self, command: RuntimeCommand | ApplicationCommand) -> RuntimeEvent | SessionView | Path:
+    def handle(self, command: RuntimeCommand | ApplicationCommand) -> RuntimeEvent | SessionView | Path | ApplicationResult:
         """Run one typed command without exposing runtime internals."""
         if self._closed:
             raise RuntimeError("Application is closed")
@@ -68,6 +80,14 @@ class Application:
             return self.exit_subagent()
         if isinstance(command, DumpSession):
             return self.dump()
+        if isinstance(command, ReloadKnowledge):
+            if self._knowledge is None:
+                raise RuntimeError("knowledge service is unavailable")
+            return KnowledgeReloaded(self._knowledge.reload(command.target))
+        if isinstance(command, BuildMemory):
+            if self._memory is None:
+                raise RuntimeError("memory service is unavailable")
+            return MemoryBuildScheduled(self._memory.build_async(self._sessions.memory_source()))
         return self._sessions.handle(command)
 
     def view(self) -> SessionView:
@@ -96,6 +116,22 @@ class Application:
         if self._closed:
             raise RuntimeError("Application is closed")
         self._sessions.request_cancel(reason)
+
+    def finalize_turn(self) -> TurnFinalizationResult:
+        """Persist a terminal session and independently schedule optional memory work."""
+        snapshot_error: str | None = None
+        memory_receipt = None
+        memory_error: str | None = None
+        try:
+            self.snapshot()
+        except Exception as error:
+            snapshot_error = str(error)
+        if self.settings.auto_memory_on_exit and self._memory is not None:
+            try:
+                memory_receipt = self._memory.build_async(self._sessions.memory_source())
+            except Exception as error:
+                memory_error = str(error)
+        return TurnFinalizationResult(snapshot_error, memory_receipt, memory_error)
 
     def close(self) -> CloseReport:
         if self._close_report is not None:

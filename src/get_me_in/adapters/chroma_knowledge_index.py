@@ -9,25 +9,26 @@ from src.get_me_in.ports.llm import CancellationSignal
 class SentenceTransformerEmbedder:
     def __init__(self, model_name: str, batch_size: int, model: object | None = None) -> None:
         self._batch_size = batch_size
-        if model is None:
-            from sentence_transformers import SentenceTransformer
-            model = SentenceTransformer(model_name)
+        self._model_name = model_name
         self._model = model
 
     def embed(self, texts: tuple[str, ...]) -> tuple[list[float], ...]:
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            self._model = SentenceTransformer(self._model_name)
         values = self._model.encode(list(texts), batch_size=self._batch_size, normalize_embeddings=True, show_progress_bar=False)
         return tuple(value.tolist() for value in values)
 
 
 class CrossEncoderReranker:
     def __init__(self, model_name: str, batch_size: int, top_k: int, model: object | None = None) -> None:
-        self._batch_size, self._top_k = batch_size, top_k
-        if model is None:
-            from sentence_transformers import CrossEncoder
-            model = CrossEncoder(model_name)
+        self._batch_size, self._top_k, self._model_name = batch_size, top_k, model_name
         self._model = model
 
     def rerank(self, query: str, hits: tuple[IndexHit, ...]) -> tuple[IndexHit, ...]:
+        if self._model is None:
+            from sentence_transformers import CrossEncoder
+            self._model = CrossEncoder(self._model_name)
         scores = self._model.predict([(query, hit.content) for hit in hits], batch_size=self._batch_size, show_progress_bar=False)
         ranked = tuple(sorted((IndexHit(hit.chunk_id, hit.content, hit.metadata | {"rerank_score": float(score)}, float(score)) for hit, score in zip(hits, scores)), key=lambda hit: hit.score, reverse=True))
         return ranked[:self._top_k]

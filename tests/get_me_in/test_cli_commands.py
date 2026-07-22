@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from rich.console import Console
 
-from src.get_me_in.application.app_commands import DumpSession, ExitSubAgent, RestoreSession, RewindSession
+from src.get_me_in.application.app_commands import BuildMemory, DumpSession, ExitSubAgent, ReloadKnowledge, RestoreSession, RewindSession
 from src.get_me_in.cli.commands import (
     ApprovalMode,
     CommandAction,
@@ -109,8 +109,17 @@ class CoreCommandTests(unittest.TestCase):
         )
         self.assertEqual([RestoreSession("session-2")], self.application.commands)
 
-    def test_unavailable_approval_and_exit_commands_have_typed_results(self) -> None:
-        self.assertIn("R6", self.registry.dispatch("/ragreload references").text)
+    def test_r6_commands_return_typed_application_commands(self) -> None:
+        self.assertEqual(
+            CommandResult(CommandAction.RUN, command=ReloadKnowledge("references")),
+            self.registry.dispatch("/ragreload references"),
+        )
+        self.assertEqual(
+            CommandResult(CommandAction.RUN, command=BuildMemory()),
+            self.registry.dispatch("/build-memory"),
+        )
+
+    def test_approval_and_exit_commands_have_typed_results(self) -> None:
         self.assertEqual(CommandResult(CommandAction.SET_APPROVAL), self.registry.dispatch("/approval"))
         self.assertEqual(ApprovalMode.AUTO, self.registry.dispatch("/approval auto").approval_mode)
         self.assertIn("仅支持", self.registry.dispatch("/approval on").text)

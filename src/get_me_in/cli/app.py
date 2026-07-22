@@ -111,6 +111,10 @@ class CliApp:
 
     def _snapshot_after_terminal_event(self) -> None:
         try:
-            self._application.snapshot()
+            result = self._application.finalize_turn()
+            if result.snapshot_error:
+                self._renderer.render_error(f"会话保存失败：{result.snapshot_error}")
+            if result.memory_error:
+                self._renderer.render_error(f"自动构建记忆失败：{result.memory_error}")
         except Exception as error:
             self._renderer.render_error(f"会话保存失败：{error}")

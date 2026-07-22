@@ -8,12 +8,21 @@ from src.get_me_in.adapters.local_workspace import LocalWorkspace
 from src.get_me_in.adapters.os_frontend import OSFrontend
 from src.get_me_in.adapters.openai_web_search import OpenAIWebSearchAdapter
 from src.get_me_in.adapters.authorized_file_reader import AuthorizedFileReader
-from src.get_me_in.adapters.deferred_retrieval import DeferredRetrievalAdapter
+from src.get_me_in.adapters.chroma_knowledge_index import (
+    ChromaKnowledgeIndex,
+    CrossEncoderReranker,
+    SentenceTransformerEmbedder,
+)
+from src.get_me_in.adapters.json_manifest_repository import JsonManifestRepository
+from src.get_me_in.adapters.json_memory_repository import JsonMemoryRepository
+from src.get_me_in.adapters.local_knowledge_sources import LocalKnowledgeSourceRepository
+from src.get_me_in.adapters.markdown_chunker import MarkdownChunker
 from src.get_me_in.adapters.local_resume_artifacts import LocalResumeArtifacts
 from src.get_me_in.adapters.subprocess_runner import SubprocessRunner
 from src.get_me_in.adapters.json_session_repository import JsonSessionRepository
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
+from src.get_me_in.application.background_worker import BackgroundWorker
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.conversation_codec import ConversationCodec
 from src.get_me_in.application.prompt_renderer import PromptRenderer
@@ -22,6 +31,9 @@ from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.session_codec import SessionSnapshotCodec
 from src.get_me_in.application.session_service import SessionService
 from src.get_me_in.application.orchestration import Orchestrator
+from src.get_me_in.application.knowledge_service import KnowledgeService
+from src.get_me_in.application.memory_extractor import MemoryExtractor
+from src.get_me_in.application.memory_service import MemoryService
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
@@ -86,7 +98,19 @@ def build_application(
     frontend = OSFrontend()
     web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
     external_files = AuthorizedFileReader()
-    retrieval = DeferredRetrievalAdapter()
+    worker = BackgroundWorker("knowledge-memory", settings.shutdown_timeout_seconds)
+    from chromadb import PersistentClient
+    knowledge = KnowledgeService(
+        (LocalKnowledgeSourceRepository(settings.reference_dir), JsonMemoryRepository(settings.memories_dir, clock)),
+        MarkdownChunker(),
+        ChromaKnowledgeIndex(
+            PersistentClient(path=str(settings.knowledge_chroma_dir)),
+            SentenceTransformerEmbedder(settings.embedding_model, settings.embedding_batch_size),
+            CrossEncoderReranker(settings.reranker_model, settings.rerank_batch_size, settings.retrieval_top_k),
+        ),
+        JsonManifestRepository(settings.knowledge_manifest_path),
+        worker,
+    )
     resume_artifacts = LocalResumeArtifacts(
         settings.resume_template_dir,
         SubprocessRunner(cancel_grace_seconds=settings.cancel_grace_seconds),
@@ -106,6 +130,24 @@ def build_application(
             ModelProfile.FLASH: settings.llm_flash_model,
         },
         thinking_enabled=settings.llm_thinking_enabled,
+    )
+    memory_llm = OpenAILLMAdapter(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        model_names={ModelProfile.PRO: settings.llm_pro_model, ModelProfile.FLASH: settings.llm_flash_model},
+        thinking_enabled=False,
+    )
+    memory = MemoryService(
+        JsonMemoryRepository(settings.memories_dir, clock),
+        MemoryExtractor(
+            memory_llm,
+            "Extract only durable user facts and preferences. Return a JSON array of objects with category and content.",
+            clock,
+            id_generator,
+            settings.llm_timeout_seconds,
+        ),
+        knowledge,
+        worker,
     )
     runtime = AgentRuntime(
         spec=main_spec,
@@ -129,7 +171,7 @@ def build_application(
             frontend=frontend,
             web_search=web_search,
             external_files=external_files,
-            retrieval=retrieval,
+            retrieval=knowledge,
             resume_artifacts=resume_artifacts,
             workspace_access=workspace_access,
         ),
@@ -154,6 +196,9 @@ def build_application(
     resources = ResourceStack()
     resources.register("web_search", web_search.close)
     resources.register("sessions", sessions.close)
+    resources.register("knowledge", knowledge.close)
+    resources.register("memory", memory.close)
+    resources.register("background_worker", worker.close)
     return Application(
         settings=settings,
         catalog=catalog,
@@ -165,4 +210,6 @@ def build_application(
         tool_catalog=tool_catalog,
         web_search=web_search,
         resources=resources,
+        knowledge=knowledge,
+        memory=memory,
     )

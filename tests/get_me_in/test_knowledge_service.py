@@ -122,6 +122,15 @@ class KnowledgeServiceTests(unittest.TestCase):
         self.assertEqual(("references/a.md",), self.service.index_document(document).updated)
         self.assertEqual(("references/a.md",), self.service.delete_source("references/a.md").deleted)
 
+    def test_reload_persists_pending_then_ready_index_state(self) -> None:
+        report = self.service.reload()
+
+        self.assertEqual(("references/a.md",), report.added)
+        self.assertEqual(("references/a.md",), tuple(self.index.replaced))
+        entry = self.manifests.value.entries[0]
+        self.assertEqual(ManifestStatus.READY, entry.status)
+        self.assertEqual("hash", entry.indexed_hash)
+
 
 class _Sources:
     def __init__(self, sources): self.sources = sources
@@ -134,15 +143,17 @@ class _Chunker:
 
 
 class _Index:
-    def replace_source(self, source, chunks, cancellation): pass
+    def __init__(self): self.replaced = []
+    def replace_source(self, source, chunks, cancellation): self.replaced.append(source.source_key)
     def delete_source(self, source_key, *, cancellation): pass
     def search(self, query, *, collection, category, top_k, cancellation): return (IndexHit("chunk", "found", {}, 1.0),)
     def close(self): pass
 
 
 class _Manifests:
-    def load(self): return _manifest()
-    def save(self, manifest): pass
+    def __init__(self): self.value = _manifest()
+    def load(self): return self.value
+    def save(self, manifest): self.value = manifest
     def close(self): pass
 
 

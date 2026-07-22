@@ -42,6 +42,18 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(1, len(repository.records))
         self.assertEqual(1, len(knowledge.documents))
 
+    def test_delete_coordinates_index_before_removing_repository_record(self) -> None:
+        worker = BackgroundWorker("memory-delete-test", 1)
+        repository, knowledge = _Repository(), _Knowledge()
+        service = MemoryService(repository, _Extractor(), knowledge, worker)
+        try:
+            report = service.delete("memory-1")
+        finally:
+            worker.close()
+
+        self.assertEqual("memory-1", report.deleted_memory_id)
+        self.assertEqual(["memories/memory-1.json"], knowledge.deleted_sources)
+
 
 class _Clock:
     def now(self): return _now()
@@ -59,8 +71,11 @@ class _Extractor:
 
 
 class _Knowledge:
-    def __init__(self): self.documents = []
+    def __init__(self): self.documents = []; self.deleted_sources = []
     def index_document(self, document): self.documents.append(document)
+    def delete_source(self, source_key):
+        self.deleted_sources.append(source_key)
+        return type("Report", (), {"failures": ()})()
 
 
 def _now() -> datetime:
