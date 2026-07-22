@@ -1,18 +1,19 @@
 # 当前状态
 
-**当前阶段：** R6 —— Knowledge/RAG 与 Memory（G6 已通过；R7 未启动）
+**当前阶段：** R6-F —— G6 审查修复（已授权；R7 未启动）
 
-**当前任务：** R6-T 强制终止门禁：等待用户审查 R6 成果
+**当前任务：** R6-F 四个独立修复切片
 
-**当前子任务：** 无。已完成 checkpoint；未经用户后续明确授权不得进入 R7 或 R8。
+**当前子任务：** 切片 1：接通后台启动加载、前台 reload cancellation 与 KnowledgeService search/mutation 串行边界。
 
-**当前阻塞：** 等待用户审查。R6-T 生效，未经用户明确授权不得进入 R7 或 R8。
+**当前阻塞：** 无。R6-F 接口与范围已获用户确认；R7/R8 仍未授权。
 
-**会话交接说明：** R6 已按确认清单完成六个切片。`da62776` 固定 knowledge/memory DTO、ports 与 manifest diff；`3840b1d`、`569d5bc`、`3fd5fe0`、`82a4ead` 分别落地 application command/worker、KnowledgeService、本地/Chroma adapter 与 memory service；`66c6e1c` 完成 Settings/bootstrap/CLI/资源生命周期集成；`3b6c4b7` 用真实 `KnowledgeService` 替换并删除 `DeferredRetrievalAdapter`。`IndexManifest.diff()` 为纯函数、确定排序、拒绝重复 key；manifest 对 index 操作写入 pending/error/ready 状态；Memory 输入副本剥离 thinking；关闭顺序由 ResourceStack 保证。完整自动化测试 171 项通过，`compileall` 通过，真实 Chroma + embedding + rerank 临时目录 smoke 通过。未修改 R7 文件、旧 `main.py` 或执行 R8 清理。
+**会话交接说明：** R6 原六个切片已提交，但 R6-T 审查撤销了 G6 通过结论：Knowledge 未启动、前台 reload cancellation 未接通、search 未与 mutation 串行；Chroma replace/delete 可能丢失旧索引或吞掉删除错误；Memory 后台 partial failure 不可观察且 delete intent 提前提交；worker timeout 后可能关闭仍在使用的依赖；171 项测试虽显示 OK，但进程因未关闭的非 daemon worker 无法正常退出。用户已确认 R6-F：新增 typed background job result、可取消 task callback 与 Memory delete finalize callback，按四个切片修复并分别验证提交。未授权 R7、旧 `main.py` 切换或 R8 清理。
 
-**下一步：** 用户审查 R6 代码、测试与 smoke 证据；只有获得后续明确授权，才可讨论 R7 的新文件、类和公开方法清单。
+**下一步：** 完成并提交 R6-F 切片 1：启动加载、reload cancellation、独立 cancellation token 与 KnowledgeService 串行边界；运行对应 contract tests 后停止检查结果。
 
-174. **G6 已通过并进入 R6-T 审查门禁** — R6 六个切片完成，真实 KnowledgeService 已替换 DeferredRetrievalAdapter；171 项自动化测试、编译检查与真实 Chroma/embedder/reranker smoke 通过。状态已 checkpoint，R7 未启动，必须等待用户后续明确授权。
+174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
+175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -57,3 +58,5 @@
 171. **R6 前增加独立 `thinking` 契约修复门禁** — v2 必须保留静态 JSON 输出中的用户可见 thinking 摘要并按 `SHOW_THINKING` 展示和持久化，但 ConversationCodec 与 R6 MemoryBuildSource 必须剥离该字段；不得捕获 provider 原生 `reasoning_content`。R6 清单不变，但 coding 必须等待 G5-F 通过。
 172. **R5-F follow-up 统一格式修复的唯一契约与重试边界** — finish 必须出现 string `thinking` 但允许空字符串，tool_call 可省略或为空；格式失败注入具体解析错误与完整 canonical output format，只允许一次修复，第二次失败立即返回 `invalid_model_reply`。
 173. **v2 显式装配日志并固定环境变量所有权** — v2 日志仅配置 `src.get_me_in` 命名空间并写入 `LOG_DIR/app.log`；DEBUG 才记录完整模型原始回复。v2 只消费 typed Settings 声明的变量，旧 `AGENT_MAX_ROUNDS` 不生效，实际调用上限由 `AGENT_MAX_MODEL_CALLS` 控制。
+174. **G6 原通过结论已由决策 175 撤销** — R6 原六个切片完成并 checkpoint，但后续审查发现一致性、取消、关闭和测试退出缺口；该决定仅保留历史过程，不再代表当前门禁状态。
+175. **撤销 G6 通过结论并授权 R6-F** — BackgroundWorker typed result/cancellation、Memory delete finalize、Knowledge 串行边界与四个修复切片已获确认；全部复验前不得进入 R7/R8。

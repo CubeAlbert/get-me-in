@@ -501,6 +501,21 @@ R6 固定按以下切片实施，每个切片独立验证、独立提交：domai
 
 **R6-T 强制终止门禁：** G6 通过后，只允许整理验收证据并执行 `/project-checkpoint`，把 `docs/current.md` 保存为“R6 完成、R7 未启动、等待用户审查”。随后必须停止；未经用户在后续指令中明确确认，不得提交 R7 设计清单、创建 R7 文件、修改 R7 代码、切换入口或执行 R8 清理。
 
+#### 6.9.5 R6-F 审查修复边界（已确认）
+
+R6-T 代码审查发现启动、取消、索引一致性、后台失败可见性和资源关闭尚未闭合，因此撤销决策 174 中“G6 已通过”的结论，R7 继续保持未授权。用户已确认 R6-F 只修复 R6 既有边界，不创建或修改 R7 文件、不切换旧 `main.py`、不执行 R8 清理。
+
+- `KnowledgeService.start()` 由 Application-owned `BackgroundWorker` 排入启动加载；加载完成前查询明确返回 `retrieval_unavailable`。`Application.request_cancel()` 可取消当前前台 reload，Runtime cancellation 与后台 Memory cancellation 彼此独立。
+- `KnowledgeService.search()`、`reload()`、`index_document()` 与 `delete_source()` 共用显式串行边界；search 遇到正在执行的 mutation 时快速返回 busy/unavailable，不依赖 Chroma 的隐含线程安全。
+- Chroma replace 必须先完成 embedding，再写入新 chunk；失败时清理本次新 chunk 并保留旧 chunk，成功后才删除旧 chunk id。删除只忽略明确的 collection-not-found，其他异常必须上抛并保留 manifest retry 状态。
+- `BackgroundWorker` 的 task callback 改为接收独立 `CancellationSignal`，并保存 typed job result。新增 `BackgroundJobState`、`BackgroundJobResult` 与 `result(job_id) -> BackgroundJobResult | None`；`/build-memory` 仍立即返回 receipt，本轮不增加新的 CLI 查询命令。
+- `MemoryService` 后台 build 返回 `MemoryBuildReport`，不得忽略 repository 成功、index 失败或 busy。`KnowledgeService.delete_source(..., finalize=...)` 先写 manifest delete intent，再删除 index，调用 Memory repository finalize，最后提交 manifest；任一步失败均保留可重试状态。
+- `BackgroundWorker.close()` 必须拒绝新任务、取消排队及当前任务并有界等待；若任务仍未停止，ResourceStack 不得继续关闭其仍在使用的 Knowledge/Memory 依赖，只返回 typed timeout issue。MemoryService/KnowledgeService 内部资源关闭同样失败隔离。
+- MemoryExtractor 使用静态 memory prompt，不在 composition root 硬编码 prompt 文本；优先复用 `data/prompts/` 既有资产，若缺失则只新增对应静态 prompt 文件。
+- 所有创建 Application 的自动化测试必须注册 close cleanup；新增启动加载、reload 取消、search/mutation 竞争、Chroma replace rollback、delete error、Memory partial failure/delete retry、worker timeout 与测试进程正常退出覆盖。
+
+R6-F 允许修改 R6 已确认文件及其对应测试，并允许在 `application/app_results.py` 增加上述两个 typed job result DTO；不新增 service/module 文件。修复按“启动／取消／串行边界 → Chroma 可恢复写入 → BackgroundWorker 与 Memory 一致性 → bootstrap/cleanup/完整回归与真实 smoke”四个独立切片提交。全部通过后重新执行 G6 和 checkpoint，仍须停在 R6-T 等待用户审查。
+
 ## 7. 迁移策略
 
 采用 Strangler Fig/纵向切片迁移：

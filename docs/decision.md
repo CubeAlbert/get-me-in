@@ -189,6 +189,7 @@
 - [决策 172 — R5-F follow-up 统一格式修复的唯一契约与重试边界](#决策-172--r5-f-follow-up-统一格式修复的唯一契约与重试边界)
 - [决策 173 — v2 显式装配日志并固定环境变量所有权](#决策-173--v2-显式装配日志并固定环境变量所有权)
 - [决策 174 — G6 通过并停在 R6-T 审查门禁](#决策-174--g6-通过并停在-r6-t-审查门禁)
+- [决策 175 — 撤销 G6 通过结论并授权 R6-F 审查修复](#决策-175--撤销-g6-通过结论并授权-r6-f-审查修复)
 
 ---
 
@@ -3890,3 +3891,29 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：**
 
 - R6 已形成可审查的独立边界；先审查 Knowledge/Memory 的一致性和资源关闭，再决定是否授权 Resume/Artifact 的下一阶段。
+
+---
+
+### 决策 175 —— 撤销 G6 通过结论并授权 R6-F 审查修复
+
+**背景：** R6-T 代码审查确认原 171 项测试虽然断言通过，但测试进程因非 daemon worker 泄漏不能正常退出；同时发现 Knowledge 未启动、reload cancellation 未接通、search 未与 mutation 串行、Chroma replace/delete 可误报一致、Memory partial failure 不可观察以及 worker timeout 后可能关闭仍在使用的依赖。决策 174 的 G6 通过结论缺少这些交叉契约证据。
+
+**决定：**
+
+- 撤销决策 174 中“G6 已通过”的结论，保留 R6-T 对 R7/R8 的禁止；当前阶段改为 R6-F，用户已明确授权修复代码。
+- BackgroundWorker task 接收独立 `CancellationSignal`，新增 `BackgroundJobState`、`BackgroundJobResult` 与 `result(job_id)`；`/build-memory` 继续立即返回 receipt，本轮不增加 CLI 查询命令。
+- `KnowledgeService.delete_source()` 增加可选 repository finalize callback，按 manifest intent、index delete、repository finalize、manifest commit 协调 Memory 删除。
+- 启动加载、前台 reload cancellation、search/mutation 串行、Chroma 可恢复 replace/delete、Memory typed partial failure、timeout-safe close、静态 memory prompt 与测试 cleanup 统一纳入 R6-F。
+- R6-F 只修改既有 R6 文件、对应测试和文档；不创建 service/module 文件，不修改 R7、旧 `main.py`、RuntimeCommand/RuntimeEvent 或 snapshot schema。
+
+**理由：**
+
+- 这些问题影响 G6 明确要求的一致性、取消、资源所有权和可验证性，必须在进入 R7 前闭合。
+- typed job result 与 finalize callback 是异步结果和跨 repository/index 删除事务所需的最小公开扩展；继续依赖异常吞噬或无结果 receipt 无法证明 partial failure。
+- 保持四个独立切片可使每组修复分别验证、提交和回滚。
+
+**曾考虑的替代方案：**
+
+- 保留 G6 通过并把问题延后到 R8 —— 会让错误的一致性与关闭契约成为后续迁移基础，已拒绝。
+- 让 MemoryBuildReceipt 持有 Future —— 会把运行时同步对象放入 immutable domain DTO，已拒绝。
+- Memory 删除先移除 repository 再尽力删除 index —— 无法满足 manifest delete intent 与可恢复重试约束，已拒绝。

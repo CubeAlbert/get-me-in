@@ -213,6 +213,18 @@
 
 **R6-T 强制终止门禁：** G6 通过后执行 `/project-checkpoint`，将状态保存为“R6 完成、R7 未启动、等待用户审查”，然后立即停止。未经后续明确授权，不得提交 R7 设计清单、创建或修改 R7 文件、切换入口或执行 R8 清理。
 
+#### R6-F —— G6 审查修复
+
+R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户确认，只修复既有 R6 契约，不进入 R7：
+
+1. 接通后台启动加载、前台 reload cancellation 与 KnowledgeService search/mutation 串行边界。
+2. 修复 Chroma replace/delete 的失败传播、旧索引保留与幂等重试。
+3. 为 BackgroundWorker 增加 operation cancellation 和 typed job result；Memory build/delete 返回并保留 partial failure。
+4. 修复 worker timeout 后的依赖关闭顺序、Application 测试 cleanup 与 composition root 构造失败清理。
+5. 使用静态 memory prompt，补齐交叉 contract tests，重跑完整自动化测试、`compileall` 与真实 Chroma/embedder/reranker smoke。
+
+**R6-F 验收：** 测试命令必须在打印结果后正常退出；启动后 reference/memory reload 可观察；Esc 可取消前台 reload；index/memory 任一步失败均不误报成功且可重试；worker timeout 不产生 use-after-close；真实 smoke 证据必须记录可复跑命令与结果。通过后重新认定 G6，并再次执行 R6-T checkpoint。R7 仍需后续明确授权。
+
 ### R7 —— Resume 纵向切片与产物管理
 
 **目标：** 用 ResumeAgent 验证 v2 的完整产品链路，而非只验证框架。
