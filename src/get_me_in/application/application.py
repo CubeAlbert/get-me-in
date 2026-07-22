@@ -5,11 +5,14 @@ from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
 from src.get_me_in.application.runtime import AgentRuntime
+from src.get_me_in.application.session_codec import SessionSnapshot
+from src.get_me_in.application.session_service import SessionService
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.ports.clock import Clock
 from src.get_me_in.ports.ids import IdGenerator
 from src.get_me_in.ports.web_search import WebSearchPort
+from src.get_me_in.domain.sessions import SessionPreview, SessionView
 
 
 class Application:
@@ -24,6 +27,7 @@ class Application:
         id_generator: IdGenerator,
         cancellation: CancellationToken,
         runtime: AgentRuntime,
+        sessions: SessionService,
         tool_catalog: ToolCatalog,
         web_search: WebSearchPort | None = None,
     ) -> None:
@@ -34,6 +38,7 @@ class Application:
         self.cancellation = cancellation
         self.tool_catalog = tool_catalog
         self._runtime = runtime
+        self._sessions = sessions
         self._web_search = web_search
         self._closed = False
 
@@ -41,7 +46,19 @@ class Application:
         """Run one typed command without exposing runtime internals."""
         if self._closed:
             raise RuntimeError("Application is closed")
-        return self._runtime.handle(command)
+        return self._sessions.handle(command)
+
+    def view(self) -> SessionView:
+        return self._sessions.view()
+
+    def snapshot(self) -> SessionSnapshot:
+        return self._sessions.snapshot()
+
+    def restore(self, session_id: str) -> SessionView:
+        return self._sessions.restore(session_id)
+
+    def list_sessions(self) -> tuple[SessionPreview, ...]:
+        return self._sessions.list_sessions()
 
     def request_cancel(self, reason: str = "Cancelled by user") -> None:
         """Cancel an active blocking call without mutating Runtime state cross-thread."""
@@ -52,5 +69,6 @@ class Application:
     def close(self) -> None:
         self._closed = True
         self._runtime.close()
+        self._sessions.close()
         if self._web_search is not None:
             self._web_search.close()

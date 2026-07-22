@@ -11,6 +11,7 @@ from src.get_me_in.adapters.authorized_file_reader import AuthorizedFileReader
 from src.get_me_in.adapters.deferred_retrieval import DeferredRetrievalAdapter
 from src.get_me_in.adapters.local_resume_artifacts import LocalResumeArtifacts
 from src.get_me_in.adapters.subprocess_runner import SubprocessRunner
+from src.get_me_in.adapters.json_session_repository import JsonSessionRepository
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.cancellation import CancellationToken
@@ -18,11 +19,14 @@ from src.get_me_in.application.conversation_codec import ConversationCodec
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.runtime import AgentRuntime
+from src.get_me_in.application.session_codec import SessionSnapshotCodec
+from src.get_me_in.application.session_service import SessionService
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
+from src.get_me_in.domain.sessions import AgentSessionState, SessionState
 from src.get_me_in.ports.llm import LLMPort, ModelProfile
 from src.get_me_in.tools.system import build_system_tools
 from src.get_me_in.tools.plan import build_plan_tools
@@ -87,6 +91,7 @@ def build_application(
     )
     workspace_access = WorkspaceAccessState()
     plan_service = PlanService(id_generator)
+    session_id = id_generator.new_id()
     tool_catalog = ToolCatalog(
         (*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools(), *build_resume_tools())
     )
@@ -114,7 +119,7 @@ def build_application(
         model_timeout_seconds=settings.llm_timeout_seconds,
         tool_executor=tool_executor,
         tool_context=ToolContext(
-            session_id="application",
+            session_id=session_id,
             agent_key=AgentKey.MAIN,
             cancellation=cancellation,
             plan=plan_service,
@@ -127,6 +132,22 @@ def build_application(
             workspace_access=workspace_access,
         ),
     )
+    session = SessionState(
+        session_id=session_id,
+        active_agent=AgentKey.MAIN,
+        agents={AgentKey.MAIN: AgentSessionState()},
+        handoff_stack=(),
+        created_at=clock.now(),
+        updated_at=clock.now(),
+    )
+    sessions = SessionService(
+        session,
+        runtime=runtime,
+        plans=plan_service,
+        repository=JsonSessionRepository(settings.sessions_dir, codec=SessionSnapshotCodec()),
+        clock=clock,
+        workspace_access=workspace_access,
+    )
     return Application(
         settings=settings,
         catalog=catalog,
@@ -134,6 +155,7 @@ def build_application(
         id_generator=id_generator,
         cancellation=cancellation,
         runtime=runtime,
+        sessions=sessions,
         tool_catalog=tool_catalog,
         web_search=web_search,
     )

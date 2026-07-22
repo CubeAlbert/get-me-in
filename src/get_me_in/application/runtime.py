@@ -40,7 +40,7 @@ from src.get_me_in.domain.messages import (
     ToolCallRecord,
     ToolResultRecord,
 )
-from src.get_me_in.domain.sessions import PendingToolCall, RuntimePhase
+from src.get_me_in.domain.sessions import AgentSessionState, PendingToolCall, RuntimePhase
 from src.get_me_in.domain.tools import (
     ToolFailure,
     ToolHandoff,
@@ -54,16 +54,9 @@ from src.get_me_in.ports.llm import LLMPort, LLMRequest, ModelProfile
 
 
 @dataclass(frozen=True)
-class RuntimeState:
-    """Runtime-owned state; R4 will compose it into the session AgentState."""
-
-    phase: RuntimePhase = RuntimePhase.READY
-    history: tuple[ConversationRecord, ...] = ()
-    model_calls: int = 0
-    pending_tool: PendingToolCall | None = None
-    repair_attempted: bool = False
-    cancel_reason: str = "Cancelled by user"
-    turn_id: str = ""
+class RuntimeTransition:
+    state: AgentSessionState
+    event: RuntimeEvent
 
 
 class AgentRuntime:
@@ -103,10 +96,20 @@ class AgentRuntime:
         self._model_timeout_seconds = model_timeout_seconds
         self._tool_executor = tool_executor
         self._tool_context = tool_context
-        self._state = RuntimeState()
+        self._state: AgentSessionState | None = None
         self._requested_cancel_reason = "Cancelled by user"
 
-    def handle(self, command: RuntimeCommand) -> RuntimeEvent:
+    def advance(self, state: AgentSessionState, command: RuntimeCommand) -> RuntimeTransition:
+        """Advance caller-owned state once, without retaining a state copy."""
+        self._state = state
+        try:
+            event = self._handle(command)
+            assert self._state is not None
+            return RuntimeTransition(self._state, event)
+        finally:
+            self._state = None
+
+    def _handle(self, command: RuntimeCommand) -> RuntimeEvent:
         if isinstance(command, Cancel):
             return self._cancel(command.reason)
         if isinstance(command, UserMessage):
@@ -146,10 +149,11 @@ class AgentRuntime:
         self._requested_cancel_reason = "Cancelled by user"
         turn_id = self._id_generator.new_id()
         user_record = self._message(Role.USER, command.text, turn_id)
-        self._state = RuntimeState(
+        self._state = AgentSessionState(
             phase=RuntimePhase.MODEL_PENDING,
             history=(*self._state.history, user_record),
             turn_id=turn_id,
+            plan=self._state.plan,
         )
         return Progress("Calling model")
 

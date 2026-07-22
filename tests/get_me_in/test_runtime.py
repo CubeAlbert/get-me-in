@@ -24,6 +24,7 @@ from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
+from src.get_me_in.domain.sessions import AgentSessionState
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
 from src.get_me_in.tools.switch import build_switch_tools
@@ -206,7 +207,7 @@ def _runtime(
     max_model_calls: int = 12,
     timeout_seconds: float = 60,
     definitions: tuple[ToolDefinition, ...] = (),
-) -> tuple[AgentRuntime, "_FakeLlm", tempfile.TemporaryDirectory[str]]:
+) -> tuple["_RuntimeDriver", "_FakeLlm", tempfile.TemporaryDirectory[str]]:
     temporary_dir = tempfile.TemporaryDirectory()
     root = Path(temporary_dir.name) / "general_agent"
     root.mkdir()
@@ -245,7 +246,20 @@ def _runtime(
         tool_executor=ToolExecutor(catalog),
         tool_context=ToolContext("session", AgentKey.MAIN, cancellation),
     )
-    return runtime, llm, temporary_dir
+    return _RuntimeDriver(runtime), llm, temporary_dir
+
+
+class _RuntimeDriver:
+    """Test-only owner of state passed to the pure runtime transition function."""
+
+    def __init__(self, runtime: AgentRuntime) -> None:
+        self._runtime = runtime
+        self._state = AgentSessionState()
+
+    def handle(self, command: object) -> object:
+        transition = self._runtime.advance(self._state, command)
+        self._state = transition.state
+        return transition.event
 
 
 class _FakeLlm:

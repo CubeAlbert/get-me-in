@@ -42,6 +42,7 @@ class AgentSessionState:
     pending_tool: PendingToolCall | None = None
     repair_attempted: bool = False
     cancel_reason: str = "Cancelled by user"
+    turn_id: str = ""
     plan: Plan | None = None
 
 
