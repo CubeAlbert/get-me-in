@@ -187,11 +187,13 @@ def build_command_registry(application: object, input_controller: object, render
     registry.register(CommandSpec("/dump", "导出当前会话", dump_command))
     registry.register(CommandSpec("/restore", "恢复会话（可选 session_id）", restore_command))
     registry.register(CommandSpec("/rewind", "选择或指定 turn_id 回退到用户回合", rewind_command))
-    registry.register(CommandSpec("/ragreload", "重载知识库（可选 target）", reload_command))
-    registry.register(CommandSpec("/build-memory", "构建当前会话记忆", build_memory_command))
+    registry.register(CommandSpec("/ragreload", "重载知识库（可选 target；R6 前不可用）", unavailable_command))
+    registry.register(CommandSpec("/build-memory", "构建记忆（R6 前不可用）", unavailable_command))
     registry.register(CommandSpec("/exit_sub", "退出当前子 Agent", exit_subagent_command))
     registry.register(CommandSpec("/approval", "切换审批模式（可选参数：prompt|auto）", approval_command))
     registry.register(CommandSpec("/exit", "退出 CLI", lambda _: CommandResult(CommandAction.EXIT)))
+    registry.replace(CommandSpec("/ragreload", "重载知识库（可选 target）", reload_command))
+    registry.replace(CommandSpec("/build-memory", "构建当前会话记忆", build_memory_command))
     return registry
 
 
