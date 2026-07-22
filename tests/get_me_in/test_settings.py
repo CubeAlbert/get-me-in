@@ -28,6 +28,26 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(Path("project/data/workspace"), settings.workspace_dir)
         self.assertEqual(Path("project/data/logs"), settings.log_dir)
         self.assertEqual("INFO", settings.log_level)
+        self.assertEqual("BAAI/bge-base-zh-v1.5", settings.embedding_model)
+        self.assertEqual("BAAI/bge-reranker-v2-m3", settings.reranker_model)
+
+    def test_from_env_accepts_legacy_rag_model_names_through_typed_settings(self) -> None:
+        settings = Settings.from_env(
+            {
+                "OPENAI_API_KEY": "key",
+                "OPENAI_BASE_URL": "https://example.test",
+                "LLM_PRO_MODEL": "pro",
+                "LLM_FLASH_MODEL": "flash",
+                "BI_ENCODER_MODEL": "legacy-embedder",
+                "CROSS_ENCODER_MODEL": "legacy-reranker",
+                "EMBED_BATCH_SIZE": "7",
+            },
+            project_root=Path("project"),
+        )
+
+        self.assertEqual("legacy-embedder", settings.embedding_model)
+        self.assertEqual("legacy-reranker", settings.reranker_model)
+        self.assertEqual(7, settings.embedding_batch_size)
 
     def test_from_env_accepts_a_workspace_override(self) -> None:
         settings = Settings.from_env(

@@ -33,8 +33,8 @@ class Settings:
     knowledge_manifest_path: Path = Path("data/v2/knowledge/manifest.json")
     knowledge_chroma_dir: Path = Path("data/v2/knowledge/chroma")
     memories_dir: Path = Path("data/v2/memories")
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    embedding_model: str = "BAAI/bge-base-zh-v1.5"
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
     embedding_batch_size: int = 32
     rerank_batch_size: int = 32
     retrieval_top_k: int = 8
@@ -106,8 +106,11 @@ class Settings:
                 "SHOW_THINKING must be true, false, 1, or 0"
             )
 
-        def positive_int(name: str, default: int) -> int:
-            raw = env.get(name, str(default))
+        def positive_int(
+            name: str, default: int, *, fallback_name: str | None = None
+        ) -> int:
+            fallback = env.get(fallback_name, str(default)) if fallback_name else str(default)
+            raw = env.get(name, fallback)
             try:
                 value = int(raw)
             except ValueError as error:
@@ -153,9 +156,18 @@ class Settings:
             knowledge_manifest_path=project_root / "data" / "v2" / "knowledge" / "manifest.json",
             knowledge_chroma_dir=project_root / "data" / "v2" / "knowledge" / "chroma",
             memories_dir=project_root / "data" / "v2" / "memories",
-            embedding_model=env.get("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
-            reranker_model=env.get("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
-            embedding_batch_size=positive_int("EMBEDDING_BATCH_SIZE", 32),
+            embedding_model=env.get(
+                "EMBEDDING_MODEL", env.get("BI_ENCODER_MODEL", "BAAI/bge-base-zh-v1.5")
+            ),
+            reranker_model=env.get(
+                "RERANKER_MODEL",
+                env.get("CROSS_ENCODER_MODEL", "BAAI/bge-reranker-v2-m3"),
+            ),
+            embedding_batch_size=positive_int(
+                "EMBEDDING_BATCH_SIZE",
+                32,
+                fallback_name="EMBED_BATCH_SIZE",
+            ),
             rerank_batch_size=positive_int("RERANK_BATCH_SIZE", 32),
             retrieval_top_k=positive_int("RETRIEVAL_TOP_K", 8),
             shutdown_timeout_seconds=shutdown_timeout,

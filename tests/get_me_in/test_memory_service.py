@@ -74,20 +74,39 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(["memories/memory-1.json"], knowledge.deleted_sources)
         self.assertEqual(["memory-1"], repository.deleted)
 
+    def test_close_isolates_owned_resource_failures(self) -> None:
+        worker = BackgroundWorker("memory-close-test", 1)
+        repository = _Repository(fail_close=True)
+        extractor = _Extractor(fail_close=True)
+        service = MemoryService(repository, extractor, _Knowledge(), worker)
+
+        report = service.close()
+        worker.close()
+
+        self.assertEqual(("memory_service",), report.closed)
+        self.assertEqual(
+            ("memory_extractor", "memory_repository"),
+            tuple(issue.resource_name for issue in report.issues),
+        )
+
 
 class _Clock:
     def now(self): return _now()
 
 
 class _Repository:
-    def __init__(self): self.records = []; self.deleted = []
+    def __init__(self, *, fail_close=False): self.records = []; self.deleted = []; self.fail_close = fail_close
     def write(self, record): self.records.append(record); return object()
     def delete(self, memory_id): self.deleted.append(memory_id)
-    def close(self): pass
+    def close(self):
+        if self.fail_close: raise RuntimeError("repository close failed")
 
 
 class _Extractor:
+    def __init__(self, *, fail_close=False): self.fail_close = fail_close
     def extract(self, source, cancellation): return (MemoryRecord(1, "id", AgentKey.MAIN, MemoryCategory.FACT, "fact", _now()),)
+    def close(self):
+        if self.fail_close: raise RuntimeError("extractor close failed")
 
 
 class _Knowledge:

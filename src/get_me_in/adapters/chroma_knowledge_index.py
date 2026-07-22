@@ -88,12 +88,19 @@ class ChromaKnowledgeIndex:
 
     def search(self, query: str, *, collection: str, category: str | None, top_k: int, cancellation: CancellationSignal) -> tuple[IndexHit, ...]:
         if cancellation.is_cancelled: raise InterruptedError
-        result = self._client.get_collection(collection).query(query_embeddings=self._embedder.embed((query,)), n_results=top_k, where={"category": category} if category else None, include=["documents", "metadatas", "distances"])
+        result = self._client.get_collection(collection).query(
+            query_embeddings=list(self._embedder.embed((query,))),
+            n_results=top_k,
+            where={"category": category} if category else None,
+            include=["documents", "metadatas", "distances"],
+        )
         hits = tuple(IndexHit(identifier, result["documents"][0][index], result["metadatas"][0][index], 1 - float(result["distances"][0][index])) for index, identifier in enumerate(result.get("ids", [[]])[0]))
         return self._reranker.rerank(query, hits)
 
     def close(self) -> None:
-        pass
+        close = getattr(self._client, "close", None)
+        if close is not None:
+            close()
 
 
 def _raise_if_cancelled(cancellation: CancellationSignal) -> None:

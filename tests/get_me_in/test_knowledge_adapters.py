@@ -55,8 +55,10 @@ class KnowledgeAdapterTests(unittest.TestCase):
 
         index.replace_source(source, MarkdownChunker().chunk(KnowledgeDocument(source, "text")), token)
         hits = index.search("query", collection="references", category=None, top_k=1, cancellation=token)
+        index.close()
 
         self.assertEqual(("found",), tuple(hit.content for hit in hits))
+        self.assertTrue(client.closed)
 
     def test_chroma_replace_embeds_before_mutating_existing_source(self) -> None:
         collection = _Collection(old_ids=("old",))
@@ -120,13 +122,17 @@ class _Collection:
         if self.fail_old_delete and ids == self.old_ids:
             raise RuntimeError("delete failed")
     def add(self, **kwargs): self.mutations.append(("add", tuple(kwargs["ids"])))
-    def query(self, **kwargs): return {"ids": [["id"]], "documents": [["found"]], "metadatas": [[{}]], "distances": [[0.2]]}
+    def query(self, **kwargs):
+        if not isinstance(kwargs["query_embeddings"], list):
+            raise TypeError("query_embeddings must be a list")
+        return {"ids": [["id"]], "documents": [["found"]], "metadatas": [[{}]], "distances": [[0.2]]}
 
 
 class _Client:
-    def __init__(self, collection=None): self.collection = collection or _Collection()
+    def __init__(self, collection=None): self.collection = collection or _Collection(); self.closed = False
     def get_or_create_collection(self, name): return self.collection
     def get_collection(self, name): return self.collection
+    def close(self): self.closed = True
 
 
 class _FailingClient:

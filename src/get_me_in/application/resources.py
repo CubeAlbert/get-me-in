@@ -31,11 +31,15 @@ class ResourceStack:
         for name, closer in reversed(self._resources):
             try:
                 report = closer()
-                closed.append(name)
                 if report is not None:
                     issues.extend(report.issues)
+                if report is None or report.closed or not report.issues:
+                    closed.append(name)
+                if report is not None and any(issue.timed_out for issue in report.issues):
+                    break
             except TimeoutError as error:
                 issues.append(CloseIssue(name, str(error), timed_out=True))
+                break
             except Exception as error:
                 issues.append(CloseIssue(name, str(error)))
         self._report = CloseReport(tuple(closed), tuple(issues))

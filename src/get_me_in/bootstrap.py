@@ -141,7 +141,7 @@ def build_application(
         JsonMemoryRepository(settings.memories_dir, clock),
         MemoryExtractor(
             memory_llm,
-            "Extract only durable user facts and preferences. Return a JSON array of objects with category and content.",
+            (settings.prompts_dir / "memory" / "builder.md").read_text(encoding="utf-8"),
             clock,
             id_generator,
             settings.llm_timeout_seconds,

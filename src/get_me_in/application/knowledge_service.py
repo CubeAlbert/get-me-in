@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from threading import Lock
 
-from src.get_me_in.application.app_results import CloseReport
+from src.get_me_in.application.app_results import CloseIssue, CloseReport
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.background_worker import BackgroundWorker
 from dataclasses import replace
@@ -207,7 +207,6 @@ class KnowledgeService:
             try:
                 closer()
             except Exception as error:
-                from src.get_me_in.application.app_results import CloseIssue
                 issues.append(CloseIssue(name, str(error)))
         self._state = KnowledgeState.CLOSED
         return CloseReport(closed=("knowledge_service",), issues=tuple(issues))

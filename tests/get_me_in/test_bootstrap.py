@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 import tempfile
+from threading import enumerate as enumerate_threads
 from unittest.mock import patch
 
 from src.get_me_in.bootstrap import build_application
@@ -180,6 +181,28 @@ class BootstrapTests(unittest.TestCase):
             application.request_cancel("stop reload")
 
         cancel_knowledge.assert_called_once_with("stop reload")
+
+    def test_composition_uses_static_memory_prompt(self) -> None:
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
+
+        expected = (Path("data/prompts") / "memory" / "builder.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(expected, application._memory._extractor._prompt)
+
+    def test_composition_failure_does_not_leave_background_thread(self) -> None:
+        before = {id(thread) for thread in enumerate_threads()}
+
+        with patch("chromadb.PersistentClient", side_effect=RuntimeError("chroma failed")):
+            with self.assertRaisesRegex(RuntimeError, "chroma failed"):
+                build_application(_settings(), llm=_FakeLlm("unused"))
+
+        leaked = [
+            thread
+            for thread in enumerate_threads()
+            if id(thread) not in before and thread.name == "knowledge-memory"
+        ]
+        self.assertEqual([], leaked)
 
 
 class _FakeLlm:

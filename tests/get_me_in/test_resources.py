@@ -27,14 +27,16 @@ class ResourceStackTests(unittest.TestCase):
         self.assertIs(first, stack.close())
 
     def test_close_isolates_error_and_timeout(self) -> None:
+        closed: list[str] = []
         stack = ResourceStack()
-        stack.register("after-error", lambda: CloseReport(closed=("after-error",)))
+        stack.register("after-timeout", lambda: closed.append("unsafe"))
         stack.register("timeout", _timeout)
         stack.register("error", _error)
 
         report = stack.close()
 
-        self.assertEqual(("after-error",), report.closed)
+        self.assertEqual((), report.closed)
+        self.assertEqual([], closed)
         self.assertEqual(
             (("error", False), ("timeout", True)),
             tuple((issue.resource_name, issue.timed_out) for issue in report.issues),
@@ -42,6 +44,15 @@ class ResourceStackTests(unittest.TestCase):
 
 
 class BackgroundWorkerTests(unittest.TestCase):
+    def test_does_not_start_thread_until_first_submission(self) -> None:
+        worker = BackgroundWorker("lazy-memory", 1)
+        try:
+            self.assertFalse(worker._thread.is_alive())
+        finally:
+            report = worker.close()
+
+        self.assertEqual(("lazy-memory",), report.closed)
+
     def test_runs_submitted_work_serially_and_returns_typed_receipt(self) -> None:
         completed = Event()
         order: list[str] = []

@@ -38,7 +38,7 @@ class BackgroundWorker:
         self._results: dict[str, BackgroundJobResult] = {}
         self._tokens: dict[str, CancellationToken] = {}
         self._thread = Thread(target=self._run, name=name, daemon=False)
-        self._thread.start()
+        self._started = False
 
     def submit(self, task_name: str, task: _BackgroundTask) -> BackgroundJobReceipt:
         if not task_name:
@@ -54,6 +54,9 @@ class BackgroundWorker:
                 receipt.job_id, task_name, BackgroundJobState.QUEUED
             )
             self._tasks.put((receipt.job_id, task_name, task, cancellation))
+            if not self._started:
+                self._thread.start()
+                self._started = True
         return receipt
 
     def result(self, job_id: str) -> BackgroundJobResult | None:
@@ -67,6 +70,9 @@ class BackgroundWorker:
             if self._closed:
                 return CloseReport()
             self._closed = True
+            if not self._started:
+                self._close_report = CloseReport(closed=(self._name,))
+                return self._close_report
             for cancellation in self._tokens.values():
                 cancellation.cancel()
             self._tasks.put(_STOP)

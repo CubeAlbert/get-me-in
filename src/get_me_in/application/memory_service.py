@@ -1,6 +1,6 @@
 """Background memory build orchestration without a duplicate search API."""
 
-from src.get_me_in.application.app_results import CloseReport
+from src.get_me_in.application.app_results import CloseIssue, CloseReport
 from src.get_me_in.domain.memories import MemoryBuildReceipt, MemoryBuildReport, MemoryBuildSource
 from src.get_me_in.ports.llm import CancellationSignal
 
@@ -28,11 +28,19 @@ class MemoryService:
             return MemoryBuildReport("", deleted_memory_id=memory_id, error=str(error))
 
     def close(self) -> CloseReport:
-        self._repository.close()
-        close = getattr(self._extractor, "close", None)
-        if close is not None:
-            close()
-        return CloseReport(closed=("memory_service",))
+        issues: list[CloseIssue] = []
+        close_extractor = getattr(self._extractor, "close", None)
+        for name, close in (
+            ("memory_extractor", close_extractor),
+            ("memory_repository", self._repository.close),
+        ):
+            if close is None:
+                continue
+            try:
+                close()
+            except Exception as error:
+                issues.append(CloseIssue(name, str(error)))
+        return CloseReport(closed=("memory_service",), issues=tuple(issues))
 
     def _build(
         self, source: MemoryBuildSource, cancellation: CancellationSignal
