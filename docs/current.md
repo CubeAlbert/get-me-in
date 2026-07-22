@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R5 —— CLI 拆分与交互迁移（代码切片完成，待 G5 人工 smoke）
+**当前阶段：** R5 —— CLI 拆分与交互迁移（已完成，G5 已通过；R6 尚未启动）
 
-**当前任务：** 验收独立 v2 CLI，并完成 G5 前审查
+**当前任务：** 等待 R6 启动确认
 
-**当前子任务：** 按 `docs/legacy-cli-smoke-checklist.md#10-r5-v2-cli-增量-smoke` 完成 v2 人工 smoke，并审查后决定是否通过 G5、删除临时 Runner（⬜）
+**当前子任务：** 按用户指示停在 R5；未提交 R6 新文件、类与公开方法清单，且不开始 R6 编码（⏸️）
 
-**当前阻塞：** 等待 V50–V56 真实终端／provider 人工 smoke；核心自动化测试已复核无问题，DeepSeek Web Search 的最小 provider smoke 已通过
+**当前阻塞：** 用户明确要求暂不进入 R6
 
-**会话交接说明：** 已完成全部五个 R5 CLI 代码切片：`commands.py`、`input.py`、`renderer.py`、`worker.py`、`app.py` 和独立入口。`python -m src.get_me_in.cli` 已装配 `build_application()` 与动态命令补全；`/rewind`、`/restore` 选择项显示用户可读预览并在末尾提供“❌ 取消”，取消直接返回 CLI；`/rewind` 会在回退前保存目标输入并预填到下一次 CLI 输入框，`/help` 从实际注册表排序生成，`/approval` 可无参数切换或显式设定模式。工具开始显示脱敏参数摘要，工具结束显示截断结果预览，Plan 工具显示只读计划表格；审批提示使用“✅ 执行 / ❌ 取消”选项，不使用 `y/N`。用户拒绝审批时，Runtime 会写入拒绝结果闭合 pending call 并以 `Cancelled` 结束当前轮次，CLI 立即归还输入框；实际工具失败仍交回模型自修复。DeepSeek Web Search 已恢复旧版两轮请求契约，且拒绝把未执行 DSML 调用记录为成功结果；132 项核心自动化测试及最小 provider smoke 通过。旧 `main.py` 与临时 `scripts/v2_runtime_smoke.py` 未修改，G5 仍待人工 smoke 和审查。
+**会话交接说明：** R5 已完成并通过 G5：用户确认 V50–V56 人工 smoke 可接受，核心自动化测试 132 项通过，DeepSeek Web Search 最小 provider smoke 已通过。独立 v2 CLI 入口为 `python -m src.get_me_in.cli`；`/rewind`、`/restore` 显示用户可读预览并提供“❌ 取消”，`/rewind` 会预填目标输入；`/help` 与实际注册表同源排序，`/approval` 以“✅ 执行 / ❌ 取消”选项交互。工具展示脱敏参数、结果预览与 Plan 表格；用户拒绝审批会立即归还输入框。临时 `scripts/v2_runtime_smoke.py` 已删除，旧 `main.py` 未修改。按用户指示，R6 尚未开始。
 
-**下一步：** 使用 `uv run python -m src.get_me_in.cli` 执行 V50–V56 人工 smoke，重点验证 Windows UTF-8、EOF、编辑器失败、真实 provider、审批/选择、Esc/Ctrl+C、restore/rewind 和终态 snapshot；用户审查通过 G5 后，才可删除临时 Runner 并单独提交。
+**下一步：** 等待用户明确恢复 R6；恢复后先提交 R6 新文件、类与公开方法清单供确认，未经确认不得编码。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -48,3 +48,4 @@
 164. **审批交互使用明确选项而非 `y/N`** — InputController 的 `confirm()` 以 questionary 选项列表显示“✅ 执行 / ❌ 取消”，保持 v1 的可视化审批体验；返回值和 CliApp 的 Approve/Reject 协议不变。
 165. **`/rewind` 在回退前捕获预填文本** — CommandRegistry 必须在调用 `RewindSession(turn_id)` 前从当前 `SessionView.rewind_points` 取得目标用户输入，并返回 `PREFILL`；回退后的投影可能已不含目标回合，不能用于反查。
 166. **`/restore` 与 `/rewind` 的选择菜单提供取消项** — 两个交互菜单末尾固定显示“❌ 取消”；选择后仅返回 CLI，不调用 RestoreSession 或 RewindSession，也不依赖 Ctrl+C。
+167. **G5 已通过且 R6 暂停** — 用户确认 V50–V56 smoke 可接受；临时 `scripts/v2_runtime_smoke.py` 已删除。R6 仍须先经新文件、类与公开方法清单确认，当前按用户指示不进入该阶段。

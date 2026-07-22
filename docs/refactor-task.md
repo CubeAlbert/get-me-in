@@ -214,30 +214,30 @@
 
 ### 2. 命令迁移
 
-- 🔄 `/help`；从当前注册表按命令名排序，列出 alias 与参数说明。
-- 🔄 `/edit`
-- 🔄 `/dump`
-- 🔄 `/restore [session_id]`；无参数时显示序号、最新用户输入预览与保存时间，通过 InputController 选择 session 并映射回 session_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application。
-- 🔄 `/rewind`；无参数时显示序号与用户输入预览，通过 InputController 选择公开 rewind point，并映射回精确 turn_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application；回退前保存目标文本，成功后预填到下一次 CLI 输入框，不能从回退后的投影反查目标。
-- 🔄 `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
-- 🔄 `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
-- 🔄 `/exit_sub`
-- 🔄 `/approval`；无参数切换 `prompt/auto`，或用参数显式设置；策略只决定 ApprovalRequested 是否自动 Approve，且不保留 `/auto-approve-switch`。
-- 🔄 `/exit`
+- ✅ `/help`；从当前注册表按命令名排序，列出 alias 与参数说明。
+- ✅ `/edit`
+- ✅ `/dump`
+- ✅ `/restore [session_id]`；无参数时显示序号、最新用户输入预览与保存时间，通过 InputController 选择 session 并映射回 session_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application。
+- ✅ `/rewind`；无参数时显示序号与用户输入预览，通过 InputController 选择公开 rewind point，并映射回精确 turn_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application；回退前保存目标文本，成功后预填到下一次 CLI 输入框，不能从回退后的投影反查目标。
+- ✅ `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
+- ✅ `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
+- ✅ `/exit_sub`
+- ✅ `/approval`；无参数切换 `prompt/auto`，或用参数显式设置；策略只决定 ApprovalRequested 是否自动 Approve，且不保留 `/auto-approve-switch`。
+- ✅ `/exit`
 
 ### 3. Interaction 与跨平台
 
-- 🔄 ApprovalRequested → questionary 选项列表“✅ 执行 / ❌ 取消” → Approve/Reject command；不得使用 `y/N` 确认框。`Reject` 写入拒绝结果闭合 call 后以 `Cancelled` 结束当前内层循环并归还输入框，实际工具失败仍交回模型；代码与自动化验证已完成，待真实终端 smoke。
-- 🔄 SelectionRequested → 选择/自定义输入 → SubmitSelection command；代码已接入，待真实终端 smoke。
+- ✅ ApprovalRequested → questionary 选项列表“✅ 执行 / ❌ 取消” → Approve/Reject command；不得使用 `y/N` 确认框。`Reject` 写入拒绝结果闭合 call 后以 `Cancelled` 结束当前内层循环并归还输入框，实际工具失败仍交回模型；代码、自动化验证与人工 smoke 已完成。
+- ✅ SelectionRequested → 选择/自定义输入 → SubmitSelection command；代码、自动化验证与人工 smoke 已完成。
 - ✅ 删除 UIBridge 和模块级 current bridge 的 v2 依赖。
-- ⬜ Windows UTF-8、Esc、Ctrl+C、EOF 和 editor-not-found 行为验证。
-- 🔄 Input history 使用进程内 CLI-owned state；restore 后从 `SessionView.rewind_points` 重建，不增加独立持久化 schema；待真实终端 smoke。
+- ✅ Windows UTF-8、Esc、Ctrl+C、EOF 和 editor-not-found 行为验证。
+- ✅ Input history 使用进程内 CLI-owned state；restore 后从 `SessionView.rewind_points` 重建，不增加独立持久化 schema；人工 smoke 已通过。
 - ✅ Completed/Failed/Cancelled 后自动 snapshot；保存失败单独渲染且不得覆盖原终态。
 - ✅ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
 - ✅ 工具开始显示脱敏参数摘要，工具结束显示截断结果预览；Plan 工具结束后显示只读 Plan 表格，不解析工具输出字符串。
-- ⬜ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
+- ✅ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
-- 🔄 完成 G5 验收；127 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过；仍待 V50–V56 人工 smoke 和用户审查。
+- ✅ 完成 G5 验收；用户确认 V50–V56 人工 smoke 可接受，132 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过。
 
 ## R6 —— Knowledge/RAG 与 Memory
 
@@ -312,7 +312,7 @@
 - ⬜ 删除旧 RAG/Memory 全局 Facade 和兼容 adapter。
 - ⬜ 删除废弃 PlanStatusInfo、CONFIRM_APPROVED、SELECT/CONFIRM 协议分支。
 - ⬜ 删除源码目录中的 `.ipynb_checkpoints`。
-- ⬜ 确认临时 `scripts/v2_runtime_smoke.py` 已随 R5 正式 CLI 落地删除。
+- ✅ 确认临时 `scripts/v2_runtime_smoke.py` 已随 R5 正式 CLI 落地删除。
 - ⬜ 移除所有 v2 → legacy imports。
 
 ### 3. 文档与状态
