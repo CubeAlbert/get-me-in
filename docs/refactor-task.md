@@ -227,16 +227,16 @@
 
 ### 3. Interaction 与跨平台
 
-- ⬜ ApprovalRequested → questionary confirm/select → Approve/Reject command。
-- ⬜ SelectionRequested → 选择/自定义输入 → SubmitSelection command。
-- ⬜ 删除 UIBridge 和模块级 current bridge 的 v2 依赖。
+- 🔄 ApprovalRequested → questionary confirm/select → Approve/Reject command；代码与自动化验证已完成，待真实终端 smoke。
+- 🔄 SelectionRequested → 选择/自定义输入 → SubmitSelection command；代码已接入，待真实终端 smoke。
+- ✅ 删除 UIBridge 和模块级 current bridge 的 v2 依赖。
 - ⬜ Windows UTF-8、Esc、Ctrl+C、EOF 和 editor-not-found 行为验证。
-- ⬜ Input history 使用进程内 CLI-owned state；restore 后从 `SessionView.rewind_points` 重建，不增加独立持久化 schema。
-- ⬜ Completed/Failed/Cancelled 后自动 snapshot；保存失败单独渲染且不得覆盖原终态。
-- ⬜ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
+- 🔄 Input history 使用进程内 CLI-owned state；restore 后从 `SessionView.rewind_points` 重建，不增加独立持久化 schema；待真实终端 smoke。
+- ✅ Completed/Failed/Cancelled 后自动 snapshot；保存失败单独渲染且不得覆盖原终态。
+- ✅ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
 - ⬜ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
-- 🔄 完成 G5 验收；已通过 119 项核心自动化测试与 CLI 编译验证，待 V50–V56 人工 smoke 和用户审查。
+- 🔄 完成 G5 验收；123 项核心自动化测试与 CLI 编译验证通过，用户已确认当前测试无问题；仍待 V50–V56 人工 smoke 和用户审查。
 
 ## R6 —— Knowledge/RAG 与 Memory
 

@@ -6,9 +6,9 @@
 
 **当前子任务：** 按 `docs/legacy-cli-smoke-checklist.md#10-r5-v2-cli-增量-smoke` 完成 v2 人工 smoke，并审查后决定是否通过 G5、删除临时 Runner（⬜）
 
-**当前阻塞：** 等待真实终端／provider 人工 smoke；`.env` 存在，自动化验证未擅自触发外部 LLM 调用
+**当前阻塞：** 等待 V50–V56 真实终端／provider 人工 smoke；当前核心自动化测试已复核无问题，`.env` 存在，自动化验证未擅自触发外部 LLM 调用
 
-**会话交接说明：** 已完成全部五个 R5 CLI 代码切片：`commands.py`、`input.py`、`renderer.py`、`worker.py`、`app.py` 和独立入口。`python -m src.get_me_in.cli` 已装配 `build_application()` 与动态命令补全；119 项核心自动化测试及 CLI 编译验证通过。旧 `main.py` 与临时 `scripts/v2_runtime_smoke.py` 未修改，等待 G5 前人工 smoke 和审查。
+**会话交接说明：** 已完成全部五个 R5 CLI 代码切片：`commands.py`、`input.py`、`renderer.py`、`worker.py`、`app.py` 和独立入口。`python -m src.get_me_in.cli` 已装配 `build_application()` 与动态命令补全；`/rewind`、`/restore` 选择项显示用户可读预览，`/help` 从实际注册表排序生成，`/approval` 可无参数切换或显式设定模式。123 项核心自动化测试及 CLI 编译验证通过，用户已确认当前测试无问题。旧 `main.py` 与临时 `scripts/v2_runtime_smoke.py` 未修改，G5 仍待人工 smoke 和审查。
 
 **下一步：** 使用 `uv run python -m src.get_me_in.cli` 执行 V50–V56 人工 smoke，重点验证 Windows UTF-8、EOF、编辑器失败、真实 provider、审批/选择、Esc/Ctrl+C、restore/rewind 和终态 snapshot；用户审查通过 G5 后，才可删除临时 Runner 并单独提交。
 
