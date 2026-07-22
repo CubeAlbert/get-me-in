@@ -236,7 +236,7 @@
 - ✅ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
 - ⬜ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
-- 🔄 完成 G5 验收；123 项核心自动化测试与 CLI 编译验证通过，用户已确认当前测试无问题；仍待 V50–V56 人工 smoke 和用户审查。
+- 🔄 完成 G5 验收；125 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过；仍待 V50–V56 人工 smoke 和用户审查。
 
 ## R6 —— Knowledge/RAG 与 Memory
 

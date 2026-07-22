@@ -6,9 +6,9 @@
 
 **当前子任务：** 按 `docs/legacy-cli-smoke-checklist.md#10-r5-v2-cli-增量-smoke` 完成 v2 人工 smoke，并审查后决定是否通过 G5、删除临时 Runner（⬜）
 
-**当前阻塞：** 等待 V50–V56 真实终端／provider 人工 smoke；当前核心自动化测试已复核无问题，`.env` 存在，自动化验证未擅自触发外部 LLM 调用
+**当前阻塞：** 等待 V50–V56 真实终端／provider 人工 smoke；核心自动化测试已复核无问题，DeepSeek Web Search 的最小 provider smoke 已通过
 
-**会话交接说明：** 已完成全部五个 R5 CLI 代码切片：`commands.py`、`input.py`、`renderer.py`、`worker.py`、`app.py` 和独立入口。`python -m src.get_me_in.cli` 已装配 `build_application()` 与动态命令补全；`/rewind`、`/restore` 选择项显示用户可读预览，`/help` 从实际注册表排序生成，`/approval` 可无参数切换或显式设定模式。123 项核心自动化测试及 CLI 编译验证通过，用户已确认当前测试无问题。旧 `main.py` 与临时 `scripts/v2_runtime_smoke.py` 未修改，G5 仍待人工 smoke 和审查。
+**会话交接说明：** 已完成全部五个 R5 CLI 代码切片：`commands.py`、`input.py`、`renderer.py`、`worker.py`、`app.py` 和独立入口。`python -m src.get_me_in.cli` 已装配 `build_application()` 与动态命令补全；`/rewind`、`/restore` 选择项显示用户可读预览，`/help` 从实际注册表排序生成，`/approval` 可无参数切换或显式设定模式。DeepSeek Web Search 已恢复旧版两轮请求契约，且拒绝把未执行 DSML 调用记录为成功结果；125 项核心自动化测试及最小 provider smoke 通过。旧 `main.py` 与临时 `scripts/v2_runtime_smoke.py` 未修改，G5 仍待人工 smoke 和审查。
 
 **下一步：** 使用 `uv run python -m src.get_me_in.cli` 执行 V50–V56 人工 smoke，重点验证 Windows UTF-8、EOF、编辑器失败、真实 provider、审批/选择、Esc/Ctrl+C、restore/rewind 和终态 snapshot；用户审查通过 G5 后，才可删除临时 Runner 并单独提交。
 
@@ -42,3 +42,4 @@
 158. **`/restore` 选择显示会话预览而非内部 session_id** — SessionPreview 从最新主 Agent 用户输入派生短 preview；CommandRegistry 显示“序号 + 预览 + 保存时间”，并在内部映射到 session_id，CLI 不读取 snapshot/history。
 159. **帮助从真实命令注册表排序并说明审批模式** — `help_entries()` 与 `completions()` 均按命令名排序；`/approval` 无参数切换，或接受 `prompt/auto` 显式设置。
 160. **不保留 `/auto-approve-switch` 向前兼容** — 删除该 alias；审批偏好统一由 `/approval` 管理，避免一个“switch”命令反而要求参数的交互歧义。
+161. **恢复 DeepSeek Web Search 的旧版请求契约并拒绝未执行调用** — v2 adapter 必须保留旧版两轮调用的精确 system/user 文本、`max_tokens=4096`、`web_search` function schema 和 `"Provide the result"` tool result；不能将 `<｜｜DSML｜｜tool_calls>` 这类未执行调用当作成功搜索结果。真实最小 provider smoke 已返回正常搜索摘要。

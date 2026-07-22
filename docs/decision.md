@@ -3530,3 +3530,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 保留 alias 并让其无参数切换 —— 仍保留无价值的旧入口，已拒绝。
 - 保留 alias 并要求参数 —— 与 switch 语义矛盾，已拒绝。
+
+---
+
+### 决策 161 — 恢复 DeepSeek Web Search 的旧版请求契约并拒绝未执行调用
+
+**背景：** v2 `OpenAIWebSearchAdapter` 将旧版 `LLMClient.web_search()` 的两轮请求简化为新的 system/user 文本，并移除了两轮调用的 `max_tokens=4096`。真实 provider 随后返回 `<｜｜DSML｜｜tool_calls>`，该文本是未执行的 `web_search` 调用，却被 adapter 当作成功结果写入 session，导致后续模型在无真实搜索内容的条件下作答。
+
+**决策：**
+
+- 恢复旧版的精确 DeepSeek 请求契约：system prompt、`Perform a web search for the query: {query}` 用户消息、`max_tokens=4096`、`web_search` function schema 和第二轮的 `Provide the result` tool result。
+- 保持 `WebSearchPort`、`ToolContext` 和 `ToolSuccess/ToolFailure` 边界不变；这是既有 adapter 的 provider 协议修复，不新增搜索服务或公共接口。
+- 如果 provider 仍以 `<｜｜DSML｜｜tool_calls>` 返回未执行调用，adapter 必须抛出错误，由工具层转为 `web_search_failed`，不得写成 `ToolSuccess`。
+- 增加 adapter 契约测试，并执行一次最小真实 DeepSeek provider smoke，确认恢复契约后返回正常的搜索摘要。
+
+**理由：**
+
+- 该搜索能力由 DeepSeek 在 OpenAI 兼容调用链中提供；旧协议已在项目中实际运行，迁移时不应以通用化提示词替换 provider 专用 wire contract。
+- 对未执行调用 fail closed，可防止 session 和后续回答把控制标记误作事实性搜索结果。
+
+**曾考虑的替代方案：**
+
+- 接入第三方搜索供应商 —— 当前没有必要；会改变既有 provider 边界、配置和计费方式。
+- 接受 DSML 文本并让后续模型继续处理 —— 已被真实 session 证明会产生无依据回答。

@@ -7,6 +7,36 @@ from openai import OpenAI
 from src.get_me_in.ports.llm import CancellationSignal
 
 
+_WEB_SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "description": "Search the web for information",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The search query",
+                }
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+_WEB_SEARCH_SYSTEM = (
+    "You are a web search tool. Your only job is to perform a single "
+    "web search for the given query and return the results. "
+    "Do not engage in conversation, ask follow-up questions, "
+    "or mention that you are an AI model. "
+    "Just return the search results directly."
+)
+
+_MAX_TOKENS = 4096
+_DSML_TOOL_CALL_MARKER = "<｜｜DSML｜｜tool_calls>"
+
+
 class OpenAIWebSearchAdapter:
     def __init__(
         self,
@@ -32,11 +62,12 @@ class OpenAIWebSearchAdapter:
         try:
             response = client.chat.completions.create(
                 model=self._model,
+                max_tokens=_MAX_TOKENS,
                 messages=[
-                    {"role": "system", "content": "Search the web once and return a concise sourced answer."},
-                    {"role": "user", "content": query},
+                    {"role": "system", "content": _WEB_SEARCH_SYSTEM},
+                    {"role": "user", "content": f"Perform a web search for the query: {query}"},
                 ],
-                tools=[{"type": "function", "function": {"name": "web_search", "description": "Search the web", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}}],
+                tools=[_WEB_SEARCH_TOOL],
                 tool_choice={"type": "function", "function": {"name": "web_search"}},
                 extra_body={"thinking": {"type": "disabled"}},
             )
@@ -44,13 +75,17 @@ class OpenAIWebSearchAdapter:
                 raise InterruptedError("Web search was cancelled")
             message = response.choices[0].message
             if not message.tool_calls:
-                return message.content or ""
+                content = message.content or ""
+                if _DSML_TOOL_CALL_MARKER in content:
+                    raise RuntimeError("DeepSeek returned an unexecuted web_search tool call")
+                return content
             call = message.tool_calls[0]
             response = client.chat.completions.create(
                 model=self._model,
+                max_tokens=_MAX_TOKENS,
                 messages=[
-                    {"role": "system", "content": "Search the web once and return a concise sourced answer."},
-                    {"role": "user", "content": query},
+                    {"role": "system", "content": _WEB_SEARCH_SYSTEM},
+                    {"role": "user", "content": f"Perform a web search for the query: {query}"},
                     {"role": "assistant", "content": message.content or "", "tool_calls": [{"id": call.id, "type": "function", "function": {"name": call.function.name, "arguments": call.function.arguments}}]},
                     {"role": "tool", "tool_call_id": call.id, "content": "Provide the result"},
                 ],
