@@ -1,14 +1,14 @@
 # 当前状态
 
-**当前阶段：** R4 —— Session Aggregate 与编排（设计确认门禁）
+**当前阶段：** R5 —— CLI 拆分与交互迁移（启动前复审门禁）
 
-**当前任务：** 审查并确认已修订的 R4 新文件、类、公开方法与职责边界清单
+**当前任务：** 基于 R4 实际落地边界重新 Review R5～R8，并确认 R5 新文件、类与公开方法清单
 
-**当前子任务：** 用户审查 `docs/refactor-design.md#65-持久化` 中的 R4 文件、对象与公开边界清单（⬜）
+**当前子任务：** 复核 R5 CLI/WorkerRunner 是否仍为薄层，以及 R6/R7 依赖、资源关闭与 R8 删除/回退范围（⬜）
 
-**当前阻塞：** R4 编码尚未获得修订后清单的用户确认；必须先确认单 Session Application、Session 唯一状态所有权、CompleteHandoff/FailHandoff、turn_id rewind 与安全 snapshot phase
+**当前阻塞：** R5 编码尚未获准：必须先完成 R5～R8 复审、记录结论并取得 R5 新文件、类与公开方法清单确认
 
-**下一步：** 用户审查修订后的 R4 设计清单；确认后才能创建 `domain/sessions.py`、orchestration/session service/codec、JSON repository 等文件并调整现有 Runtime/Application
+**下一步：** 审查实际 `Application`、`SessionService`、`Orchestrator`、ApplicationCommand/RuntimeCommand、RuntimeEvent 与 cancellation 边界；形成 R5 清单后提交用户确认
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -30,3 +30,4 @@
 148. **G2/G3 修复完成并恢复门禁结论** — Runtime 改为 pull-driven 单事件状态机并补齐 provider-neutral conversation codec、call closure、多工具回合、真实取消、capability 隔离与 session-scoped workspace revision；86 项核心自动化测试通过，临时 v2 Runtime Runner 经用户确认可用；下一步停在 R4 设计清单确认门禁。
 149. **后续设计按当前 Runtime 重新校准** — 每个 Application 同时只管理一个活动 Session；SessionState 唯一持有 AgentSessionState，Runtime 以状态转换器工作；handoff 由 CompleteHandoff/FailHandoff 闭合，rewind 使用 turn_id，snapshot 禁止重放活动副作用；CLI input history 与 Artifact schema 分别留在 R5/R7，R6/R7 可在 G5 后并行。
 150. **增加强制 R5 前复审门禁** — G4 完成并 checkpoint 后，必须根据实际落地的 Application/Session/Command/Event/cancellation 边界重新 Review R5～R8，重点检查 CLI 薄层、R6 命令与资源生命周期、R6/R7 依赖及 R8 删除/回退范围；记录结论并确认 R5 清单前不得开始 R5 coding。
+151. **R4/G4 已完成并进入 R5 前复审** — `SessionState` 已成为唯一状态源，Runtime 以 `advance(state, command)` 转换，Orchestrator 通过 Complete/FailHandoff 闭合原 call id；v2 snapshot 使用 schema_version=2、turn_id rewind 与安全 phase 规范化。98 项核心自动化测试通过；不更新设计/计划，先执行强制 R5～R8 复审。

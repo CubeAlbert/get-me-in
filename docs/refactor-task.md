@@ -156,38 +156,38 @@
 
 ### 1. Session model
 
-- ⬜ 定义 `AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionView`、`SessionPreview`；R4 不提前定义 Artifact schema。
-- ⬜ 将现有 RuntimeState 的 history/phase/pending/model-call/repair 状态并入 AgentSessionState，SessionState 成为唯一规范状态源。
-- ⬜ AgentRuntime 改为 `advance(state, command) -> RuntimeTransition`，不得保留第二份长期状态；Application 对外仍一次返回一个 RuntimeEvent。
-- ⬜ 每个 Application 同时只管理一个活动 Session；生成真实 session id，并按 session/agent 构造 ToolContext、CancellationToken、Plan 绑定与 WorkspaceAccessState。
-- ⬜ Settings 增加 `sessions_dir`，默认使用全新 `data/v2/sessions/`，不得读取旧 `data/save/`。
-- ⬜ CLI input history 留在 R5 InputController；如需持久化，使用独立 CLI snapshot，不进入 domain SessionState。
-- ⬜ 提供公开 `view/snapshot/restore/rewind(turn_id)/list_sessions/dump` API。
-- ⬜ 禁止 CLI 直接访问 `_history`、`_plan` 或 Agent 私有方法。
+- ✅ 定义 `AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionView`、`SessionPreview`；R4 不提前定义 Artifact schema。
+- ✅ 将现有 RuntimeState 的 history/phase/pending/model-call/repair 状态并入 AgentSessionState，SessionState 成为唯一规范状态源。
+- ✅ AgentRuntime 改为 `advance(state, command) -> RuntimeTransition`，不得保留第二份长期状态；Application 对外仍一次返回一个 RuntimeEvent。
+- ✅ 每个 Application 同时只管理一个活动 Session；生成真实 session id，并按 session/agent 构造 ToolContext、CancellationToken、Plan 绑定与 WorkspaceAccessState。
+- ✅ Settings 增加 `sessions_dir`，默认使用全新 `data/v2/sessions/`，不得读取旧 `data/save/`。
+- ✅ CLI input history 留在 R5 InputController；如需持久化，使用独立 CLI snapshot，不进入 domain SessionState。
+- ✅ 提供公开 `view/snapshot/restore/rewind(turn_id)/list_sessions/dump` API。
+- ✅ 禁止 CLI 直接访问 `_history`、`_plan` 或 Agent 私有方法。
 
 ### 2. Orchestrator
 
-- ⬜ 实现 Hub-and-Spoke 路由约束。
-- ⬜ Main Runtime 只注入可路由 descriptor；子 Agent Runtime 不持有完整 AgentCatalog。
-- ⬜ 定义 `CompleteHandoff` 与 `FailHandoff`，使 WAITING_FOR_HANDOFF 可以按原 call id 闭合。
-- ⬜ 实现带 turn_id/call_id 的 main→sub handoff frame。
-- ⬜ 实现 sub→main summary、frame pop、active agent 恢复与源 tool call 原子闭合。
-- ⬜ 实现 `/exit_sub` 的 application command，不向 Agent 私有 history 直接 append。
-- ⬜ 处理未知 Agent、嵌套切换和中断中的 handoff；所有失败路径均闭合原 call id。
-- ⬜ 使用测试专用 sub Agent 完成 G4；真实 Resume AgentSpec 不提前从 R7 移入。
+- ✅ 实现 Hub-and-Spoke 路由约束。
+- ✅ Main Runtime 只注入可路由 descriptor；子 Agent Runtime 不持有完整 AgentCatalog。
+- ✅ 定义 `CompleteHandoff` 与 `FailHandoff`，使 WAITING_FOR_HANDOFF 可以按原 call id 闭合。
+- ✅ 实现带 turn_id/call_id 的 main→sub handoff frame。
+- ✅ 实现 sub→main summary、frame pop、active agent 恢复与源 tool call 原子闭合。
+- ✅ 实现 `/exit_sub` 的 application command，不向 Agent 私有 history 直接 append。
+- ✅ 处理未知 Agent、嵌套切换和中断中的 handoff；所有失败路径均闭合原 call id。
+- ✅ 使用测试专用 sub Agent 完成 G4；真实 Resume AgentSpec 不提前从 R7 移入。
 
 ### 3. Snapshot repository
 
-- ⬜ 定义 `schema_version=2` SessionSnapshot DTO。
-- ⬜ 每条 ConversationRecord 增加 turn_id；rewind 只允许用户回合边界，不截断在 tool call/result 中间。
-- ⬜ 分离 provider-facing ConversationCodec、磁盘 SessionSnapshotCodec 与 JSON file repository。
-- ⬜ 明确定义可恢复稳定 phase；活动 LLM/Process 归一化为 interrupted/cancelled，禁止自动重放 TOOL_READY 副作用。
-- ⬜ 原子写入并报告保存失败；保存失败不得触发旧 sub 数据清理。
+- ✅ 定义 `schema_version=2` SessionSnapshot DTO。
+- ✅ 每条 ConversationRecord 增加 turn_id；rewind 只允许用户回合边界，不截断在 tool call/result 中间。
+- ✅ 分离 provider-facing ConversationCodec、磁盘 SessionSnapshotCodec 与 JSON file repository。
+- ✅ 明确定义可恢复稳定 phase；活动 LLM/Process 归一化为 interrupted/cancelled，禁止自动重放 TOOL_READY 副作用。
+- ✅ 原子写入并报告保存失败；保存失败不得触发旧 sub 数据清理。
 - ⛔ 实现 v1 session/meta/message/plan → v2 migration —— R-D6 明确不迁移。
-- ⬜ 实现 list、preview、dump。
-- ⬜ Restore/Rewind 同步修正 pending action、plan 和 handoff stack，并清除 WorkspaceAccessState，编辑前重新读取。
-- ⬜ 增加 Session、Orchestrator、Snapshot codec 与 JSON repository 的核心自动化测试文件，覆盖 G4 失败路径。
-- ⬜ 完成 G4 验收。
+- ✅ 实现 list、preview、dump。
+- ✅ Restore/Rewind 同步修正 pending action、plan 和 handoff stack，并清除 WorkspaceAccessState，编辑前重新读取。
+- ✅ 增加 Session、Orchestrator、Snapshot codec 与 JSON repository 的核心自动化测试文件，覆盖 G4 失败路径。
+- ✅ 完成 G4 验收（98 项核心自动化测试通过）。
 
 ## R5 —— CLI 拆分与交互迁移
 

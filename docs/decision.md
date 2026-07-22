@@ -158,6 +158,7 @@
 - [决策 148 — G2/G3 修复完成并恢复门禁结论](#决策-148--g2g3-修复完成并恢复门禁结论)
 - [决策 149 — 后续设计按当前 Runtime 重新校准](#决策-149--后续设计按当前-runtime-重新校准)
 - [决策 150 — G4 后强制重新 Review R5 至 R8](#决策-150--g4-后强制重新-review-r5-至-r8)
+- [决策 151 — R4/G4 完成后先进入 R5 前复审](#决策-151--r4g4-完成后先进入-r5-前复审)
 
 ---
 
@@ -3289,3 +3290,23 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 现在深入设计 R5～R8 —— 缺少 R4 落地证据，容易产生推测性接口，已拒绝。
 - 保持现有计划且不增加复审门禁 —— 新会话可能在 G4 后直接进入 R5 coding，无法防止设计再次漂移，已拒绝。
+
+---
+
+### 决策 151 — R4/G4 完成后先进入 R5 前复审
+
+**背景：** R4 已按确认清单完成 Session aggregate、Runtime 状态迁移、handoff 编排与 v2 snapshot；核心自动化测试增至 98 项。R5～R8 的接口和依赖仍必须以实际落地边界为准。
+
+**决策：**
+
+- 将 R4 和 G4 标记为完成，并在 `docs/current.md` 将当前工作切换到 R5 启动前复审门禁。
+- 不在本次 checkpoint 改写 `docs/refactor-design.md` 或 `docs/refactor-plan.md`；R5 新文件、类和公开方法清单仍须经过复审并获用户确认。
+
+**理由：**
+
+- R4 的实际 `Application`、`SessionService`、`Orchestrator`、ApplicationCommand/RuntimeCommand、RuntimeEvent 与 cancellation 边界已经可作为复审事实基础。
+- 保持 R5 编码门禁，避免 CLI、Knowledge、Resume 和旧代码删除在未经重新校准的条件下扩张范围。
+
+**曾考虑的替代方案：**
+
+- 直接开始 R5 CLI 编码 —— 违反决策 150 的强制复审门禁，已拒绝。
