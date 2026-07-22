@@ -93,6 +93,19 @@ class SessionSnapshotCodec:
         for frame in session.handoff_stack:
             if frame.source not in session.agents or frame.target not in session.agents:
                 raise ValueError("Handoff frame references an unknown agent")
+        if len(session.handoff_stack) > 1:
+            raise ValueError("Nested handoff frames are not supported")
+        if session.handoff_stack:
+            frame = session.handoff_stack[-1]
+            source = session.agents[frame.source]
+            if session.active_agent is not frame.target:
+                raise ValueError("Active agent must match the handoff target")
+            if source.phase is not RuntimePhase.WAITING_FOR_HANDOFF:
+                raise ValueError("Handoff source must be waiting for completion")
+            if source.pending_tool is None or source.pending_tool.call_id != frame.call_id:
+                raise ValueError("Handoff frame must match the source pending call")
+            if source.turn_id != frame.turn_id:
+                raise ValueError("Handoff frame must match the source turn")
 
     @staticmethod
     def _validate_agent(key: AgentKey, state: AgentSessionState) -> None:

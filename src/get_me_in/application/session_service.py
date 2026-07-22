@@ -10,9 +10,15 @@ from src.get_me_in.application.orchestration import Orchestrator
 from src.get_me_in.application.session_codec import SessionSnapshot
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey
-from src.get_me_in.domain.messages import ToolResultRecord
+from src.get_me_in.domain.messages import MessageRecord, Role, ToolResultRecord
 from src.get_me_in.domain.sessions import RuntimePhase
-from src.get_me_in.domain.sessions import AgentSessionState, SessionPreview, SessionState, SessionView
+from src.get_me_in.domain.sessions import (
+    AgentSessionState,
+    SessionPreview,
+    SessionState,
+    SessionTurnView,
+    SessionView,
+)
 from src.get_me_in.ports.clock import Clock
 from src.get_me_in.ports.ids import IdGenerator
 from src.get_me_in.ports.sessions import SessionRepository
@@ -51,7 +57,22 @@ class SessionService:
 
     def view(self) -> SessionView:
         active = self._session.agents[self._session.active_agent]
-        return SessionView(self._session.session_id, self._session.active_agent, active.phase, active.plan)
+        rewind_points = tuple(
+            SessionTurnView(record.turn_id, key, record.content, record.timestamp)
+            for key, state in self._session.agents.items()
+            for record in state.history
+            if key is AgentKey.MAIN
+            and isinstance(record, MessageRecord)
+            and record.role is Role.USER
+            and record.turn_id
+        )
+        return SessionView(
+            self._session.session_id,
+            self._session.active_agent,
+            active.phase,
+            active.plan,
+            tuple(sorted(rewind_points, key=lambda item: item.timestamp)),
+        )
 
     def snapshot(self) -> SessionSnapshot:
         self._session = self._normalise_snapshot_state(self._session)
@@ -63,6 +84,10 @@ class SessionService:
         snapshot = self._repository.load(session_id)
         if not isinstance(snapshot, SessionSnapshot):
             raise TypeError("Session repository returned an invalid snapshot")
+        unavailable = set(snapshot.session.agents) - set(self._plans)
+        if unavailable:
+            names = ", ".join(sorted(key.value for key in unavailable))
+            raise ValueError(f"Session requires unavailable agents: {names}")
         self._workspace_access.clear_session(self._session.session_id)
         self._workspace_access.clear_session(snapshot.session.session_id)
         self._session = snapshot.session

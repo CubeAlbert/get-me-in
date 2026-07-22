@@ -68,11 +68,22 @@ class SessionState:
 
 
 @dataclass(frozen=True)
+class SessionTurnView:
+    """Read-only user-turn projection exposed to frontends."""
+
+    turn_id: str
+    agent_key: AgentKey
+    user_text: str
+    timestamp: datetime
+
+
+@dataclass(frozen=True)
 class SessionView:
     session_id: str
     active_agent: AgentKey
     phase: RuntimePhase
     plan: Plan | None
+    rewind_points: tuple[SessionTurnView, ...] = ()
 
 
 @dataclass(frozen=True)

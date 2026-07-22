@@ -149,6 +149,8 @@ class BootstrapTests(unittest.TestCase):
             _pump(application, UserMessage("first"))
             snapshot = application.snapshot()
             turn_id = snapshot.session.agents[AgentKey.MAIN].history[0].turn_id
+            self.assertEqual((turn_id,), tuple(item.turn_id for item in application.view().rewind_points))
+            self.assertEqual("first", application.view().rewind_points[0].user_text)
 
             rewound = application.handle(RewindSession(turn_id))
             restored = application.handle(RestoreSession(snapshot.session.session_id))

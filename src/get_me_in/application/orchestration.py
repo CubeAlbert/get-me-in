@@ -3,8 +3,8 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
-from src.get_me_in.application.commands import CompleteHandoff, FailHandoff, RuntimeCommand
-from src.get_me_in.application.events import HandoffRequested, RuntimeEvent
+from src.get_me_in.application.commands import CompleteHandoff, FailHandoff, RuntimeCommand, UserMessage
+from src.get_me_in.application.events import Cancelled, Failed, HandoffRequested, RuntimeEvent
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, SessionState
@@ -29,6 +29,8 @@ class Orchestrator:
         session = self._replace_agent(session, source, transition.state)
         event = transition.event
         if not isinstance(event, HandoffRequested):
+            if isinstance(event, (Cancelled, Failed)) and session.handoff_stack:
+                return self._close_active_handoff(session, event)
             return SessionTransition(session, event)
         return self._handoff(session, event)
 
@@ -68,9 +70,39 @@ class Orchestrator:
             return self._close_failure(session, event, "nested_handoff", "Only main may start one sub-agent handoff")
         source_state = session.agents[event.source]
         frame = HandoffFrame(event.source, event.target, event.call_id, source_state.turn_id, event.context)
+        target_runtime = self._runtimes[event.target]
+        target_transition = target_runtime.advance(
+            session.agents[event.target],
+            UserMessage(event.context or "Continue the delegated task."),
+        )
+        if isinstance(target_transition.event, Failed):
+            return self._close_failure(
+                session,
+                event,
+                "handoff_start_failed",
+                target_transition.event.message,
+            )
+        session = self._replace_agent(session, event.target, target_transition.state)
         return SessionTransition(
             replace(session, active_agent=event.target, handoff_stack=(*session.handoff_stack, frame)),
             event,
+        )
+
+    def _close_active_handoff(self, session: SessionState, event: Cancelled | Failed) -> SessionTransition:
+        frame = session.handoff_stack[-1]
+        if session.active_agent is not frame.target:
+            return SessionTransition(session, event)
+        code = "subagent_cancelled" if isinstance(event, Cancelled) else "subagent_failed"
+        message = event.reason if isinstance(event, Cancelled) else event.message
+        runtime = self._runtimes[frame.source]
+        transition = runtime.advance(
+            session.agents[frame.source],
+            FailHandoff(frame.call_id, code, message),
+        )
+        session = self._replace_agent(session, frame.source, transition.state)
+        return SessionTransition(
+            replace(session, active_agent=frame.source, handoff_stack=session.handoff_stack[:-1]),
+            transition.event,
         )
 
     def _return_to_main(self, session: SessionState, event: HandoffRequested) -> SessionTransition:

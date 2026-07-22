@@ -6,7 +6,7 @@ import unittest
 from src.get_me_in.application.session_codec import SessionSnapshot, SessionSnapshotCodec
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role
-from src.get_me_in.domain.sessions import AgentSessionState, RuntimePhase, SessionState
+from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, RuntimePhase, SessionState
 
 
 class SessionSnapshotCodecTests(unittest.TestCase):
@@ -42,6 +42,26 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         }]
         with self.assertRaisesRegex(ValueError, "matching tool call"):
             codec.decode(payload)
+
+    def test_rejects_inconsistent_handoff_frame(self) -> None:
+        snapshot = _snapshot()
+        session = snapshot.session
+        agents = dict(session.agents)
+        agents[AgentKey.RESUME] = AgentSessionState()
+        inconsistent = SessionSnapshot(
+            SessionState(
+                session_id=session.session_id,
+                active_agent=AgentKey.RESUME,
+                agents=agents,
+                handoff_stack=(HandoffFrame(AgentKey.MAIN, AgentKey.RESUME, "call-1", "turn-1", "context"),),
+                created_at=session.created_at,
+                updated_at=session.updated_at,
+            ),
+            snapshot.saved_at,
+        )
+
+        with self.assertRaisesRegex(ValueError, "waiting for completion"):
+            SessionSnapshotCodec().encode(inconsistent)
 
 
 def _snapshot(*, phase: RuntimePhase = RuntimePhase.READY) -> SessionSnapshot:
