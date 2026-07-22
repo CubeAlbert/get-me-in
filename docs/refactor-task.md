@@ -227,7 +227,7 @@
 
 ### 3. Interaction 与跨平台
 
-- 🔄 ApprovalRequested → questionary confirm/select → Approve/Reject command；`Reject` 写入拒绝结果闭合 call 后以 `Cancelled` 结束当前内层循环并归还输入框，实际工具失败仍交回模型；代码与自动化验证已完成，待真实终端 smoke。
+- 🔄 ApprovalRequested → questionary 选项列表“✅ 执行 / ❌ 取消” → Approve/Reject command；不得使用 `y/N` 确认框。`Reject` 写入拒绝结果闭合 call 后以 `Cancelled` 结束当前内层循环并归还输入框，实际工具失败仍交回模型；代码与自动化验证已完成，待真实终端 smoke。
 - 🔄 SelectionRequested → 选择/自定义输入 → SubmitSelection command；代码已接入，待真实终端 smoke。
 - ✅ 删除 UIBridge 和模块级 current bridge 的 v2 依赖。
 - ⬜ Windows UTF-8、Esc、Ctrl+C、EOF 和 editor-not-found 行为验证。

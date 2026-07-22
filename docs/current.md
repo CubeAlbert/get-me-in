@@ -8,7 +8,7 @@
 
 **当前阻塞：** 等待 V50–V56 真实终端／provider 人工 smoke；核心自动化测试已复核无问题，DeepSeek Web Search 的最小 provider smoke 已通过
 
-**会话交接说明：** 已完成全部五个 R5 CLI 代码切片：`commands.py`、`input.py`、`renderer.py`、`worker.py`、`app.py` 和独立入口。`python -m src.get_me_in.cli` 已装配 `build_application()` 与动态命令补全；`/rewind`、`/restore` 选择项显示用户可读预览，`/help` 从实际注册表排序生成，`/approval` 可无参数切换或显式设定模式。工具开始显示脱敏参数摘要，工具结束显示截断结果预览，Plan 工具显示只读计划表格。用户拒绝审批时，Runtime 会写入拒绝结果闭合 pending call 并以 `Cancelled` 结束当前轮次，CLI 立即归还输入框；实际工具失败仍交回模型自修复。DeepSeek Web Search 已恢复旧版两轮请求契约，且拒绝把未执行 DSML 调用记录为成功结果；128 项核心自动化测试及最小 provider smoke 通过。旧 `main.py` 与临时 `scripts/v2_runtime_smoke.py` 未修改，G5 仍待人工 smoke 和审查。
+**会话交接说明：** 已完成全部五个 R5 CLI 代码切片：`commands.py`、`input.py`、`renderer.py`、`worker.py`、`app.py` 和独立入口。`python -m src.get_me_in.cli` 已装配 `build_application()` 与动态命令补全；`/rewind`、`/restore` 选择项显示用户可读预览，`/help` 从实际注册表排序生成，`/approval` 可无参数切换或显式设定模式。工具开始显示脱敏参数摘要，工具结束显示截断结果预览，Plan 工具显示只读计划表格；审批提示使用“✅ 执行 / ❌ 取消”选项，不使用 `y/N`。用户拒绝审批时，Runtime 会写入拒绝结果闭合 pending call 并以 `Cancelled` 结束当前轮次，CLI 立即归还输入框；实际工具失败仍交回模型自修复。DeepSeek Web Search 已恢复旧版两轮请求契约，且拒绝把未执行 DSML 调用记录为成功结果；129 项核心自动化测试及最小 provider smoke 通过。旧 `main.py` 与临时 `scripts/v2_runtime_smoke.py` 未修改，G5 仍待人工 smoke 和审查。
 
 **下一步：** 使用 `uv run python -m src.get_me_in.cli` 执行 V50–V56 人工 smoke，重点验证 Windows UTF-8、EOF、编辑器失败、真实 provider、审批/选择、Esc/Ctrl+C、restore/rewind 和终态 snapshot；用户审查通过 G5 后，才可删除临时 Runner 并单独提交。
 
@@ -45,3 +45,4 @@
 161. **恢复 DeepSeek Web Search 的旧版请求契约并拒绝未执行调用** — v2 adapter 必须保留旧版两轮调用的精确 system/user 文本、`max_tokens=4096`、`web_search` function schema 和 `"Provide the result"` tool result；不能将 `<｜｜DSML｜｜tool_calls>` 这类未执行调用当作成功搜索结果。真实最小 provider smoke 已返回正常搜索摘要。
 162. **R5 工具可见性使用强类型事件投影** — `ToolStarted` 携带 arguments 供 Renderer 脱敏摘要，`ToolFinished` 可携带只读 Plan 投影；Renderer 显示截断结果预览与 Plan 表格，不读取 Session，也不反解析工具输出字符串；Sticky Plan 仍暂缓。
 163. **用户拒绝审批终止本轮而非触发模型重试** — `Reject` 必须记录拒绝的 tool result 闭合 pending call，随后返回 `Cancelled` 让 CliApp 立即回到输入；技术/业务执行失败仍作为 `ToolFinished` 交回模型自修复。
+164. **审批交互使用明确选项而非 `y/N`** — InputController 的 `confirm()` 以 questionary 选项列表显示“✅ 执行 / ❌ 取消”，保持 v1 的可视化审批体验；返回值和 CliApp 的 Approve/Reject 协议不变。

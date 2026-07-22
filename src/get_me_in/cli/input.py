@@ -50,7 +50,12 @@ class InputController:
 
     def confirm(self, prompt: str) -> bool | None:
         try:
-            return questionary.confirm(prompt, qmark="").ask()
+            choice = questionary.select(
+                prompt,
+                choices=("✅ 执行", "❌ 取消"),
+                qmark="",
+            ).ask()
+            return choice == "✅ 执行"
         except (EOFError, KeyboardInterrupt):
             return None
 

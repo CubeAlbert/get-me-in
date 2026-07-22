@@ -366,7 +366,7 @@ CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触
 
 - `CliApp`：唯一外层输入循环；把普通文本转换为 `UserMessage`，驱动 RuntimeEvent → 下一条 RuntimeCommand，并在终态触发 session snapshot。
 - `CommandRegistry`：命令解析、帮助文本、alias 与 handler 映射；R6 可替换已注册的 unavailable handler，无需修改 CliApp。
-- `InputController`：autocomplete、进程内输入导航历史、prefill、editor、confirm/select；不增加独立 CLI 持久化 schema。restore 后可从 `SessionView.rewind_points` 重建导航历史。
+- `InputController`：autocomplete、进程内输入导航历史、prefill、editor、confirm/select；其中 `confirm()` 使用 questionary 选项列表呈现“✅ 执行 / ❌ 取消”，不使用 `y/N` 确认框；不增加独立 CLI 持久化 schema。restore 后可从 `SessionView.rewind_points` 重建导航历史。
 - `Renderer`：Markdown、Plan、spinner、错误、命令结果和 `SessionView` context recap；工具开始时以脱敏、截断后的 arguments 摘要展示调用，工具结束时显示截断结果预览；Plan 工具结束时直接渲染只读 Plan 表格，不解析输出字符串；不决定下一条业务 command。
 - `WorkerRunner`：使用单 worker 串行执行一个 `Application.handle(RuntimeCommand)`，轮询 Esc/Ctrl+C 并只通过 `Application.request_cancel()` 跨线程取消；不得并发执行 snapshot/restore/另一条 command。
 

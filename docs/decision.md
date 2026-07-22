@@ -178,6 +178,7 @@
 - [决策 161 — 恢复 DeepSeek Web Search 的旧版请求契约并拒绝未执行调用](#决策-161--恢复-deepseek-web-search-的旧版请求契约并拒绝未执行调用)
 - [决策 162 — R5 工具可见性使用强类型事件投影](#决策-162--r5-工具可见性使用强类型事件投影)
 - [决策 163 — 用户拒绝审批立即结束当前 Agent 回合](#决策-163--用户拒绝审批立即结束当前-agent-回合)
+- [决策 164 — 审批交互使用明确选项而非 y/N](#决策-164--审批交互使用明确选项而非-yn)
 
 ---
 
@@ -3609,3 +3610,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 继续把拒绝作为普通 `ToolFailure`，仅由提示词要求模型不重试 —— 无法保证行为，且 CLI 仍不能立刻归还输入。
 - 不记录 tool result 直接取消 —— 会留下未闭合的已声明调用，破坏会话记录与 snapshot 的一致性。
+
+---
+
+### 决策 164 —— 审批交互使用明确选项而非 `y/N`
+
+**背景：** v2 `InputController.confirm()` 使用 `questionary.confirm()`，终端会显示 `y/N` 文本确认。用户要求恢复 v1 审批界面的明确选项交互，以便直接看见“执行”与“取消”。
+
+**决定：**
+
+- `InputController.confirm()` 改用 `questionary.select()`，固定显示“✅ 执行”和“❌ 取消”两个选项。
+- 选中“✅ 执行”返回 `True`，其余选择与输入取消保持拒绝语义；`CliApp` 继续将布尔结果映射为既有 `Approve/Reject` command。
+- 不引入 v1 的 `ConfirmChoice` 类型，也不让 v2 依赖旧模块；选项仅是 InputController 内部展示细节。
+
+**理由：**
+
+- 选项列表在终端中更易识别，且与 v1 已验证的审批体验保持一致。
+- 保持 `confirm() -> bool | None` 公开契约不变，不影响 Runtime、CliApp 和自动审批模式。
+
+**曾考虑的替代方案：**
+
+- 继续使用 `questionary.confirm()` 并调整提示文本 —— 仍会保留 `y/N` 交互，不符合目标。
+- 复用旧 `ConfirmChoice` —— 会让 v2 CLI 反向依赖 legacy 代码，违反受控重构边界。

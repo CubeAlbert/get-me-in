@@ -142,6 +142,18 @@ class InputControllerTests(unittest.TestCase):
         self.assertEqual("long text", controller.edit())
         self.assertEqual(["restored"], controller._history)
 
+    def test_confirm_uses_explicit_approve_and_reject_choices(self) -> None:
+        controller = InputController(editor=lambda: None)
+
+        with patch("src.get_me_in.cli.input.questionary.select") as select:
+            select.return_value.ask.return_value = "✅ 执行"
+            self.assertTrue(controller.confirm("Approve tool write_file?"))
+            select.return_value.ask.return_value = "❌ 取消"
+            self.assertFalse(controller.confirm("Approve tool write_file?"))
+
+        self.assertEqual(("✅ 执行", "❌ 取消"), select.call_args_list[0].kwargs["choices"])
+        self.assertEqual("", select.call_args_list[0].kwargs["qmark"])
+
 
 class RendererTests(unittest.TestCase):
     def test_renders_typed_terminal_events_without_returning_commands(self) -> None:
