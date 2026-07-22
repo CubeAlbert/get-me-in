@@ -191,6 +191,13 @@
 
 ## R5 —— CLI 拆分与交互迁移
 
+### 0. 启动前复审门禁
+
+- ⬜ G4 完成并 checkpoint 后，基于实际 Application/Session/Command/Event/cancellation API 重新 Review R5～R8。
+- ⬜ 复核 R5 CliApp、CommandRegistry、InputController、Renderer、WorkerRunner 的职责和新文件/公开方法清单，确保 CLI 不吸收业务编排。
+- ⬜ 复核 R6 命令接入与资源清理、R6/R7 并行及验收依赖、R8 删除/回退/临时 Runner 清理范围。
+- ⬜ 将复审结论同步到 refactor design/plan/task/decision，并获得 R5 清单确认；未完成前不得开始 R5 coding。
+
 ### 1. CLI shell
 
 - ⬜ 创建 CliApp，仅保留输入循环和 application command/event 转发。

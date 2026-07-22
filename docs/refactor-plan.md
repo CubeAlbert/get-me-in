@@ -129,6 +129,8 @@
 
 ### R5 —— CLI 拆分与交互迁移
 
+> **R5 前复审门禁（强制）：** G4 完成并 checkpoint 后、提交 R5 新文件/类/公开方法清单前，必须基于实际落地的 Application、SessionView、ApplicationCommand/RuntimeCommand、RuntimeEvent、handoff 与 cancellation 边界重新 Review R5～R8。重点复核：R5 CLI/WorkerRunner 是否仍为薄层；R6 命令接入与统一资源关闭是否仍匹配；R6/R7 并行和最终验收依赖是否合理；R8 删除清单、临时 Runner 删除时点与回退步骤是否完整。复审结论未记录前不得开始 R5 coding。
+
 **目标：** 将旧 App 拆为薄 shell，使命令、输入、渲染和 worker 可独立替换。
 
 **产出：**

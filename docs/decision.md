@@ -157,6 +157,7 @@
 - [决策 147 — 架构复审撤销 G2/G3 完成结论并暂停 R4](#决策-147--架构复审撤销-g2g3-完成结论并暂停-r4)
 - [决策 148 — G2/G3 修复完成并恢复门禁结论](#决策-148--g2g3-修复完成并恢复门禁结论)
 - [决策 149 — 后续设计按当前 Runtime 重新校准](#决策-149--后续设计按当前-runtime-重新校准)
+- [决策 150 — G4 后强制重新 Review R5 至 R8](#决策-150--g4-后强制重新-review-r5-至-r8)
 
 ---
 
@@ -3264,3 +3265,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 让 AgentRuntime 直接读写 AgentStateRepository —— 增加不必要的进程内 repository，并隐藏状态转换，已拒绝。
 - 一个 Application 同时管理多个活动 Session —— 超出当前 CLI 和 R4 需求，与 R9 暂缓范围冲突，已拒绝。
 - 允许 restore 自动继续 TOOL_READY —— 可能重复文件写入、编译或外部调用，已拒绝。
+
+---
+
+### 决策 150 — G4 后强制重新 Review R5 至 R8
+
+**背景：** 对 R5～R8 进行基于 `docs/refactor-plan.md` 的快速风险扫描后，未发现需要立即推翻总体路线的问题，但这些阶段都依赖 R4 最终落地的 Application、SessionView、ApplicationCommand/RuntimeCommand、RuntimeEvent、handoff 和 cancellation 边界。当前仅有修订后的设计，尚不能用来确认 CLI worker、Knowledge 命令接入、R6/R7 并行验收和 R8 删除清单的最终形状。
+
+**决策：**
+
+- G4 完成并执行 checkpoint 后、提交 R5 新文件/类/公开方法清单前，强制重新 Review R5～R8。
+- 复审至少检查四项：R5 CLI/WorkerRunner 是否保持薄层；R6 `/ragreload`、`/build-memory` 与资源清理是否匹配 R5；R6/R7 并行和 G7 最终依赖是否仍成立；R8 删除范围、临时 Runner 删除时点和回退步骤是否完整。
+- 复审结论必须同步到活跃 refactor design/plan/task/decision，并获得 R5 清单确认；未完成前不得开始 R5 coding。
+- 当前不深入细化 R5～R8，不因预判未来接口而扩大 R4 范围。
+
+**理由：**
+
+- R4 会重塑 Application 与 Session 的公开边界，提前锁定 R5 worker 和命令协议容易重复本次状态所有权漂移。
+- R6/R7 的并行是优化而非硬约束，应依据 G4/G5 后真实集成边界决定。
+- 在删除旧入口前重新核对真实依赖，比现在维护一份推测性的 R8 删除清单更可靠。
+
+**曾考虑的替代方案：**
+
+- 现在深入设计 R5～R8 —— 缺少 R4 落地证据，容易产生推测性接口，已拒绝。
+- 保持现有计划且不增加复审门禁 —— 新会话可能在 G4 后直接进入 R5 coding，无法防止设计再次漂移，已拒绝。
