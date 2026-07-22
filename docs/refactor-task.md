@@ -218,7 +218,7 @@
 - 🔄 `/edit`
 - 🔄 `/dump`
 - 🔄 `/restore [session_id]`；无参数时使用 InputController 选择 session。
-- 🔄 `/rewind`；无参数时使用 InputController 选择公开 rewind point。
+- 🔄 `/rewind`；无参数时显示序号与用户输入预览，通过 InputController 选择公开 rewind point，并映射回精确 turn_id。
 - 🔄 `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/exit_sub`

@@ -64,6 +64,15 @@ class CoreCommandTests(unittest.TestCase):
         self.assertEqual([RestoreSession("session-2"), RewindSession("turn-1")], self.application.commands)
         self.assertEqual(("first", "second"), self.input_controller.history)
 
+    def test_interactive_rewind_displays_previews_but_uses_the_matching_turn_id(self) -> None:
+        self.input_controller.selected = "2. second"
+
+        rewound = self.registry.dispatch("/rewind")
+
+        self.assertEqual(CommandResult(CommandAction.PREFILL, "second"), rewound)
+        self.assertEqual(("1. first", "2. second"), self.input_controller.selection_choices)
+        self.assertEqual([RewindSession("turn-2")], self.application.commands)
+
     def test_unavailable_approval_and_exit_commands_have_typed_results(self) -> None:
         self.assertIn("R6", self.registry.dispatch("/ragreload references").text)
         self.assertEqual(ApprovalMode.AUTO, self.registry.dispatch("/auto-approve-switch auto").approval_mode)
@@ -145,17 +154,26 @@ class _Application:
             return "event"
         return _View()
 
+    def view(self) -> _View:
+        return _View()
+
 
 class _InputController:
     def __init__(self) -> None:
         self.editor_result: str | None = None
         self.history: tuple[str, ...] = ()
+        self.selected: str | None = None
+        self.selection_choices: tuple[str, ...] = ()
 
     def edit(self) -> str | None:
         return self.editor_result
 
     def replace_history(self, entries: tuple[str, ...]) -> None:
         self.history = entries
+
+    def select(self, prompt: str, choices: tuple[str, ...]) -> str | None:
+        self.selection_choices = choices
+        return self.selected
 
 
 class _Renderer:

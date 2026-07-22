@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 157 — /rewind 选择显示用户输入预览而非内部 turn_id](#决策-157--rewind-选择显示用户输入预览而非内部-turn_id)
 - [决策 156 — InputController 通过 CompletionProvider 获取动态命令补全](#决策-156--inputcontroller-通过-completionprovider-获取动态命令补全)
 - [决策 155 — R5 第一切片已审查并保持交互职责后置](#决策-155--r5-第一切片已审查并保持交互职责后置)
 
@@ -3438,3 +3439,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 严格保持原公开清单并推迟 autocomplete —— 会使已确认职责无法闭合，已拒绝。
 - 注入静态命令列表 —— register()/replace() 后会产生过期补全，已拒绝。
 - 让 InputController import CommandRegistry —— 引入不必要的组件耦合，已拒绝。
+
+---
+
+### 决策 157 — /rewind 选择显示用户输入预览而非内部 turn_id
+
+**背景：** R5 首次人工 smoke 发现 `/rewind` 的选择项直接显示 `SessionTurnView.turn_id` UUID。虽然该值可准确驱动 `RewindSession`，但用户无法从 UUID 判断要回退到哪条输入，交互不可用。
+
+**决策：**
+
+- 无参数 `/rewind` 的选项显示为“序号 + 清理后的用户输入预览”，预览最长 80 个字符。
+- CommandRegistry 在内部保存显示 label 到 `turn_id` 的映射；选择后仍将精确 `turn_id` 传入 `RewindSession`。
+- 不扩展 InputController 的 `select()` 类型或暴露 Session 内部结构。
+
+**理由：**
+
+- 前端选择应使用用户可理解的文本，内部标识仅用于协议闭合。
+- 局部映射保持既有 InputController 字符串选择边界，避免为单一命令引入新 UI DTO。
+
+**曾考虑的替代方案：**
+
+- 继续展示 UUID —— 人工 smoke 已证明不可用，已拒绝。
+- 将 UUID 与预览同时展示 —— 会造成冗长噪声，且不改善用户选择，已拒绝。

@@ -133,9 +133,11 @@ def build_command_registry(application: object, input_controller: object, render
             points = application.view().rewind_points
             if not points:
                 return handled("没有可回退的用户输入。")
-            arguments = input_controller.select("选择要回退的输入:", tuple(point.turn_id for point in points))
-            if arguments is None:
+            choices = _rewind_choices(points)
+            selected = input_controller.select("选择要回退的输入:", tuple(choices))
+            if selected is None:
                 return CommandResult(CommandAction.HANDLED)
+            arguments = choices[selected]
         view = application.handle(RewindSession(arguments))
         renderer.render_session(view)
         input_controller.replace_history(tuple(point.user_text for point in view.rewind_points))
@@ -176,3 +178,14 @@ def _validate_name(name: str) -> str:
     if not normalized.startswith("/") or len(normalized) == 1 or any(character.isspace() for character in normalized):
         raise ValueError(f"invalid command name: {name!r}")
     return normalized
+
+
+def _rewind_choices(points: Iterable[object]) -> dict[str, str]:
+    """Build human-readable rewind labels while keeping opaque turn ids internal."""
+    choices: dict[str, str] = {}
+    for index, point in enumerate(points, start=1):
+        preview = " ".join(point.user_text.split()) or "（空白输入）"
+        if len(preview) > 80:
+            preview = f"{preview[:79]}…"
+        choices[f"{index}. {preview}"] = point.turn_id
+    return choices
