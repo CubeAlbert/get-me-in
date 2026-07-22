@@ -188,6 +188,7 @@
 - [决策 171 — R6 前增加独立 thinking 契约修复门禁](#决策-171--r6-前增加独立-thinking-契约修复门禁)
 - [决策 172 — R5-F follow-up 统一格式修复的唯一契约与重试边界](#决策-172--r5-f-follow-up-统一格式修复的唯一契约与重试边界)
 - [决策 173 — v2 显式装配日志并固定环境变量所有权](#决策-173--v2-显式装配日志并固定环境变量所有权)
+- [决策 174 — G6 通过并停在 R6-T 审查门禁](#决策-174--g6-通过并停在-r6-t-审查门禁)
 
 ---
 
@@ -3873,3 +3874,19 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 直接复用 legacy `src.logger` —— 会让独立 v2 反向依赖旧基础设施，已拒绝。
 - 配置 root logger —— 会收集大量第三方 DEBUG 日志并降低可读性，已拒绝。
 - 只在 CLI 显示更多错误而不落盘 —— 无法保留模型原始回复和跨运行诊断证据，已拒绝。
+
+---
+
+### 决策 174 —— G6 通过并停在 R6-T 审查门禁
+
+**背景：** R6 的六个固定切片已完成，需要把完成事实、验证证据与下一阶段的停止边界写入受控状态，避免将“R6 完成”误解为自动授权 R7。
+
+**决定：**
+
+- 认定 G6 通过：`IndexManifest.diff()`、资源生命周期、KnowledgeService、local/Chroma adapters、MemoryService 以及 Settings/bootstrap/CLI 接入均已完成；真实 `KnowledgeService` 已替换并删除 `DeferredRetrievalAdapter`。
+- 验收证据为 171 项核心自动化测试、`compileall` 与真实 Chroma/embedder/reranker 临时目录 smoke 均通过。
+- 执行 checkpoint，将状态固定为“R6 完成、R7 未启动、等待用户审查”；不得创建或修改 R7 文件、切换入口或执行 R8 清理。
+
+**理由：**
+
+- R6 已形成可审查的独立边界；先审查 Knowledge/Memory 的一致性和资源关闭，再决定是否授权 Resume/Artifact 的下一阶段。

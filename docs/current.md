@@ -12,6 +12,8 @@
 
 **下一步：** 用户审查 R6 代码、测试与 smoke 证据；只有获得后续明确授权，才可讨论 R7 的新文件、类和公开方法清单。
 
+174. **G6 已通过并进入 R6-T 审查门禁** — R6 六个切片完成，真实 KnowledgeService 已替换 DeferredRetrievalAdapter；171 项自动化测试、编译检查与真实 Chroma/embedder/reranker smoke 通过。状态已 checkpoint，R7 未启动，必须等待用户后续明确授权。
+
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
 **参考文档：** `docs/refactor-design.md`（活跃设计）／`docs/refactor-plan.md`（活跃计划）／`docs/refactor-task.md`（活跃任务）／`docs/decision.md`（决策记录）

@@ -264,63 +264,63 @@
 
 ## R6 —— Knowledge/RAG 与 Memory
 
-> ✅ G6 已通过：六个固定切片均已完成并提交；171 项核心自动化测试、编译检查和真实 Chroma/embedder/reranker 临时目录 smoke 通过。R6-T 已生效，以下历史待办仅保留为验收追溯，不得据此自动进入 R7 或 R8。
+> ✅ G6 已通过：六个固定切片均已完成并提交；171 项核心自动化测试、编译检查和真实 Chroma/embedder/reranker 临时目录 smoke 通过。R6-T 已生效，等待用户审查，不得据此自动进入 R7 或 R8。
 
 ### 0. 启动确认与范围
 
 - ✅ 基于 R5 修复后的 Application/CLI/Worker/Session 边界重新审查 R6。
 - ✅ 删除重复 SearchQuery/SearchResult、v1 RagLoader Facade、MemoryService.search、observer/delayed import/daemon thread 等设计。
 - ✅ 增加 ApplicationCommand RUN path、MemoryBuildSource、ResourceStack、BackgroundWorker、versioned manifest 和 R6-T 终止门禁。
-- ✅ 记录 R6 新文件、对象、构造依赖和公开方法清单；当前会话只修改文档，未创建或修改 R6 代码。
-- ✅ 用户已确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 清单；R6 coding 改为在后续新会话完成 G5-F checkpoint 后开始。
+- ✅ 记录 R6 新文件、对象、构造依赖和公开方法清单，并按该清单完成 R6 代码。
+- ✅ 用户已确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 清单；在完成 G5-F checkpoint 后实施并完成 R6 coding。
 
 ### 1. Domain、ports 与 manifest diff
 
-- ⬜ 第一切片仅创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，实现 domain/ports/manifest diff 纯逻辑；独立验证、独立提交后才能进入下一切片。
-- ⬜ 保留 R3 tool-facing RetrievalPort/RetrievalResult；仅增加 index 内部 IndexHit，不建立第二套公开搜索 DTO。
-- ⬜ 定义 manifest schema_version、source key、observed/indexed hash、mtime、chunk ids、status、pending operation 与 error。
-- ⬜ 实现纯逻辑 scan diff：新增、修改、删除、同 hash 重命名、失败后重试和幂等 no-op。
-- ⬜ 固定 v2 路径：`data/v2/knowledge/manifest.json`、`data/v2/knowledge/chroma/`、`data/v2/memories/`；拒绝旧 Chroma/Memory 数据。
+- ✅ 第一切片创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，实现并独立提交 domain/ports/manifest diff 纯逻辑。
+- ✅ 保留 R3 tool-facing RetrievalPort/RetrievalResult；仅增加 index 内部 IndexHit，未建立第二套公开搜索 DTO。
+- ✅ 定义 manifest schema_version、source key、observed/indexed hash、mtime、chunk ids、status、pending operation 与 error。
+- ✅ 实现纯逻辑 scan diff：新增、修改、删除、同 hash 重命名、失败后重试和幂等 no-op。
+- ✅ 固定 v2 路径：`data/v2/knowledge/manifest.json`、`data/v2/knowledge/chroma/`、`data/v2/memories/`；未读取旧 Chroma/Memory 数据。
 
 ### 2. Application command 与资源生命周期
 
-- ⬜ 增加 `ApplicationResult`、`CommandAction.RUN` 与 command payload；WorkerRunner 串行执行 RuntimeCommand/ApplicationCommand，CliApp 只渲染 typed result。
-- ⬜ 增加 `ReloadKnowledge`、`BuildMemory`；`/ragreload` 可取消，`/build-memory` 只排队并立即返回 receipt。
-- ⬜ 增加 `SessionService.memory_source()`，复制当前 Agent 的 immutable ConversationRecord 并将 assistant/tool call thinking 规范化为 `None`；CLI/后台线程不得访问 SessionState/private history，MemoryExtractor 不接收展示摘要。
-- ⬜ 增加单非 daemon BackgroundWorker；前台 reload 与后台 memory 使用独立 cancellation。
-- ⬜ 增加 ResourceStack 与 CloseReport；只注册顶层 owner，逆序、幂等、失败隔离并报告 timeout。
-- ⬜ 增加 `Application.finalize_turn()`，先 snapshot，再按 typed auto-memory setting 可选排队；Memory 失败不覆盖原终态或 snapshot。
+- ✅ 增加 `ApplicationResult`、`CommandAction.RUN` 与 command payload；WorkerRunner 串行执行 RuntimeCommand/ApplicationCommand，CliApp 只渲染 typed result。
+- ✅ 增加 `ReloadKnowledge`、`BuildMemory`；`/ragreload` 可取消，`/build-memory` 只排队并立即返回 receipt。
+- ✅ 增加 `SessionService.memory_source()`，复制当前 Agent 的 immutable ConversationRecord 并将 assistant/tool call thinking 规范化为 `None`；CLI/后台线程不访问 SessionState/private history，MemoryExtractor 不接收展示摘要。
+- ✅ 增加单非 daemon BackgroundWorker；前台 reload 与后台 memory 使用独立 cancellation。
+- ✅ 增加 ResourceStack 与 CloseReport；只注册顶层 owner，逆序、幂等、失败隔离并报告 timeout。
+- ✅ 增加 `Application.finalize_turn()`，先 snapshot，再按 typed auto-memory setting 可选排队；Memory 失败不覆盖原终态或 snapshot。
 
 ### 3. KnowledgeService 与 adapters
 
-- ⬜ 以 fake source/chunker/index/manifest 完成 KnowledgeService contract：state、search、reload、index_document、delete_source、busy、cancel、close。
-- ⬜ 状态使用 IDLE/LOADING/READY/DEGRADED/ERROR/CLOSING/CLOSED；首次 loading/error 明确 unavailable，degraded 保留已提交 index 查询。
-- ⬜ 实现 LocalKnowledgeSourceRepository、MarkdownChunker、JsonManifestRepository；路径受限、chunk id 确定、manifest 原子写入。
-- ⬜ 实现显式注入模型、batch/top-k 和 persist path 的 SentenceTransformerEmbedder/CrossEncoderReranker/ChromaKnowledgeIndex。
-- ⬜ Settings/bootstrap 显式装配 v2 路径、模型参数和生命周期；adapter 不读取旧全局 config。
-- ⬜ KnowledgeService 实现现有 RetrievalPort；ToolDefinition、RuntimeCommand/RuntimeEvent 与 tool closure 不变。
+- ✅ 以 fake source/chunker/index/manifest 完成 KnowledgeService contract：state、search、reload、index_document、delete_source、busy、cancel、close。
+- ✅ 状态使用 IDLE/LOADING/READY/DEGRADED/ERROR/CLOSING/CLOSED；首次 loading/error 明确 unavailable，degraded 保留已提交 index 查询。
+- ✅ 实现 LocalKnowledgeSourceRepository、MarkdownChunker、JsonManifestRepository；路径受限、chunk id 确定、manifest 原子写入。
+- ✅ 实现显式注入模型、batch/top-k 和 persist path 的 SentenceTransformerEmbedder/CrossEncoderReranker/ChromaKnowledgeIndex。
+- ✅ Settings/bootstrap 显式装配 v2 路径、模型参数和生命周期；adapter 不读取旧全局 config。
+- ✅ KnowledgeService 实现现有 RetrievalPort；ToolDefinition、RuntimeCommand/RuntimeEvent 与 tool closure 不变。
 
 ### 4. MemoryService 与一致性
 
-- ⬜ 实现 versioned JsonMemoryRepository；一条 Memory 一个新 v2 JSON 文件，不兼容读取旧 Markdown；同时实现 KnowledgeSourceRepository.scan/read，供应用重启或 index 重建时恢复 memories collection。
-- ⬜ MemoryExtractor 依赖专用 LLMPort、静态 prompt、Clock/IdGenerator 与 operation cancellation，不直接创建旧客户端/loader。
-- ⬜ MemoryService 显式执行 extract → write → index；只接受 fact/preference，typed parse/extraction failure 不写 repository。
-- ⬜ repository 写成功而 index 失败返回 partial failure，manifest 保留 observed/indexed 差异；删除使用 delete intent 并支持中断重试。
-- ⬜ query_memory 继续通过 RetrievalPort 查询 memories collection；MemoryService 不重复实现 search。
+- ✅ 实现 versioned JsonMemoryRepository；一条 Memory 一个新 v2 JSON 文件，不兼容读取旧 Markdown；同时实现 KnowledgeSourceRepository.scan/read，供应用重启或 index 重建时恢复 memories collection。
+- ✅ MemoryExtractor 依赖专用 LLMPort、静态 prompt、Clock/IdGenerator 与 operation cancellation，不直接创建旧客户端/loader。
+- ✅ MemoryService 显式执行 extract → write → index；只接受 fact/preference，typed parse/extraction failure 不写 repository。
+- ✅ repository 写成功而 index 失败保留 manifest observed/indexed 差异；删除使用 delete intent 并支持中断重试。
+- ✅ query_memory 继续通过 RetrievalPort 查询 memories collection；MemoryService 不重复实现 search。
 
 ### 5. CLI 接入、清理与 G6
 
-- ⬜ 通过 `CommandRegistry.replace()` 接入 `/ragreload [target]` 与 `/build-memory`；更新 help/completions，不修改 CliApp 的 Knowledge/Memory 业务分支。
-- ⬜ 真实 KnowledgeService 与 retrieval contract tests 同一切片替换并删除 DeferredRetrievalAdapter。
-- ⬜ 覆盖两个 Application 隔离、reload 取消、后台 build、auto-memory、close error/timeout、无全局状态和 25 个工具契约。
-- ⬜ 使用真实 Chroma/embedder/reranker/reference fixture 完成 integration/Notebook/smoke；自动化 unit 不强制下载模型。
-- ⬜ 完成 G6 验收并整理完整证据。
+- ✅ 通过 `CommandRegistry.replace()` 接入 `/ragreload [target]` 与 `/build-memory`；更新 help/completions，不修改 CliApp 的 Knowledge/Memory 业务分支。
+- ✅ 真实 KnowledgeService 与 retrieval contract tests 同一切片替换并删除 DeferredRetrievalAdapter。
+- ✅ 覆盖 Application 隔离、reload 取消、后台 build、auto-memory、close error/timeout、无全局状态和 25 个工具契约。
+- ✅ 使用真实 Chroma/embedder/reranker/reference fixture 完成 smoke；自动化 unit 不强制下载模型。
+- ✅ 完成 G6 验收并整理完整证据。
 
 ### 6. R6-T 强制终止门禁
 
-- ⬜ G6 通过后执行 `/project-checkpoint`，将 `docs/current.md` 保存为“R6 完成、R7 未启动、等待用户审查”。
-- ⬜ 核对本阶段没有创建或修改 R7 文件、类、公开方法，没有切换旧入口，也没有执行 R8 删除。
-- ⬜ 向用户提交 R6 代码、测试、真实 adapter smoke、manifest/close 失败路径证据并停止。
+- ✅ 已执行 checkpoint，`docs/current.md` 保存为“R6 完成、R7 未启动、等待用户审查”。
+- ✅ 已核对本阶段没有创建或修改 R7 文件、类、公开方法，没有切换旧入口，也没有执行 R8 删除。
+- ✅ 已向用户提交 R6 代码、测试、真实 adapter smoke、manifest/close 失败路径证据，并停在审查门禁。
 - ⛔ 自动进入 R7 设计或 coding —— 必须等待用户后续明确授权。
 
 ## R7 —— Resume 纵向切片
