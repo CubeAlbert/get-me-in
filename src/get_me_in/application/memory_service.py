@@ -2,6 +2,7 @@
 
 from src.get_me_in.application.app_results import CloseReport
 from src.get_me_in.domain.memories import MemoryBuildReceipt, MemoryBuildReport, MemoryBuildSource
+from src.get_me_in.ports.llm import CancellationSignal
 
 
 class MemoryService:
@@ -9,15 +10,19 @@ class MemoryService:
         self._repository, self._extractor, self._knowledge, self._worker = repository, extractor, knowledge, worker
 
     def build_async(self, source: MemoryBuildSource) -> MemoryBuildReceipt:
-        receipt = self._worker.submit("build-memory", lambda: self._build(source))
+        receipt = self._worker.submit(
+            "build-memory", lambda cancellation: self._build(source, cancellation)
+        )
         return MemoryBuildReceipt(receipt.job_id, source.session_id)
 
     def delete(self, memory_id: str) -> MemoryBuildReport:
         try:
-            report = self._knowledge.delete_source(f"memories/{memory_id}.json")
+            report = self._knowledge.delete_source(
+                f"memories/{memory_id}.json",
+                finalize=lambda: self._repository.delete(memory_id),
+            )
             if report.failures:
                 return MemoryBuildReport("", deleted_memory_id=memory_id, error="; ".join(report.failures))
-            self._repository.delete(memory_id)
             return MemoryBuildReport("", deleted_memory_id=memory_id)
         except Exception as error:
             return MemoryBuildReport("", deleted_memory_id=memory_id, error=str(error))
@@ -29,7 +34,32 @@ class MemoryService:
             close()
         return CloseReport(closed=("memory_service",))
 
-    def _build(self, source: MemoryBuildSource) -> None:
-        from src.get_me_in.application.cancellation import CancellationToken
-        for record in self._extractor.extract(source, CancellationToken()):
-            self._knowledge.index_document(self._repository.write(record))
+    def _build(
+        self, source: MemoryBuildSource, cancellation: CancellationSignal
+    ) -> MemoryBuildReport:
+        created: list[str] = []
+        try:
+            records = self._extractor.extract(source, cancellation)
+            for record in records:
+                if cancellation.is_cancelled:
+                    raise InterruptedError("memory build cancelled")
+                document = self._repository.write(record)
+                created.append(record.memory_id)
+                report = self._knowledge.index_document(document, cancellation)
+                if report.busy:
+                    return MemoryBuildReport(
+                        source.session_id,
+                        tuple(created),
+                        error=f"knowledge index busy for memory {record.memory_id}",
+                    )
+                if report.failures:
+                    return MemoryBuildReport(
+                        source.session_id,
+                        tuple(created),
+                        error="; ".join(report.failures),
+                    )
+            return MemoryBuildReport(source.session_id, tuple(created))
+        except InterruptedError:
+            raise
+        except Exception as error:
+            return MemoryBuildReport(source.session_id, tuple(created), error=str(error))

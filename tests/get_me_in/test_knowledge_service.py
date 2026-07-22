@@ -188,6 +188,39 @@ class KnowledgeServiceTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         service.close()
 
+    def test_delete_finalize_failure_keeps_retryable_manifest_intent(self) -> None:
+        memory_source = _source("memories/id.json", "hash")
+        self.manifests.value = _manifest(
+            _entry("memories/id.json", "hash", indexed_hash="hash")
+        )
+        service = KnowledgeService(
+            (_Sources((memory_source,)),),
+            _Chunker(),
+            self.index,
+            self.manifests,
+            self.worker,
+        )
+
+        failed = service.delete_source(
+            "memories/id.json", finalize=lambda: _raise_finalize_error()
+        )
+
+        self.assertEqual(("memories/id.json: repository failed",), failed.failures)
+        entry = self.manifests.value.entries[0]
+        self.assertEqual(ManifestStatus.ERROR, entry.status)
+        self.assertEqual(PendingIndexOperation.DELETE, entry.pending_operation)
+
+        reloaded = service.reload()
+        self.assertEqual(
+            ("memories/id.json: delete finalize pending",), reloaded.failures
+        )
+        self.assertEqual(PendingIndexOperation.DELETE, self.manifests.value.entries[0].pending_operation)
+
+        succeeded = service.delete_source("memories/id.json", finalize=lambda: None)
+        self.assertEqual(("memories/id.json",), succeeded.deleted)
+        self.assertEqual((), self.manifests.value.entries)
+        service.close()
+
 
 class _Sources:
     def __init__(self, sources): self.sources = sources
@@ -232,7 +265,7 @@ class _BlockingIndex(_Index):
 class _QueuedWorker:
     def __init__(self): self.task = None
     def submit(self, task_name, task): self.task = task; return object()
-    def run(self): self.task()
+    def run(self): self.task(CancellationToken())
 
 
 class _Manifests:
@@ -247,7 +280,8 @@ def _now() -> datetime:
 
 
 def _source(source_key: str, content_hash: str) -> KnowledgeSource:
-    return KnowledgeSource(KnowledgeCollection.REFERENCES, source_key, content_hash, _now())
+    collection = KnowledgeCollection(source_key.partition("/")[0])
+    return KnowledgeSource(collection, source_key, content_hash, _now())
 
 
 def _entry(
@@ -258,7 +292,8 @@ def _entry(
     status: ManifestStatus = ManifestStatus.READY,
     operation: PendingIndexOperation | None = None,
 ) -> ManifestEntry:
-    return ManifestEntry(source_key, KnowledgeCollection.REFERENCES, observed_hash, indexed_hash, _now(), status=status, pending_operation=operation)
+    collection = KnowledgeCollection(source_key.partition("/")[0])
+    return ManifestEntry(source_key, collection, observed_hash, indexed_hash, _now(), status=status, pending_operation=operation)
 
 
 def _manifest(*entries: ManifestEntry) -> IndexManifest:
@@ -271,3 +306,7 @@ def _wait_for_state(service: KnowledgeService, expected: KnowledgeState) -> None
         sleep(0.001)
     if service.state is not expected:
         raise AssertionError(f"expected {expected}, got {service.state}")
+
+
+def _raise_finalize_error() -> None:
+    raise RuntimeError("repository failed")

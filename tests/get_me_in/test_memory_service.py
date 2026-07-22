@@ -3,10 +3,12 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
+from time import monotonic, sleep
 import unittest
 
 from src.get_me_in.adapters.json_memory_repository import JsonMemoryRepository
 from src.get_me_in.application.background_worker import BackgroundWorker
+from src.get_me_in.application.app_results import BackgroundJobState
 from src.get_me_in.application.memory_service import MemoryService
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.memories import MemoryBuildSource, MemoryCategory, MemoryRecord
@@ -34,13 +36,30 @@ class MemoryServiceTests(unittest.TestCase):
         source = MemoryBuildSource("session", AgentKey.MAIN, ())
         try:
             receipt = service.build_async(source)
-            worker.close()
+            result = _wait_for_job(worker, receipt.job_id)
         finally:
             worker.close()
 
         self.assertEqual("session", receipt.source_session_id)
+        self.assertEqual(BackgroundJobState.SUCCEEDED, result.state)
+        self.assertEqual(("id",), result.value.created_memory_ids)
         self.assertEqual(1, len(repository.records))
         self.assertEqual(1, len(knowledge.documents))
+
+    def test_build_retains_typed_partial_failure_after_repository_write(self) -> None:
+        worker = BackgroundWorker("memory-partial-test", 1)
+        repository = _Repository()
+        service = MemoryService(repository, _Extractor(), _Knowledge(fail_index=True), worker)
+        source = MemoryBuildSource("session", AgentKey.MAIN, ())
+        try:
+            receipt = service.build_async(source)
+            result = _wait_for_job(worker, receipt.job_id)
+        finally:
+            worker.close()
+
+        self.assertEqual(BackgroundJobState.FAILED, result.state)
+        self.assertEqual(("id",), result.value.created_memory_ids)
+        self.assertEqual("index failed", result.value.error)
 
     def test_delete_coordinates_index_before_removing_repository_record(self) -> None:
         worker = BackgroundWorker("memory-delete-test", 1)
@@ -53,6 +72,7 @@ class MemoryServiceTests(unittest.TestCase):
 
         self.assertEqual("memory-1", report.deleted_memory_id)
         self.assertEqual(["memories/memory-1.json"], knowledge.deleted_sources)
+        self.assertEqual(["memory-1"], repository.deleted)
 
 
 class _Clock:
@@ -60,9 +80,9 @@ class _Clock:
 
 
 class _Repository:
-    def __init__(self): self.records = []
+    def __init__(self): self.records = []; self.deleted = []
     def write(self, record): self.records.append(record); return object()
-    def delete(self, memory_id): pass
+    def delete(self, memory_id): self.deleted.append(memory_id)
     def close(self): pass
 
 
@@ -71,12 +91,30 @@ class _Extractor:
 
 
 class _Knowledge:
-    def __init__(self): self.documents = []; self.deleted_sources = []
-    def index_document(self, document): self.documents.append(document)
-    def delete_source(self, source_key):
+    def __init__(self, *, fail_index=False): self.documents = []; self.deleted_sources = []; self.fail_index = fail_index
+    def index_document(self, document, cancellation=None):
+        self.documents.append(document)
+        return type("Report", (), {"busy": False, "failures": ("index failed",) if self.fail_index else ()})()
+    def delete_source(self, source_key, *, finalize=None):
         self.deleted_sources.append(source_key)
+        if finalize is not None:
+            finalize()
         return type("Report", (), {"failures": ()})()
 
 
 def _now() -> datetime:
     return datetime(2026, 7, 22, tzinfo=timezone.utc)
+
+
+def _wait_for_job(worker: BackgroundWorker, job_id: str):
+    deadline = monotonic() + 1
+    while monotonic() < deadline:
+        result = worker.result(job_id)
+        if result is not None and result.state in {
+            BackgroundJobState.SUCCEEDED,
+            BackgroundJobState.FAILED,
+            BackgroundJobState.CANCELLED,
+        }:
+            return result
+        sleep(0.001)
+    raise AssertionError(f"background job did not finish: {job_id}")

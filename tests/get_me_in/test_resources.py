@@ -1,10 +1,14 @@
 """R6 resource ownership and background-worker tests."""
 
 from threading import Event
-from time import sleep
+from time import monotonic, sleep
 import unittest
 
-from src.get_me_in.application.app_results import ApplicationResult, CloseReport
+from src.get_me_in.application.app_results import (
+    ApplicationResult,
+    BackgroundJobState,
+    CloseReport,
+)
 from src.get_me_in.application.background_worker import BackgroundWorker
 from src.get_me_in.application.resources import ResourceStack
 
@@ -43,13 +47,15 @@ class BackgroundWorkerTests(unittest.TestCase):
         order: list[str] = []
         worker = BackgroundWorker("memory", 1)
         try:
-            first = worker.submit("first", lambda: order.append("first"))
-            second = worker.submit("second", lambda: (order.append("second"), completed.set()))
+            first = worker.submit("first", lambda _: order.append("first"))
+            second = worker.submit("second", lambda _: (order.append("second"), completed.set()))
 
             self.assertEqual(("memory-1", "first"), (first.job_id, first.task_name))
             self.assertEqual(("memory-2", "second"), (second.job_id, second.task_name))
             self.assertTrue(completed.wait(timeout=1))
             self.assertEqual(["first", "second"], order)
+            result = _wait_for_job(worker, second.job_id)
+            self.assertEqual(BackgroundJobState.SUCCEEDED, result.state)
         finally:
             report = worker.close()
 
@@ -60,7 +66,7 @@ class BackgroundWorkerTests(unittest.TestCase):
         started = Event()
         release = Event()
         worker = BackgroundWorker("memory", 0.001)
-        worker.submit("blocked", lambda: (started.set(), release.wait(timeout=1)))
+        worker.submit("blocked", lambda _: (started.set(), release.wait(timeout=1)))
         self.assertTrue(started.wait(timeout=1))
 
         report = worker.close()
@@ -69,6 +75,33 @@ class BackgroundWorkerTests(unittest.TestCase):
 
         self.assertTrue(report.issues[0].timed_out)
 
+    def test_job_failure_is_retained_as_typed_result(self) -> None:
+        worker = BackgroundWorker("memory", 1)
+        receipt = worker.submit("broken", lambda _: _raise_job_error())
+        result = _wait_for_job(worker, receipt.job_id)
+        worker.close()
+
+        self.assertEqual(BackgroundJobState.FAILED, result.state)
+        self.assertEqual("job failed", result.error)
+
+    def test_close_cooperatively_cancels_running_job(self) -> None:
+        started = Event()
+        worker = BackgroundWorker("memory", 1)
+
+        def wait_for_cancel(cancellation):
+            started.set()
+            while not cancellation.is_cancelled:
+                sleep(0.001)
+            raise InterruptedError("cancelled")
+
+        receipt = worker.submit("cancel", wait_for_cancel)
+        self.assertTrue(started.wait(timeout=1))
+        report = worker.close()
+        result = worker.result(receipt.job_id)
+
+        self.assertEqual(("memory",), report.closed)
+        self.assertEqual(BackgroundJobState.CANCELLED, result.state)
+
 
 def _error() -> CloseReport:
     raise RuntimeError("broken")
@@ -76,3 +109,21 @@ def _error() -> CloseReport:
 
 def _timeout() -> CloseReport:
     raise TimeoutError("slow")
+
+
+def _raise_job_error() -> None:
+    raise RuntimeError("job failed")
+
+
+def _wait_for_job(worker: BackgroundWorker, job_id: str):
+    deadline = monotonic() + 1
+    while monotonic() < deadline:
+        result = worker.result(job_id)
+        if result is not None and result.state in {
+            BackgroundJobState.SUCCEEDED,
+            BackgroundJobState.FAILED,
+            BackgroundJobState.CANCELLED,
+        }:
+            return result
+        sleep(0.001)
+    raise AssertionError(f"background job did not finish: {job_id}")

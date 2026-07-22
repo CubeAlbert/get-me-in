@@ -4,11 +4,20 @@ from collections.abc import Callable
 from queue import Queue
 from threading import Lock, Thread
 
-from src.get_me_in.application.app_results import BackgroundJobReceipt, CloseIssue, CloseReport
+from src.get_me_in.application.app_results import (
+    BackgroundJobReceipt,
+    BackgroundJobResult,
+    BackgroundJobState,
+    CloseIssue,
+    CloseReport,
+)
+from src.get_me_in.application.cancellation import CancellationToken
+from src.get_me_in.ports.llm import CancellationSignal
 
 
 _STOP = object()
-_BackgroundTask = Callable[[], None]
+_BackgroundTask = Callable[[CancellationSignal], object]
+_QueuedTask = tuple[str, str, _BackgroundTask, CancellationToken]
 
 
 class BackgroundWorker:
@@ -21,11 +30,13 @@ class BackgroundWorker:
             raise ValueError("shutdown_timeout_seconds must be positive")
         self._name = name
         self._shutdown_timeout_seconds = shutdown_timeout_seconds
-        self._tasks: Queue[_BackgroundTask | object] = Queue()
+        self._tasks: Queue[_QueuedTask | object] = Queue()
         self._lock = Lock()
         self._next_job = 0
         self._closed = False
         self._close_report: CloseReport | None = None
+        self._results: dict[str, BackgroundJobResult] = {}
+        self._tokens: dict[str, CancellationToken] = {}
         self._thread = Thread(target=self._run, name=name, daemon=False)
         self._thread.start()
 
@@ -37,8 +48,17 @@ class BackgroundWorker:
                 raise RuntimeError("BackgroundWorker is closed")
             self._next_job += 1
             receipt = BackgroundJobReceipt(f"{self._name}-{self._next_job}", task_name)
-            self._tasks.put(task)
+            cancellation = CancellationToken()
+            self._tokens[receipt.job_id] = cancellation
+            self._results[receipt.job_id] = BackgroundJobResult(
+                receipt.job_id, task_name, BackgroundJobState.QUEUED
+            )
+            self._tasks.put((receipt.job_id, task_name, task, cancellation))
         return receipt
+
+    def result(self, job_id: str) -> BackgroundJobResult | None:
+        with self._lock:
+            return self._results.get(job_id)
 
     def close(self) -> CloseReport:
         with self._lock:
@@ -47,6 +67,8 @@ class BackgroundWorker:
             if self._closed:
                 return CloseReport()
             self._closed = True
+            for cancellation in self._tokens.values():
+                cancellation.cancel()
             self._tasks.put(_STOP)
         self._thread.join(self._shutdown_timeout_seconds)
         if self._thread.is_alive():
@@ -59,13 +81,66 @@ class BackgroundWorker:
 
     def _run(self) -> None:
         while True:
-            task = self._tasks.get()
+            queued = self._tasks.get()
             try:
-                if task is _STOP:
+                if queued is _STOP:
                     return
-                task()
-            except Exception:
-                # Each submitted operation owns its typed failure result.
-                pass
+                job_id, task_name, task, cancellation = queued
+                if cancellation.is_cancelled:
+                    self._set_result(
+                        BackgroundJobResult(
+                            job_id,
+                            task_name,
+                            BackgroundJobState.CANCELLED,
+                            error="background job cancelled before execution",
+                        )
+                    )
+                    continue
+                self._set_result(
+                    BackgroundJobResult(job_id, task_name, BackgroundJobState.RUNNING)
+                )
+                value = task(cancellation)
+                error = getattr(value, "error", None)
+                failures = getattr(value, "failures", ())
+                if error is None and failures:
+                    error = "; ".join(str(item) for item in failures)
+                state = (
+                    BackgroundJobState.CANCELLED
+                    if cancellation.is_cancelled
+                    else BackgroundJobState.FAILED
+                    if error
+                    else BackgroundJobState.SUCCEEDED
+                )
+                self._set_result(
+                    BackgroundJobResult(job_id, task_name, state, value, error)
+                )
+            except InterruptedError as error:
+                self._set_result(
+                    BackgroundJobResult(
+                        job_id,
+                        task_name,
+                        BackgroundJobState.CANCELLED,
+                        error=str(error) or "background job cancelled",
+                    )
+                )
+            except Exception as error:
+                self._set_result(
+                    BackgroundJobResult(
+                        job_id,
+                        task_name,
+                        BackgroundJobState.FAILED,
+                        error=str(error),
+                    )
+                )
             finally:
                 self._tasks.task_done()
+
+    def _set_result(self, result: BackgroundJobResult) -> None:
+        with self._lock:
+            self._results[result.job_id] = result
+            if result.state in {
+                BackgroundJobState.SUCCEEDED,
+                BackgroundJobState.FAILED,
+                BackgroundJobState.CANCELLED,
+            }:
+                self._tokens.pop(result.job_id, None)

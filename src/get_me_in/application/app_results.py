@@ -1,6 +1,7 @@
 """Strongly typed application-command and shutdown results."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from src.get_me_in.domain.knowledge import ReloadReport
 from src.get_me_in.domain.memories import MemoryBuildReceipt
@@ -15,6 +16,23 @@ class ApplicationResult:
 class BackgroundJobReceipt:
     job_id: str
     task_name: str
+
+
+class BackgroundJobState(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True)
+class BackgroundJobResult:
+    job_id: str
+    task_name: str
+    state: BackgroundJobState
+    value: object | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)

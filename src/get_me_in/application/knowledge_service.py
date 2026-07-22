@@ -1,5 +1,6 @@
 """Explicit, serial knowledge lifecycle service using injected ports."""
 
+from collections.abc import Callable
 from threading import Lock
 
 from src.get_me_in.application.app_results import CloseReport
@@ -9,6 +10,7 @@ from dataclasses import replace
 
 from src.get_me_in.domain.knowledge import (
     IndexManifest,
+    KnowledgeCollection,
     KnowledgeDocument,
     KnowledgeState,
     ManifestEntry,
@@ -53,7 +55,7 @@ class KnowledgeService:
                 return
             self._state = KnowledgeState.LOADING
             try:
-                self._worker.submit("load-knowledge", lambda: self.reload())
+                self._worker.submit("load-knowledge", self._run_startup_reload)
             except Exception:
                 self._state = KnowledgeState.ERROR
                 raise
@@ -101,7 +103,12 @@ class KnowledgeService:
             for source_key in report.retried:
                 entry = next(entry for entry in manifest.entries if entry.source_key == source_key)
                 if entry.pending_operation is PendingIndexOperation.DELETE:
-                    manifest, error = self._delete_entry(manifest, entry, self._reload_cancellation)
+                    if source_key in repositories:
+                        error = f"{source_key}: delete finalize pending"
+                    else:
+                        manifest, error = self._delete_entry(
+                            manifest, entry, self._reload_cancellation
+                        )
                 else:
                     source = next((item for item in observed if item.source_key == source_key), None)
                     if source is None:
@@ -129,13 +136,17 @@ class KnowledgeService:
         finally:
             self._lock.release()
 
-    def index_document(self, document: KnowledgeDocument) -> ReloadReport:
+    def index_document(
+        self,
+        document: KnowledgeDocument,
+        cancellation: CancellationSignal | None = None,
+    ) -> ReloadReport:
         if not self._lock.acquire(blocking=False):
             return ReloadReport(busy=True)
         try:
             self._ensure_open()
             manifest, error = self._upsert_document(
-                self._manifests.load(), document, CancellationToken()
+                self._manifests.load(), document, cancellation or CancellationToken()
             )
             if error:
                 self._state = KnowledgeState.DEGRADED
@@ -148,20 +159,32 @@ class KnowledgeService:
         finally:
             self._lock.release()
 
-    def delete_source(self, source_key: str) -> ReloadReport:
+    def delete_source(
+        self,
+        source_key: str,
+        *,
+        finalize: Callable[[], None] | None = None,
+    ) -> ReloadReport:
         if not self._lock.acquire(blocking=False):
             return ReloadReport(busy=True)
         try:
             self._ensure_open()
             manifest = self._manifests.load()
             entry = next((item for item in manifest.entries if item.source_key == source_key), None)
-            if entry is not None:
-                _, error = self._delete_entry(manifest, entry, CancellationToken())
-                if error:
-                    self._state = KnowledgeState.DEGRADED
-                    return ReloadReport(failures=(error,))
-            else:
-                self._index.delete_source(source_key, cancellation=CancellationToken())
+            if entry is None:
+                entry = ManifestEntry(
+                    source_key=source_key,
+                    collection=self._collection_from_source_key(source_key),
+                    observed_hash=None,
+                    indexed_hash=None,
+                    mtime=None,
+                )
+            _, error = self._delete_entry(
+                manifest, entry, CancellationToken(), finalize=finalize
+            )
+            if error:
+                self._state = KnowledgeState.DEGRADED
+                return ReloadReport(failures=(error,))
             return ReloadReport(deleted=(source_key,))
         except Exception as error:
             self._state = KnowledgeState.DEGRADED
@@ -192,6 +215,13 @@ class KnowledgeService:
     def _ensure_open(self) -> None:
         if self._closed:
             raise RuntimeError("KnowledgeService is closed")
+
+    def _run_startup_reload(self, cancellation: CancellationSignal) -> ReloadReport:
+        registration = cancellation.register(self._reload_cancellation.cancel)
+        try:
+            return self.reload()
+        finally:
+            registration.close()
 
     def _upsert_source(
         self,
@@ -243,12 +273,16 @@ class KnowledgeService:
         manifest: IndexManifest,
         entry: ManifestEntry,
         cancellation: CancellationSignal,
+        *,
+        finalize: Callable[[], None] | None = None,
     ) -> tuple[IndexManifest, str | None]:
         pending = replace(entry, status=ManifestStatus.PENDING, pending_operation=PendingIndexOperation.DELETE, error=None)
         manifest = self._replace_entry(manifest, pending)
         self._manifests.save(manifest)
         try:
             self._index.delete_source(entry.source_key, cancellation=cancellation)
+            if finalize is not None:
+                finalize()
         except Exception as error:
             failed = replace(pending, status=ManifestStatus.ERROR, error=str(error))
             manifest = self._replace_entry(manifest, failed)
@@ -260,6 +294,13 @@ class KnowledgeService:
         )
         self._manifests.save(manifest)
         return manifest, None
+
+    @staticmethod
+    def _collection_from_source_key(source_key: str) -> KnowledgeCollection:
+        collection, separator, _ = source_key.partition("/")
+        if not separator:
+            raise ValueError(f"invalid knowledge source key: {source_key}")
+        return KnowledgeCollection(collection)
 
     @staticmethod
     def _replace_entry(manifest: IndexManifest, replacement: ManifestEntry) -> IndexManifest:
