@@ -36,6 +36,7 @@ data/chroma/
 data/temp/
 data/workspace/
 data/save/
+data/v2/
 
 # === Python version ===
 .python-version
