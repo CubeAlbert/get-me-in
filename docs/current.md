@@ -1,14 +1,16 @@
 # 当前状态
 
-**当前阶段：** R5 —— CLI 拆分与交互迁移（启动前复审门禁）
+**当前阶段：** R5 —— CLI 拆分与交互迁移（清单已确认，待新会话编码）
 
-**当前任务：** 确认 R5 新文件、类与公开方法清单；确认前不开始 CLI 编码
+**当前任务：** 在下一编码会话按已确认清单实施 R5 CLI
 
-**当前子任务：** R5～R8 复审与清单已同步到活跃文档，等待用户确认（⏸️）
+**当前子任务：** 新会话先执行 project-bootstrap，再实施第一切片：`commands.py` + `test_cli_commands.py`（⬜）
 
-**当前阻塞：** R5 编码尚未获准：复审与文档同步已完成，仍需用户明确确认 `docs/refactor-design.md#67-cli` 的新文件、类与公开方法清单
+**当前阻塞：** 无；R5 清单已获用户确认，读取本文件的后续会话可按五步顺序小步实施
 
-**下一步：** 用户审查并确认 R5 清单；确认后才可创建 `src/get_me_in/cli/` 与对应测试文件
+**会话交接说明：** 记录本状态的确认会话不编码；执行下一步的后续会话已获 R5 编码授权，无需再次请求清单确认
+
+**下一步：** 新会话使用 project-bootstrap 恢复状态，读取 `docs/refactor-design.md#67-cli` 的精确契约；只创建 `src/get_me_in/cli/commands.py` 与 `tests/get_me_in/test_cli_commands.py`，验证并独立提交
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -32,4 +34,5 @@
 150. **增加强制 R5 前复审门禁** — G4 完成并 checkpoint 后，必须根据实际落地的 Application/Session/Command/Event/cancellation 边界重新 Review R5～R8，重点检查 CLI 薄层、R6 命令与资源生命周期、R6/R7 依赖及 R8 删除/回退范围；记录结论并确认 R5 清单前不得开始 R5 coding。
 151. **R4/G4 已完成并进入 R5 前复审** — `SessionState` 已成为唯一状态源，Runtime 以 `advance(state, command)` 转换，Orchestrator 通过 Complete/FailHandoff 闭合原 call id；v2 snapshot 使用 schema_version=2、turn_id rewind 与安全 phase 规范化。98 项核心自动化测试通过；不更新设计/计划，先执行强制 R5～R8 复审。
 152. **R4 复审补齐 handoff 启动、失败闭合与 frontend 回合投影** — Orchestrator 切换时用 context 启动目标 Runtime，子 Agent 取消/失败通过 FailHandoff 闭合原 call id；snapshot 严格校验 frame，restore 拒绝未装配 Agent，SessionView 公开只读 rewind_points。104 项核心自动化测试通过，G4 复验完成。
-153. **R5 使用薄 CLI、单 WorkerRunner 与可替换命令注册** — CliApp 只驱动 typed command/event 并在终态自动 snapshot；WorkerRunner 单线程串行调用 Application，跨线程只 request_cancel；CommandRegistry 支持 R6 replace handler；输入历史不新增持久化 schema；提供独立模块入口，R8 等待 G6/G7 并拆分入口切换与遗留删除提交。R5 清单仍待用户确认。
+153. **R5 使用薄 CLI、单 WorkerRunner 与可替换命令注册** — CliApp 只驱动 typed command/event 并在终态自动 snapshot；WorkerRunner 单线程串行调用 Application，跨线程只 request_cancel；CommandRegistry 支持 R6 replace handler；输入历史不新增持久化 schema；提供独立模块入口，R8 等待 G6/G7 并拆分入口切换与遗留删除提交。
+154. **R5 清单获确认并固定新会话实施入口** — 用户确认 `docs/refactor-design.md#67-cli` 的文件、对象、构造依赖与公开方法；新会话可编码，第一切片仅创建 commands.py 与 test_cli_commands.py。当前会话不编码，每步独立验证提交，不跨入 R6/R7。

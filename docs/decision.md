@@ -161,6 +161,7 @@
 - [决策 151 — R4/G4 完成后先进入 R5 前复审](#决策-151--r4g4-完成后先进入-r5-前复审)
 - [决策 152 — R4 复审补齐 handoff 启动、失败闭合与 frontend 回合投影](#决策-152--r4-复审补齐-handoff-启动失败闭合与-frontend-回合投影)
 - [决策 153 — R5 使用薄 CLI、单 WorkerRunner 与可替换命令注册](#决策-153--r5-使用薄-cli单-workerrunner-与可替换命令注册)
+- [决策 154 — R5 清单获确认并固定新会话实施入口](#决策-154--r5-清单获确认并固定新会话实施入口)
 
 ---
 
@@ -3365,3 +3366,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 直接把临时 `scripts/v2_runtime_smoke.py` 演进为正式 CLI —— 缺少命令、输入、渲染与 worker 边界，已拒绝。
 - 让 CommandRegistry handler 直接修改 Agent/Runtime 或读取 SessionSnapshot —— 重新制造跨层耦合，已拒绝。
 - 在 R5 新增独立 CLI history snapshot —— 当前 SessionView 已提供 rewind projection，没有足够收益支撑第二套 schema，已拒绝。
+
+---
+
+### 决策 154 — R5 清单获确认并固定新会话实施入口
+
+**背景：** 用户已确认 R5 新文件、类与公开方法清单，但明确要求当前会话不编码，并检查新会话经 project-bootstrap 恢复后是否具备无歧义的实施信息。冷启动审查发现确认状态尚未写入 `current.md`，原清单也缺少构造依赖、返回类型、CommandResult 语义与实施顺序。
+
+**决策：**
+
+- 正式确认 `docs/refactor-design.md#67-cli` 的 R5 文件、对象、构造依赖和公开方法清单；新会话允许按该清单创建 `src/get_me_in/cli/` 与三个对应测试文件。
+- 固定 CommandResult/CommandSpec 语义和五步实施顺序；每一步独立验证、独立提交，不跨入 R6/R7。
+- 第一实施切片是 `commands.py` 与 `test_cli_commands.py`；完成后再迁移 InputController/Renderer，不一次创建全部 R5 文件。
+- 当前会话只更新状态与设计文档，不创建 R5 代码；新会话必须先执行 project-bootstrap，以 `docs/current.md` 路由到活跃 refactor design/plan/task/decision。
+
+**理由：**
+
+- 把确认事实和第一个可执行切片写入唯一状态快照，避免新会话重复请求确认或一次性铺开全部 CLI。
+- 明确类型语义和依赖能减少实现时临时发明控制 dict、跨层依赖或额外持久化 schema 的风险。
+
+**曾考虑的替代方案：**
+
+- 只在本次对话中确认、不更新 current.md —— 新会话无法可靠恢复授权状态，已拒绝。
+- 新会话直接创建全部 R5 文件 —— 违反小步验证和独立提交约定，已拒绝。

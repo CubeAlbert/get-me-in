@@ -200,10 +200,11 @@
 - ✅ 复核 R5 CliApp、CommandRegistry、InputController、Renderer、WorkerRunner 的职责和新文件/公开方法清单，确保 CLI 不吸收业务编排。
 - ✅ 复核 R6 命令接入与资源清理、R6/R7 并行及验收依赖、R8 删除/回退/临时 Runner 清理范围。
 - ✅ 将复审结论与 R5 清单同步到 refactor design/plan/task/decision。
-- ⬜ 获得 R5 新文件、类与公开方法清单确认；确认前不得开始 R5 coding。
+- ✅ 用户已确认 `docs/refactor-design.md#67-cli` 的 R5 新文件、类与公开方法清单；允许在新会话按清单开始编码。
 
 ### 1. CLI shell
 
+- ⬜ 第一实施切片：创建 `commands.py` 与 `test_cli_commands.py`，固定强类型 command spec/result、解析、alias、replace 和核心 command handlers；验证并独立提交。
 - ⬜ 创建 CliApp，仅保留输入循环和 application command/event 转发。
 - ⬜ 创建 CommandRegistry，命令帮助与 handler 同源。
 - ⬜ 创建 InputController，管理 autocomplete/history/prefill/editor。

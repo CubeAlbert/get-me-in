@@ -376,23 +376,35 @@ CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触
 
 `/ragreload` 与 `/build-memory` 在 R5 只进入 CommandRegistry 并明确报告 R6 尚不可用；R6 通过 `CommandRegistry.replace()` 接入真实 handler。R5 提供 `python -m src.get_me_in.cli` 独立入口；正式 CLI 通过 G5 后删除临时 `scripts/v2_runtime_smoke.py`，因此 R8 切换 `main.py` 前仍有唯一可验证的 v2 CLI 入口。
 
-R5 新文件、对象与公开边界清单如下；获得用户确认前不得创建：
+R5 新文件、对象与公开边界清单如下，已由用户在决策 154 中确认；编码只允许创建或调整清单明确列出的 R5 范围：
 
 | 文件 | 新增对象 | 公开边界 |
 |------|----------|----------|
 | `src/get_me_in/cli/__init__.py` | v2 CLI package | 不导出可变全局实例 |
-| `src/get_me_in/cli/app.py` | `CliApp` | `run() -> int`；内部持有审批模式并驱动 command/event，不暴露业务状态 |
-| `src/get_me_in/cli/commands.py` | `ApprovalMode`、`CommandAction`、`CommandResult`、`CommandSpec`、`CommandRegistry` | `register(spec)`、`replace(spec)`、`dispatch(text)`、`help_entries()`、`completions()`；结果使用强类型 action，不返回魔法 dict |
-| `src/get_me_in/cli/input.py` | `InputController` | `read(prefill=None)`、`edit()`、`confirm()`、`select()`、`remember()`、`replace_history()` |
-| `src/get_me_in/cli/renderer.py` | `Renderer` | `render_event()`、`render_session()`、`render_help()`、`render_error()`、`render_notice()`、`status()` |
-| `src/get_me_in/cli/worker.py` | `WorkerRunner` | `run(command) -> RuntimeEvent`、`close()`；只管理单 worker、轮询和取消 |
+| `src/get_me_in/cli/app.py` | `CliApp` | `__init__(application, commands, input_controller, renderer, worker)`、`run() -> int`；内部持有审批模式并驱动 command/event，不暴露业务状态 |
+| `src/get_me_in/cli/commands.py` | `ApprovalMode`、`CommandAction`、`CommandResult`、`CommandSpec`、`CommandRegistry` | `CommandRegistry(specs=())`、`register(spec) -> None`、`replace(spec) -> None`、`dispatch(text) -> CommandResult | None`、`help_entries() -> tuple[tuple[str, str], ...]`、`completions() -> tuple[str, ...]`、`build_command_registry(application, input_controller, renderer) -> CommandRegistry`；结果使用强类型 action，不返回魔法 dict |
+| `src/get_me_in/cli/input.py` | `InputController` | `__init__(editor=None)`、`read(prefill=None) -> str | None`、`edit() -> str | None`、`confirm(prompt) -> bool | None`、`select(prompt, choices, allow_custom=False) -> str | None`、`remember(text) -> None`、`replace_history(entries) -> None` |
+| `src/get_me_in/cli/renderer.py` | `Renderer` | `__init__(console=None)`、`render_event(event) -> None`、`render_session(view) -> None`、`render_help(entries) -> None`、`render_error(message) -> None`、`render_notice(message) -> None`、`status(message)`；不返回下一条 command |
+| `src/get_me_in/cli/worker.py` | `WorkerRunner` | `__init__(application, renderer, poll_interval_seconds=0.1)`、`run(command: RuntimeCommand) -> RuntimeEvent`、`close() -> None`；只管理单 worker、轮询和取消 |
 | `src/get_me_in/cli/main.py` | CLI composition function | `main() -> int`；构造 Application 与 CLI 组件，按 worker → application 顺序关闭 |
 | `src/get_me_in/cli/__main__.py` | 模块入口 | 只调用 `main()`，不含业务逻辑 |
 | `tests/get_me_in/test_cli_app.py` | CliApp protocol tests | 覆盖事件推进、handoff continue、终态自动保存与保存失败 |
 | `tests/get_me_in/test_cli_commands.py` | CommandRegistry tests | 覆盖 parse/help/alias/replace、restore/rewind、unavailable handler 与审批策略 |
 | `tests/get_me_in/test_cli_worker.py` | WorkerRunner tests | 覆盖单 worker、取消、关闭与禁止并发 |
 
-R5 调整既有 `bootstrap.py` 的装配复用方式和 `docs/legacy-cli-smoke-checklist.md`；不修改 RuntimeCommand/RuntimeEvent、Session snapshot schema、ToolDefinition 或 R6/R7 service。真实 questionary/Rich、Windows UTF-8、Esc、Ctrl+C、EOF 与 editor-not-found 仍使用人工 smoke 验证。
+其中 `ApprovalMode` 只包含 `PROMPT/AUTO`；`CommandAction` 只包含 `HANDLED/EXIT/SUBMIT/PREFILL/SET_APPROVAL`。`CommandResult` 由 `action`、可选 `text` 和可选 `approval_mode` 组成：`SUBMIT` 用于 `/edit` 产生普通用户输入，`PREFILL` 用于 `/rewind` 回退后预填，`SET_APPROVAL` 只修改 CliApp 的进程内审批偏好。`CommandSpec` 包含 `name/description/handler/aliases`，handler 接收命令参数文本并返回 `CommandResult`；非命令输入时 `dispatch()` 返回 `None`。
+
+R5 复用既有 `build_application()`，不改变 `bootstrap.py` 的 Runtime/Session 装配边界；`cli/main.py` 负责 Settings 加载和 CLI 组件装配。R5 只调整 `docs/legacy-cli-smoke-checklist.md`，不修改 RuntimeCommand/RuntimeEvent、Session snapshot schema、ToolDefinition 或 R6/R7 service。真实 questionary/Rich、Windows UTF-8、Esc、Ctrl+C、EOF 与 editor-not-found 仍使用人工 smoke 验证。
+
+推荐实施顺序固定为：
+
+1. `commands.py` 与 `test_cli_commands.py`：先固定强类型 command spec/result、解析、alias、replace 和核心 command handlers。
+2. `input.py`、`renderer.py`：迁移纯终端输入/输出职责，不接 Application 私有状态。
+3. `worker.py` 与 `test_cli_worker.py`：完成单 worker、轮询取消和关闭。
+4. `app.py` 与 `test_cli_app.py`：完成 command/event 驱动、handoff continue、交互和终态自动 snapshot。
+5. `main.py`、`__main__.py`：装配正式入口，执行自动化测试与人工 smoke；G5 通过后删除临时 Runner 并单独提交。
+
+上述每一步独立验证并使用现有提交风格提交；不得在同一提交提前实现 R6 Knowledge handler 或 R7 Resume Agent。
 
 ### 6.8 Workspace 与 Artifact
 

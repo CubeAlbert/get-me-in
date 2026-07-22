@@ -155,6 +155,8 @@
 
 **依赖：** G4。
 
+**实施顺序：** CommandRegistry 强类型协议 → InputController/Renderer → WorkerRunner → CliApp event driver → 独立模块入口与 G5 smoke。每一步独立验证和提交；G5 前不接入 R6/R7 实现。
+
 ### R6 —— Knowledge/RAG 与 Memory 迁移
 
 **目标：** 消除 RAG/Memory 全局 Facade 与回调式隐式索引，建立显式生命周期和可恢复一致性。
