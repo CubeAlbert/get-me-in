@@ -10,7 +10,8 @@ from src.get_me_in.application.orchestration import Orchestrator
 from src.get_me_in.application.session_codec import SessionSnapshot
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey
-from src.get_me_in.domain.messages import MessageRecord, Role, ToolResultRecord
+from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord, ToolResultRecord
+from src.get_me_in.domain.memories import MemoryBuildSource
 from src.get_me_in.domain.sessions import RuntimePhase
 from src.get_me_in.domain.sessions import (
     AgentSessionState,
@@ -134,6 +135,14 @@ class SessionService:
 
     def request_cancel(self, reason: str = "Cancelled by user") -> None:
         self._orchestrator.request_cancel(reason)
+
+    def memory_source(self) -> MemoryBuildSource:
+        state = self._session.agents[self._session.active_agent]
+        records = tuple(
+            replace(record, thinking=None) if isinstance(record, (MessageRecord, ToolCallRecord)) else record
+            for record in state.history
+        )
+        return MemoryBuildSource(self._session.session_id, self._session.active_agent, records)
 
     def close(self) -> None:
         self._orchestrator.close()
