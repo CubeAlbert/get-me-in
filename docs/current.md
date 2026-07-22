@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R5-F —— LLM `thinking` 契约修复（R6 前置门禁；仅完成文档设计，coding 尚未启动）
+**当前阶段：** R6 —— Knowledge/RAG 与 Memory（已通过 G5-F checkpoint；第一切片尚未启动）
 
-**当前任务：** 先独立修复 v2 `thinking` 的保留、展示、持久化与剥离契约；通过 G5-F 后才能启动 R6
+**当前任务：** 按已确认清单实施 R6 第一切片的 domain/ports/manifest diff 纯逻辑
 
-**当前子任务：** 按 `docs/refactor-task.md#r5-f--llm-thinking-契约修复` 修改既有 v2 消息、RuntimeEvent、snapshot、Settings 与 Renderer 边界并补齐测试；不得创建 R6 文件（⬜）
+**当前子任务：** 仅创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，实现 domain/ports/manifest diff 纯逻辑；独立验证、独立提交（⬜）
 
-**当前阻塞：** R6 被 G5-F 阻塞；当前会话按用户要求只更新文档，不执行 `thinking` 修复或 R6 coding
+**当前阻塞：** 无。R6 已获清单确认并通过 G5-F；G6 后仍必须停在 R6-T，未经用户明确授权不得进入 R7 或 R8
 
-**会话交接说明：** R5 已完成并通过 G5 复验，134 项核心测试通过。R6 设计及清单已获确认，但在 R6 前发现 v2 契约偏移：静态输出提示词和 `ModelReplyParser` 仍接收 JSON `thinking` 摘要，Runtime 却没有把它写入 `MessageRecord`／`ToolCallRecord`、RuntimeEvent、snapshot 或 Renderer。决策 171 增加独立 R5-F：恢复“当前回复保留并按 `SHOW_THINKING` 展示、snapshot 可恢复、发往下一轮 LLM 时剥离”的语义；继续禁止捕获 provider 原生 `reasoning_content`。R6 总体设计和文件清单不变，但增加 G5-F 前置依赖，且 `SessionService.memory_source()` 必须复制出不含 `thinking` 的记录，防止 MemoryExtractor 接收展示摘要。本次只更新文档，没有修改代码。
+**会话交接说明：** R5-F/G5-F 已完成。`da530dc` 恢复 finish 必需、tool call 可选的 JSON `thinking` 摘要：assistant `MessageRecord`／`ToolCallRecord`、`ToolStarted`、snapshot 和 Renderer 均保留该投影；ConversationCodec 始终剥离它，且继续禁止读取 provider 原生 `reasoning_content`。`SHOW_THINKING` 与 `LLM_THINKING_ENABLED` 已分离；`937c4ea` 将最终回复渲染为先显示“思考摘要”、再显示 LLM message。完整核心自动化测试 140 项通过，CLI 编译及开／关渲染验证通过。R6 设计、清单和第一切片不变，且 R6 MemoryBuildSource 仍必须剥离 thinking。
 
-**下一步：** 在新会话执行 `/project-bootstrap`，先实施并独立提交 R5-F，不得创建 R6 文件。G5-F 必须证明：finish 回复的 JSON `thinking` 被保留；tool call 可选保留；`SHOW_THINKING` 与 provider `LLM_THINKING_ENABLED` 分离；conversation codec 和 R6 MemoryBuildSource 投影不含 thinking；snapshot round-trip 与 CLI 展示正确。G5-F checkpoint 完成后，才按原已确认清单启动 R6 第一切片。G6 后仍必须停在 R6-T，不得进入 R7。
+**下一步：** 在新会话执行 `/project-bootstrap` 后，按 `docs/refactor-design.md#69-knowledge-与-memory` 的已确认清单，仅创建并独立验证 R6 第一切片：`domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`。完成后独立提交；G6 后必须 checkpoint 并停在 R6-T，不得进入 R7。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
