@@ -77,7 +77,7 @@ class CoreCommandTests(unittest.TestCase):
         self.registry.dispatch("/exit_sub")
 
         self.assertEqual([DumpSession(), ExitSubAgent()], self.application.commands)
-        self.assertEqual(["会话已导出：export.md"], self.renderer.notices)
+        self.assertEqual([], self.renderer.notices)
 
 
 class InputControllerTests(unittest.TestCase):

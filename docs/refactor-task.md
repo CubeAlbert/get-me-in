@@ -205,7 +205,7 @@
 ### 1. CLI shell
 
 - ✅ 第一实施切片：创建 `commands.py` 与 `test_cli_commands.py`，固定强类型 command spec/result、解析、alias、replace 和核心 command handlers；110 项 v2 核心自动化测试通过，独立提交 `151b04a`。
-- ⬜ 创建 CliApp，仅保留输入循环和 application command/event 转发。
+- ✅ 创建 CliApp，仅保留输入循环和 application command/event 转发；覆盖 handoff continue、审批、终态自动 snapshot 与保存失败提示。
 - ✅ 创建 CommandRegistry，命令帮助与 handler 同源。
 - ✅ 创建 InputController，管理 autocomplete/history/prefill/editor；使用 `set_completions(CompletionProvider)` 动态读取 CommandRegistry 的最新补全。
 - ✅ 创建 Renderer，管理 Markdown/Plan/spinner/error/recap。
@@ -217,8 +217,8 @@
 - 🔄 `/help`
 - 🔄 `/edit`
 - 🔄 `/dump`
-- 🔄 `/restore [session_id]`
-- 🔄 `/rewind`
+- 🔄 `/restore [session_id]`；无参数时使用 InputController 选择 session。
+- 🔄 `/rewind`；无参数时使用 InputController 选择公开 rewind point。
 - 🔄 `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
 - 🔄 `/exit_sub`

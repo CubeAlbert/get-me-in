@@ -101,8 +101,6 @@ def build_command_registry(application: object, input_controller: object, render
     """Build R5 commands using only public Application and frontend APIs."""
 
     def handled(message: str | None = None) -> CommandResult:
-        if message:
-            renderer.render_notice(message)
         return CommandResult(CommandAction.HANDLED, text=message)
 
     def help_command(_: str) -> CommandResult:
@@ -119,7 +117,12 @@ def build_command_registry(application: object, input_controller: object, render
 
     def restore_command(arguments: str) -> CommandResult:
         if not arguments:
-            return handled("请提供要恢复的 session_id。")
+            sessions = application.list_sessions()
+            if not sessions:
+                return handled("没有可恢复的会话。")
+            arguments = input_controller.select("选择要恢复的会话:", tuple(session.session_id for session in sessions))
+            if arguments is None:
+                return CommandResult(CommandAction.HANDLED)
         view = application.handle(RestoreSession(arguments))
         renderer.render_session(view)
         input_controller.replace_history(tuple(point.user_text for point in view.rewind_points))
@@ -127,7 +130,12 @@ def build_command_registry(application: object, input_controller: object, render
 
     def rewind_command(arguments: str) -> CommandResult:
         if not arguments:
-            return handled("请提供要回退的 turn_id。")
+            points = application.view().rewind_points
+            if not points:
+                return handled("没有可回退的用户输入。")
+            arguments = input_controller.select("选择要回退的输入:", tuple(point.turn_id for point in points))
+            if arguments is None:
+                return CommandResult(CommandAction.HANDLED)
         view = application.handle(RewindSession(arguments))
         renderer.render_session(view)
         input_controller.replace_history(tuple(point.user_text for point in view.rewind_points))
