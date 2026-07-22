@@ -1,7 +1,5 @@
 """Explicit v2 vector adapters; models and persistence are constructor-owned."""
 
-from collections.abc import Callable
-
 from src.get_me_in.domain.knowledge import IndexChunk, IndexHit, KnowledgeSource
 from src.get_me_in.ports.llm import CancellationSignal
 
@@ -39,17 +37,54 @@ class ChromaKnowledgeIndex:
         self._client, self._embedder, self._reranker = client, embedder, reranker
 
     def replace_source(self, source: KnowledgeSource, chunks: tuple[IndexChunk, ...], cancellation: CancellationSignal) -> None:
-        if cancellation.is_cancelled: raise InterruptedError
+        _raise_if_cancelled(cancellation)
+        embeddings = self._embedder.embed(tuple(chunk.content for chunk in chunks)) if chunks else ()
+        _raise_if_cancelled(cancellation)
         collection = self._client.get_or_create_collection(source.collection.value)
-        collection.delete(where={"source_key": source.source_key})
-        if chunks:
-            collection.add(ids=[chunk.chunk_id for chunk in chunks], embeddings=self._embedder.embed(tuple(chunk.content for chunk in chunks)), documents=[chunk.content for chunk in chunks], metadatas=[dict(chunk.metadata) | {"source_key": source.source_key} for chunk in chunks])
+        existing = collection.get(where={"source_key": source.source_key}, include=[])
+        old_ids = tuple(existing.get("ids", ()))
+        new_ids = tuple(chunk.chunk_id for chunk in chunks)
+        try:
+            if chunks:
+                collection.add(
+                    ids=list(new_ids),
+                    embeddings=list(embeddings),
+                    documents=[chunk.content for chunk in chunks],
+                    metadatas=[
+                        dict(chunk.metadata) | {"source_key": source.source_key}
+                        for chunk in chunks
+                    ],
+                )
+            _raise_if_cancelled(cancellation)
+            stale_ids = tuple(identifier for identifier in old_ids if identifier not in new_ids)
+            if stale_ids:
+                collection.delete(ids=list(stale_ids))
+        except Exception as error:
+            rollback_error: Exception | None = None
+            if new_ids:
+                try:
+                    collection.delete(ids=list(new_ids))
+                except Exception as cleanup_error:
+                    rollback_error = cleanup_error
+            if rollback_error is not None:
+                raise RuntimeError(
+                    f"knowledge replace failed: {error}; rollback failed: {rollback_error}"
+                ) from error
+            raise
 
     def delete_source(self, source_key: str, *, cancellation: CancellationSignal) -> None:
-        if cancellation.is_cancelled: raise InterruptedError
-        for name in ("references", "memories"):
-            try: self._client.get_collection(name).delete(where={"source_key": source_key})
-            except Exception: pass
+        _raise_if_cancelled(cancellation)
+        collection_name, separator, _ = source_key.partition("/")
+        if not separator or collection_name not in {"references", "memories"}:
+            raise ValueError(f"invalid knowledge source key: {source_key}")
+        try:
+            collection = self._client.get_collection(collection_name)
+        except Exception as error:
+            if _is_missing_collection(error):
+                return
+            raise
+        collection.delete(where={"source_key": source_key})
+        _raise_if_cancelled(cancellation)
 
     def search(self, query: str, *, collection: str, category: str | None, top_k: int, cancellation: CancellationSignal) -> tuple[IndexHit, ...]:
         if cancellation.is_cancelled: raise InterruptedError
@@ -59,3 +94,16 @@ class ChromaKnowledgeIndex:
 
     def close(self) -> None:
         pass
+
+
+def _raise_if_cancelled(cancellation: CancellationSignal) -> None:
+    if cancellation.is_cancelled:
+        raise InterruptedError("knowledge index operation cancelled")
+
+
+def _is_missing_collection(error: Exception) -> bool:
+    try:
+        from chromadb.errors import NotFoundError
+    except ImportError:
+        return False
+    return isinstance(error, NotFoundError)

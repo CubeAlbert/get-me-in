@@ -48,7 +48,8 @@ class KnowledgeAdapterTests(unittest.TestCase):
                 repository.load()
 
     def test_chroma_index_uses_injected_client_and_reranker(self) -> None:
-        index = ChromaKnowledgeIndex(_Client(), _Embedder(), _Reranker())
+        client = _Client()
+        index = ChromaKnowledgeIndex(client, _Embedder(), _Reranker())
         source = KnowledgeSource(KnowledgeCollection.REFERENCES, "references/a.md", "hash", _now())
         token = _Token()
 
@@ -56,6 +57,38 @@ class KnowledgeAdapterTests(unittest.TestCase):
         hits = index.search("query", collection="references", category=None, top_k=1, cancellation=token)
 
         self.assertEqual(("found",), tuple(hit.content for hit in hits))
+
+    def test_chroma_replace_embeds_before_mutating_existing_source(self) -> None:
+        collection = _Collection(old_ids=("old",))
+        index = ChromaKnowledgeIndex(_Client(collection), _FailingEmbedder(), _Reranker())
+        source = KnowledgeSource(KnowledgeCollection.REFERENCES, "references/a.md", "new", _now())
+
+        with self.assertRaisesRegex(RuntimeError, "embedding failed"):
+            index.replace_source(
+                source,
+                MarkdownChunker().chunk(KnowledgeDocument(source, "new text")),
+                _Token(),
+            )
+
+        self.assertEqual([], collection.mutations)
+
+    def test_chroma_replace_rolls_back_new_chunks_when_old_delete_fails(self) -> None:
+        collection = _Collection(old_ids=("old",), fail_old_delete=True)
+        index = ChromaKnowledgeIndex(_Client(collection), _Embedder(), _Reranker())
+        source = KnowledgeSource(KnowledgeCollection.REFERENCES, "references/a.md", "new", _now())
+        chunks = MarkdownChunker().chunk(KnowledgeDocument(source, "new text"))
+
+        with self.assertRaisesRegex(RuntimeError, "delete failed"):
+            index.replace_source(source, chunks, _Token())
+
+        self.assertIn(("add", (chunks[0].chunk_id,)), collection.mutations)
+        self.assertEqual(("delete", (chunks[0].chunk_id,)), collection.mutations[-1])
+
+    def test_chroma_delete_propagates_operational_errors(self) -> None:
+        index = ChromaKnowledgeIndex(_FailingClient(), _Embedder(), _Reranker())
+
+        with self.assertRaisesRegex(RuntimeError, "chroma unavailable"):
+            index.delete_source("references/a.md", cancellation=_Token())
 
 
 class _Token:
@@ -66,19 +99,38 @@ class _Embedder:
     def embed(self, texts): return ([0.1],) * len(texts)
 
 
+class _FailingEmbedder:
+    def embed(self, texts): raise RuntimeError("embedding failed")
+
+
 class _Reranker:
     def rerank(self, query, hits): return hits
 
 
 class _Collection:
-    def delete(self, **kwargs): pass
-    def add(self, **kwargs): pass
+    def __init__(self, *, old_ids=(), fail_old_delete=False):
+        self.old_ids = old_ids
+        self.fail_old_delete = fail_old_delete
+        self.mutations = []
+
+    def get(self, **kwargs): return {"ids": list(self.old_ids)}
+    def delete(self, **kwargs):
+        ids = tuple(kwargs.get("ids", ()))
+        self.mutations.append(("delete", ids or kwargs.get("where")))
+        if self.fail_old_delete and ids == self.old_ids:
+            raise RuntimeError("delete failed")
+    def add(self, **kwargs): self.mutations.append(("add", tuple(kwargs["ids"])))
     def query(self, **kwargs): return {"ids": [["id"]], "documents": [["found"]], "metadatas": [[{}]], "distances": [[0.2]]}
 
 
 class _Client:
-    def get_or_create_collection(self, name): return _Collection()
-    def get_collection(self, name): return _Collection()
+    def __init__(self, collection=None): self.collection = collection or _Collection()
+    def get_or_create_collection(self, name): return self.collection
+    def get_collection(self, name): return self.collection
+
+
+class _FailingClient:
+    def get_collection(self, name): raise RuntimeError("chroma unavailable")
 
 
 def _now() -> datetime:
