@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R6 —— Knowledge/RAG 与 Memory（设计与清单已确认；coding 待新会话启动）
+**当前阶段：** R5-F —— LLM `thinking` 契约修复（R6 前置门禁；仅完成文档设计，coding 尚未启动）
 
-**当前任务：** 等待新会话通过 `/project-bootstrap` 恢复上下文后开始 R6 第一实现切片
+**当前任务：** 先独立修复 v2 `thinking` 的保留、展示、持久化与剥离契约；通过 G5-F 后才能启动 R6
 
-**当前子任务：** 第一切片仅允许创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，实现 domain/ports/manifest diff 纯逻辑并独立验证、独立提交（⬜）
+**当前子任务：** 按 `docs/refactor-task.md#r5-f--llm-thinking-契约修复` 修改既有 v2 消息、RuntimeEvent、snapshot、Settings 与 Renderer 边界并补齐测试；不得创建 R6 文件（⬜）
 
-**当前阻塞：** 无；用户已确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 文件、对象、构造依赖与公开方法清单。当前会话按用户要求只更新文档并 checkpoint，不执行 coding
+**当前阻塞：** R6 被 G5-F 阻塞；当前会话按用户要求只更新文档，不执行 `thinking` 修复或 R6 coding
 
-**会话交接说明：** R5 已完成并通过 G5 复验，134 项核心测试通过。用户已确认 R6 设计及 `docs/refactor-design.md#69-knowledge-与-memory` 清单：保留 RetrievalPort，删除重复 SearchQuery/SearchResult、v1 RagLoader Facade、MemoryService.search 与 observer/daemon 方案；新增 ApplicationCommand RUN path、immutable MemoryBuildSource、observed/indexed manifest、单 BackgroundWorker、ResourceStack、typed close report 与 `Application.finalize_turn()`。R6 只使用全新 `data/v2/knowledge/` 和 `data/v2/memories/`，不读取旧运行数据。新会话必须先执行 `/project-bootstrap`，再从第一切片开始，且每个切片独立验证、独立提交。R6/R7 不再并行；G6 后必须经过 R6-T checkpoint 并停止，等待用户审查。本次 checkpoint 只更新文档，没有创建或修改 R6 代码。
+**会话交接说明：** R5 已完成并通过 G5 复验，134 项核心测试通过。R6 设计及清单已获确认，但在 R6 前发现 v2 契约偏移：静态输出提示词和 `ModelReplyParser` 仍接收 JSON `thinking` 摘要，Runtime 却没有把它写入 `MessageRecord`／`ToolCallRecord`、RuntimeEvent、snapshot 或 Renderer。决策 171 增加独立 R5-F：恢复“当前回复保留并按 `SHOW_THINKING` 展示、snapshot 可恢复、发往下一轮 LLM 时剥离”的语义；继续禁止捕获 provider 原生 `reasoning_content`。R6 总体设计和文件清单不变，但增加 G5-F 前置依赖，且 `SessionService.memory_source()` 必须复制出不含 `thinking` 的记录，防止 MemoryExtractor 接收展示摘要。本次只更新文档，没有修改代码。
 
-**下一步：** 在新会话执行 `/project-bootstrap`；读取本文件及其中列出的活跃 refactor 文档后，只实施第一切片：`domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py`、`test_knowledge_service.py` 的 domain/ports/manifest diff 纯逻辑。完成验证和独立提交后再进入下一 R6 切片。G6 后必须停在 R6-T，不得进入 R7。
+**下一步：** 在新会话执行 `/project-bootstrap`，先实施并独立提交 R5-F，不得创建 R6 文件。G5-F 必须证明：finish 回复的 JSON `thinking` 被保留；tool call 可选保留；`SHOW_THINKING` 与 provider `LLM_THINKING_ENABLED` 分离；conversation codec 和 R6 MemoryBuildSource 投影不含 thinking；snapshot round-trip 与 CLI 展示正确。G5-F checkpoint 完成后，才按原已确认清单启动 R6 第一切片。G6 后仍必须停在 R6-T，不得进入 R7。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -52,3 +52,4 @@
 168. **R5 审查修复命令事件闭合与错误边界** — `/exit_sub` 通过 `CommandAction.DRIVE` 将 RuntimeEvent 交回 CliApp 继续推进；命令 handler 的预期异常统一渲染并返回输入循环。跨组件回归补齐后 134 项核心测试通过；R6 仍未开始。
 169. **R6 重设一致性边界并增加强制终止门禁** — 保留 RetrievalPort，删除重复搜索 DTO 和旧 Facade/observer/daemon 形状；新增 RUN command path、immutable MemoryBuildSource、observed/indexed manifest、BackgroundWorker、ResourceStack 与 typed close report。R6/R7 不再并行；G6 后必须 checkpoint 并停在 R6-T，未经用户授权不得进入 R7/R8。当前只完成设计文档，R6 coding 未启动。
 170. **R6 清单获确认并固定新会话实施入口** — 用户确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 文件、对象、构造依赖与公开方法清单；本会话只做文档 checkpoint，不写代码。新会话 bootstrap 后从 domain/ports/manifest diff 第一切片开始，每步独立验证提交；G6 后仍强制停在 R6-T，不得进入 R7。
+171. **R6 前增加独立 `thinking` 契约修复门禁** — v2 必须保留静态 JSON 输出中的用户可见 thinking 摘要并按 `SHOW_THINKING` 展示和持久化，但 ConversationCodec 与 R6 MemoryBuildSource 必须剥离该字段；不得捕获 provider 原生 `reasoning_content`。R6 清单不变，但 coding 必须等待 G5-F 通过。

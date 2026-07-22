@@ -240,6 +240,28 @@
 - 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
 - ✅ 完成 G5 验收并通过审查修复复验；用户确认 V50–V56 人工 smoke 可接受，134 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过。
 
+## R5-F —— LLM `thinking` 契约修复
+
+### 1. 输出、domain 与事件契约
+
+- ⬜ 对齐 `07_output_format.md`：finish 必须包含 string `thinking` 摘要，tool_call 可省略；missing/type error 走既有一次格式修复。
+- ⬜ 为 assistant `MessageRecord` 与 `ToolCallRecord` 增加可选 thinking；user/system/tool result 不产生 thinking。
+- ⬜ AgentRuntime 不再丢弃 `ModelReply.thinking`；Completed 通过 MessageRecord、ToolStarted 通过显式字段向前端投影。
+- ⬜ 保持 provider-neutral 边界：不得读取或保存 OpenAI/DeepSeek 原生 `reasoning_content`。
+
+### 2. 上下文、snapshot 与展示
+
+- ⬜ ConversationCodec 对所有历史记录剥离 thinking，补齐多轮 finish/tool call 不回放测试。
+- ⬜ SessionSnapshotCodec 对 assistant message/tool call thinking 做可选 round-trip；缺失字段兼容为 `None`，不迁移 v1 Session。
+- ⬜ v2 Settings 增加 `show_thinking` 并读取 `SHOW_THINKING`；不得与只控制 provider 的 `llm_thinking_enabled` 混用。
+- ⬜ Renderer 在 show_thinking=true 且摘要非空时展示“思考摘要”，覆盖 Completed 与 ToolStarted；关闭时不展示但保留记录。
+
+### 3. 范围与 G5-F
+
+- ⬜ 只修改 `data/prompts/general_agent/07_output_format.md`、`domain/messages.py`、`application/model_reply.py`、`application/runtime.py`、`application/events.py`、`application/conversation_codec.py`、`application/session_codec.py`、`application/settings.py`、`cli/renderer.py`、`cli/main.py` 与对应既有测试；不创建新代码文件。
+- ⬜ 运行完整核心自动化测试、CLI 编译与 SHOW_THINKING 开／关 smoke，独立提交修复证据。
+- ⬜ 执行 `/project-checkpoint` 保存 G5-F 结论；通过前不得创建或修改 R6 文件。
+
 ## R6 —— Knowledge/RAG 与 Memory
 
 ### 0. 启动确认与范围
@@ -248,7 +270,7 @@
 - ✅ 删除重复 SearchQuery/SearchResult、v1 RagLoader Facade、MemoryService.search、observer/delayed import/daemon thread 等设计。
 - ✅ 增加 ApplicationCommand RUN path、MemoryBuildSource、ResourceStack、BackgroundWorker、versioned manifest 和 R6-T 终止门禁。
 - ✅ 记录 R6 新文件、对象、构造依赖和公开方法清单；当前会话只修改文档，未创建或修改 R6 代码。
-- ✅ 用户已确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 清单；本会话只做文档 checkpoint，R6 coding 从后续新会话 bootstrap 后开始。
+- ✅ 用户已确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 清单；R6 coding 改为在后续新会话完成 G5-F checkpoint 后开始。
 
 ### 1. Domain、ports 与 manifest diff
 
@@ -262,7 +284,7 @@
 
 - ⬜ 增加 `ApplicationResult`、`CommandAction.RUN` 与 command payload；WorkerRunner 串行执行 RuntimeCommand/ApplicationCommand，CliApp 只渲染 typed result。
 - ⬜ 增加 `ReloadKnowledge`、`BuildMemory`；`/ragreload` 可取消，`/build-memory` 只排队并立即返回 receipt。
-- ⬜ 增加 `SessionService.memory_source()`，复制当前 Agent 的 immutable ConversationRecord；CLI/后台线程不得访问 SessionState/private history。
+- ⬜ 增加 `SessionService.memory_source()`，复制当前 Agent 的 immutable ConversationRecord 并将 assistant/tool call thinking 规范化为 `None`；CLI/后台线程不得访问 SessionState/private history，MemoryExtractor 不接收展示摘要。
 - ⬜ 增加单非 daemon BackgroundWorker；前台 reload 与后台 memory 使用独立 cancellation。
 - ⬜ 增加 ResourceStack 与 CloseReport；只注册顶层 owner，逆序、幂等、失败隔离并报告 timeout。
 - ⬜ 增加 `Application.finalize_turn()`，先 snapshot，再按 typed auto-memory setting 可选排队；Memory 失败不覆盖原终态或 snapshot。

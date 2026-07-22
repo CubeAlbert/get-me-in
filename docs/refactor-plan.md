@@ -157,6 +157,29 @@
 
 **实施顺序：** CommandRegistry 强类型协议 → InputController/Renderer → WorkerRunner → CliApp event driver → 独立模块入口与 G5 smoke。每一步独立验证和提交；G5 前不接入 R6/R7 实现。
 
+### R5-F —— LLM `thinking` 契约修复
+
+**目标：** 修复 v2 在解析 JSON `thinking` 后立即丢弃的契约偏移，恢复决策 135/136 的“保留但不回放”语义，并在 R6 复制会话用于 Memory 前固定敏感展示数据边界。
+
+**产出：**
+
+- `finish` 模型回复必须携带 string `thinking` 摘要；`tool_call` 可选携带。该字段是由静态输出 prompt 约束的用户可见推理总结，不是 provider 原生 `reasoning_content`。
+- `MessageRecord` 和 `ToolCallRecord` 保存可选 thinking；AgentRuntime 将 parser 结果写入记录和对应 RuntimeEvent，`Completed` 与 `ToolStarted` 均可供前端读取。
+- Session snapshot 对 assistant message/tool call 的 thinking 做可选字段 round-trip；缺失字段按 `None` 兼容当前 v2 snapshot，不迁移 v1 数据，不重放活动副作用。
+- v2 Settings 增加独立 `show_thinking`，从 `SHOW_THINKING` 读取；Renderer 只在该值为 true 且摘要非空时展示“思考摘要”。`LLM_THINKING_ENABLED` 仍只控制 provider 端 thinking 模式。
+- ConversationCodec 对所有发往 LLM 的历史记录显式排除 thinking；不得把前轮摘要写入 JSON message，也不得读取 provider 原生 `reasoning_content`。
+- 仅修改既有 `data/prompts/general_agent/07_output_format.md`、`domain/messages.py`、`application/model_reply.py`、`application/runtime.py`、`application/events.py`、`application/conversation_codec.py`、`application/session_codec.py`、`application/settings.py`、`cli/renderer.py`、`cli/main.py` 与对应既有测试；不创建新代码文件，不修改 R6/R7 service。
+
+**验收门禁 G5-F：**
+
+- finish 缺少或错误类型 thinking 时走既有一次格式修复；tool_call 缺少 thinking 仍合法。
+- finish/tool call thinking 可在当前事件和 snapshot round-trip 中保留；`SHOW_THINKING=false` 不显示但不破坏记录。
+- 第二次及后续 LLMRequest 的所有历史消息均不包含 thinking；provider `reasoning_content` 仍不会进入 domain。
+- v2 CLI 在 `SHOW_THINKING=true` 时分别对最终回复和工具调用展示摘要；既有 Runtime、Session、CLI 与 25 个工具契约测试全部通过。
+- 完成独立提交和 checkpoint 后才允许 R6 coding；R5-F 不创建或修改任何 R6 文件。
+
+**依赖：** G5。R6 新增依赖 G5-F；R6 已确认的总体设计、文件清单与第一切片内容不变。
+
 ### R6 —— Knowledge/RAG 与 Memory 迁移
 
 **目标：** 消除 RAG/Memory 全局 Facade 与回调式隐式索引，建立显式生命周期、可恢复一致性和受控的 CLI/ApplicationCommand 执行边界。
@@ -186,7 +209,7 @@
 - DeferredRetrievalAdapter 已删除，25 个工具签名与 retrieval_unavailable/cancelled 失败契约保持一致。
 - 核心 domain/application contract tests、adapter contract tests 与真实 Chroma/model smoke 均有验收证据。
 
-**依赖：** G3、G5；R6 设计清单已由用户确认（决策 170），coding 从后续新会话 `/project-bootstrap` 后开始。R6 与 R7 不再并行实施。
+**依赖：** G3、G5、G5-F；R6 设计清单已由用户确认（决策 170），但 coding 必须等待独立 thinking 契约修复通过并 checkpoint。R6 与 R7 不再并行实施。
 
 **R6-T 强制终止门禁：** G6 通过后执行 `/project-checkpoint`，将状态保存为“R6 完成、R7 未启动、等待用户审查”，然后立即停止。未经后续明确授权，不得提交 R7 设计清单、创建或修改 R7 文件、切换入口或执行 R8 清理。
 
@@ -251,7 +274,7 @@
 ## 3. 关键依赖顺序
 
 ```text
-R0 → R1 → R2 → R3 → R4 → R5 → R6 → R6-T（强制停止／用户审查） → R7 → R8 → R9
+R0 → R1 → R2 → R3 → R4 → R5 → R5-F（thinking 契约修复） → R6 → R6-T（强制停止／用户审查） → R7 → R8 → R9
 ```
 
 R6 与 R7 不再并行。R6 coding 与 G6 完成后必须先停在 R6-T；只有用户明确授权后才能进入 R7。R8 仍须等待 G6、G7 均完成，且在 R8 之前旧实现保持可运行。

@@ -185,6 +185,7 @@
 - [决策 168 — R5 审查修复命令事件闭合与错误边界](#决策-168--r5-审查修复命令事件闭合与错误边界)
 - [决策 169 — R6 重设一致性边界并增加强制终止门禁](#决策-169--r6-重设一致性边界并增加强制终止门禁)
 - [决策 170 — R6 清单获确认并固定新会话实施入口](#决策-170--r6-清单获确认并固定新会话实施入口)
+- [决策 171 — R6 前增加独立 thinking 契约修复门禁](#决策-171--r6-前增加独立-thinking-契约修复门禁)
 
 ---
 
@@ -3789,3 +3790,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 当前会话直接开始 R6 coding —— 与用户明确要求冲突，已拒绝。
 - 只修改 `current.md`，不更新 task/design/plan/decision —— 新会话可能读到相互矛盾的“待确认”状态，已拒绝。
 - 清单确认后一次性创建全部 R6 文件 —— 破坏逐切片验证与独立提交要求，已拒绝。
+
+---
+
+### 决策 171 —— R6 前增加独立 `thinking` 契约修复门禁
+
+**背景：** R6 coding 启动前复核系统提示词与模型回复，发现静态 `07_output_format.md` 仍要求 finish 输出 JSON `thinking`，`ModelReplyParser` 也会解析该字段，但 v2 AgentRuntime 只把 content 写入 MessageRecord，导致 thinking 在解析后被丢弃，无法展示、dump 或随 snapshot 恢复。现有测试只保护了“不回放给下一轮 LLM”，没有保护“当前回复仍须保留”。这偏离决策 135/136 和 v1 可观察行为。
+
+**决定：**
+
+- 在 R5 与 R6 之间增加独立 R5-F 和验收门禁 G5-F；当前会话只更新文档，不修复代码，也不创建 R6 文件。
+- finish 的 JSON thinking 为必需 string，tool_call thinking 可选；决策 171 仅取代决策 77 对 finish thinking 的可选化，保留 tool_call 容错。这是模型生成的用户可见摘要，不是 provider 原生 reasoning_content。继续禁止捕获或暴露原生 reasoning_content。
+- assistant MessageRecord 与 ToolCallRecord 保存可选 thinking；RuntimeEvent、Session snapshot 和 Renderer 保留该投影。v2 新增独立 `show_thinking` setting 读取 `SHOW_THINKING`，与控制 provider 模式的 `llm_thinking_enabled` 分离。
+- ConversationCodec 发往下一轮 LLM 时始终剥离 thinking；“不回放”不能再通过“解析后永久丢弃”实现。
+- R6 的总体设计、文件清单和第一切片不变，但新增 G5-F 前置依赖。`SessionService.memory_source()` 必须把复制记录中的 thinking 规范化为 `None`，防止 MemoryExtractor 将展示摘要当成会话事实。
+- G5-F 通过、独立提交并 checkpoint 前不得开始 R6；R6 完成后的 R6-T 终止门禁不变。
+
+**理由：**
+
+- thinking 属于一次模型回复的可观察数据；是否展示和是否回放是两个不同决策，不能用丢数据代替上下文过滤。
+- 原生 reasoning_content 可能泄漏系统提示词与内部推导，而 JSON thinking 是受项目输出协议约束的用户可见摘要，两者必须保持类型和设置隔离。
+- 在 MemoryBuildSource 复制边界剥离 thinking，可同时保留 snapshot/诊断能力并避免 R6 Memory 提取增加噪声或敏感输入。
+
+**曾考虑的替代方案：**
+
+- 把修复并入 R6 —— 会混合通用 Runtime/Session/CLI 契约和 Knowledge/Memory 副作用，扩大 G6 定位范围，已拒绝。
+- 保持 parser 接收后丢弃 —— 继续浪费输出 token，并违反已确认的可展示/可 dump 行为，已拒绝。
+- 将 provider reasoning_content 用作 thinking —— 决策 136 已因安全和 prompt injection 风险拒绝，继续不采用。
+- 让 MemoryExtractor 自行忽略 thinking —— 会把展示数据泄漏到后台 LLM 输入，边界过晚，已拒绝。

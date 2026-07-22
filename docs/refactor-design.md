@@ -360,6 +360,14 @@ R4 新增文件、类和公开方法清单如下，编码前仍需用户确认�
 
 如果 OpenAI SDK 无法稳定中止同步调用，adapter 可以使用 request-scoped client/transport，由 worker 持有并在取消时关闭；该细节不得泄漏到 Runtime。
 
+#### 6.6.1 JSON `thinking` 契约（R6 前置修复）
+
+静态 `07_output_format.md` 中的 `thinking` 是模型生成、允许向用户展示的推理摘要，与 provider 原生 `reasoning_content` 和 `LLM_THINKING_ENABLED` 完全分离。finish 回复必须包含 string thinking；tool_call 可省略。该规则由决策 171 取代决策 77 对 finish thinking 的可选化，保留 tool_call 的容错。v2 继续执行决策 136，不读取、保存或展示 provider 原生 reasoning_content。
+
+`MessageRecord` 和 `ToolCallRecord` 保存可选 thinking；Runtime 必须把 `ModelReplyParser` 的结果投影到 Completed/ToolStarted，使 Renderer 可在独立 `SHOW_THINKING` setting 开启时显示“思考摘要”。Session snapshot 对 assistant message/tool call 的 thinking 做可选 round-trip，缺失字段兼容为 `None`。thinking 不参与业务状态转换、tool closure、handoff、rewind 边界或 Plan。
+
+“保留”不等于“回放”。`ConversationCodec` 编码下一轮 LLMRequest 时必须对所有历史记录剥离 thinking；R6 的 `SessionService.memory_source()` 同样必须复制出 thinking 为 `None` 的 provider-neutral 记录，MemoryExtractor 不得接收展示摘要。这样修复只为 R6 增加 G5-F 前置依赖和一条 MemoryBuildSource 投影约束，不改变 R6 的总体架构、已确认文件清单或第一切片。
+
 ### 6.7 CLI
 
 CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触 AgentRuntime、PlanService、CancellationToken 实例、完整 SessionSnapshot 或任何私有 history。拆分职责如下：
@@ -427,7 +435,7 @@ R6 复审结论是保留 Knowledge/Memory 的总体方向，但重新设计命�
 **新增：**
 
 - 增加通用的前台 `ApplicationCommand` 执行路径。`CommandAction.RUN` 携带 application command，`WorkerRunner` 串行执行并返回强类型 `ApplicationResult`；`CliApp` 只负责调用 Renderer，不识别 Knowledge/Memory 私有状态。`/ragreload` 在 worker 中同步执行、可通过 `Application.request_cancel()` 取消；`/build-memory` 只排入受控后台队列并立即返回 receipt。
-- 增加 `MemoryBuildSource`。`SessionService` 在 application 层复制当前 Agent 的 provider-neutral `ConversationRecord`，CLI 和 Memory 后台任务均不得持有 `SessionState` 或读取私有 history。
+- 增加 `MemoryBuildSource`。`SessionService` 在 application 层复制当前 Agent 的 provider-neutral `ConversationRecord`，并把 assistant message/tool call 的 thinking 规范化为 `None`；CLI 和 Memory 后台任务均不得持有 `SessionState`、读取私有 history 或把展示摘要交给 MemoryExtractor。
 - 增加 schema-versioned `IndexManifest` 和全新 v2 Memory repository。默认路径分别位于 `data/v2/knowledge/manifest.json`、`data/v2/knowledge/chroma/` 与 `data/v2/memories/`；不得读取旧 `data/chroma/` 或 `data/memories/`。
 - 增加一个 Application-owned、非 daemon 的 `BackgroundWorker`，串行处理启动加载和 Memory 构建。KnowledgeService/MemoryService 只借用该 worker，不拥有或关闭它；后台任务使用自己的 cancellation，不与前台 Runtime command 共用可变 token。ResourceStack 必须先关闭 worker、等待或取消任务，再关闭 MemoryService/KnowledgeService 持有的 repository/index/model。
 - 增加逆序、幂等、失败隔离的 `ResourceStack`。只注册顶层 owner，嵌套资源只由其直接 owner 关闭，禁止 LLM/index/repository 被重复注册和重复关闭。
@@ -464,7 +472,7 @@ Memory repository 每条记录使用独立、versioned JSON 文件。repository 
 | 文件 | 新增对象 | 构造依赖与公开方法 |
 |------|----------|--------------------|
 | `src/get_me_in/domain/knowledge.py` | `KnowledgeCollection`、`KnowledgeState`、`ManifestStatus`、`PendingIndexOperation`、`KnowledgeSource`、`KnowledgeDocument`、`IndexChunk`、`IndexHit`、`ManifestEntry`、`IndexManifest`、`ReloadReport` | immutable DTO/StrEnum；无 I/O 方法 |
-| `src/get_me_in/domain/memories.py` | `MemoryCategory`、`MemoryRecord`、`MemoryBuildSource`、`MemoryBuildReceipt`、`MemoryBuildReport` | versioned immutable DTO；`MemoryBuildSource` 只持有复制后的 ConversationRecord |
+| `src/get_me_in/domain/memories.py` | `MemoryCategory`、`MemoryRecord`、`MemoryBuildSource`、`MemoryBuildReceipt`、`MemoryBuildReport` | versioned immutable DTO；`MemoryBuildSource` 只持有复制且 thinking 已规范化为 `None` 的 ConversationRecord |
 | `src/get_me_in/application/app_results.py` | `ApplicationResult`、`BackgroundJobReceipt`、`KnowledgeReloaded`、`MemoryBuildScheduled`、`TurnFinalizationResult`、`CloseIssue`、`CloseReport` | strong typed result；不返回控制 dict |
 | `src/get_me_in/application/background_worker.py` | `BackgroundWorker` | `__init__(name, shutdown_timeout_seconds)`、`submit(task_name, task) -> BackgroundJobReceipt`、`close() -> CloseReport`；单非 daemon worker，timeout 构造注入 |
 | `src/get_me_in/application/resources.py` | `ResourceStack` | `register(name, close: Callable[[], CloseReport | None]) -> None`、`close() -> CloseReport`；显式注册唯一 owner 的 close callback，逆序、幂等、失败隔离 |
@@ -536,4 +544,4 @@ v2 只复用以下静态项目资产：
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。R0～R5 已完成；R6 设计复审与清单已获用户确认，但当前会话只执行文档 checkpoint，没有创建或修改 R6 代码。后续新会话可在 `/project-bootstrap` 后按 6.9.4 的第一切片开始 coding；R6 完成后还必须停在 R6-T，未经后续授权不得进入 R7。
+R-D1～R-D6 已由用户确认。R0～R5 已完成；R6 设计复审与清单已获用户确认，但当前新增 R5-F thinking 契约修复门禁，没有创建或修改修复代码或 R6 代码。后续新会话必须先在 `/project-bootstrap` 后完成 G5-F、独立提交并 checkpoint，才能按 6.9.4 的第一切片开始 R6 coding；R6 完成后还必须停在 R6-T，未经后续授权不得进入 R7。
