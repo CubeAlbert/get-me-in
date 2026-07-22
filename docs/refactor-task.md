@@ -95,15 +95,19 @@
 - ✅ 实现 unknown tool、max rounds、timeout 和 provider failure。
 - ✅ 提取 ModelReplyParser；domain Message 不直接解析 provider 字符串。
 - ✅ 保证 thinking 不写回下一轮模型输入。
+- ✅ 将当前 Agent 可见的 ToolCatalog 与 AgentCatalog 描述注入 Prompt，禁止依赖 Fake LLM 硬编码工具调用。
+- ✅ 定义 provider-neutral message codec，显式保存 tool name、arguments、call id 与结果关联；Handoff 必须携带原 tool call id。
+- ✅ 限制 WAITING_FOR_TOOL 阶段可接受的 command；Cancel、新 UserMessage、Reject 与 Handoff 均不得遗留孤立 TOOL_CALL。
+- ✅ 支持单次用户请求中的连续多工具回合，并使 max rounds 与 `Settings.llm_timeout_seconds` 可配置且真实生效。
 
 ### 3. LLM adapter 与取消
 
 - ✅ 定义 LLMRequest/LLMResult/ModelProfile。
 - ✅ 实现 OpenAI sync adapter，集中 pro/flash/provider thinking 配置。
-- ✅ 设计活动调用 handle 的 cancel/close/reset 生命周期。
-- ✅ 验证取消阻塞调用后下一次调用可继续。
+- ✅ 设计并实现活动调用 handle 的 cancel/close/reset 生命周期。
+- ✅ 使用真实阻塞 adapter 验证调用执行中可取消，且下一次调用仍可继续；Fake LLM 仅作 unit test。
 - ✅ 禁止 Runtime 访问 OpenAI SDK 私有 transport。
-- ✅ 完成 G2 验收。
+- ✅ 重新完成 G2 验收；86 项核心自动化测试通过，临时 v2 Runtime Runner 已完成人工可用性验证。
 
 ## R3 —— Tool Runtime、Plan 与 Workspace
 
@@ -111,10 +115,10 @@
 
 - ✅ 定义 ToolDefinition、ToolSchema、ToolPolicy、ToolContext、ToolOutcome。
 - ✅ 将 decorator 改为仅创建定义，不自动写全局 Registry；或改为显式 builder。
-- ✅ capability-based 可见性替代 agent name、`"*"` 和 main 特判。
+- ✅ 为全部工具绑定明确 capability，并验证 Main Agent 不可见 workspace/resume/retrieval 等领域工具。
 - ✅ ToolCatalog 提供目录导出，使文档/诊断可看到真实工具数。
 - ✅ 统一参数过滤、必填校验、业务错误和框架错误。
-- ✅ 完整处理审批、拒绝和取消的 call closure。
+- ✅ 完整处理审批、拒绝、取消、新用户输入与 handoff 的 call closure，并增加 pending 状态转换测试。
 
 ### 2. Plan
 
@@ -130,10 +134,10 @@
 - ✅ 使用 `Path.is_relative_to(root)` 做边界检查。
 - ✅ 集中编码检测、文本行模型、glob/search 和结构化错误。
 - ✅ 写入与编辑使用原子文件替换。
-- ✅ 以 file revision/hash 实现 read-before-edit，状态归 session/tool context。
+- ✅ 将 read-before-edit 授权绑定到 session/tool context；纯内容 hash 不得跨 Session 复用为编辑授权。
 - ✅ 移除进程级 `_read_files`。
 - ✅ 定义批量删除部分成功的结果类型。
-- ✅ 定义 ProcessRunner，支持 timeout/cancel，供 LaTeX 使用。
+- ✅ 使 ProcessRunner 在子进程执行期间支持 cancel/terminate，而不只在 `subprocess.run()` 前后检查 token。
 
 ### 4. 现有工具归类
 
@@ -146,7 +150,7 @@
 - ✅ 暂以 port adapter 迁移 2 个 RAG query tools，R6 再替换实现。
 - ✅ 迁移 copy_template/build_pdf，R7 接入 ArtifactService。
 - ✅ 输出完整的 25 工具迁移矩阵。
-- ✅ 完成 G3 验收。
+- ✅ 重新完成 G3 验收；86 项核心自动化测试通过，临时 v2 Runtime Runner 已完成人工可用性验证。
 
 ## R4 —— Session Aggregate 与编排
 

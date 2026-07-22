@@ -149,6 +149,13 @@
 - [决策 139 — R1 临时无工具对话仅用于 G1 验证](#决策-139--r1-临时无工具对话仅用于-g1-验证)
 - [决策 140 — R2 用 ToolResult 闭合暂停的工具回合](#决策-140--r2-用-toolresult-闭合暂停的工具回合)
 - [决策 141 — 保留静态 prompt 的 JSON 在应用边界归一化](#决策-141--保留静态-prompt-的-json-在应用边界归一化)
+- [决策 142 — system tools 通过显式 Clock 与 WorkspacePort 注入实现](#决策-142--system-tools-通过显式-clock-与-workspaceport-注入实现)
+- [决策 143 — Runtime 直接执行显式 Catalog 工具，应用独立装配 Workspace](#决策-143--runtime-直接执行显式-catalog-工具应用独立装配-workspace)
+- [决策 144 — 文件预览经 FrontendPort 处理](#决策-144--文件预览经-frontendport-处理)
+- [决策 145 — R3 检索工具只依赖临时 RetrievalPort](#决策-145--r3-检索工具只依赖临时-retrievalport)
+- [决策 146 — R3 简历工具使用临时 ResumeArtifactPort](#决策-146--r3-简历工具使用临时-resumeartifactport)
+- [决策 147 — 架构复审撤销 G2/G3 完成结论并暂停 R4](#决策-147--架构复审撤销-g2g3-完成结论并暂停-r4)
+- [决策 148 — G2/G3 修复完成并恢复门禁结论](#决策-148--g2g3-修复完成并恢复门禁结论)
 
 ---
 
@@ -3175,3 +3182,53 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 等到 R7 再迁移两个工具 —— 会使 R3 的 25 工具目录不完整，已拒绝。
 - 在工具 handler 内直接读取模板和调用 `subprocess.run` —— 破坏依赖注入和自动化测试隔离，已拒绝。
+
+---
+
+### 决策 147 — 架构复审撤销 G2/G3 完成结论并暂停 R4
+
+**背景：** R1～R3 实现完成后进行架构复审。现有 80 个自动化测试全部通过，但静态检查与只读诊断发现：真实 Prompt 未注入 ToolCatalog/AgentCatalog；Main Agent 实际可见全部 25 个工具；ConversationEvent 与 Handoff 缺少可持久化的 call-id 关联；等待工具期间取消或接收新用户消息会遗留孤立 TOOL_CALL；Workspace revision 只是可跨 Session 复用的内容 hash；OpenAI 与 ProcessRunner 只在阻塞调用前后检查取消；默认两轮上限无法支持连续多工具任务；Settings 中的 LLM timeout 未进入 Runtime。
+
+**决策：**
+
+- 撤销 `docs/refactor-task.md` 中 G2、G3 的完成结论，将上述缺口恢复为待修复任务；已经满足且有测试证据的细分任务保持完成。
+- R4 Session Aggregate 与编排暂不启动。先提交 G2/G3 修复所需的新文件、类、公开方法与既有接口调整清单，获得用户确认后再编码。
+- 重新验收必须覆盖真实 Prompt 目录注入、provider-neutral message/call-id codec、pending call 的所有闭合路径、真实阻塞 adapter 取消、完整 capability 绑定、session-scoped revision、连续多工具回合及 Settings timeout 生效。
+- 单元测试继续保留，但 Fake LLM/Fake ProcessRunner 不能单独作为真实 adapter 取消或端到端工具发现的验收证据。
+
+**理由：**
+
+- 门禁的意义是保护下一阶段依赖的协议，而不是只证明局部类型和 handler 可以运行；带缺口进入 R4 会把错误的消息关联、状态所有权和权限边界固化进 Session schema。
+- 先修复 R2/R3 边界，可以避免 R4 同时承担会话建模和底层 Runtime 返工，降低 snapshot、rewind 与 handoff 闭环的设计风险。
+- 保留已通过的细分成果，同时只撤销不真实的门禁状态，比整体回滚 R1～R3 更准确。
+
+**曾考虑的替代方案：**
+
+- 保持 G2/G3 完成，在 R4 顺便修复 —— 会混合门禁责任，并使 Session model 建立在尚未稳定的 call-id、pending state 和 revision 语义上，已拒绝。
+- 只增加测试、不调整任务状态 —— 文档仍会指示新会话直接进入 R4，无法真实反映当前风险，已拒绝。
+
+---
+
+### 决策 148 — G2/G3 修复完成并恢复门禁结论
+
+**背景：** 决策 147 识别的 Runtime、消息关联、取消、权限和 Workspace 授权缺口已经按用户确认的推荐方案修复。核心自动化测试增至 86 项并全部通过；临时 `scripts/v2_runtime_smoke.py` 已提供真实终端交互链路，用户确认当前状态可用。
+
+**决策：**
+
+- 恢复 G2 与 G3 的完成结论；R2/R3 不再保留已知门禁缺口。
+- Runtime 采用 pull-driven 单事件状态机，由强类型 `RuntimeCommand` 驱动；conversation codec 显式保存 tool name、arguments、call id 与结果关联，handoff 保留原 call id。
+- Prompt 仅注入当前 Agent 可见的 ToolCatalog/AgentCatalog 描述；生产工具必须声明 capability，Main Agent 不获得 workspace、resume 等领域权限。
+- OpenAI adapter 与 ProcessRunner 的活动调用可由 CancellationToken 中断；工作区 read-before-edit 授权绑定 session/path/revision，禁止跨 Session 复用。
+- `scripts/v2_runtime_smoke.py` 仅作为 R2/R3 人工 smoke Runner；它不替代 R5 正式 CLI，遇到 handoff 只展示并关闭当前回合，不提前实现 R4 编排。
+- R4 仍须先提交新文件、类、公开方法和职责边界清单供用户确认；本次恢复门禁不构成进入 R4 编码的授权。
+
+**理由：**
+
+- 86 项自动化测试覆盖 Prompt 目录注入、消息与 call-id 关联、pending 状态闭合、连续多工具回合、配置化 timeout、capability 隔离、跨 Session revision 隔离以及 adapter/子进程取消。
+- 临时 Runner 补充了真实终端交互证据，同时明确隔离于后续 Session、handoff 编排和正式 CLI，避免验证设施演变为新的生产架构入口。
+- R2/R3 协议已稳定到足以支撑 R4 设计，但继续保留 R4 的独立确认门禁，可以防止未经审查地固化 Session 状态所有权。
+
+**曾考虑的替代方案：**
+
+- 保持 G2/G3 为未完成直到 R5 正式 CLI 落地 —— 会把 Runtime/Tool 门禁与 CLI 迁移门禁混为一谈，已拒绝。
+- 将临时 Runner 直接演进为正式 CLI —— 会越过 R4 Session 与 R5 CLI 拆分设计，已拒绝。
