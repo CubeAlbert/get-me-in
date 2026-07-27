@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 180 — R7-P 动态 session identity 完成](#决策-180--r7-p-动态-session-identity-完成)
 - [决策 179 — R7-P0 temperature 契约完成并继续 R7](#决策-179--r7-p0-temperature-契约完成并继续-r7)
 - [决策 160 — 不保留 /auto-approve-switch 向前兼容](#决策-160--不保留-auto-approve-switch-向前兼容)
 - [决策 159 — 帮助从真实命令注册表排序并列出 alias](#决策-159--帮助从真实命令注册表排序并列出-alias)
@@ -4026,3 +4027,24 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 在 P0 预先创建 Resume AgentSpec 工厂 —— 跨越已确认的切片边界，已拒绝。
 - 由 OpenAI adapter 为未指定请求填入全局默认值 —— 会隐藏调用方契约并造成 provider 行为漂移，已拒绝。
+
+---
+
+### 决策 180 —— R7-P 动态 session identity 完成
+
+**背景：** composition root 创建 ToolContext 时会捕获初始 session id，而 restore 可替换 SessionState。若工具继续读取固定值，workspace revision grant 与后续 Artifact provenance 会脱离唯一的 SessionState。
+
+**决定：**
+
+- `AgentRuntime.advance()` 显式接收当前 `session_id`；Orchestrator 从传入的 SessionState 在每次调用时提供它。
+- Runtime 只在该次 `advance()` 的工具执行中，用 session id 替换 immutable ToolContext 模板中的 scope；调用返回后清除该临时值。
+- SessionService 保持 restore 清理离开和进入 session scope、rewind 清理当前 scope 的行为；连续 restore 与 main→resume→main handoff 已加入回归。
+
+**理由：**
+
+- 这使 SessionState 保持唯一长期事实来源，不需要全局变量、CLI 私有读取或第二份可变 session-id 状态。
+- 后续 ArtifactService 可以直接使用动态 ToolContext 的 session id 与 agent key 记录 provenance。
+
+**曾考虑的替代方案：**
+
+- 在 ToolContext 或 composition root 保存可变 session id —— 会形成第二份长期状态并在 restore 后漂移，已拒绝。

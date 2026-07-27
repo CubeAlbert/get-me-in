@@ -91,6 +91,17 @@ class SessionDomainTests(unittest.TestCase):
         self.assertEqual("restored", view.session_id)
         self.assertEqual(["current", "restored"], access.cleared)
 
+    def test_consecutive_restore_clears_each_real_session_scope(self) -> None:
+        first = SessionSnapshot(_session("first"), _now())
+        second = SessionSnapshot(_session("second"), _now())
+        service, repository, access = _service(_session("current"), first)
+
+        service.restore("first")
+        repository.loaded = second
+        service.restore("second")
+
+        self.assertEqual(["current", "first", "first", "second"], access.cleared)
+
 
 def _now() -> datetime:
     return datetime(2026, 7, 22, tzinfo=timezone.utc)

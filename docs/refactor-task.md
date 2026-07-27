@@ -342,7 +342,7 @@
 - ✅ 复核 R6-T checkpoint、四个 R6-F 提交和干净工作区；重新运行 187 项核心自动化测试并正常退出。
 - ✅ 对照实际 v2 代码复核 R7 旧任务：当前生产 composition root 只装配 Main Runtime；Resume 工具仍使用临时 `ResumeArtifactPort`／`LocalResumeArtifacts`，尚无 Artifact schema 或 repository。
 - ✅ 用户确认 R7-P dynamic session identity、Resume capability parity 与 agent-scoped Runtime/LLM ownership、独立 Artifact repository、ArtifactService/build-attempt 语义及 typed partial-failure/retry 五项总体边界。
-- ⬜ 闭合 R7-P：当前 `ToolContext.session_id` 在 composition root 中固定为初始 session id，`restore()` 后不会随 `SessionState.session_id` 更新；必须先恢复真正的 session-scoped workspace revision 与 artifact provenance，且不得引入第二份长期 Session 状态。
+- ✅ 闭合 R7-P：`Orchestrator` 在每次 Runtime transition 传入 `SessionState.session_id`，Runtime 仅在该 transition 内替换 immutable ToolContext scope；restore／rewind 清理真实 session 的 workspace grant，不引入第二份长期 Session 状态。
 - ✅ Resume 保留除 `route` 外的 v1 capability parity；Main/Resume 分别拥有 Runtime、CancellationToken、PlanService、ToolContext 和 LLM 生命周期。
 - ✅ Artifact 使用全新 `data/v2/artifacts/` 独立 repository，不写入 Memory、不加入 SessionSnapshot，也不随 rewind 回滚。
 - ✅ Artifact operation 采用 pending → side effect → commit；只在 exit code 为 0 且 PDF 存在时登记可用 PDF，metadata 失败返回 typed partial failure 并支持 retry reconcile。
@@ -359,10 +359,10 @@
 
 ### 2. R7-P —— 动态 session identity 前置修复
 
-- ⬜ 让每次 Runtime 工具执行从当前 `SessionState` 获得 session id，不依赖 bootstrap 时捕获的固定字符串。
-- ⬜ `restore`／`rewind` 后清除真实当前 session 的 workspace revision grant；连续恢复多个 snapshot 时不得跨 session 复用旧 read authorization。
-- ⬜ ArtifactService 调用取得当前 session id 与 `AgentKey.RESUME`，不通过全局变量、CLI 私有状态或可变 session-id 镜像获取 provenance。
-- ⬜ 为双 snapshot 连续 restore、read-before-edit 隔离和 handoff 后 Resume 工具上下文补回归测试；该修复独立验证、独立提交。
+- ✅ 让每次 Runtime 工具执行从当前 `SessionState` 获得 session id，不依赖 bootstrap 时捕获的固定字符串。
+- ✅ `restore`／`rewind` 后清除真实当前 session 的 workspace revision grant；连续恢复多个 snapshot 时不得跨 session 复用旧 read authorization。
+- ✅ 后续 ArtifactService 将从同一动态 ToolContext 获得 session id 与 `AgentKey.RESUME`，不通过全局变量、CLI 私有状态或可变 session-id 镜像获取 provenance。
+- ✅ 补齐双 snapshot 连续 restore、工具 read-before-edit scope 与 main→resume→main handoff context 回归；针对性 29 项测试通过。
 
 ### 3. Resume AgentSpec 与 composition root
 
@@ -391,7 +391,7 @@
 ### 5. 已确认实施切片
 
 - ✅ 切片 1：R7-P0 temperature contract 与请求透传测试。提交：待本 checkpoint 后创建。
-- ⬜ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。
+- ✅ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。提交：待本 checkpoint 后创建。
 - ⬜ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。
 - ⬜ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。
 - ⬜ 切片 5：ArtifactService、`ResumeArtifactPort` 替换、copy/build/log/partial-failure tests。

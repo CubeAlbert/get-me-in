@@ -25,7 +25,7 @@ class Orchestrator:
     def handle(self, session: SessionState, command: RuntimeCommand) -> SessionTransition:
         source = session.active_agent
         runtime = self._runtimes[source]
-        transition = runtime.advance(session.agents[source], command)
+        transition = runtime.advance(session.agents[source], command, session_id=session.session_id)
         session = self._replace_agent(session, source, transition.state)
         event = transition.event
         if not isinstance(event, HandoffRequested):
@@ -43,6 +43,7 @@ class Orchestrator:
         transition = runtime.advance(
             session.agents[frame.source],
             FailHandoff(frame.call_id, "subagent_exited", "Sub-agent exited before completing"),
+            session_id=session.session_id,
         )
         session = self._replace_agent(session, frame.source, transition.state)
         return SessionTransition(
@@ -74,6 +75,7 @@ class Orchestrator:
         target_transition = target_runtime.advance(
             session.agents[event.target],
             UserMessage(event.context or "Continue the delegated task."),
+            session_id=session.session_id,
         )
         if isinstance(target_transition.event, Failed):
             return self._close_failure(
@@ -98,6 +100,7 @@ class Orchestrator:
         transition = runtime.advance(
             session.agents[frame.source],
             FailHandoff(frame.call_id, code, message),
+            session_id=session.session_id,
         )
         session = self._replace_agent(session, frame.source, transition.state)
         return SessionTransition(
@@ -113,7 +116,7 @@ class Orchestrator:
             return self._close_failure(session, event, "invalid_return", "Handoff return does not match active frame")
         source_runtime = self._runtimes[frame.source]
         source_transition = source_runtime.advance(
-            session.agents[frame.source], CompleteHandoff(frame.call_id, event.context)
+            session.agents[frame.source], CompleteHandoff(frame.call_id, event.context), session_id=session.session_id
         )
         session = self._replace_agent(session, frame.source, source_transition.state)
         return SessionTransition(
@@ -123,7 +126,11 @@ class Orchestrator:
 
     def _close_failure(self, session: SessionState, event: HandoffRequested, code: str, message: str) -> SessionTransition:
         runtime = self._runtimes[event.source]
-        transition = runtime.advance(session.agents[event.source], FailHandoff(event.call_id, code, message))
+        transition = runtime.advance(
+            session.agents[event.source],
+            FailHandoff(event.call_id, code, message),
+            session_id=session.session_id,
+        )
         return SessionTransition(self._replace_agent(session, event.source, transition.state), transition.event)
 
     @staticmethod

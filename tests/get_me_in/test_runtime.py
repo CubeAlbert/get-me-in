@@ -238,6 +238,25 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertEqual(0.1, llm.requests[0].temperature)
 
+    def test_tool_context_uses_session_id_of_current_transition(self) -> None:
+        observed_session_ids: list[str] = []
+        runtime, _, temporary_dir = _runtime(
+            [
+                '{"content": "", "tool_call": {"name": "inspect"}}',
+                '{"content": "done", "thinking": "done"}',
+            ],
+            definitions=(_tool("inspect", handler=lambda arguments, context: observed_session_ids.append(context.session_id) or ToolSuccess("ok")),),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        runtime.handle(UserMessage("question"))
+        started = runtime.handle(Continue())
+        runtime.session_id = "restored-session"
+        _pump(runtime, Continue())
+
+        self.assertIsInstance(started, ToolStarted)
+        self.assertEqual(["restored-session"], observed_session_ids)
+
 
 def _pump(runtime: AgentRuntime, command: object) -> list[object]:
     events = [runtime.handle(command)]
@@ -305,9 +324,10 @@ class _RuntimeDriver:
     def __init__(self, runtime: AgentRuntime) -> None:
         self._runtime = runtime
         self._state = AgentSessionState()
+        self.session_id = "session"
 
     def handle(self, command: object) -> object:
-        transition = self._runtime.advance(self._state, command)
+        transition = self._runtime.advance(self._state, command, session_id=self.session_id)
         self._state = transition.state
         return transition.event
 
@@ -353,11 +373,12 @@ def _tool(
     name: str,
     *,
     confirmation: ConfirmationMode = ConfirmationMode.NEVER,
+    handler=None,
 ) -> ToolDefinition:
     return ToolDefinition(
         name=name,
         description=name,
         schema=ToolSchema(properties={}),
         policy=ToolPolicy(confirmation=confirmation),
-        handler=lambda arguments, context: ToolSuccess({"tool": name}),
+        handler=handler or (lambda arguments, context: ToolSuccess({"tool": name})),
     )

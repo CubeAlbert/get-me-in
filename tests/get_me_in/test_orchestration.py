@@ -14,7 +14,8 @@ from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, Pendi
 
 class OrchestratorTests(unittest.TestCase):
     def test_main_sub_main_closes_original_call_id(self) -> None:
-        orchestrator = Orchestrator({AgentKey.MAIN: _FakeRuntime(AgentKey.MAIN), AgentKey.RESUME: _FakeRuntime(AgentKey.RESUME)})
+        main, resume = _FakeRuntime(AgentKey.MAIN), _FakeRuntime(AgentKey.RESUME)
+        orchestrator = Orchestrator({AgentKey.MAIN: main, AgentKey.RESUME: resume})
         session = _session()
 
         started = orchestrator.handle(session, UserMessage("delegate"))
@@ -27,6 +28,8 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual("call-main", returned.event.call_id)
         self.assertEqual(AgentKey.MAIN, returned.session.active_agent)
         self.assertEqual((), returned.session.handoff_stack)
+        self.assertEqual(["session-1", "session-1"], main.session_ids)
+        self.assertEqual(["session-1", "session-1"], resume.session_ids)
 
     def test_unknown_target_closes_source_call_with_failure(self) -> None:
         runtime = _FakeRuntime(AgentKey.MAIN, target=AgentKey.JOB_SEARCH)
@@ -81,8 +84,10 @@ class _FakeRuntime:
     def __init__(self, key: AgentKey, *, target: AgentKey | None = None) -> None:
         self._key = key
         self._target = target
+        self.session_ids: list[str] = []
 
-    def advance(self, state: AgentSessionState, command: object) -> RuntimeTransition:
+    def advance(self, state: AgentSessionState, command: object, *, session_id: str) -> RuntimeTransition:
+        self.session_ids.append(session_id)
         if isinstance(command, CompleteHandoff):
             return RuntimeTransition(replace(state, phase=RuntimePhase.MODEL_QUEUED, pending_tool=None), ToolFinished(command.call_id, "switch_to_subagent", command.summary))
         if isinstance(command, FailHandoff):

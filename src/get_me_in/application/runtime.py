@@ -104,17 +104,26 @@ class AgentRuntime:
         self._tool_executor = tool_executor
         self._tool_context = tool_context
         self._state: AgentSessionState | None = None
+        self._session_id: str | None = None
         self._requested_cancel_reason = "Cancelled by user"
 
-    def advance(self, state: AgentSessionState, command: RuntimeCommand) -> RuntimeTransition:
+    def advance(
+        self,
+        state: AgentSessionState,
+        command: RuntimeCommand,
+        *,
+        session_id: str,
+    ) -> RuntimeTransition:
         """Advance caller-owned state once, without retaining a state copy."""
         self._state = state
+        self._session_id = session_id
         try:
             event = self._handle(command)
             assert self._state is not None
             return RuntimeTransition(self._state, event)
         finally:
             self._state = None
+            self._session_id = None
 
     def _handle(self, command: RuntimeCommand) -> RuntimeEvent:
         if isinstance(command, Cancel):
@@ -337,7 +346,14 @@ class AgentRuntime:
         if self._tool_executor is None or self._tool_context is None:
             self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_TOOL_RESULT)
             return Progress("Waiting for external tool result")
-        context = replace(self._tool_context, approved=approved, rejected=rejected)
+        if self._session_id is None:
+            raise RuntimeError("Tool execution requires an active session scope")
+        context = replace(
+            self._tool_context,
+            session_id=self._session_id,
+            approved=approved,
+            rejected=rejected,
+        )
         outcome = self._tool_executor.execute(
             pending.call_id,
             pending.tool_name,
