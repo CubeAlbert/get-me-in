@@ -8,6 +8,10 @@
 
 ## 目录
 
+- [决策 186 — 撤回 G7 完成结论并记录 R7-T 审查问题](#决策-186--撤回-g7-完成结论并记录-r7-t-审查问题)
+- [决策 185 — 批准原始字节 content_hash 并完成 R7/G7](#决策-185--批准原始字节-content_hash-并完成-r7g7)
+- [决策 184 — R7-P6 production composition 完成](#决策-184--r7-p6-production-composition-完成)
+- [决策 183 — R7-P5 ArtifactService 完成](#决策-183--r7-p5-artifactservice-完成)
 - [决策 182 — Artifact 使用 operation aggregate 持久化](#决策-182--artifact-使用-operation-aggregate-持久化)
 - [决策 181 — Resume 双 Runtime composition 完成](#决策-181--resume-双-runtime-composition-完成)
 - [决策 180 — R7-P 动态 session identity 完成](#决策-180--r7-p-动态-session-identity-完成)
@@ -4134,3 +4138,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 原始字节摘要才稳定表达 PDF 与文本产物的实际内容，且不改变 workspace 的文本编辑／revision 边界。
 - 将 hash 保留在 WorkspacePort 避免 ArtifactService 越过端口边界，也不混淆编译 backend 与内容查询职责。
+
+---
+
+### 决策 186 —— 撤回 G7 完成结论并记录 R7-T 审查问题
+
+**背景：** 决策 185 记录了 R7 七个代码切片、真实 Resume smoke、205 项自动化测试与 `compileall` 通过，并据此认定 G7 完成。后续 R7-T 审查在当前环境重新确认 205 项测试、`compileall` 与 `git diff --check` 通过，但发现现有测试没有覆盖四类关键缺口：PENDING build 可能把旧 PDF 误判为当前构建成功；文件副作用后的 metadata preparation 与 ToolFailure 映射没有完整保留 typed partial failure／`changed_paths`；结构合法但字段损坏的 Artifact JSON 会泄漏 `KeyError`／`ValueError` 等非 typed 异常；`refactor-task.md` 仍有直接属于 G7 的 temperature、已有简历修改、capability、审批、取消、restore／rewind 与 handoff 端到端验收项未完成。本轮没有重新执行真实 `pdflatex` smoke。
+
+**决定：**
+
+- 撤回决策 185 中“R7/G7 已完成”的门禁结论；R7 七个切片已经编码、205 项测试与既有 smoke 的事实记录继续保留，但不能等同于 G7 已通过。
+- 将当前状态设为“R7-T 审查修复待授权”；在四类审查问题修复、未完成 G7 端到端项补齐并重新 checkpoint 前，不得进入 R8。
+- 在 `docs/refactor-task.md` 记录旧 PDF reconcile、typed partial failure、损坏 JSON typed failure 与完整 G7 复验四组待办；本 checkpoint 只记录问题，不授权或实施任何代码修复。
+- 后续若获用户授权，必须先确认修复切片与验证范围；修复后运行针对性测试、完整自动化测试、`compileall`、`git diff --check` 与真实 Resume smoke，并同步 `current.md`、`refactor-task.md`、`decision.md` 后再决定是否恢复 G7。
+
+**理由：**
+
+- 自动化测试全绿只能证明已覆盖行为没有回归，不能证明 PENDING 副作用归属、partial failure 可观察性和损坏持久化记录边界正确。
+- G7 是进入 R8 的强制依赖；任务文件仍存在直接对应 G7 的未完成项时，继续维持完成结论会使入口切换与遗留删除失去可靠门禁。
+- 保留已完成代码和验证事实、仅撤回验收结论，可以准确区分“实现已存在”与“阶段已验收”，也符合受控重写在审查点停止的要求。
+
+**曾考虑的替代方案：**
+
+- 保留 G7 完成结论，把问题延后到 R8 或 R9 —— 会允许在 Artifact 一致性和端到端证据不完整时切换入口，已拒绝。
+- 本 checkpoint 直接实施修复 —— 用户明确要求先只记录问题，未授权代码修改，已拒绝。
