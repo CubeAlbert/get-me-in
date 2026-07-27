@@ -40,7 +40,10 @@ class BootstrapTests(unittest.TestCase):
         self.addCleanup(self._knowledge_start_patcher.stop)
 
     def _build_application(self, settings: Settings, *, llm: object):
-        application = build_application(settings, llm=llm)
+        application = build_application(
+            settings,
+            runtime_llms={AgentKey.MAIN: llm, AgentKey.RESUME: _FakeLlm("resume")},
+        )
         self.addCleanup(application.close)
         return application
 
@@ -48,14 +51,14 @@ class BootstrapTests(unittest.TestCase):
         first = self._build_application(_settings(), llm=_FakeLlm("first"))
         second = self._build_application(_settings(), llm=_FakeLlm("second"))
 
-        first.cancellation.cancel()
+        first.request_cancel()
 
-        self.assertTrue(first.cancellation.is_cancelled)
-        self.assertFalse(second.cancellation.is_cancelled)
+        self.assertTrue(first._sessions._orchestrator._runtimes[AgentKey.MAIN]._cancellation.is_cancelled)
+        self.assertFalse(second._sessions._orchestrator._runtimes[AgentKey.MAIN]._cancellation.is_cancelled)
         self.assertIsNot(first.catalog, second.catalog)
         self.assertIsNot(first.clock, second.clock)
         self.assertIsNot(first.id_generator, second.id_generator)
-        self.assertEqual(AgentKey.MAIN, second.catalog.get(AgentKey.MAIN).key)
+        self.assertEqual({AgentKey.MAIN, AgentKey.RESUME}, {item.key for item in second.catalog.list_descriptors()})
 
     def test_application_handles_one_no_tool_conversation(self) -> None:
         llm = _FakeLlm("completed")
@@ -195,7 +198,7 @@ class BootstrapTests(unittest.TestCase):
 
         with patch("chromadb.PersistentClient", side_effect=RuntimeError("chroma failed")):
             with self.assertRaisesRegex(RuntimeError, "chroma failed"):
-                build_application(_settings(), llm=_FakeLlm("unused"))
+                build_application(_settings(), runtime_llms={AgentKey.MAIN: _FakeLlm("unused"), AgentKey.RESUME: _FakeLlm("resume")})
 
         leaked = [
             thread

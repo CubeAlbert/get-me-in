@@ -85,6 +85,7 @@ class _FakeRuntime:
         self._key = key
         self._target = target
         self.session_ids: list[str] = []
+        self.cancel_reasons: list[str] = []
 
     def advance(self, state: AgentSessionState, command: object, *, session_id: str) -> RuntimeTransition:
         self.session_ids.append(session_id)
@@ -105,6 +106,9 @@ class _FakeRuntime:
             return RuntimeTransition(state, HandoffRequested("call-sub", self._key, self._target, "nested"))
         state = replace(state, phase=RuntimePhase.WAITING_FOR_HANDOFF, pending_tool=PendingToolCall("call-sub", "switch_to_mainagent", {}), turn_id="turn-sub")
         return RuntimeTransition(state, HandoffRequested("call-sub", AgentKey.RESUME, AgentKey.MAIN, "summary"))
+
+    def request_cancel(self, reason: str) -> None:
+        self.cancel_reasons.append(reason)
 
 
 def _session(*, agents: tuple[AgentKey, ...] = (AgentKey.MAIN, AgentKey.RESUME)) -> SessionState:

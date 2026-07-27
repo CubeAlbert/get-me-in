@@ -134,7 +134,7 @@ class SessionService:
         return transition.event
 
     def request_cancel(self, reason: str = "Cancelled by user") -> None:
-        self._orchestrator.request_cancel(reason)
+        self._orchestrator.request_cancel(self._session, reason)
 
     def memory_source(self) -> MemoryBuildSource:
         state = self._session.agents[self._session.active_agent]

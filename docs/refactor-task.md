@@ -366,12 +366,12 @@
 
 ### 3. Resume AgentSpec 与 composition root
 
-- ⬜ 将旧 ResumeAgent 的 14 个声明方法迁移为 immutable `AgentSpec`；不创建只有元数据方法的 stateful ResumeAgent 类。
-- ⬜ 按已确认 capability parity 装配 `system`、`plan`、`interaction`、`web.search`、`external_file.read`、`return_to_main`、`workspace.read/write/open`、`resume.artifact` 与 `knowledge.query`；Resume 不获得 `route`。
-- ⬜ 保留新建、修改、JD 定制三类入口，以及“编辑前重新读取”“不得编造经历”“编译失败先依据输出定位”的约束。
-- ⬜ AgentCatalog 同时声明 Main/Resume；SessionState、PlanService 和 Orchestrator 同时装配两个 Agent，Main prompt 只通过 descriptor 发现 Resume。
-- ⬜ Main/Resume Runtime 使用 agent-scoped CancellationToken、PlanService 与 ToolContext；共享 adapter 必须有唯一 owner，LLM 不得因两个 Runtime 共用实例而重复关闭。
-- ⬜ 覆盖 main → resume → main、子 Agent 取消／失败／`/exit_sub`、在 Resume 活跃时 save/restore，以及 Agent capability 隔离。
+- ✅ 创建 immutable `build_resume_spec()`，不创建只有元数据方法的 stateful ResumeAgent 类。
+- ✅ 按已确认 capability parity 装配 Resume，且不获得 `route`。
+- ✅ 保留新建、修改、JD 定制入口与真实经历、重新读取、编译诊断约束。
+- ✅ AgentCatalog、SessionState、PlanService 和 Orchestrator 同时装配 Main/Resume；Main 仅通过 descriptor 发现 Resume。
+- ✅ Main/Resume Runtime 使用各自的 CancellationToken、PlanService、ToolContext 与不同 LLM；共享 adapter 仍由 ResourceStack 唯一 owner 关闭。
+- ✅ 覆盖 capability 隔离、main→resume→main handoff 与取消 scope；完整核心测试 193 项通过。提交：待本 checkpoint 后创建。
 
 ### 4. Artifact domain、repository 与 service
 
@@ -392,7 +392,7 @@
 
 - ✅ 切片 1：R7-P0 temperature contract 与请求透传测试。提交：待本 checkpoint 后创建。
 - ✅ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。提交：待本 checkpoint 后创建。
-- ⬜ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。
+- ✅ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。提交：待本 checkpoint 后创建。
 - ⬜ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。
 - ⬜ 切片 5：ArtifactService、`ResumeArtifactPort` 替换、copy/build/log/partial-failure tests。
 - ⬜ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。

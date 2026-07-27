@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R7 —— 切片 1、2 已完成并 checkpoint，继续实施已确认的七个切片
+**当前阶段：** R7 —— 切片 1、2、3 已完成并 checkpoint，继续实施已确认的七个切片
 
-**当前任务：** R7 切片 3 —— Resume AgentSpec、capability 与双 Runtime composition
+**当前任务：** R7 切片 4 —— Artifact domain、port 与 JSON repository
 
-**当前子任务：** 创建已确认的 immutable Resume AgentSpec factory，装配 Main／Resume 双 Runtime 与资源所有权，并补齐 handoff／取消／restore 回归。
+**当前子任务：** 创建 versioned Artifact DTO、ArtifactRepository port 与原子 JSON repository，并建立 schema／operation key／损坏记录测试。
 
 **当前阻塞：** 无。
 
 **会话交接说明：** R6-F/G6 已完成；R7 的总体边界、具体文件／对象／公开方法清单及七个实施切片均已确认。R7-P0 已恢复显式 temperature，针对性 27 项自动化测试通过。R7-P 已使 `SessionState.session_id` 成为每次 Runtime transition 的唯一临时工具身份来源，并以 29 项针对性自动化测试验证 restore／rewind 授权隔离与 handoff scope。用户授权在没有新决策时自动完成 R7；不切换旧 `main.py`，不进入 R8。
 
-**下一步：** 实施切片 3：创建 `agents/resume.py` 的 `build_resume_spec()`，装配两个独立 Runtime／LLM／CancellationToken／PlanService，并补齐 Resume composition contract tests。
+**下一步：** 实施切片 4：创建已确认的 Artifact domain、port 与 JSON repository，完成 schema、atomicity、operation key、list/filter 与损坏记录验证。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -19,6 +19,7 @@
 178. **确认 R7 具体清单与 temperature/log 补充** — 用户确认具体文件、对象、公开方法和七个切片；先以 R7-P0 恢复 Main `0.1`、Resume `0.2`、MemoryExtractor `0.0`，Artifact build log 采用有界、脱敏、UTF-8 安全截断。本会话只做文档 checkpoint，后续新会话可从切片 1 开始。
 179. **R7-P0 temperature 契约完成并继续 R7** — `AgentSpec`、`LLMRequest`、AgentRuntime、MemoryExtractor 与 OpenAI adapter 已表达显式 temperature，非法 provider 请求在建连前拒绝；针对性测试通过。用户已授权自动继续后续已确认切片。
 180. **R7-P 动态 session identity 完成** — 每次 Runtime transition 从唯一的 `SessionState` 注入 session id，并仅在该次工具执行中形成临时 ToolContext scope；restore／rewind 授权隔离与 handoff 传播已回归验证。
+181. **Resume 双 Runtime composition 完成** — Resume 使用 immutable AgentSpec 和完整非路由 capability；Main/Resume 拥有不同的 Runtime、LLM、CancellationToken、PlanService 与 ToolContext，Session 和 Orchestrator 同时装配二者。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 

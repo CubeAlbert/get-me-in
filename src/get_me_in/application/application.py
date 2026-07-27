@@ -18,10 +18,8 @@ from src.get_me_in.application.app_results import (
     MemoryBuildScheduled,
     TurnFinalizationResult,
 )
-from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
-from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.app_results import CloseReport
 from src.get_me_in.application.resources import ResourceStack
 from src.get_me_in.application.session_codec import SessionSnapshot
@@ -44,8 +42,6 @@ class Application:
         catalog: AgentCatalog,
         clock: Clock,
         id_generator: IdGenerator,
-        cancellation: CancellationToken,
-        runtime: AgentRuntime,
         sessions: SessionService,
         tool_catalog: ToolCatalog,
         web_search: WebSearchPort | None = None,
@@ -57,9 +53,7 @@ class Application:
         self.catalog = catalog
         self.clock = clock
         self.id_generator = id_generator
-        self.cancellation = cancellation
         self.tool_catalog = tool_catalog
-        self._runtime = runtime
         self._sessions = sessions
         self._web_search = web_search
         self._resources = resources

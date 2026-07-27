@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 181 — Resume 双 Runtime composition 完成](#决策-181--resume-双-runtime-composition-完成)
 - [决策 180 — R7-P 动态 session identity 完成](#决策-180--r7-p-动态-session-identity-完成)
 - [决策 179 — R7-P0 temperature 契约完成并继续 R7](#决策-179--r7-p0-temperature-契约完成并继续-r7)
 - [决策 160 — 不保留 /auto-approve-switch 向前兼容](#决策-160--不保留-auto-approve-switch-向前兼容)
@@ -4048,3 +4049,20 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 
 - 在 ToolContext 或 composition root 保存可变 session id —— 会形成第二份长期状态并在 restore 后漂移，已拒绝。
+
+---
+
+### 决策 181 —— Resume 双 Runtime composition 完成
+
+**背景：** R7 需要以声明式 Resume Agent 替换旧 14 个元数据方法，并保证 Main 与 Resume 的运行、取消和 LLM 生命周期互不污染。
+
+**决定：**
+
+- 新增 `build_resume_spec()`，固定 Resume `temperature=0.2` 和已确认的非路由 capability 集合。
+- `build_application()` 接受覆盖 Main/Resume 且实例互异的 `runtime_llms` 映射；生产装配为两个独立 adapter。
+- Application 不再公开单一 runtime 或 cancellation；SessionService/Orchestrator 管理双 Runtime，取消只送往 active agent。
+
+**理由：**
+
+- 声明式 spec 保留 Resume 行为约束而不重新创建无状态价值的旧 Agent 类。
+- 独立所有权防止 Resume 取消或 close 影响 Main 的正在进行或未来请求。

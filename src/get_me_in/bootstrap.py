@@ -1,6 +1,7 @@
 """The sole v2 composition root."""
 
 import os
+from collections.abc import Mapping
 
 from src.get_me_in.adapters.system import SystemClock, UuidGenerator
 from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
@@ -40,6 +41,7 @@ from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.application.resources import ResourceStack
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
+from src.get_me_in.agents.resume import build_resume_spec
 from src.get_me_in.domain.sessions import AgentSessionState, SessionState
 from src.get_me_in.ports.llm import LLMPort, ModelProfile
 from src.get_me_in.tools.system import build_system_tools
@@ -55,7 +57,7 @@ from src.get_me_in.tools.resume import build_resume_tools
 def build_application(
     settings: Settings,
     *,
-    llm: LLMPort | None = None,
+    runtime_llms: Mapping[AgentKey, LLMPort] | None = None,
 ) -> Application:
     """Build one isolated R1 application without import-time side effects."""
     if settings.hf_endpoint:
@@ -90,11 +92,13 @@ def build_application(
         ),
         priorities=("先明确用户当前目标，再选择下一步。",),
     )
-    catalog = AgentCatalog((main_spec,))
+    resume_spec = build_resume_spec()
+    catalog = AgentCatalog((main_spec, resume_spec))
     prompt_renderer = PromptRenderer(settings.prompts_dir)
     clock = SystemClock()
     id_generator = UuidGenerator()
-    cancellation = CancellationToken()
+    main_cancellation = CancellationToken()
+    resume_cancellation = CancellationToken()
     workspace = LocalWorkspace(settings.workspace_dir)
     frontend = OSFrontend()
     web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
@@ -117,21 +121,27 @@ def build_application(
         SubprocessRunner(cancel_grace_seconds=settings.cancel_grace_seconds),
     )
     workspace_access = WorkspaceAccessState()
-    plan_service = PlanService(id_generator)
+    main_plan = PlanService(id_generator)
+    resume_plan = PlanService(id_generator)
     session_id = id_generator.new_id()
     tool_catalog = ToolCatalog(
         (*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools(), *build_resume_tools())
     )
     tool_executor = ToolExecutor(tool_catalog)
-    runtime_llm = llm or OpenAILLMAdapter(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        model_names={
-            ModelProfile.PRO: settings.llm_pro_model,
-            ModelProfile.FLASH: settings.llm_flash_model,
-        },
-        thinking_enabled=settings.llm_thinking_enabled,
-    )
+    if runtime_llms is None:
+        runtime_llms = {
+            key: OpenAILLMAdapter(
+                api_key=settings.openai_api_key,
+                base_url=settings.openai_base_url,
+                model_names={ModelProfile.PRO: settings.llm_pro_model, ModelProfile.FLASH: settings.llm_flash_model},
+                thinking_enabled=settings.llm_thinking_enabled,
+            )
+            for key in (AgentKey.MAIN, AgentKey.RESUME)
+        }
+    if set(runtime_llms) != {AgentKey.MAIN, AgentKey.RESUME}:
+        raise ValueError("runtime_llms must provide exactly Main and Resume instances")
+    if runtime_llms[AgentKey.MAIN] is runtime_llms[AgentKey.RESUME]:
+        raise ValueError("Main and Resume runtime LLM instances must be distinct")
     memory_llm = OpenAILLMAdapter(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
@@ -150,13 +160,13 @@ def build_application(
         knowledge,
         worker,
     )
-    runtime = AgentRuntime(
+    main_runtime = AgentRuntime(
         spec=main_spec,
         prompt_renderer=prompt_renderer,
-        llm=runtime_llm,
+        llm=runtime_llms[AgentKey.MAIN],
         clock=clock,
         id_generator=id_generator,
-        cancellation=cancellation,
+        cancellation=main_cancellation,
         agent_catalog=catalog,
         tool_catalog=tool_catalog,
         conversation_codec=ConversationCodec(),
@@ -166,8 +176,8 @@ def build_application(
         tool_context=ToolContext(
             session_id=session_id,
             agent_key=AgentKey.MAIN,
-            cancellation=cancellation,
-            plan=plan_service,
+            cancellation=main_cancellation,
+            plan=main_plan,
             workspace=workspace,
             frontend=frontend,
             web_search=web_search,
@@ -177,18 +187,31 @@ def build_application(
             workspace_access=workspace_access,
         ),
     )
+    resume_runtime = AgentRuntime(
+        spec=resume_spec, prompt_renderer=prompt_renderer, llm=runtime_llms[AgentKey.RESUME],
+        clock=clock, id_generator=id_generator, cancellation=resume_cancellation,
+        agent_catalog=catalog, tool_catalog=tool_catalog, conversation_codec=ConversationCodec(),
+        max_model_calls=settings.max_model_calls_per_run, model_timeout_seconds=settings.llm_timeout_seconds,
+        tool_executor=tool_executor,
+        tool_context=ToolContext(
+            session_id=session_id, agent_key=AgentKey.RESUME, cancellation=resume_cancellation,
+            plan=resume_plan, workspace=workspace, frontend=frontend, web_search=web_search,
+            external_files=external_files, retrieval=knowledge, resume_artifacts=resume_artifacts,
+            workspace_access=workspace_access,
+        ),
+    )
     session = SessionState(
         session_id=session_id,
         active_agent=AgentKey.MAIN,
-        agents={AgentKey.MAIN: AgentSessionState()},
+        agents={AgentKey.MAIN: AgentSessionState(), AgentKey.RESUME: AgentSessionState()},
         handoff_stack=(),
         created_at=clock.now(),
         updated_at=clock.now(),
     )
     sessions = SessionService(
         session,
-        orchestrator=Orchestrator({AgentKey.MAIN: runtime}),
-        plans={AgentKey.MAIN: plan_service},
+        orchestrator=Orchestrator({AgentKey.MAIN: main_runtime, AgentKey.RESUME: resume_runtime}),
+        plans={AgentKey.MAIN: main_plan, AgentKey.RESUME: resume_plan},
         repository=JsonSessionRepository(settings.sessions_dir, codec=SessionSnapshotCodec()),
         clock=clock,
         id_generator=id_generator,
@@ -205,8 +228,6 @@ def build_application(
         catalog=catalog,
         clock=clock,
         id_generator=id_generator,
-        cancellation=cancellation,
-        runtime=runtime,
         sessions=sessions,
         tool_catalog=tool_catalog,
         web_search=web_search,

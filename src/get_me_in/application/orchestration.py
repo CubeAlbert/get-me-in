@@ -51,9 +51,8 @@ class Orchestrator:
             transition.event,
         )
 
-    def request_cancel(self, reason: str = "Cancelled by user") -> None:
-        for runtime in self._runtimes.values():
-            runtime.request_cancel(reason)
+    def request_cancel(self, session: SessionState, reason: str = "Cancelled by user") -> None:
+        self._runtimes[session.active_agent].request_cancel(reason)
 
     def close(self) -> None:
         for runtime in self._runtimes.values():
