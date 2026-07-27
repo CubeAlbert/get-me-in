@@ -10,7 +10,7 @@ from src.get_me_in.application.commands import Approve, Continue, Reject, UserMe
 from src.get_me_in.application.app_commands import DumpSession, RestoreSession, RewindSession
 from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress, ToolFinished, ToolStarted
 from src.get_me_in.application.settings import Settings
-from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.agents import AgentKey, AgentStyle
 from src.get_me_in.domain.sessions import RuntimePhase
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult
 
@@ -91,6 +91,22 @@ class BootstrapTests(unittest.TestCase):
             "<Name>简历定制 Agent</Name>",
             llm.request.messages[0].content,
         )
+        self.assertIn(
+            "<Tone>\n专业、简洁、友好、引导式。\n</Tone>",
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
+            "以任务识别和下一步行动说明为主。避免提供领域知识解释。",
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
+            "- 保持自然对话，不暴露内部Agent架构细节。",
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
+            "- 避免讨论Agent、工具、路由机制。",
+            llm.request.messages[0].content,
+        )
         self.assertNotIn("workspace_write", llm.request.messages[0].content)
         self.assertNotIn("copy_template", llm.request.messages[0].content)
         self.assertFalse(llm.cancellation.is_cancelled)
@@ -155,6 +171,54 @@ class BootstrapTests(unittest.TestCase):
         ]
 
         self.assertEqual([], missing)
+
+    def test_composition_restores_complete_legacy_communication_styles(self) -> None:
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
+
+        self.assertEqual(
+            AgentStyle(
+                tone="专业、简洁、友好、引导式。",
+                verbosity="简短。",
+                explanation_style="以任务识别和下一步行动说明为主。避免提供领域知识解释。",
+                rules=(
+                    "- 优先确认用户目标。",
+                    "- 需要澄清时使用简短问题。",
+                    "- 切换Agent时明确告知用户。",
+                    "- 保持自然对话，不暴露内部Agent架构细节。",
+                ),
+                avoids=(
+                    "- 避免回答技术问题。",
+                    "- 避免提供简历建议。",
+                    "- 避免制定学习计划。",
+                    "- 避免模拟面试。",
+                    "- 避免解释自己无法完成任务的内部原因。",
+                    "- 避免讨论Agent、工具、路由机制。",
+                ),
+            ),
+            application.catalog.get(AgentKey.MAIN).style,
+        )
+        self.assertEqual(
+            AgentStyle(
+                tone="专业、细致、注重格式准确性。",
+                verbosity="适中，操作类信息简洁，内容建议可以详细。",
+                explanation_style='按"当前状态 → 修改计划 → 执行 → 结果"的流程呈现。',
+                rules=(
+                    "- 首次对话先确认用户意图：新建简历还是修改已有简历。",
+                    "- 新建时先与用户确认语言和文件名前缀。",
+                    "- 每次编辑前先读取文件，确认行号和内容后再编辑。",
+                    "- 大段内容修改用全局替换，精确行级修改用逐行编辑。",
+                    "- 完成任务后询问是否需要编译 PDF 和预览。",
+                    "- 当前任务全部完成或用户明确表示结束时，调用 finish，不闲聊。",
+                ),
+                avoids=(
+                    "- 避免凭记忆编辑文件，必须先读取文件确认内容。",
+                    "- 避免校验用的旧内容与实际文件内容不一致。",
+                    "- 避免讨论 Agent 路由或实现细节。",
+                    "- 避免替用户编造经历、技能等信息。",
+                ),
+            ),
+            application.catalog.get(AgentKey.RESUME).style,
+        )
 
     def test_application_close_releases_its_llm_adapter(self) -> None:
         llm = _FakeLlm("unused")
@@ -276,6 +340,22 @@ class BootstrapTests(unittest.TestCase):
             )
             self.assertNotIn("<SubAgent name=", resume_prompt)
             self.assertNotIn("switch_to_subagent", resume_prompt)
+            self.assertIn(
+                "<Tone>\n专业、细致、注重格式准确性。\n</Tone>",
+                resume_prompt,
+            )
+            self.assertIn(
+                '按"当前状态 → 修改计划 → 执行 → 结果"的流程呈现。',
+                resume_prompt,
+            )
+            self.assertIn(
+                "- 当前任务全部完成或用户明确表示结束时，调用 finish，不闲聊。",
+                resume_prompt,
+            )
+            self.assertIn(
+                "- 避免替用户编造经历、技能等信息。",
+                resume_prompt,
+            )
             self.assertEqual(AgentKey.MAIN, application.view().active_agent)
             self.assertEqual((), application._sessions._session.handoff_stack)
 

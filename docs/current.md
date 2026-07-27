@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。Tool 提示词语义阻断已解除；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner。决策 195 记录的 Tool 提示词语义退化也已闭合：全部 25 个 v2 Tool 与 9 个 legacy 文件一一对应，`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，新增强类型 `ToolParameter` 表达参数 description/default/items/allowed_values/nullable。决策 197 进一步恢复 legacy `<Tool>` XML 的模型可见结构和语义顺序，`Arguments` 仍由同一份强类型 schema 生成有序 JSON，相邻 Tool 块以一个空行分隔。决策 198 将 SubAgent prompt 同步恢复为 `<SubAgent>` XML，并限定只有具备 Route capability 的 Main 能看见子 Agent 列表；Resume 不再把 Main 错列为子 Agent。JobSearchAgent 在 legacy 中只是测试壳，完整 Job Search 按 R0～R8 冻结范围未装配，当前 production Catalog 仍有且仅有 Main／Resume。相关 30 项回归、完整 235 项自动化测试、`compileall` 与 `git diff --check` 已通过；真实 composition 输出 `SUBAGENT_XML_SMOKE_OK main_chars=11930 resume_chars=19809 agents=2 tools=25`。Tool／SubAgent 的 prompt 修复不恢复旧全局 Registry，也不改变 v2 capability、审批、handler、ToolOutcome 或 handoff 协议。剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner。决策 195～198 已恢复 Tool 完整语义、legacy XML Tool/SubAgent prompt 结构和 Main-only 子 Agent 可见性。决策 199 继续闭合 CommunicationStyle 迁移缺失：Main／Resume 的 Tone、Verbosity、ExplanationStyle 以及全部 StyleRules／StyleAvoids 已逐项恢复 legacy 原始文本，不再保留空白规则区块；当前 production Catalog 仍有且仅有 Main／Resume，完整 Job Search 按 R0～R8 冻结范围未装配。相关 26 项回归、完整 236 项自动化测试、`compileall` 与 `git diff --check` 已通过；真实 composition 输出 `COMMUNICATION_STYLE_SMOKE_OK main_chars=12111 resume_chars=20104 agents=2 tools=25`。这些 prompt 修复不恢复旧全局 Registry，也不改变 v2 capability、审批、handler、ToolOutcome 或 handoff 协议。剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
 
 **下一步：** 从根入口完成剩余 CLI／交互、Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
@@ -37,6 +37,7 @@
 196. **恢复 25 个 Tool 的完整 LLM-facing 语义** — 全部 legacy 定义均已找到并迁移到强类型 `ToolDefinition`／`ToolParameter`，真实 Main／Resume prompt 重新包含使用／禁用时机、预期输出和完整参数元数据；234 项测试与 production composition prompt smoke 通过，Tool 阻断解除，R8-O 仍未整体完成。
 197. **恢复 legacy XML Tool prompt 结构与固定语义顺序** — Tool 外层恢复为 `<Tool name>`、`Purpose`、`UseWhen`、`DoNotUseWhen`、`Arguments`、`ExpectedOutput` 的固定顺序；Arguments 内由 v2 强类型 schema 生成有序 JSON，不恢复旧全局 Registry 或运行时边界。
 198. **恢复 SubAgent XML prompt 并限定路由可见性** — Main 以 `<SubAgent name>`、`Name`、`Description`、`Responsibilities`、`HardConstraints` 的固定顺序看见可路由子 Agent；非 Route Agent 不注入列表。JobSearchAgent 仍是冻结的 legacy 测试壳，本次不扩展 production Catalog。
+199. **恢复 Main／Resume 完整 CommunicationStyle** — v2 首次迁移缩写了 Tone／Verbosity／ExplanationStyle，并遗漏全部 StyleRules／StyleAvoids；现按 legacy 原始定义逐项恢复到 immutable AgentStyle，由 PromptRenderer 继续统一注入五个既有区块。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 

@@ -468,6 +468,9 @@
 - ✅ 核对 production Catalog 只有 Main／Resume 是既定范围而非迁移遗漏：legacy JobSearchAgent 仅为 M4 测试壳，完整 Job Search 在 R0～R8 冻结，保留 `AgentKey.JOB_SEARCH` 与通用 handoff 测试作为未来扩展点，本次不新增 Agent。
 - ✅ SubAgent prompt 恢复 legacy XML 语义结构：`<SubAgent name>` 内固定输出 `Name`、`Description`、`Responsibilities`、`HardConstraints`，多个块以空行分隔；只有具备 Route capability 的 Agent 注入列表，修复 Resume prompt 把 Main 错列为子 Agent 的问题。
 - ✅ SubAgent 修复的 30 项 Prompt/bootstrap/Catalog/orchestration 回归、完整 235 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 production composition 输出 `SUBAGENT_XML_SMOKE_OK main_chars=11930 resume_chars=19809 agents=2 tools=25`，确认 Main 只见 Resume、Resume 不见任何 SubAgent、JobSearch 未被误装配。
+- ✅ 确认 CommunicationStyle 同样存在真实迁移缺失而非导出问题：Main／Resume 的 Tone、Verbosity、ExplanationStyle 被概括改写，StyleRules／StyleAvoids 全部为空；legacy 原始定义仍完整保留。
+- ✅ 将 Main／Resume 五类 CommunicationStyle 元数据逐项恢复到 immutable `AgentStyle`；不修改 `06_communtion_style.md`、PromptRenderer 接口或运行时协议，完整对象相等测试锁定所有规则与避免项。
+- ✅ CommunicationStyle 修复的 26 项 bootstrap/Prompt/Catalog 回归、完整 236 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `COMMUNICATION_STYLE_SMOKE_OK main_chars=12111 resume_chars=20104 agents=2 tools=25`，确认五个区块均非空且包含原始中文内容。
 - ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。

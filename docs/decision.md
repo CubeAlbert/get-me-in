@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 199 — 恢复 Main／Resume 完整 CommunicationStyle](#决策-199--恢复-mainresume-完整-communicationstyle)
 - [决策 198 — 恢复 SubAgent XML prompt 并限定路由可见性](#决策-198--恢复-subagent-xml-prompt-并限定路由可见性)
 - [决策 197 — 恢复 legacy XML Tool prompt 结构与固定语义顺序](#决策-197--恢复-legacy-xml-tool-prompt-结构与固定语义顺序)
 - [决策 196 — 恢复 25 个 Tool 的完整 LLM-facing 语义](#决策-196--恢复-25-个-tool-的完整-llm-facing-语义)
@@ -4501,3 +4502,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 只把现有三字段 JSON 改为 XML —— 仍会遗漏路由边界并保留 Resume 反向看见 Main 的错误，未采用。
 - 立即把 legacy JobSearchAgent 加入 production composition —— 该实现只是测试壳，且违反 R0～R8 冻结完整 Job Search 的已确认范围，未采用。
 - 恢复 legacy AgentRegistry —— 会重新引入全局可变注册与 Agent 私有状态读取，继续拒绝。
+
+---
+
+### 决策 199 —— 恢复 Main／Resume 完整 CommunicationStyle
+
+**背景：** 对真实 system prompt 的复核确认，v2 `AgentStyle` 类型虽然已经支持 tone、verbosity、explanation_style、rules、avoids，但 production Main／Resume spec 只填入三条概括性文案，且 rules／avoids 使用默认空 tuple。这导致 `<StyleRules>`、`<StyleAvoids>` 为空，前三个区块也与 legacy 原始定义不一致；不是 Notebook 或 PromptRenderer 导出遗漏。
+
+**决定：**
+
+- Main 的 Tone、Verbosity、ExplanationStyle、4 条 StyleRules 与 6 条 StyleAvoids 全部按 legacy `MainAgent` 原文恢复。
+- Resume 的 Tone、Verbosity、ExplanationStyle、6 条 StyleRules 与 4 条 StyleAvoids 全部按 legacy `ResumeAgent` 原文恢复。
+- 原始文本直接进入现有 immutable `AgentStyle`，继续由 PromptRenderer 填充 `06_communtion_style.md` 的五个既有区块；不复制为第二套 prompt 拼接逻辑，不修改模板或公开接口。
+- 完整对象相等测试锁定两套 AgentStyle，并通过真实 Main／Resume production composition prompt 直接验证五个区块，防止只恢复部分关键词或再次退化为空。
+- 本次只恢复当前 production Main／Resume；冻结的 legacy JobSearchAgent 不因此进入 v2 composition。
+- 验证结果：26 项 bootstrap/Prompt/Catalog 回归、完整 236 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `COMMUNICATION_STYLE_SMOKE_OK main_chars=12111 resume_chars=20104 agents=2 tools=25`。
+
+**理由：**
+
+- CommunicationStyle 是 Agent 行为契约的一部分；概括改写会丢失首次交互、澄清、编辑前读取、结束条件和禁止暴露内部实现等具体行为指导。
+- `AgentStyle` 已经是合适且唯一的强类型事实源，问题在 production spec 数据未完整迁移，不需要改变 PromptRenderer 或模板。
+- 完整对象断言加真实 prompt smoke 同时覆盖“定义正确”和“模型实际可见”，避免再次出现类型存在但字段未填充的假阳性。
+
+**曾考虑的替代方案：**
+
+- 只补 StyleRules／StyleAvoids，保留前三项概括文案 —— 仍与用户原始定义不一致，未采用。
+- 将缺失内容直接写死到 `06_communtion_style.md` —— 会让所有 Agent 共享错误规则并形成第二事实源，未采用。
+- 同时迁移 JobSearch CommunicationStyle 并装配 Agent —— 超出当前冻结范围，未采用。
