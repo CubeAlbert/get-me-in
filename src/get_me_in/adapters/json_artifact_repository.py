@@ -69,7 +69,7 @@ class JsonArtifactRepository:
             raw = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
                 raise ArtifactRepositoryError(f"Artifact record must be an object: {path.name}")
-            if raw.get("schema_version") != 1:
+            if type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
                 raise ArtifactRepositoryError(f"Unsupported artifact schema in {path.name}")
             return raw
         except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
@@ -99,36 +99,106 @@ class JsonArtifactRepository:
 
     @staticmethod
     def _artifact(raw: dict) -> Artifact:
-        if raw.get("schema_version") != 1:
+        if not isinstance(raw, dict) or type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
             raise ValueError("Unsupported nested artifact schema")
         return Artifact(1, raw["artifact_id"], raw["session_id"], AgentKey(raw["agent_key"]), ArtifactKind(raw["kind"]), raw["path"], raw["version"], raw["content_hash"], datetime.fromisoformat(raw["created_at"]), raw.get("template_name"))
 
     @staticmethod
     def _attempt(raw: dict) -> ArtifactBuildAttempt:
-        if raw.get("schema_version") != 1:
+        if not isinstance(raw, dict) or type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
             raise ValueError("Unsupported nested build-attempt schema")
         return ArtifactBuildAttempt(1, raw["attempt_id"], raw["operation_key"], raw["session_id"], AgentKey(raw["agent_key"]), raw["source_path"], raw["exit_code"], raw["stdout"], raw["stderr"], raw["stdout_original_bytes"], raw["stderr_original_bytes"], raw["stdout_truncated"], raw["stderr_truncated"], raw["timed_out"], raw["cancelled"], datetime.fromisoformat(raw["created_at"]))
 
     @staticmethod
     def _validate_operation(operation: ArtifactOperation) -> None:
-        if operation.schema_version != 1:
+        if not isinstance(operation, ArtifactOperation):
+            raise ArtifactRepositoryError("Artifact operation has an invalid type")
+        if type(operation.schema_version) is not int or operation.schema_version != 1:
             raise ArtifactRepositoryError("Unsupported artifact operation schema")
+        if (
+            not _non_empty_string(operation.operation_key)
+            or not _non_empty_string(operation.session_id)
+            or not isinstance(operation.agent_key, AgentKey)
+            or not isinstance(operation.kind, ArtifactOperationKind)
+            or not _non_empty_string(operation.path)
+            or not _non_empty_string(operation.input_hash)
+            or not isinstance(operation.status, ArtifactOperationStatus)
+            or not isinstance(operation.created_at, datetime)
+        ):
+            raise ArtifactRepositoryError("Artifact operation contains invalid fields")
+        expected_key = ArtifactOperation.key_for(
+            session_id=operation.session_id,
+            agent_key=operation.agent_key,
+            kind=operation.kind,
+            path=operation.path,
+            input_hash=operation.input_hash,
+        )
+        if operation.operation_key != expected_key:
+            raise ArtifactRepositoryError("Artifact operation key does not match its inputs")
         if operation.status is ArtifactOperationStatus.PENDING and (
             operation.artifacts or operation.build_attempts
         ):
             raise ArtifactRepositoryError("Pending artifact operation cannot contain results")
+        if operation.status is ArtifactOperationStatus.COMMITTED:
+            if operation.kind is ArtifactOperationKind.COPY_TEMPLATE and (
+                not operation.artifacts or operation.build_attempts
+            ):
+                raise ArtifactRepositoryError("Committed template copy has invalid results")
+            if operation.kind is ArtifactOperationKind.BUILD_PDF and (
+                len(operation.build_attempts) != 1
+                or len(operation.artifacts) > 1
+                or any(artifact.kind is not ArtifactKind.PDF for artifact in operation.artifacts)
+            ):
+                raise ArtifactRepositoryError("Committed PDF build has invalid results")
         if any(
-            artifact.schema_version != 1
+            not isinstance(artifact, Artifact)
+            or type(artifact.schema_version) is not int
+            or artifact.schema_version != 1
+            or not _non_empty_string(artifact.artifact_id)
             or artifact.session_id != operation.session_id
             or artifact.agent_key is not operation.agent_key
+            or not isinstance(artifact.kind, ArtifactKind)
+            or not _non_empty_string(artifact.path)
+            or type(artifact.version) is not int
+            or artifact.version < 1
+            or not _non_empty_string(artifact.content_hash)
+            or not isinstance(artifact.created_at, datetime)
+            or artifact.template_name is not None
+            and not _non_empty_string(artifact.template_name)
             for artifact in operation.artifacts
         ):
             raise ArtifactRepositoryError("Artifact result does not match its operation")
+        if operation.kind is ArtifactOperationKind.COPY_TEMPLATE and any(
+            artifact.kind not in {ArtifactKind.LATEX, ArtifactKind.README}
+            for artifact in operation.artifacts
+        ):
+            raise ArtifactRepositoryError("Template copy contains an invalid artifact kind")
         if any(
-            attempt.schema_version != 1
+            not isinstance(attempt, ArtifactBuildAttempt)
+            or type(attempt.schema_version) is not int
+            or attempt.schema_version != 1
+            or not _non_empty_string(attempt.attempt_id)
             or attempt.operation_key != operation.operation_key
             or attempt.session_id != operation.session_id
             or attempt.agent_key is not operation.agent_key
+            or attempt.source_path != operation.path
+            or attempt.exit_code is not None
+            and (type(attempt.exit_code) is not int)
+            or not isinstance(attempt.stdout, str)
+            or not isinstance(attempt.stderr, str)
+            or type(attempt.stdout_original_bytes) is not int
+            or attempt.stdout_original_bytes < 0
+            or type(attempt.stderr_original_bytes) is not int
+            or attempt.stderr_original_bytes < 0
+            or not isinstance(attempt.stdout_truncated, bool)
+            or not isinstance(attempt.stderr_truncated, bool)
+            or not isinstance(attempt.timed_out, bool)
+            or not isinstance(attempt.cancelled, bool)
+            or not isinstance(attempt.created_at, datetime)
             for attempt in operation.build_attempts
         ):
             raise ArtifactRepositoryError("Build attempt does not match its operation")
+
+
+def _non_empty_string(value: object) -> bool:
+    return isinstance(value, str) and bool(value)

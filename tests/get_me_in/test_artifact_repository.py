@@ -47,19 +47,38 @@ class JsonArtifactRepositoryTests(unittest.TestCase):
 
     def test_structurally_corrupt_operations_are_typed_failures(self) -> None:
         valid = asdict(_operation(ArtifactOperationStatus.COMMITTED, artifacts=(_artifact(),)))
+        build_without_attempt = {
+            **valid,
+            "operation_key": ArtifactOperation.key_for(
+                session_id="session",
+                agent_key=AgentKey.RESUME,
+                kind=ArtifactOperationKind.BUILD_PDF,
+                path="resume.tex",
+                input_hash="hash",
+            ),
+            "kind": ArtifactOperationKind.BUILD_PDF.value,
+            "artifacts": [],
+            "build_attempts": [],
+        }
         cases = {
             "not-object": [],
             "missing-field": {"schema_version": 1},
             "invalid-agent": {**valid, "agent_key": "invalid"},
             "invalid-time": {**valid, "created_at": "not-a-time"},
+            "invalid-operation-key": {**valid, "operation_key": "wrong"},
             "invalid-nested-schema": {
                 **valid,
                 "artifacts": [{**valid["artifacts"][0], "schema_version": 2}],
+            },
+            "invalid-artifact-version": {
+                **valid,
+                "artifacts": [{**valid["artifacts"][0], "version": "1"}],
             },
             "pending-with-results": {
                 **valid,
                 "status": ArtifactOperationStatus.PENDING.value,
             },
+            "committed-build-without-attempt": build_without_attempt,
         }
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "operations"
@@ -89,7 +108,14 @@ class JsonArtifactRepositoryTests(unittest.TestCase):
 
 
 def _operation(status, artifacts=()):
-    return ArtifactOperation(1, "operation", "session", AgentKey.RESUME, ArtifactOperationKind.COPY_TEMPLATE, "resume.tex", "hash", status, _now(), artifacts)
+    key = ArtifactOperation.key_for(
+        session_id="session",
+        agent_key=AgentKey.RESUME,
+        kind=ArtifactOperationKind.COPY_TEMPLATE,
+        path="resume.tex",
+        input_hash="hash",
+    )
+    return ArtifactOperation(1, key, "session", AgentKey.RESUME, ArtifactOperationKind.COPY_TEMPLATE, "resume.tex", "hash", status, _now(), artifacts)
 
 
 def _artifact():
