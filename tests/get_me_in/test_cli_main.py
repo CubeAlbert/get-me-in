@@ -3,15 +3,22 @@
 import ast
 from contextlib import redirect_stderr
 from io import StringIO
+import logging
 from pathlib import Path
+import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
+from src.get_me_in.application.app_results import CloseIssue, CloseReport
 from src.get_me_in.application.settings import Settings, SettingsValidationError
 from src.get_me_in.cli import main as cli_main
 
 
-def _settings() -> Settings:
+def _settings(
+    *,
+    log_dir: Path = Path("data/logs"),
+    log_level: str = "INFO",
+) -> Settings:
     return Settings(
         openai_api_key="key",
         openai_base_url="https://example.test",
@@ -25,6 +32,8 @@ def _settings() -> Settings:
         resume_template_dir=Path("data/resume/template"),
         workspace_dir=Path("data/workspace"),
         sessions_dir=Path("data/v2/sessions"),
+        log_dir=log_dir,
+        log_level=log_level,
     )
 
 
@@ -54,17 +63,58 @@ class CliMainTests(unittest.TestCase):
     def test_startup_error_returns_one_without_traceback(self) -> None:
         renderer = Mock()
         stderr = StringIO()
+        with tempfile.TemporaryDirectory() as temporary:
+            try:
+                with redirect_stderr(stderr):
+                    with (
+                        patch.object(cli_main, "_ensure_utf8"),
+                        patch.object(cli_main, "Renderer", return_value=renderer),
+                        patch.object(cli_main, "Settings") as settings_type,
+                        patch.object(
+                            cli_main,
+                            "build_application",
+                            side_effect=RuntimeError("broken startup"),
+                        ),
+                    ):
+                        settings_type.from_env.return_value = _settings(
+                            log_dir=Path(temporary),
+                            log_level="ERROR",
+                        )
+                        self.assertEqual(1, cli_main.main())
+                log = (Path(temporary) / "app.log").read_text(encoding="utf-8")
+            finally:
+                _close_v2_handlers()
+
+        renderer.render_error.assert_called_once_with("启动失败；请检查配置或日志后重试。")
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertIn("Traceback", log)
+        self.assertIn("broken startup", log)
+
+    def test_logging_setup_error_returns_one_without_traceback(self) -> None:
+        initial_renderer = Mock()
+        configured_renderer = Mock()
+        stderr = StringIO()
         with redirect_stderr(stderr):
             with (
                 patch.object(cli_main, "_ensure_utf8"),
-                patch.object(cli_main, "Renderer", return_value=renderer),
+                patch.object(
+                    cli_main,
+                    "Renderer",
+                    side_effect=(initial_renderer, configured_renderer),
+                ),
                 patch.object(cli_main, "Settings") as settings_type,
-                patch.object(cli_main, "build_application", side_effect=RuntimeError("broken startup")),
+                patch.object(
+                    cli_main,
+                    "configure_logging",
+                    side_effect=OSError("log directory unavailable"),
+                ),
             ):
                 settings_type.from_env.return_value = _settings()
                 self.assertEqual(1, cli_main.main())
 
-        renderer.render_error.assert_called_once_with("启动失败；请检查配置或日志后重试。")
+        configured_renderer.render_error.assert_called_once_with(
+            "启动失败；请检查配置或日志后重试。"
+        )
         self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_normal_exit_returns_zero_and_closes_resources(self) -> None:
@@ -74,6 +124,7 @@ class CliMainTests(unittest.TestCase):
         worker = Mock()
         app = Mock()
         app.run.return_value = 0
+        application.close.return_value = CloseReport(closed=("application",))
         with (
             patch.object(cli_main, "_ensure_utf8"),
             patch.object(cli_main, "Renderer", side_effect=(initial_renderer, configured_renderer)),
@@ -94,3 +145,84 @@ class CliMainTests(unittest.TestCase):
         )
         worker.close.assert_called_once_with()
         application.close.assert_called_once_with()
+
+    def test_close_issue_returns_one_and_is_visible(self) -> None:
+        initial_renderer = Mock()
+        configured_renderer = Mock()
+        application = Mock()
+        worker = Mock()
+        app = Mock()
+        app.run.return_value = 0
+        application.close.return_value = CloseReport(
+            issues=(CloseIssue("background_worker", "still running", timed_out=True),)
+        )
+        with (
+            patch.object(cli_main, "_ensure_utf8"),
+            patch.object(
+                cli_main,
+                "Renderer",
+                side_effect=(initial_renderer, configured_renderer),
+            ),
+            patch.object(cli_main, "Settings") as settings_type,
+            patch.object(cli_main, "configure_logging"),
+            patch.object(cli_main, "build_application", return_value=application),
+            patch.object(cli_main, "InputController"),
+            patch.object(cli_main, "build_command_registry") as commands_builder,
+            patch.object(cli_main, "WorkerRunner", return_value=worker),
+            patch.object(cli_main, "CliApp", return_value=app),
+            patch.object(cli_main.logger, "critical"),
+        ):
+            settings_type.from_env.return_value = _settings()
+            commands_builder.return_value.completions = Mock()
+            self.assertEqual(1, cli_main.main())
+
+        configured_renderer.render_error.assert_called_once_with(
+            "资源关闭超时（background_worker）：still running"
+        )
+        worker.close.assert_called_once_with()
+        application.close.assert_called_once_with()
+
+    def test_close_exceptions_return_one_and_both_owners_are_attempted(self) -> None:
+        initial_renderer = Mock()
+        configured_renderer = Mock()
+        application = Mock()
+        application.close.side_effect = RuntimeError("application close failed")
+        worker = Mock()
+        worker.close.side_effect = RuntimeError("worker close failed")
+        app = Mock()
+        app.run.return_value = 0
+        with (
+            patch.object(cli_main, "_ensure_utf8"),
+            patch.object(
+                cli_main,
+                "Renderer",
+                side_effect=(initial_renderer, configured_renderer),
+            ),
+            patch.object(cli_main, "Settings") as settings_type,
+            patch.object(cli_main, "configure_logging"),
+            patch.object(cli_main, "build_application", return_value=application),
+            patch.object(cli_main, "InputController"),
+            patch.object(cli_main, "build_command_registry") as commands_builder,
+            patch.object(cli_main, "WorkerRunner", return_value=worker),
+            patch.object(cli_main, "CliApp", return_value=app),
+            patch.object(cli_main.logger, "critical"),
+        ):
+            settings_type.from_env.return_value = _settings()
+            commands_builder.return_value.completions = Mock()
+            self.assertEqual(1, cli_main.main())
+
+        configured_renderer.render_error.assert_has_calls(
+            (
+                call("CLI Worker 关闭失败；请检查日志。"),
+                call("应用资源关闭失败；请检查日志。"),
+            )
+        )
+        worker.close.assert_called_once_with()
+        application.close.assert_called_once_with()
+
+
+def _close_v2_handlers() -> None:
+    package_logger = logging.getLogger("src.get_me_in")
+    for handler in tuple(package_logger.handlers):
+        package_logger.removeHandler(handler)
+        handler.close()

@@ -8,6 +8,7 @@ import sys
 
 _LOGGER_NAME = "src.get_me_in"
 _HANDLER_MARKER = "_get_me_in_v2_handler"
+_FILE_ONLY_MARKER = "_get_me_in_file_only"
 
 
 def configure_logging(log_dir: Path, level: str) -> Path:
@@ -43,6 +44,7 @@ def configure_logging(log_dir: Path, level: str) -> Path:
 
     stderr_handler = logging.StreamHandler(sys.stderr)
     stderr_handler.setLevel(logging.ERROR)
+    stderr_handler.addFilter(_exclude_file_only_records)
     stderr_handler.setFormatter(logging.Formatter("%(levelname)s | %(message)s"))
     setattr(stderr_handler, _HANDLER_MARKER, True)
 
@@ -56,3 +58,7 @@ def _remove_existing_handlers(logger: logging.Logger) -> None:
         if getattr(handler, _HANDLER_MARKER, False):
             logger.removeHandler(handler)
             handler.close()
+
+
+def _exclude_file_only_records(record: logging.LogRecord) -> bool:
+    return not bool(getattr(record, _FILE_ONLY_MARKER, False))

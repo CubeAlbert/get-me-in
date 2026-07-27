@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import sys
 import logging
-import traceback
 
 from dotenv import load_dotenv
 
@@ -19,6 +18,7 @@ from src.get_me_in.logging_setup import configure_logging
 
 
 logger = logging.getLogger(__name__)
+_FILE_ONLY_LOG = {"_get_me_in_file_only": True}
 
 
 def main() -> int:
@@ -35,9 +35,12 @@ def main() -> int:
 
     application = None
     worker = None
+    exit_code = 1
+    logging_ready = False
     try:
         renderer = Renderer(show_thinking=settings.show_thinking)
         log_path = configure_logging(settings.log_dir, settings.log_level)
+        logging_ready = True
         logger.info("v2 CLI starting; log=%s level=%s", log_path, settings.log_level)
         application = build_application(settings)
         input_controller = InputController()
@@ -45,19 +48,57 @@ def main() -> int:
         input_controller.set_completions(commands.completions)
         worker = WorkerRunner(application, renderer)
         app = CliApp(application, commands, input_controller, renderer, worker)
-        return app.run()
+        exit_code = app.run()
     except Exception:
-        logger.info("v2 CLI startup or execution failed:\n%s", traceback.format_exc())
+        if logging_ready:
+            logger.critical(
+                "v2 CLI startup or execution failed",
+                exc_info=True,
+                extra=_FILE_ONLY_LOG,
+            )
         renderer.render_error("启动失败；请检查配置或日志后重试。")
-        return 1
+        exit_code = 1
     finally:
         try:
             if worker is not None:
-                worker.close()
+                try:
+                    worker.close()
+                except Exception:
+                    logger.critical(
+                        "v2 CLI worker close failed",
+                        exc_info=True,
+                        extra=_FILE_ONLY_LOG,
+                    )
+                    renderer.render_error("CLI Worker 关闭失败；请检查日志。")
+                    exit_code = 1
         finally:
             if application is not None:
-                application.close()
+                try:
+                    close_report = application.close()
+                except Exception:
+                    logger.critical(
+                        "v2 CLI application close failed",
+                        exc_info=True,
+                        extra=_FILE_ONLY_LOG,
+                    )
+                    renderer.render_error("应用资源关闭失败；请检查日志。")
+                    exit_code = 1
+                else:
+                    for issue in close_report.issues:
+                        logger.critical(
+                            "v2 CLI resource close issue: resource=%s timed_out=%s message=%s",
+                            issue.resource_name,
+                            issue.timed_out,
+                            issue.message,
+                            extra=_FILE_ONLY_LOG,
+                        )
+                        label = "资源关闭超时" if issue.timed_out else "资源关闭失败"
+                        renderer.render_error(
+                            f"{label}（{issue.resource_name}）：{issue.message}"
+                        )
+                        exit_code = 1
             logger.info("v2 CLI stopped")
+    return exit_code
 
 
 def _ensure_utf8() -> None:
