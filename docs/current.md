@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R7-T 审查修复待授权 —— R7 七个切片已编码，但决策 186 已撤回 G7 完成结论；不得进入 R8
+**当前阶段：** R7 —— R7-T 审查修复与 G7 完整复验已完成并 checkpoint；停在 R8 独立授权门禁前
 
-**当前任务：** 仅记录 R7 审查问题并等待修复授权；本 checkpoint 不实施
+**当前任务：** R7/G7 已重新完成；不得进入 R8
 
-**当前子任务：** R7 审查发现的四类问题已写入 `docs/refactor-task.md`；修复工作尚未开始。
+**当前子任务：** 无。等待用户审查 R7-T 修复与 G7 复验结果。
 
-**当前阻塞：** 用户要求先不实施；G7 必须在审查问题修复、未完成端到端验收补齐并重新 checkpoint 后才能恢复，R8 继续禁止。
+**当前阻塞：** R8 需要用户独立授权；旧 `main.py` 未改动。
 
-**会话交接说明：** R6-F/G6 已完成；R7 七个已确认切片均已编码，当前工作区复验为 205 项自动化测试、`compileall` 与 `git diff --check` 通过，旧 `main.py` 未改动。本次 R7-T 审查发现：PENDING build 可把旧 PDF 误判为当前构建成功；文件副作用后的 metadata preparation 与 ToolFailure 映射未完整保留 typed partial failure／`changed_paths`；结构合法但字段损坏的 Artifact JSON 会泄漏非 typed 异常；任务文件仍有直接属于 G7 的未完成端到端验收项。决策 186 已撤回决策 185 的 G7 完成结论；用户明确要求本 checkpoint 只记录问题，不实施修复。
+**会话交接说明：** R6-F/G6 已完成；R7 七个切片与 R7-T 审查修复均已完成。PENDING PDF retry 现在重新构建而不凭旧文件合成成功；Artifact metadata preparation、repository commit 与 ToolFailure 映射完整保留 partial failure／`changed_paths`；Artifact JSON decode 与 aggregate 不变量统一返回 typed repository failure；Windows CRLF 写入不再插入空行。新增 production composition 回归覆盖 Main→Resume→Main、审批拒绝、temperature、capability/prompt 与 handoff 后 snapshot/rewind/restore。最终 212 项自动化测试、`compileall`、`git diff --check` 通过；真实 ArtifactService 在隔离工作区重新生成中文、英文、双语共 4 份 PDF，另完成已有英文简历 replace、授权清理后重新读取、精确 edit 与编译 smoke。旧 `main.py` 未改动。
 
-**下一步：** 等待用户单独授权 R7-T 审查修复；获授权后先确认修复切片与验证范围，再从旧 PDF reconcile 误判问题开始，不得直接进入 R8。
+**下一步：** 审查 R7-T 修复与 G7 复验结果；若要继续，先确认 R8 入口切换的具体文件／对象／公开方法与回退清单，不得直接删除遗留架构。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -25,6 +25,7 @@
 184. **R7-P6 production composition 完成** — Settings 提供 artifacts directory、PDF timeout 与日志上限；ArtifactService 成为 Main/Resume 共享但仅关闭一次的资源 owner。
 185. **R7/G7 已完成并停在 R8 门禁前** — WorkspacePort 增加受限原始字节 `content_hash()`，真实中文／英文／双语模板均完成复制、README 读取与 pdflatex 编译；205 项自动化测试和 `compileall` 通过。
 186. **撤回 G7 完成结论并记录 R7-T 审查问题** — R7 代码切片与既有测试事实保留，但审查发现 Artifact reconcile、typed partial failure、损坏记录 typed failure 与 G7 验收证据缺口；问题修复与完整复验前不得恢复 G7 或进入 R8。本 checkpoint 只记录状态，不实施。
+187. **R7-T 修复完成并重新通过 G7** — 四类审查问题与编辑 smoke 新发现的 Windows CRLF 问题均已修复，五个独立提交通过针对性验证；最终 212 项自动化测试、`compileall`、`git diff --check`、四份真实 Resume PDF smoke 与已有简历 edit/replace smoke 通过。恢复 G7 完成结论并继续停在 R8 独立授权门禁前。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 187 — R7-T 修复完成并重新通过 G7](#决策-187--r7-t-修复完成并重新通过-g7)
 - [决策 186 — 撤回 G7 完成结论并记录 R7-T 审查问题](#决策-186--撤回-g7-完成结论并记录-r7-t-审查问题)
 - [决策 185 — 批准原始字节 content_hash 并完成 R7/G7](#决策-185--批准原始字节-content_hash-并完成-r7g7)
 - [决策 184 — R7-P6 production composition 完成](#决策-184--r7-p6-production-composition-完成)
@@ -4162,3 +4163,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 保留 G7 完成结论，把问题延后到 R8 或 R9 —— 会允许在 Artifact 一致性和端到端证据不完整时切换入口，已拒绝。
 - 本 checkpoint 直接实施修复 —— 用户明确要求先只记录问题，未授权代码修改，已拒绝。
+
+---
+
+### 决策 187 —— R7-T 修复完成并重新通过 G7
+
+**背景：** 用户在决策 186 的问题 checkpoint 提交后授权开始修复。三个已知 Artifact 问题分别涉及 PENDING PDF 归属、文件副作用后的 partial failure 可观察性，以及损坏 JSON 的 typed decode/aggregate validation。补齐 G7 已有简历 edit/replace smoke 时又发现 Windows 文本模式会把模板中已有 CRLF 再次转换，插入空行并导致精确 edit 行号漂移。
+
+**决定：**
+
+- PENDING PDF operation 重试时重新执行受 cancellation／timeout 控制的构建，不再仅凭同名 PDF 已存在就合成成功；只有本次实际构建返回 exit code 0 且 PDF 存在时登记可用产物。
+- 文件副作用完成后的 Artifact DTO 构造、`content_hash()`、`next_version()` 与 repository commit 统一纳入 `ArtifactPartialFailure("metadata_commit_failed", changed_paths, message)`；Resume tool 通过既有 ToolFailure message／suggestion 暴露内部 code 与可能已改变的路径，不扩展 ToolOutcome schema。
+- JsonArtifactRepository 将 JSON object、顶层／nested schema、必填字段、枚举、时间以及 PENDING/result ownership 不变量的失败统一转换为 `ArtifactRepositoryError`；save 与 load 使用相同 aggregate 校验。
+- `LocalWorkspace.write()` 禁用平台换行转换，保证写入字节、返回 revision 与后续 read 的文本一致；已有 CRLF 不再变成 CRCRLF。
+- 新增 production composition 回归覆盖 Main→Resume→Main、审批拒绝、Main／Resume temperature、Resume capability/prompt 与 handoff 后 snapshot/rewind/restore；结合既有 MemoryExtractor、workspace、CLI Esc 与 session 测试完成 G7 验收矩阵。
+- 最终 212 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 ArtifactService 在隔离工作区生成中文、英文、双语共 4 份 PDF；另完成已有英文简历 replace、workspace grant 清理后拒绝旧 revision、重新读取、精确 edit 与真实 PDF 编译。恢复 G7 完成结论，继续停在 R8 独立授权门禁前。
+
+**理由：**
+
+- 重新构建比根据无法证明归属的旧 PDF 猜测副作用已完成更安全，并继续保持 operation key 的幂等结果边界。
+- partial failure 必须让调用方知道文件可能已改变；复用 ToolFailure 的现有字段可以保留可观察性而不扩大 Runtime 协议。
+- repository typed failure 必须覆盖结构和 aggregate 语义，而不只是 JSON 语法，否则损坏持久化数据仍会泄漏实现异常。
+- workspace revision 必须描述实际可再次读取的文本；禁止隐式换行转换可以同时保护 LaTeX 行号、hash 与 read-before-edit 契约。
+
+**曾考虑的替代方案：**
+
+- 为 PENDING operation 增加新的副作用阶段或 PDF baseline hash 字段 —— 会修改已确认的 schema/public boundary；当前重新构建已能安全闭合问题，未采用。
+- 将 `changed_paths` 加入 ToolFailure 公共 schema —— 会扩大 R7 Runtime 协议；既有 suggestion 足以表达，未采用。
+- 仅调整 smoke 脚本行号以绕过 CRLF 问题 —— 会掩盖真实用户编辑时的行号漂移，已拒绝。

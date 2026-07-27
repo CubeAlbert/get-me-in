@@ -335,7 +335,7 @@
 
 ## R7 —— Resume 纵向切片
 
-> ⏸️ R7 七个已确认切片均已编码，但 R7-T 审查已由决策 186 撤回 G7 完成结论。当前只记录问题，不实施修复；G7 恢复前不得进入 R8。
+> ✅ R7 七个已确认切片与 R7-T 审查修复均已完成；决策 187 已恢复 G7 完成结论。当前停在 R8 独立授权门禁前。
 
 ### 0. R7 启动前 Review 门禁
 
@@ -345,7 +345,7 @@
 - ✅ 闭合 R7-P：`Orchestrator` 在每次 Runtime transition 传入 `SessionState.session_id`，Runtime 仅在该 transition 内替换 immutable ToolContext scope；restore／rewind 清理真实 session 的 workspace grant，不引入第二份长期 Session 状态。
 - ✅ Resume 保留除 `route` 外的 v1 capability parity；Main/Resume 分别拥有 Runtime、CancellationToken、PlanService、ToolContext 和 LLM 生命周期。
 - ✅ Artifact 使用全新 `data/v2/artifacts/` 独立 repository，不写入 Memory、不加入 SessionSnapshot，也不随 rewind 回滚。
-- 🔄 Artifact operation 的已确认目标仍为 pending → side effect → commit、成功且 PDF 存在才登记可用产物、metadata partial failure 可观察且可重试；当前实现存在旧 PDF reconcile 与 partial-failure 边界缺口，详见第 7 节。
+- ✅ Artifact operation 采用 pending → side effect → commit；PENDING PDF retry 重新执行构建，不凭同名旧文件合成成功；成功且 PDF 存在才登记可用产物，metadata partial failure 可观察且可重试。
 - ✅ 用户确认活跃设计中的 R7 新文件、类、构造依赖、公开方法、允许修改文件和七个实施切片清单。
 - ✅ 恢复显式 temperature 契约：Main 为 `0.1`、Resume 为 `0.2`、MemoryExtractor 为 `0.0`；先以独立 R7-P0 切片闭合。
 - ✅ Artifact build log 使用固定上限、workspace 根路径脱敏、UTF-8 安全 head/tail 截断，并保存原始字节数和截断标记。
@@ -377,48 +377,49 @@
 
 - ✅ 定义 `schema_version=1` 的 typed Artifact、build-attempt 与 aggregate ArtifactOperation schema；Artifact 保存 `content_hash` 与 `template_name`，无开放 metadata dict。
 - ✅ repository 使用全新 `data/v2/artifacts/` 边界；路径契约为 workspace-relative，不读取或迁移旧运行数据。
-- 🔄 定义 ArtifactRepository 的原子 aggregate 持久化、列举／查询与幂等 close；损坏记录 typed failure 仅覆盖 JSON 语法／顶层 schema，字段缺失、非法枚举与非法时间仍待统一转换。
+- ✅ 定义 ArtifactRepository 的原子 aggregate 持久化、列举／查询与幂等 close；JSON 语法、顶层／nested schema、字段、枚举、时间与 aggregate 不变量损坏统一返回 typed repository failure。
 - ✅ operation key 使用 canonical JSON 的 SHA-256；每条 JSON 记录为 PENDING 或携带结果的 COMMITTED，单次 replace 原子切换。
 - ✅ ArtifactService 直接满足 ResumeArtifactPort provenance 契约，并借用 LocalResumeArtifacts backend；保持 LLM 参数 schema 与 ToolOutcome 闭合协议不变。
 - ✅ `copy_template` 预检模板、目标 LaTeX、README 与重复后缀；明确 README 覆盖行为，并记录成功文件、来源模板和版本。
-- 🔄 `build_pdf` 已复用现有 ProcessRunner 并记录成功、非零退出、超时、取消和异常尝试；但 PENDING retry 仅凭同名 PDF 存在即可合成成功，仍可能把旧 PDF 误登记为当前 source revision 的可用产物。
+- ✅ `build_pdf` 复用现有 ProcessRunner，记录每次成功、非零退出、超时、取消和异常尝试；PENDING retry 重新构建并覆盖旧 PDF，只有实际返回 exit code 0 且目标 PDF 存在时才记录可用产物。
 - ✅ build attempt 按配置上限保存 stdout/stderr，脱敏 workspace 根、UTF-8 head/tail 截断并保存原始字节数与标记。
-- 🔄 `save_operation()` 提交失败已抛出 `ArtifactPartialFailure`；但副作用后的 `content_hash()`／`next_version()` 等 metadata preparation 尚未纳入同一边界，ToolFailure 映射也未保留 `changed_paths`。
-- 🔄 pending operation 已在下一次同 key 调用时惰性 reconcile，且未增加 daemon、新 CLI 或 pruning/retention policy；旧 PDF 归属无法证明的问题修复前不能认定该重试安全。
+- ✅ 文件副作用后的 Artifact DTO 构造、`content_hash()`、`next_version()` 与 repository commit 均纳入 `ArtifactPartialFailure`；ToolFailure 通过既有 message／suggestion 保留内部 code 与 `changed_paths` 可观察语义。
+- ✅ pending operation 只在下一次同 key 调用时惰性恢复；模板复制按内容幂等，PDF 重新构建，不增加 daemon、新 CLI 或 pruning/retention policy。
 - ✅ `workspace_open` 已在 R3 通过 Frontend/OS adapter 实现，不由 domain 直接启动 GUI；R7 只做端到端复验。
-- ⬜ Artifact repository 只保存产物与编译记录；user memory 继续只保存 fact/preference。不把 ArtifactRef 加入 SessionSnapshot，rewind 不删除或回滚工作区文件与 artifact 记录。
+- ✅ Artifact repository 只保存产物与编译记录；user memory 继续只保存 fact/preference。不把 ArtifactRef 加入 SessionSnapshot，rewind 不删除或回滚工作区文件与 artifact 记录。
 
 ### 5. 已确认实施切片
 
-- ✅ 切片 1：R7-P0 temperature contract 与请求透传测试。提交：待本 checkpoint 后创建。
-- ✅ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。提交：待本 checkpoint 后创建。
-- ✅ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。提交：待本 checkpoint 后创建。
-- ✅ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。针对性 3 项测试通过；提交：待本 checkpoint 后创建。
-- ✅ 切片 5：ArtifactService、ResumeArtifactPort 替换、copy/build/log/partial-failure tests。针对性 10 项测试与 `compileall` 通过；提交：本 checkpoint 创建。
+- ✅ 切片 1：R7-P0 temperature contract 与请求透传测试。提交：`dca9d48`。
+- ✅ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。提交：`2fd3d20`。
+- ✅ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。提交：`9839a83`。
+- ✅ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。提交：`bb5b241`。
+- ✅ 切片 5：ArtifactService、ResumeArtifactPort 替换、copy/build/log/partial-failure tests。提交：`5893f7a`、`ce805ff`。
 - ✅ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。全量 202 项测试与 `compileall` 通过；提交：`96c5dc7`。
-- ✅ 切片 7：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。中文、英文、双语共 4 份 PDF 在隔离工作区成功生成；全量 205 项测试与 `compileall` 通过；提交：本 checkpoint 创建。
+- ✅ 切片 7：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。中文、英文、双语共 4 份 PDF 在隔离工作区成功生成；提交：`10941a8`。R7-T 后以 212 项测试和真实 smoke 重新验收。
 
 ### 6. 端到端验证
 
-- ⬜ 验证 Main、Resume 与 MemoryExtractor 的 temperature 分别为 `0.1`、`0.2`、`0.0`，且 adapter 不覆盖未指定值。
+- ✅ 验证 Main、Resume 与 MemoryExtractor 的 temperature 分别为 `0.1`、`0.2`、`0.0`，且 adapter 不覆盖未指定值。
 - ✅ 中文模板新建 → 读取 README → 填充 → 编译 → 预览。
 - ✅ 英文模板新建 → 读取 README → 填充 → 编译 → 预览。
 - ✅ 双语模板复制、文件名防重复后缀和既有目标拒绝覆盖。
-- ⬜ 修改已有简历与精确 edit/replace；restore/rewind 后必须重新读取才能编辑。
-- ⬜ 外部简历/JD 读取、Memory/Reference 检索和可选 Web Search 的实际 capability 与 prompt 可见性符合确认清单。
-- 🔄 pdflatex 缺失、非零退出、超时、取消、编译失败修复与 build log 脱敏／截断已有自动化覆盖，真实 smoke 覆盖成功编译；metadata partial failure 目前只覆盖 `save_operation()` 提交失败，完整边界仍待第 7 节问题修复。
-- ⬜ 审批拒绝、Esc cancel、save/restore/rewind、main → resume → main 闭环。
-- ⏸️ G7 完成结论已由决策 186 撤回；审查问题修复、上述未完成端到端项补齐并完整复验前，不得进入 R8 入口切换或遗留删除。
+- ✅ 修改已有简历与精确 edit/replace；授权清理后旧 revision 被拒绝，重新读取后可编辑并真实编译 PDF。Windows CRLF round-trip 已修复并回归。
+- ✅ 外部简历/JD 读取、Memory/Reference 检索和可选 Web Search 的 capability 与 Resume prompt 可见性符合确认清单。
+- ✅ pdflatex 缺失、非零退出、超时、取消、编译失败修复、build log 脱敏／截断与完整 metadata partial failure 均有自动化覆盖；真实 smoke 覆盖成功编译。
+- ✅ 审批拒绝、Esc cancel、save/restore/rewind、main → resume → main 闭环均通过分层与 production composition 回归。
+- ✅ 决策 187 已恢复 G7 完成结论；未经用户后续确认不得进入 R8 入口切换或遗留删除。
 
-### 7. R7-T 审查问题（仅记录，未授权实施）
+### 7. R7-T 审查修复（已完成）
 
 - ✅ 完成 R7 代码审查与当前环境复验：205 项自动化测试、`compileall`、`git diff --check` 通过；工作区干净，旧 `main.py` 未改动。本轮未重新执行真实 `pdflatex` smoke。
-- ⬜ 修复 PENDING build 的旧 PDF 误判：不能仅凭同名 PDF 存在合成 `exit_code=0`，必须证明产物属于当前 source revision／本次副作用。
-- ⬜ 完整闭合文件副作用后的 typed partial failure：覆盖 Artifact DTO 构造、`content_hash()`、`next_version()` 与 repository commit，并让 ToolFailure 保留 changed paths 的可观察语义。
-- ⬜ 让 Artifact JSON 的字段缺失、类型错误、非法枚举、非法时间及 aggregate 不变量失败统一转换为 typed repository failure，并补齐结构损坏测试。
-- ⬜ 补齐 G7 未完成的 temperature、已有简历 edit/replace、capability/prompt、审批拒绝、Esc cancel、save/restore/rewind 与 main→resume→main 端到端验收。
-- ⬜ 修复完成后重新运行针对性测试、完整自动化测试、`compileall`、`git diff --check` 与真实 Resume smoke；同步 `current.md`、`refactor-task.md`、`decision.md` 后再决定是否恢复 G7。
-- ⏸️ 当前只记录问题，不实施任何修复；等待用户单独授权 R7-T 修复范围。
+- ✅ 修复 PENDING build 的旧 PDF 误判：PENDING retry 重新执行受取消／超时控制的构建，不再仅凭同名 PDF 存在合成 `exit_code=0`。提交：`c1fe9dc`。
+- ✅ 完整闭合文件副作用后的 typed partial failure：覆盖 Artifact DTO 构造、`content_hash()`、`next_version()` 与 repository commit，并让 ToolFailure 保留 changed paths 的可观察语义。提交：`7a621bd`。
+- ✅ 让 Artifact JSON 的字段缺失、类型错误、非法枚举、非法时间、nested schema 及 aggregate 不变量失败统一转换为 typed repository failure，并补齐结构损坏测试。提交：`03e2240`。
+- ✅ 补齐 production composition 的 temperature、capability/prompt、审批拒绝、handoff、snapshot/rewind/restore 回归；结合既有 workspace、CLI Esc 与 MemoryExtractor 测试闭合 G7 验收矩阵。提交：`b54157b`。
+- ✅ 真实已有简历 edit/replace smoke 发现并修复 Windows CRLF 重复转换；`LocalWorkspace.write()` 现在保持输入换行，精确 edit 后真实 PDF 编译通过。提交：`53d9330`。
+- ✅ 最终运行 212 项自动化测试、`compileall`、`git diff --check` 全部通过；真实 ArtifactService 在隔离工作区生成中文、英文、双语共 4 份 PDF，并另行完成已有英文简历 replace、授权清理后重新读取、精确 edit 与编译 smoke。
+- ✅ 同步 `current.md`、`refactor-task.md`、`decision.md` 并由决策 187 恢复 G7；继续停在 R8 独立授权门禁前。
 
 ## R8 —— 切换与清理
 
