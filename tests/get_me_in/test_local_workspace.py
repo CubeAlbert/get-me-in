@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from hashlib import sha256
 from pathlib import Path
 
 from src.get_me_in.adapters.local_workspace import LocalWorkspace
@@ -20,6 +21,15 @@ class LocalWorkspaceTests(unittest.TestCase):
 
         self.assertEqual("two", self.workspace.read(Path("note.txt")).content)
         self.assertNotEqual(original.revision, updated.revision)
+
+    def test_content_hash_reads_binary_bytes_without_changing_text_read_contract(self) -> None:
+        path = Path("resume.pdf")
+        raw = b"%PDF-1.7\x00\xff\x10binary"
+        self.workspace.resolve(path).write_bytes(raw)
+
+        with self.assertRaises(UnicodeError):
+            self.workspace.read(path)
+        self.assertEqual(sha256(raw).hexdigest(), self.workspace.content_hash(path))
 
     def test_stale_edit_is_rejected(self) -> None:
         original = self.workspace.write(Path("note.txt"), "one")

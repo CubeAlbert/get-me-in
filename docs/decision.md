@@ -4117,3 +4117,20 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：**
 
 - 配置化使生产 timeout 与日志边界可显式审计、可测试；单一资源 owner 避免共享 repository 的重复关闭。
+
+---
+
+### 决策 185 —— 批准原始字节 content_hash 并完成 R7/G7
+
+**背景：** 真实双语 PDF smoke 表明 `WorkspacePort.read()` 是文本接口，不能读取二进制 PDF；以文本解码内容计算 Artifact hash 会破坏原始字节语义。
+
+**决定：**
+
+- WorkspacePort 增加 `content_hash(path) -> str`，固定为受限工作区内文件原始字节的 64 位小写 SHA-256；LocalWorkspace 先经 `resolve()` 限制路径，再以流式二进制读取计算摘要。
+- `read()` 与 FileSnapshot.revision 保持文本语义；ArtifactService 对所有 Artifact 类型统一使用 `workspace.content_hash()`，不直接读取文件系统、不增加通用二进制读取接口、Tool、Capability 或 CLI。
+- 真实中文、英文、双语模板在隔离工作区完成复制、README 读取与 pdflatex 编译，生成四份 PDF；全量 205 项自动化测试和 `compileall` 通过。R7/G7 至此完成，必须停在 R8 独立授权门禁前。
+
+**理由：**
+
+- 原始字节摘要才稳定表达 PDF 与文本产物的实际内容，且不改变 workspace 的文本编辑／revision 边界。
+- 将 hash 保留在 WorkspacePort 避免 ArtifactService 越过端口边界，也不混淆编译 backend 与内容查询职责。

@@ -41,6 +41,16 @@ class LocalWorkspace:
         content = _read_text(resolved)
         return FileSnapshot(resolved.relative_to(self._root), content, _revision(content))
 
+    def content_hash(self, path: Path) -> str:
+        resolved = self.resolve(path)
+        if not resolved.is_file():
+            raise WorkspacePathError(f"Path is not a file: {path}")
+        digest = hashlib.sha256()
+        with resolved.open("rb") as source:
+            while chunk := source.read(64 * 1024):
+                digest.update(chunk)
+        return digest.hexdigest()
+
     def read_lines(
         self, path: Path, *, offset: int = 0, limit: int | None = None
     ) -> tuple[TextLine, ...]:

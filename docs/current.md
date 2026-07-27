@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R7 —— 切片 1、2、3、4、5、6 已完成并 checkpoint，继续实施已确认的七个切片
+**当前阶段：** R7 —— 七个已确认切片与 G7 已完成并 checkpoint；停在 R8 独立授权门禁前
 
-**当前任务：** R7 切片 7 —— 真实 Resume smoke 与 G7 checkpoint
+**当前任务：** R7 已完成；不得进入 R8
 
-**当前子任务：** 对中文、英文和双语静态模板执行真实复制／读取／编译 smoke；完成 G7 全量回归与最终 checkpoint。
+**当前子任务：** 无。R7 已完成；等待用户审查并决定是否单独授权 R8 入口切换。
 
-**当前阻塞：** 无。
+**当前阻塞：** R8 需要用户独立授权；旧 `main.py` 未改动。
 
 **会话交接说明：** R6-F/G6 已完成；R7 的总体边界、具体文件／对象／公开方法清单及七个实施切片均已确认。R7-P0 已恢复显式 temperature，针对性 27 项自动化测试通过。R7-P 已使 `SessionState.session_id` 成为每次 Runtime transition 的唯一临时工具身份来源，并以 29 项针对性自动化测试验证 restore／rewind 授权隔离与 handoff scope。用户授权在没有新决策时自动完成 R7；不切换旧 `main.py`，不进入 R8。
 
-**下一步：** 实施切片 7：运行中文、英文、双语 Resume smoke；如本机缺少 pdflatex，记录客观环境阻塞并继续其余 G7 验收。
+**下一步：** 审查 R7 成果；若要继续，先确认 R8 的入口切换清单，不能直接删除遗留架构。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -23,6 +23,7 @@
 182. **Artifact 使用 operation aggregate 持久化** — `ArtifactOperation` 原子承载 Artifact 与 build-attempt 结果；`save_operation()` 保持唯一写接口，PENDING 可按同 key reconcile，COMMITTED 表示记录完整而非业务一定成功。
 183. **R7-P5 ArtifactService 完成** — Resume 工具经 ArtifactService 使用 aggregate 的 PENDING→副作用→COMMITTED 提交；copy retry 与 PDF retry 均惰性 reconcile，构建异常也记录 attempt，metadata 失败仍返回 typed partial failure。
 184. **R7-P6 production composition 完成** — Settings 提供 artifacts directory、PDF timeout 与日志上限；ArtifactService 成为 Main/Resume 共享但仅关闭一次的资源 owner。
+185. **R7/G7 已完成并停在 R8 门禁前** — WorkspacePort 增加受限原始字节 `content_hash()`，真实中文／英文／双语模板均完成复制、README 读取与 pdflatex 编译；205 项自动化测试和 `compileall` 通过。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 

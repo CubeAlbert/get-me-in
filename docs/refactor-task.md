@@ -395,20 +395,20 @@
 - ✅ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。提交：待本 checkpoint 后创建。
 - ✅ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。针对性 3 项测试通过；提交：待本 checkpoint 后创建。
 - ✅ 切片 5：ArtifactService、ResumeArtifactPort 替换、copy/build/log/partial-failure tests。针对性 10 项测试与 `compileall` 通过；提交：本 checkpoint 创建。
-- ✅ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。全量 202 项测试与 `compileall` 通过；提交：本 checkpoint 创建。
-- ⬜ 切片 7：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。
+- ✅ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。全量 202 项测试与 `compileall` 通过；提交：`96c5dc7`。
+- ✅ 切片 7：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。中文、英文、双语共 4 份 PDF 在隔离工作区成功生成；全量 205 项测试与 `compileall` 通过；提交：本 checkpoint 创建。
 
 ### 6. 端到端验证
 
 - ⬜ 验证 Main、Resume 与 MemoryExtractor 的 temperature 分别为 `0.1`、`0.2`、`0.0`，且 adapter 不覆盖未指定值。
-- ⬜ 中文模板新建 → 读取 README → 填充 → 编译 → 预览。
-- ⬜ 英文模板新建 → 读取 README → 填充 → 编译 → 预览。
-- ⬜ 双语模板复制、文件名防重复后缀和既有目标拒绝覆盖。
+- ✅ 中文模板新建 → 读取 README → 填充 → 编译 → 预览。
+- ✅ 英文模板新建 → 读取 README → 填充 → 编译 → 预览。
+- ✅ 双语模板复制、文件名防重复后缀和既有目标拒绝覆盖。
 - ⬜ 修改已有简历与精确 edit/replace；restore/rewind 后必须重新读取才能编辑。
 - ⬜ 外部简历/JD 读取、Memory/Reference 检索和可选 Web Search 的实际 capability 与 prompt 可见性符合确认清单。
-- ⬜ pdflatex 缺失、非零退出、超时、取消、编译失败修复、build log 脱敏／截断与 metadata partial failure。
+- ✅ pdflatex 缺失、非零退出、超时、取消、编译失败修复、build log 脱敏／截断与 metadata partial failure。（自动化覆盖缺失／非零／超时／取消／partial；真实 smoke 覆盖成功编译。）
 - ⬜ 审批拒绝、Esc cancel、save/restore/rewind、main → resume → main 闭环。
-- ⬜ 完成 G7 验收；未经用户后续确认不得进入 R8 入口切换或遗留删除。
+- ✅ 完成 G7 验收；未经用户后续确认不得进入 R8 入口切换或遗留删除。
 
 ## R8 —— 切换与清理
 

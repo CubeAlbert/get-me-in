@@ -1,6 +1,7 @@
 """ArtifactService contract tests."""
 
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 import tempfile
 import unittest
@@ -58,6 +59,25 @@ class ArtifactServiceTests(unittest.TestCase):
         self.assertEqual(0, result.exit_code)
         self.assertEqual(1, len(self.repository.list_artifacts("resume2.pdf")))
 
+    def test_build_persists_non_success_process_outcomes_without_pdf_artifacts(self) -> None:
+        cases = (
+            ("failed.tex", ProcessResult(1, "out", "error")),
+            ("timed.tex", ProcessResult(None, "out", "timeout", timed_out=True)),
+            ("cancelled.tex", ProcessResult(None, "out", "cancelled", cancelled=True)),
+        )
+        self.backend.build_error = None
+        for name, expected in cases:
+            path = Path(name)
+            self.workspace.files[path] = name
+            self.backend.result = expected
+            self.assertEqual(expected, self.service.build_pdf(path, workspace=self.workspace, cancellation=object(), session_id="s", agent_key=AgentKey.RESUME))
+
+        attempts = {item.source_path: item for item in self.repository.list_build_attempts()}
+        self.assertEqual((1, False, False), (attempts["failed.tex"].exit_code, attempts["failed.tex"].timed_out, attempts["failed.tex"].cancelled))
+        self.assertEqual((None, True, False), (attempts["timed.tex"].exit_code, attempts["timed.tex"].timed_out, attempts["timed.tex"].cancelled))
+        self.assertEqual((None, False, True), (attempts["cancelled.tex"].exit_code, attempts["cancelled.tex"].timed_out, attempts["cancelled.tex"].cancelled))
+        self.assertEqual((), tuple(item for item in self.repository.list_artifacts() if item.kind.value == "pdf"))
+
 
 class _Workspace:
     def __init__(self): self.files = {}
@@ -65,10 +85,11 @@ class _Workspace:
     def read(self, path): return type("Snapshot", (), {"content": self.files[path], "revision": "revision:" + self.files[path]})()
     def write(self, path, content): self.files[path] = content
     def resolve(self, path): return Path("C:/workspace") / path
+    def content_hash(self, path): return sha256(self.files[path].encode()).hexdigest()
 
 
 class _Backend:
-    def __init__(self, workspace): self.workspace, self.copy_calls, self.build_error = workspace, 0, None
+    def __init__(self, workspace): self.workspace, self.copy_calls, self.build_error, self.result = workspace, 0, None, ProcessResult(0, "ok", "")
     def copy_template(self, template, prefix, target_dir, *, workspace):
         tex, readme = target_dir / f"{prefix}_CHN.tex", target_dir / "README.md"
         if not workspace.exists(tex):
@@ -78,8 +99,9 @@ class _Backend:
         return TemplateCopyResult((tex, readme), target_dir)
     def build_pdf(self, path, *, workspace, cancellation):
         if self.build_error: raise self.build_error
-        workspace.write(path.with_suffix(".pdf"), "pdf")
-        return ProcessResult(0, "ok", "")
+        if self.result.exit_code == 0:
+            workspace.write(path.with_suffix(".pdf"), "pdf")
+        return self.result
 
 
 class _Clock:

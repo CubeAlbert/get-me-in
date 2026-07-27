@@ -3,8 +3,9 @@
 import unittest
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 
-from src.get_me_in.adapters.local_resume_artifacts import LocalResumeArtifacts
+from src.get_me_in.adapters.local_resume_artifacts import LocalResumeArtifacts, ResumeArtifactError
 from src.get_me_in.adapters.local_workspace import LocalWorkspace
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.tool_catalog import ToolCatalog
@@ -64,6 +65,17 @@ class ResumeToolTests(unittest.TestCase):
             self.assertEqual((Path("resume/candidate_CHN.tex"), Path("resume/candidate_EN.tex"), Path("resume/README.md")), result.files)
             self.assertEqual("中文", workspace.read(Path("resume/candidate_CHN.tex")).content)
             self.assertEqual("说明", workspace.read(Path("resume/README.md")).content)
+
+    def test_local_adapter_reports_missing_pdflatex(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = LocalWorkspace(root / "workspace")
+            workspace.write(Path("resume.tex"), "\\documentclass{article}")
+            adapter = LocalResumeArtifacts(root, _Runner(), 60)
+
+            with patch("src.get_me_in.adapters.local_resume_artifacts.shutil.which", return_value=None):
+                with self.assertRaisesRegex(ResumeArtifactError, "未找到 pdflatex"):
+                    adapter.build_pdf(Path("resume.tex"), workspace=workspace, cancellation=CancellationToken())
 
 
 class _Workspace:

@@ -93,12 +93,11 @@ class ArtifactService:
         return ArtifactOperation(1, key, session_id, agent_key, kind, path, input_hash, ArtifactOperationStatus.PENDING, self._clock.now())
 
     def _artifact(self, path: Path, session_id: str, agent_key, workspace, template: str | None = None) -> Artifact:
-        snapshot = workspace.read(path)
         kind = ArtifactKind.LATEX if path.suffix == ".tex" else ArtifactKind.PDF if path.suffix == ".pdf" else ArtifactKind.README
         template_name = None
         if kind is ArtifactKind.LATEX:
             template_name = {"chn": "CHN_Template.tex", "en": "EN_Template.tex"}.get(template)
-        return Artifact(1, self._ids.new_id(), session_id, agent_key, kind, path.as_posix(), self._repository.next_version(path.as_posix()), sha256(snapshot.content.encode()).hexdigest(), self._clock.now(), template_name)
+        return Artifact(1, self._ids.new_id(), session_id, agent_key, kind, path.as_posix(), self._repository.next_version(path.as_posix()), workspace.content_hash(path), self._clock.now(), template_name)
 
     def _commit_reconciled_pdf(self, operation: ArtifactOperation, path: Path, pdf: Path, workspace) -> ProcessResult:
         message = "Reconciled existing PDF output after an incomplete artifact operation."

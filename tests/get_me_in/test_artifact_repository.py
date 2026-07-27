@@ -1,6 +1,7 @@
 """Aggregate JSON artifact repository contracts."""
 
 from datetime import datetime, timezone
+from hashlib import sha256
 from pathlib import Path
 import tempfile
 import unittest
@@ -73,5 +74,6 @@ class _Workspace:
     def read(self, path): return type("S", (), {"revision": "r", "content": "pdf"})()
     def exists(self, path): return path.suffix == ".pdf"
     def resolve(self, path): return Path("C:/workspace") / path
+    def content_hash(self, path): return sha256(b"pdf").hexdigest()
 class _Backend:
     def build_pdf(self, path, *, workspace, cancellation): return ProcessResult(0, "C:/workspace/" + "x" * 100, "")
