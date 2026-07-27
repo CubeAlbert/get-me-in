@@ -4286,3 +4286,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - R8-P 直接删除所有 v1-only 配置 —— 会破坏观察期单提交回退，延后到 R8-G。
 - 只比较旧数据目录 hash／mtime —— 只能证明未写，不能证明未读，未采用。
 - 在 R8 增加 console script —— 当前根入口与模块诊断入口已经足够，会扩大待确认生产入口面，未采用。
+
+---
+
+### 决策 191 —— 授权 R8 实施并完成 R8-P
+
+**背景：** 用户明确要求先通过 project-bootstrap 恢复状态，然后在 R8 已完成设计范围内自动实施；每个阶段完成后使用 checkpoint 保存状态，只有遇到需要用户决策的事项才暂停。R8-O 原有的用户审查门禁保持有效。
+
+**决定：**
+
+- R8 由 R8-P 开始实施，不新增生产 class、service、port、schema 或公开方法。
+- R8-P 已完成并独立提交 `d91e37c`：`.env.example` 与 `Settings.from_env()` 的 v2 变量、默认值和兼容别名对齐；仅供回退旧入口的变量保留在明确的 `legacy rollback only` 段；README 记录观察期入口、静态输入、新旧运行数据与回退边界。
+- 导入边界扫描扩展至全部待删除 legacy production modules；Settings sentinel 断言证明 legacy 环境变量不会改变 v2 的 workspace、sessions、knowledge、memories 或 artifacts 路径。Catalog 实测为 2 个 Agent、25 个 ToolDefinition、10 个 CLI 命令；三个静态资产目录均可用。
+- R8-P 验证通过：完整 unittest 218 项、`compileall`、`git diff --check`。R8-O 仍需执行拒绝访问旧目录的启动／smoke 边界，并在完成后强制等待用户审查，未通过不得进入 R8-D。
+
+**理由：**
+
+- 将回退配置保留至观察完成，可以让 R8-E 保持真正可单独 revert 的运行时回退点。
+- 静态导入扫描与 typed Settings 路径断言在入口切换前就关闭 v2 回接 legacy 模块和旧数据路径的风险；运行期拒绝访问边界留给 R8-O 的真实观察矩阵。
+
+**曾考虑的替代方案：**
+
+- 跳过 R8-O 用户审查并连续删除 legacy —— 与已确认的强制观察门禁冲突，未采用。

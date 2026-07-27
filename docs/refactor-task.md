@@ -435,17 +435,17 @@
 
 ## R8 —— 切换与清理
 
-> 候选具体清单已在决策 188、190 与 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单` 中细化。决策 189 已满足 R7-T2/G7 前置条件；决策 190 只完成 R8 设计审查，本清单尚未获得 coding 授权。
+> 决策 191 已授权并完成 R8-P；R8-E 正在实施。R8-O 的用户审查仍是进入 R8-D 前不可跳过的强制门禁。
 
 ### 1. R8-P —— 切换准备
 
-- ⬜ 确认 R7-T2 已完成且 G6、G7 均有效；工作区干净，旧 `main.py` 尚未改动。
-- ⬜ 复核实际 Catalog：2 个 Agent（Main／Resume）、25 个 ToolDefinition、10 个 CLI 命令；分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 取证，并与 capability 文档一致。
-- ⬜ 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可直接作为 v2 静态输入。
-- ⬜ 对旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 建立组合证据：静态扫描禁用路径／legacy-only 环境变量、sentinel project root 的 Settings 路径断言、启动／smoke 拒绝访问边界；mtime／hash 前后证据只用于确认未改写。
-- ⬜ 将 `.env.example` 补齐为 `Settings.from_env()` 的实际变量、默认值与兼容别名；v1-only 变量暂放在“legacy rollback only”段，R8-O 前不得删除。
-- ⬜ 为当前空的 README 写过渡说明：同时记录旧生产根入口与 v2 预览入口、静态资产、新旧运行数据和回退边界；不提前宣称根入口已切换。
-- ⬜ 运行 v2→legacy import scan、入口前完整自动化测试、`compileall` 与 `git diff --check`；R8-P 独立提交。
+- ✅ 确认 R7-T2 已完成且 G6、G7 均有效；切换前工作区干净，旧 `main.py` 未改动。
+- ✅ 复核实际 Catalog：2 个 Agent（Main／Resume）、25 个 ToolDefinition、10 个 CLI 命令；分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 取证，并与 capability 文档一致。
+- ✅ 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可直接作为 v2 静态输入。
+- ✅ 对旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 建立组合证据：静态扫描禁用路径／legacy-only 环境变量、sentinel project root 的 Settings 路径断言；R8-O 继续执行拒绝访问启动／smoke 边界，mtime／hash 前后证据只用于确认未改写。
+- ✅ 将 `.env.example` 补齐为 `Settings.from_env()` 的实际变量、默认值与兼容别名；v1-only 变量暂放在“legacy rollback only”段，R8-O 前不得删除。
+- ✅ 为当前空的 README 写过渡说明：同时记录旧生产根入口与 v2 预览入口、静态资产、新旧运行数据和回退边界；不提前宣称根入口已切换。
+- ✅ 运行 v2→legacy import scan、入口前完整自动化测试、`compileall` 与 `git diff --check`；R8-P 已独立提交 `d91e37c`。
 
 ### 2. R8-E —— 根入口切换
 
