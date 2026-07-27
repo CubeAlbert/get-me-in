@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 182 — Artifact 使用 operation aggregate 持久化](#决策-182--artifact-使用-operation-aggregate-持久化)
 - [决策 181 — Resume 双 Runtime composition 完成](#决策-181--resume-双-runtime-composition-完成)
 - [决策 180 — R7-P 动态 session identity 完成](#决策-180--r7-p-动态-session-identity-完成)
 - [决策 179 — R7-P0 temperature 契约完成并继续 R7](#决策-179--r7-p0-temperature-契约完成并继续-r7)
@@ -4066,3 +4067,19 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 声明式 spec 保留 Resume 行为约束而不重新创建无状态价值的旧 Agent 类。
 - 独立所有权防止 Resume 取消或 close 影响 Main 的正在进行或未来请求。
+
+---
+
+### 决策 182 —— Artifact 使用 operation aggregate 持久化
+
+**背景：** 已确认的 ArtifactRepository 只有 `save_operation()` 一个写入口，但 R7 仍需原子保存 Artifact 与 build-attempt。
+
+**决定：**
+
+- `ArtifactOperation` 增加不可变 `artifacts` 与 `build_attempts` 元组；repository 以逐 operation JSON 单次原子 replace 保存整个 aggregate。
+- 副作用前保存无结果的 PENDING；副作用后保存携带全部结果的 COMMITTED。COMMITTED 表示本次尝试记录已完整持久化，业务成功仍由 process 结果表达。
+- `list_artifacts()` 与 `list_build_attempts()` 从 operation records 展开；不增加独立保存接口或扩大 R7 责任范围。
+
+**理由：**
+
+- metadata 提交失败时原 PENDING 仍在，后续相同 key 调用可安全 reconcile；成功时状态和结果同时可见。

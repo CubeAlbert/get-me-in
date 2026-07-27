@@ -375,10 +375,10 @@
 
 ### 4. Artifact domain、repository 与 service
 
-- ⬜ 定义 `schema_version=1` 的 typed Artifact 与 build-attempt schema；Artifact 保存 `content_hash`，来源模板只保存 `template_name`，避免外部绝对路径和开放 metadata dict。
-- ⬜ 默认只写全新 `data/v2/artifacts/`；路径保存为规范化的 workspace-relative path，不读取或迁移旧 Session/Memory/temp 数据。
-- ⬜ 定义 ArtifactRepository 的原子持久化、列举／查询、幂等 close 与损坏记录失败边界。
-- ⬜ Artifact operation key 使用 canonical JSON 的 SHA-256；repository 写入保持 pending → side effect → commit。
+- ✅ 定义 `schema_version=1` 的 typed Artifact、build-attempt 与 aggregate ArtifactOperation schema；Artifact 保存 `content_hash` 与 `template_name`，无开放 metadata dict。
+- ✅ repository 使用全新 `data/v2/artifacts/` 边界；路径契约为 workspace-relative，不读取或迁移旧运行数据。
+- ✅ 定义 ArtifactRepository 的原子 aggregate 持久化、列举／查询、幂等 close 与损坏记录 typed failure。
+- ✅ operation key 使用 canonical JSON 的 SHA-256；每条 JSON 记录为 PENDING 或携带结果的 COMMITTED，单次 replace 原子切换。
 - ⬜ ArtifactService 直接满足既有 `ResumeArtifactPort`，借用 `LocalResumeArtifacts` backend；保持 LLM 可见的 `copy_template`／`build_pdf` 参数 schema 和 Runtime/ToolOutcome 闭合协议不变。
 - ⬜ `copy_template` 预检模板、目标 LaTeX、README 与重复后缀；明确 README 覆盖行为，并记录成功文件、来源模板和版本。
 - ⬜ `build_pdf` 复用现有 ProcessRunner，记录每次成功、非零退出、超时、取消和异常尝试；只有 exit code 为 0 且目标 PDF 确实存在时记录可用 PDF artifact。
@@ -393,7 +393,7 @@
 - ✅ 切片 1：R7-P0 temperature contract 与请求透传测试。提交：待本 checkpoint 后创建。
 - ✅ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。提交：待本 checkpoint 后创建。
 - ✅ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。提交：待本 checkpoint 后创建。
-- ⬜ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。
+- ✅ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。针对性 3 项测试通过；提交：待本 checkpoint 后创建。
 - ⬜ 切片 5：ArtifactService、`ResumeArtifactPort` 替换、copy/build/log/partial-failure tests。
 - ⬜ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。
 - ⬜ 切片 7：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。
