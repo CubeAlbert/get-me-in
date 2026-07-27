@@ -10,9 +10,12 @@ from src.get_me_in.adapters.json_memory_repository import JsonMemoryRepository
 from src.get_me_in.application.background_worker import BackgroundWorker
 from src.get_me_in.application.app_results import BackgroundJobState
 from src.get_me_in.application.memory_service import MemoryService
+from src.get_me_in.application.memory_extractor import MemoryExtractor
+from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.memories import MemoryBuildSource, MemoryCategory, MemoryRecord
 from src.get_me_in.domain.messages import MessageRecord, Role
+from src.get_me_in.ports.llm import LLMResult
 
 
 class MemoryRepositoryTests(unittest.TestCase):
@@ -90,6 +93,17 @@ class MemoryServiceTests(unittest.TestCase):
         )
 
 
+class MemoryExtractorTests(unittest.TestCase):
+    def test_extractor_uses_explicit_zero_temperature(self) -> None:
+        llm = _RecordingLlm()
+        extractor = MemoryExtractor(llm, "extract", _Clock(), _Ids(), 1)
+        source = MemoryBuildSource("session", AgentKey.MAIN, ())
+
+        extractor.extract(source, CancellationToken())
+
+        self.assertEqual(0.0, llm.request.temperature)
+
+
 class _Clock:
     def now(self): return _now()
 
@@ -119,6 +133,20 @@ class _Knowledge:
         if finalize is not None:
             finalize()
         return type("Report", (), {"failures": ()})()
+
+
+class _RecordingLlm:
+    def complete(self, request, cancellation):
+        self.request = request
+        return LLMResult("[]")
+
+    def close(self):
+        pass
+
+
+class _Ids:
+    def new_id(self):
+        return "id"
 
 
 def _now() -> datetime:

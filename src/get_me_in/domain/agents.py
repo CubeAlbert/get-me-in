@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isfinite
 
 
 class AgentKey(StrEnum):
@@ -54,8 +55,13 @@ class AgentSpec:
     soft_constraints: tuple[str, ...]
     style: AgentStyle
     model_profile: str
+    temperature: float
     capabilities: frozenset[Capability]
     priorities: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.temperature) or not 0 <= self.temperature <= 2:
+            raise ValueError("Agent temperature must be a finite value between 0 and 2")
 
 
 @dataclass(frozen=True)

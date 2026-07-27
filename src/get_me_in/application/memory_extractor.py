@@ -13,7 +13,7 @@ class MemoryExtractor:
 
     def extract(self, source: MemoryBuildSource, cancellation: CancellationSignal) -> tuple[MemoryRecord, ...]:
         text = "\n".join(record.content for record in source.records if hasattr(record, "content"))
-        result = self._llm.complete(LLMRequest((LLMMessage(role=Role.SYSTEM, content=self._prompt), LLMMessage(role=Role.USER, content=text)), ModelProfile.FLASH, self._timeout), cancellation)
+        result = self._llm.complete(LLMRequest((LLMMessage(role=Role.SYSTEM, content=self._prompt), LLMMessage(role=Role.USER, content=text)), ModelProfile.FLASH, self._timeout, temperature=0.0), cancellation)
         values = json.loads(result.content)
         records = []
         for item in values:

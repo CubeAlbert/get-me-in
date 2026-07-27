@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 179 — R7-P0 temperature 契约完成并继续 R7](#决策-179--r7-p0-temperature-契约完成并继续-r7)
 - [决策 160 — 不保留 /auto-approve-switch 向前兼容](#决策-160--不保留-auto-approve-switch-向前兼容)
 - [决策 159 — 帮助从真实命令注册表排序并列出 alias](#决策-159--帮助从真实命令注册表排序并列出-alias)
 - [决策 158 — /restore 选择显示会话预览而非内部 session_id](#决策-158--restore-选择显示会话预览而非内部-session_id)
@@ -4003,3 +4004,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 完整保存 build stdout/stderr —— 可能无限膨胀 repository 并泄露绝对路径，已拒绝。
 - 只保存固定前缀或仅保留失败摘要 —— 容易丢失编译器末尾的最终错误和上下文，已拒绝。
 - 在 R7 增加后台 reconcile、日志清理命令或自动 retention —— 超出当前纵向切片且引入额外生命周期，延后到有真实容量证据后再决策。
+
+---
+
+### 决策 179 —— R7-P0 temperature 契约完成并继续 R7
+
+**背景：** R7 已确认的第一切片需要恢复 Main、Resume 和 MemoryExtractor 的显式 temperature 契约，避免依赖 provider 默认值。当前生产 composition 尚未创建 Resume AgentSpec，该工厂属于后续已确认的 Resume composition 切片。
+
+**决定：**
+
+- `AgentSpec.temperature` 成为必填且受 `[0, 2]` 有限值校验的声明；当前 Main 固定为 `0.1`，后续 `build_resume_spec()` 必须固定为 `0.2`。
+- `LLMRequest.temperature` 采用可选字段；AgentRuntime 透传 AgentSpec 值，MemoryExtractor 显式传入 `0.0`，OpenAI adapter 仅对非 `None` 的有效值传给 provider。
+- 针对性自动化测试通过 27 项；R7-P0 完成。用户已明确授权在无新增决策时继续 R7-P 及其后的已确认切片，仍不得切换旧 `main.py` 或进入 R8。
+
+**理由：**
+
+- 显式请求值稳定了角色差异，同时让不指定 temperature 的调用保持 adapter 无隐藏默认值的语义。
+- Resume 工厂尚未获准在 P0 之外提前创建；将 `0.2` 固定在该工厂的实施切片，可维持已确认的按切片范围控制。
+
+**曾考虑的替代方案：**
+
+- 在 P0 预先创建 Resume AgentSpec 工厂 —— 跨越已确认的切片边界，已拒绝。
+- 由 OpenAI adapter 为未指定请求填入全局默认值 —— 会隐藏调用方契约并造成 provider 行为漂移，已拒绝。

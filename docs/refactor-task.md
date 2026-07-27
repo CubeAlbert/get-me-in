@@ -352,10 +352,10 @@
 
 ### 1. R7-P0 —— LLM temperature 契约修复
 
-- ⬜ `AgentSpec` 增加 `temperature: float`，Main 固定为 `0.1`，Resume 固定为 `0.2`。
-- ⬜ `LLMRequest` 增加 `temperature: float | None = None`；MemoryExtractor 请求显式使用 `0.0`。
-- ⬜ OpenAI adapter 仅在 temperature 非 `None` 时透传，并拒绝非有限值或超出 `[0, 2]` 的配置。
-- ⬜ 补齐 Agent、MemoryExtractor 与 adapter 请求测试；该修复独立验证、独立提交并停止，之后才进入 R7-P。
+- ✅ `AgentSpec` 增加 `temperature: float`，Main 固定为 `0.1`，Resume 将在其已确认的 AgentSpec 工厂中固定为 `0.2`。
+- ✅ `LLMRequest` 增加 `temperature: float | None = None`；MemoryExtractor 请求显式使用 `0.0`。
+- ✅ OpenAI adapter 仅在 temperature 非 `None` 时透传，并拒绝非有限值或超出 `[0, 2]` 的配置。
+- ✅ 补齐 Main Agent、MemoryExtractor 与 adapter 请求测试；针对性 27 项测试通过。用户已授权自动继续，下一步进入 R7-P。
 
 ### 2. R7-P —— 动态 session identity 前置修复
 
@@ -390,7 +390,7 @@
 
 ### 5. 已确认实施切片
 
-- ⬜ 切片 1：R7-P0 temperature contract 与请求透传测试。
+- ✅ 切片 1：R7-P0 temperature contract 与请求透传测试。提交：待本 checkpoint 后创建。
 - ⬜ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。
 - ⬜ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。
 - ⬜ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。

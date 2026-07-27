@@ -202,6 +202,7 @@ class AgentRuntime:
             messages=self._conversation_codec.encode(prompt, self._state.history),
             profile=ModelProfile(self._spec.model_profile),
             timeout_seconds=self._model_timeout_seconds,
+            temperature=self._spec.temperature,
         )
         self._state = replace(self._state, model_calls=self._state.model_calls + 1)
         logger.debug(

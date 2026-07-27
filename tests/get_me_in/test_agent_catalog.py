@@ -16,6 +16,7 @@ def _spec(key: AgentKey) -> AgentSpec:
         soft_constraints=(),
         style=AgentStyle("专业", "简洁", "直接"),
         model_profile="pro",
+        temperature=0.1,
         capabilities=frozenset({Capability.ROUTE}),
     )
 

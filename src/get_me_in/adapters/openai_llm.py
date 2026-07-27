@@ -1,6 +1,7 @@
 """OpenAI SDK adapter with request-scoped, cancellable clients."""
 
 from collections.abc import Callable, Mapping
+from math import isfinite
 
 from openai import OpenAI
 
@@ -33,6 +34,10 @@ class OpenAILLMAdapter(LLMPort):
             raise RuntimeError("OpenAILLMAdapter is closed")
         if cancellation.is_cancelled:
             raise InterruptedError("Model completion was cancelled")
+        if request.temperature is not None and (
+            not isfinite(request.temperature) or not 0 <= request.temperature <= 2
+        ):
+            raise ValueError("LLM request temperature must be a finite value between 0 and 2")
 
         client = self._client_factory()
         registration = cancellation.register(client.close)
@@ -45,6 +50,8 @@ class OpenAILLMAdapter(LLMPort):
                 ],
                 "timeout": request.timeout_seconds,
             }
+            if request.temperature is not None:
+                create_kwargs["temperature"] = request.temperature
             if not self._thinking_enabled:
                 create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
             response = client.chat.completions.create(**create_kwargs)

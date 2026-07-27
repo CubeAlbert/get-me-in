@@ -1,22 +1,23 @@
 # 当前状态
 
-**当前阶段：** R7 —— 设计与清单已确认，等待新会话从 R7-P0 开始（当前会话不 coding）
+**当前阶段：** R7 —— 切片 1 已完成并 checkpoint，继续实施已确认的七个切片
 
-**当前任务：** R7-P0 —— LLM temperature 契约修复
+**当前任务：** R7-P —— 动态 session identity 前置修复
 
-**当前子任务：** 为 `AgentSpec`／`LLMRequest` 增加显式 temperature，并固定 Main `0.1`、Resume `0.2`、MemoryExtractor `0.0`。
+**当前子任务：** 让每次 Runtime 工具执行从当前 `SessionState` 获得 session id，并在 restore／rewind 后隔离 workspace revision grant。
 
-**当前阻塞：** 无技术或设计阻塞；用户要求当前会话仅完成文档 checkpoint，R7 coding 留到新会话。
+**当前阻塞：** 无。
 
-**会话交接说明：** R6-F/G6 已完成；R7 启动 Review 中复跑的 `uv run python -m unittest discover -s tests/get_me_in -t .` 已正常退出并通过 187 项测试。用户已确认 R7 总体边界、具体文件／对象／公开方法清单及七个实施切片；补充确认显式 temperature 契约，以及 Artifact build log 的 65536 bytes 上限、workspace 路径脱敏、UTF-8 安全 head/tail 截断和诊断 metadata。本会话只同步设计、计划、任务、current 与决策，未修改代码、未切换旧 `main.py`、未进入 R8。
+**会话交接说明：** R6-F/G6 已完成；R7 的总体边界、具体文件／对象／公开方法清单及七个实施切片均已确认。R7-P0 已在 `AgentSpec`、`LLMRequest`、AgentRuntime、MemoryExtractor 和 OpenAI adapter 中恢复显式 temperature；Main 为 `0.1`，MemoryExtractor 为 `0.0`，后续 Resume AgentSpec 工厂将固定 `0.2`。针对性 27 项自动化测试通过。用户授权在没有新决策时自动完成 R7；不切换旧 `main.py`，不进入 R8。
 
-**下一步：** 新会话执行 `/project-bootstrap`，仅实施切片 1 R7-P0 temperature contract，补齐对应测试，独立验证、提交并停下；不得同批进入 R7-P dynamic session identity。
+**下一步：** 实施切片 2 R7-P：将当前 `SessionState.session_id` 显式传给每次 Runtime transition，清除 restore／rewind 离开的 workspace grant，并补齐隔离回归测试。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
 176. **R6-F 完成并重新通过 G6** — 四个修复切片独立提交，187 项自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 通过；再次停在 R6-T，等待用户审查。
 177. **确认 R7 总体边界并提交具体清单审查** — R7-P、Resume capability/资源所有权、独立 Artifact repository、build-attempt 与 typed partial retry 已确认；当时的具体清单待确认状态已由决策 178 解除。
 178. **确认 R7 具体清单与 temperature/log 补充** — 用户确认具体文件、对象、公开方法和七个切片；先以 R7-P0 恢复 Main `0.1`、Resume `0.2`、MemoryExtractor `0.0`，Artifact build log 采用有界、脱敏、UTF-8 安全截断。本会话只做文档 checkpoint，后续新会话可从切片 1 开始。
+179. **R7-P0 temperature 契约完成并继续 R7** — `AgentSpec`、`LLMRequest`、AgentRuntime、MemoryExtractor 与 OpenAI adapter 已表达显式 temperature，非法 provider 请求在建连前拒绝；针对性测试通过。用户已授权自动继续后续已确认切片。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 

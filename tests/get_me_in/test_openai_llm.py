@@ -30,6 +30,25 @@ class OpenAILLMAdapterTests(unittest.TestCase):
         self.assertEqual(1, client.close_calls)
         self.assertEqual([{"role": "user", "content": "hello"}], client.create_kwargs["messages"])
 
+    def test_temperature_is_forwarded_only_when_explicit(self) -> None:
+        configured_client = _FakeClient()
+        unset_client = _FakeClient()
+
+        _adapter(lambda: configured_client).complete(_request(temperature=0.2), CancellationToken())
+        _adapter(lambda: unset_client).complete(_request(), CancellationToken())
+
+        self.assertEqual(0.2, configured_client.create_kwargs["temperature"])
+        self.assertNotIn("temperature", unset_client.create_kwargs)
+
+    def test_invalid_temperature_is_rejected_without_creating_client(self) -> None:
+        created: list[object] = []
+        adapter = _adapter(lambda: created.append(object()))
+
+        with self.assertRaises(ValueError):
+            adapter.complete(_request(temperature=float("nan")), CancellationToken())
+
+        self.assertEqual([], created)
+
     def test_cancellation_closes_the_active_request_and_adapter_remains_reusable(self) -> None:
         blocking = _BlockingClient()
         succeeding = _FakeClient()
@@ -62,11 +81,12 @@ def _adapter(factory, *, thinking_enabled: bool = True) -> OpenAILLMAdapter:
     )
 
 
-def _request() -> LLMRequest:
+def _request(*, temperature: float | None = None) -> LLMRequest:
     return LLMRequest(
         messages=(LLMMessage(Role.USER, "hello"),),
         profile=ModelProfile.PRO,
         timeout_seconds=1,
+        temperature=temperature,
     )
 
 

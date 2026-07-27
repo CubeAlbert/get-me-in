@@ -35,6 +35,7 @@ class LLMRequest:
     messages: tuple[LLMMessage, ...]
     profile: ModelProfile
     timeout_seconds: float
+    temperature: float | None = None
 
 
 @dataclass(frozen=True)

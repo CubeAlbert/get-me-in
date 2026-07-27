@@ -76,6 +76,7 @@ def build_application(
             explanation_style="先给结论，再给必要说明",
         ),
         model_profile="pro",
+        temperature=0.1,
         capabilities=frozenset(
             {
                 Capability.SYSTEM,

@@ -230,6 +230,14 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertEqual(17, llm.requests[0].timeout_seconds)
 
+    def test_agent_spec_temperature_is_forwarded_to_llm(self) -> None:
+        runtime, llm, temporary_dir = _runtime(['{"content": "ok", "thinking": "ok"}'])
+        self.addCleanup(temporary_dir.cleanup)
+
+        _pump(runtime, UserMessage("question"))
+
+        self.assertEqual(0.1, llm.requests[0].temperature)
+
 
 def _pump(runtime: AgentRuntime, command: object) -> list[object]:
     events = [runtime.handle(command)]
@@ -268,6 +276,7 @@ def _runtime(
         soft_constraints=(),
         style=AgentStyle("clear", "brief", "direct"),
         model_profile=ModelProfile.PRO,
+        temperature=0.1,
         capabilities=capabilities,
     )
     catalog = ToolCatalog(definitions)
