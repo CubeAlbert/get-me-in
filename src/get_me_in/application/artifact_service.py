@@ -33,8 +33,8 @@ class ArtifactService:
         else:
             operation = existing
         result = self._backend.copy_template(template, prefix, target_dir, workspace=workspace)
-        artifacts = tuple(self._artifact(path, session_id, agent_key, workspace, template) for path in result.files)
         try:
+            artifacts = tuple(self._artifact(path, session_id, agent_key, workspace, template) for path in result.files)
             self._repository.save_operation(replace(operation, status=ArtifactOperationStatus.COMMITTED, artifacts=artifacts))
         except Exception as error:
             raise ArtifactPartialFailure("metadata_commit_failed", result.files, str(error)) from error
@@ -63,14 +63,16 @@ class ArtifactService:
         stdout, stdout_bytes, stdout_cut = self._bound_log(result.stdout, workspace)
         stderr, stderr_bytes, stderr_cut = self._bound_log(result.stderr, workspace)
         attempt = ArtifactBuildAttempt(1, self._ids.new_id(), operation.operation_key, session_id, agent_key, source_path, result.exit_code, stdout, stderr, stdout_bytes, stderr_bytes, stdout_cut, stderr_cut, result.timed_out, result.cancelled, self._clock.now())
-        artifacts = ()
-        if result.exit_code == 0 and workspace.exists(pdf):
-            artifacts = (self._artifact(pdf, session_id, agent_key, workspace),)
+        changed_paths = (pdf,) if result.exit_code == 0 and workspace.exists(pdf) else ()
         try:
+            artifacts = (
+                (self._artifact(pdf, session_id, agent_key, workspace),)
+                if changed_paths
+                else ()
+            )
             self._repository.save_operation(replace(operation, status=ArtifactOperationStatus.COMMITTED, artifacts=artifacts, build_attempts=(attempt,)))
         except Exception as error:
-            changed = (pdf,) if artifacts else ()
-            raise ArtifactPartialFailure("metadata_commit_failed", changed, str(error)) from error
+            raise ArtifactPartialFailure("metadata_commit_failed", changed_paths, str(error)) from error
         if backend_error is not None:
             raise backend_error
         return result

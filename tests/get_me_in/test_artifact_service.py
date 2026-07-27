@@ -41,6 +41,16 @@ class ArtifactServiceTests(unittest.TestCase):
         self.assertEqual(1, self.backend.copy_calls)
         self.assertEqual(2, len(self.repository.list_artifacts()))
 
+    def test_copy_hash_failure_after_write_is_a_partial_failure(self) -> None:
+        self.workspace.hash_error = OSError("hash unavailable")
+
+        with self.assertRaises(ArtifactPartialFailure) as raised:
+            self.service.copy_template("chn", "resume", Path("."), workspace=self.workspace, session_id="s", agent_key=AgentKey.RESUME)
+
+        self.assertEqual("metadata_commit_failed", raised.exception.code)
+        self.assertEqual((Path("resume_CHN.tex"), Path("README.md")), raised.exception.changed_paths)
+        self.assertIn(Path("resume_CHN.tex"), self.workspace.files)
+
     def test_build_records_exception_and_pending_retry_rebuilds_existing_pdf(self) -> None:
         self.workspace.files[Path("resume.tex")] = "source"
         self.backend.build_error = RuntimeError("compiler unavailable")
@@ -61,6 +71,17 @@ class ArtifactServiceTests(unittest.TestCase):
         self.assertEqual("pdf", self.workspace.files[Path("resume2.pdf")])
         self.assertEqual(2, self.backend.build_calls)
         self.assertEqual(1, len(self.repository.list_artifacts("resume2.pdf")))
+
+    def test_build_hash_failure_after_pdf_write_is_a_partial_failure(self) -> None:
+        self.workspace.files[Path("resume.tex")] = "source"
+        self.workspace.hash_error = OSError("hash unavailable")
+
+        with self.assertRaises(ArtifactPartialFailure) as raised:
+            self.service.build_pdf(Path("resume.tex"), workspace=self.workspace, cancellation=object(), session_id="s", agent_key=AgentKey.RESUME)
+
+        self.assertEqual("metadata_commit_failed", raised.exception.code)
+        self.assertEqual((Path("resume.pdf"),), raised.exception.changed_paths)
+        self.assertIn(Path("resume.pdf"), self.workspace.files)
 
     def test_build_persists_non_success_process_outcomes_without_pdf_artifacts(self) -> None:
         cases = (
@@ -83,12 +104,15 @@ class ArtifactServiceTests(unittest.TestCase):
 
 
 class _Workspace:
-    def __init__(self): self.files = {}
+    def __init__(self): self.files, self.hash_error = {}, None
     def exists(self, path): return path in self.files
     def read(self, path): return type("Snapshot", (), {"content": self.files[path], "revision": "revision:" + self.files[path]})()
     def write(self, path, content): self.files[path] = content
     def resolve(self, path): return Path("C:/workspace") / path
-    def content_hash(self, path): return sha256(self.files[path].encode()).hexdigest()
+    def content_hash(self, path):
+        if self.hash_error:
+            raise self.hash_error
+        return sha256(self.files[path].encode()).hexdigest()
 
 
 class _Backend:

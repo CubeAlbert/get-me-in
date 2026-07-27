@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from src.get_me_in.adapters.local_resume_artifacts import LocalResumeArtifacts, ResumeArtifactError
 from src.get_me_in.adapters.local_workspace import LocalWorkspace
+from src.get_me_in.application.artifact_service import ArtifactPartialFailure
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
@@ -48,6 +49,25 @@ class ResumeToolTests(unittest.TestCase):
 
         self.assertEqual(ToolFailure("build_pdf_cancelled", "PDF build was cancelled"), outcome)
 
+    def test_partial_failure_reports_changed_paths(self) -> None:
+        self.artifacts.error = ArtifactPartialFailure(
+            "metadata_commit_failed",
+            (Path("resume.tex"), Path("resume.pdf")),
+            "metadata unavailable",
+        )
+        approved = self.context.__class__(**{**self.context.__dict__, "approved": True})
+
+        outcome = self.executor.execute("call", "build_pdf", {"path": "resume.tex"}, approved)
+
+        self.assertEqual(
+            ToolFailure(
+                "artifact_partial_failure",
+                "metadata_commit_failed: metadata unavailable",
+                "Files may have changed: resume.tex, resume.pdf",
+            ),
+            outcome,
+        )
+
     def test_local_adapter_copies_requested_template_and_overwrites_readme(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -86,12 +106,17 @@ class _Artifacts:
     template: str | None = None
     build_path: Path | None = None
     result = ProcessResult(0, "ok", "", False, False)
+    error: ArtifactPartialFailure | None = None
 
     def copy_template(self, template: str, prefix: str, target_dir: Path, *, workspace: _Workspace, session_id: str, agent_key: AgentKey) -> TemplateCopyResult:
+        if self.error:
+            raise self.error
         self.template = template
         return TemplateCopyResult((Path("resume_CHN.tex"), Path("README.md")), Path("."))
 
     def build_pdf(self, path: Path, *, workspace: _Workspace, cancellation: CancellationToken, session_id: str, agent_key: AgentKey) -> ProcessResult:
+        if self.error:
+            raise self.error
         self.build_path = path
         return self.result
 

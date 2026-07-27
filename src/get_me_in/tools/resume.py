@@ -43,7 +43,7 @@ def _copy_template(arguments: Mapping[str, object], context: ResumeToolContext) 
             arguments["template"], arguments["prefix"], Path(arguments.get("target_dir", ".")), workspace=context.workspace, session_id=context.session_id, agent_key=context.agent_key,
         )
     except ArtifactPartialFailure as error:
-        return ToolFailure("artifact_partial_failure", str(error))
+        return _partial_failure(error)
     except Exception as error:
         return ToolFailure("copy_template_failed", str(error))
     return ToolSuccess({"files": tuple(str(path) for path in result.files), "target_dir": str(result.target_dir)})
@@ -58,7 +58,7 @@ def _build_pdf(arguments: Mapping[str, object], context: ResumeToolContext) -> T
     try:
         result = artifacts.build_pdf(Path(arguments["path"]), workspace=context.workspace, cancellation=context.cancellation, session_id=context.session_id, agent_key=context.agent_key)
     except ArtifactPartialFailure as error:
-        return ToolFailure("artifact_partial_failure", str(error))
+        return _partial_failure(error)
     except Exception as error:
         return ToolFailure("build_pdf_failed", str(error))
     if result.cancelled:
@@ -66,6 +66,12 @@ def _build_pdf(arguments: Mapping[str, object], context: ResumeToolContext) -> T
     if result.timed_out:
         return ToolFailure("build_pdf_timed_out", "PDF build timed out")
     return ToolSuccess({"stdout": result.stdout, "stderr": result.stderr, "exit_code": result.exit_code})
+
+
+def _partial_failure(error: ArtifactPartialFailure) -> ToolFailure:
+    changed = ", ".join(path.as_posix() for path in error.changed_paths)
+    suggestion = f"Files may have changed: {changed}" if changed else None
+    return ToolFailure("artifact_partial_failure", f"{error.code}: {error}", suggestion)
 
 
 def _artifacts(context: ResumeToolContext) -> ResumeArtifactPort | ToolFailure:
