@@ -264,7 +264,7 @@
 
 ## R6 —— Knowledge/RAG 与 Memory
 
-> ✅ R6-F 已完成并重新通过 G6：启动、取消、索引一致性、后台失败可见性、资源关闭和测试进程退出问题均已修复。当前再次停在 R6-T；R7 仍未授权。
+> ✅ R6-F 已完成并重新通过 G6：启动、取消、索引一致性、后台失败可见性、资源关闭和测试进程退出问题均已修复。该阶段随后停在 R6-T；决策 177 已在后续会话确认 R7 总体边界。
 
 ### 0. 启动确认与范围
 
@@ -335,31 +335,66 @@
 
 ## R7 —— Resume 纵向切片
 
-### 1. Agent 与 capability
+> 🔄 R7 总体边界 Review 已完成，coding 尚未授权。R6-F/G6 没有遗留的 Knowledge/Memory 技术阻塞；当前阻塞仅为 `docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认` 尚未获得用户最终确认。
 
-- ⬜ 将 ResumeAgent 的 14 个方法转换为 AgentSpec。
-- ⬜ 为 Resume AgentSpec 组合 R3 已有的 workspace.read/write/open、resume.artifact、interaction、plan 等 capability；仅在有明确最小权限收益时再拆 template.copy/pdf.build。
-- ⬜ 保留新建/修改/JD 定制三类入口行为。
-- ⬜ 保留“编辑前读取”和“不得编造经历”的约束。
+### 0. R7 启动前 Review 门禁
 
-### 2. Artifact service
+- ✅ 复核 R6-T checkpoint、四个 R6-F 提交和干净工作区；重新运行 187 项核心自动化测试并正常退出。
+- ✅ 对照实际 v2 代码复核 R7 旧任务：当前生产 composition root 只装配 Main Runtime；Resume 工具仍使用临时 `ResumeArtifactPort`／`LocalResumeArtifacts`，尚无 Artifact schema 或 repository。
+- ✅ 用户确认 R7-P dynamic session identity、Resume capability parity 与 agent-scoped Runtime/LLM ownership、独立 Artifact repository、ArtifactService/build-attempt 语义及 typed partial-failure/retry 五项总体边界。
+- ⬜ 闭合 R7-P：当前 `ToolContext.session_id` 在 composition root 中固定为初始 session id，`restore()` 后不会随 `SessionState.session_id` 更新；必须先恢复真正的 session-scoped workspace revision 与 artifact provenance，且不得引入第二份长期 Session 状态。
+- ✅ Resume 保留除 `route` 外的 v1 capability parity；Main/Resume 分别拥有 Runtime、CancellationToken、PlanService、ToolContext 和 LLM 生命周期。
+- ✅ Artifact 使用全新 `data/v2/artifacts/` 独立 repository，不写入 Memory、不加入 SessionSnapshot，也不随 rewind 回滚。
+- ✅ Artifact operation 采用 pending → side effect → commit；只在 exit code 为 0 且 PDF 存在时登记可用 PDF，metadata 失败返回 typed partial failure 并支持 retry reconcile。
+- 🔄 已在活跃设计中提交 R7 新文件、类、构造依赖、公开方法、允许修改文件和六个实施切片清单，等待用户最终确认；确认前不得开始 R7 coding。
 
-- ⬜ 定义 Artifact、ArtifactKind、ArtifactRepository。
-- ⬜ 以 ArtifactService-backed adapter 替换临时 ResumeArtifactPort 实现，保持既有工具签名和 ToolOutcome 闭合协议。
-- ⬜ copy_template 在现有模板复制结果上记录源模板、目标 LaTeX 和 README。
-- ⬜ build_pdf 复用现有 ProcessRunner，新增 stdout/stderr/exit code 和 PDF artifact 记录。
-- ✅ workspace_open 已在 R3 通过 Frontend/OS adapter 实现，不由 domain 直接启动 GUI；R7 只做端到端复验。
-- ⬜ 区分 user memory 与 resume artifact/version。
+### 1. R7-P —— 动态 session identity 前置修复
 
-### 3. 端到端验证
+- ⬜ 让每次 Runtime 工具执行从当前 `SessionState` 获得 session id，不依赖 bootstrap 时捕获的固定字符串。
+- ⬜ `restore`／`rewind` 后清除真实当前 session 的 workspace revision grant；连续恢复多个 snapshot 时不得跨 session 复用旧 read authorization。
+- ⬜ ArtifactService 调用取得当前 session id 与 `AgentKey.RESUME`，不通过全局变量、CLI 私有状态或可变 session-id 镜像获取 provenance。
+- ⬜ 为双 snapshot 连续 restore、read-before-edit 隔离和 handoff 后 Resume 工具上下文补回归测试；该修复独立验证、独立提交。
 
-- ⬜ 中文模板新建 → 填充 → 编译 → 预览。
-- ⬜ 英文模板新建 → 填充 → 编译 → 预览。
-- ⬜ 双语模板复制与文件名防重复后缀。
-- ⬜ 修改已有简历与精确 edit/replace。
-- ⬜ pdflatex 缺失、超时、编译失败与修复。
-- ⬜ 审批拒绝、Esc cancel、save/restore/rewind。
-- ⬜ 完成 G7 验收。
+### 2. Resume AgentSpec 与 composition root
+
+- ⬜ 将旧 ResumeAgent 的 14 个声明方法迁移为 immutable `AgentSpec`；不创建只有元数据方法的 stateful ResumeAgent 类。
+- ⬜ 按已确认 capability parity 装配 `system`、`plan`、`interaction`、`web.search`、`external_file.read`、`return_to_main`、`workspace.read/write/open`、`resume.artifact` 与 `knowledge.query`；Resume 不获得 `route`。
+- ⬜ 保留新建、修改、JD 定制三类入口，以及“编辑前重新读取”“不得编造经历”“编译失败先依据输出定位”的约束。
+- ⬜ AgentCatalog 同时声明 Main/Resume；SessionState、PlanService 和 Orchestrator 同时装配两个 Agent，Main prompt 只通过 descriptor 发现 Resume。
+- ⬜ Main/Resume Runtime 使用 agent-scoped CancellationToken、PlanService 与 ToolContext；共享 adapter 必须有唯一 owner，LLM 不得因两个 Runtime 共用实例而重复关闭。
+- ⬜ 覆盖 main → resume → main、子 Agent 取消／失败／`/exit_sub`、在 Resume 活跃时 save/restore，以及 Agent capability 隔离。
+
+### 3. Artifact domain、repository 与 service
+
+- ⬜ 定义 versioned Artifact 与 build-attempt schema；避免用开放 metadata dict 承载 kind、状态、路径、版本、source/output 关系、exit code 或错误。
+- ⬜ 默认只写全新 `data/v2/artifacts/`；路径保存为规范化的 workspace-relative path，不读取或迁移旧 Session/Memory/temp 数据。
+- ⬜ 定义 ArtifactRepository 的原子持久化、列举／查询、幂等 close 与损坏记录失败边界。
+- ⬜ ArtifactService 直接满足既有 `ResumeArtifactPort`，除非 Review 证明需要额外 adapter；保持 LLM 可见的 `copy_template`／`build_pdf` 参数 schema 和 Runtime/ToolOutcome 闭合协议不变。
+- ⬜ `copy_template` 预检模板、目标 LaTeX、README 与重复后缀；明确 README 覆盖行为，并记录成功文件、来源模板和版本。
+- ⬜ `build_pdf` 复用现有 ProcessRunner，记录每次成功、非零退出、超时、取消和异常尝试；只有 exit code 为 0 且目标 PDF 确实存在时记录可用 PDF artifact。
+- ⬜ 明确文件已写入／PDF 已生成但 repository 写入失败时的 typed partial result 与可重试行为，禁止误报“全部成功”。
+- ✅ `workspace_open` 已在 R3 通过 Frontend/OS adapter 实现，不由 domain 直接启动 GUI；R7 只做端到端复验。
+- ⬜ Artifact repository 只保存产物与编译记录；user memory 继续只保存 fact/preference。默认不把 ArtifactRef 加入 SessionSnapshot，rewind 不删除或回滚工作区文件与 artifact 记录，除非用户在 Review 中改变该边界。
+
+### 4. 推荐实施切片（待清单确认）
+
+- ⬜ 切片 1：R7-P dynamic session identity 与跨 restore 隔离测试。
+- ⬜ 切片 2：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。
+- ⬜ 切片 3：Artifact domain／port／JSON repository 与 schema/atomicity tests。
+- ⬜ 切片 4：ArtifactService、`ResumeArtifactPort` 替换、copy/build partial-failure tests。
+- ⬜ 切片 5：Settings/bootstrap/resource ownership 接入与跨组件回归。
+- ⬜ 切片 6：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。
+
+### 5. 端到端验证
+
+- ⬜ 中文模板新建 → 读取 README → 填充 → 编译 → 预览。
+- ⬜ 英文模板新建 → 读取 README → 填充 → 编译 → 预览。
+- ⬜ 双语模板复制、文件名防重复后缀和既有目标拒绝覆盖。
+- ⬜ 修改已有简历与精确 edit/replace；restore/rewind 后必须重新读取才能编辑。
+- ⬜ 外部简历/JD 读取、Memory/Reference 检索和可选 Web Search 的实际 capability 与 prompt 可见性符合确认清单。
+- ⬜ pdflatex 缺失、非零退出、超时、取消、编译失败修复与 metadata partial failure。
+- ⬜ 审批拒绝、Esc cancel、save/restore/rewind、main → resume → main 闭环。
+- ⬜ 完成 G7 验收；未经用户后续确认不得进入 R8 入口切换或遗留删除。
 
 ## R8 —— 切换与清理
 

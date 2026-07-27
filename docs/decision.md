@@ -191,6 +191,7 @@
 - [决策 174 — G6 通过并停在 R6-T 审查门禁](#决策-174--g6-通过并停在-r6-t-审查门禁)
 - [决策 175 — 撤销 G6 通过结论并授权 R6-F 审查修复](#决策-175--撤销-g6-通过结论并授权-r6-f-审查修复)
 - [决策 176 — R6-F 完成并重新通过 G6](#决策-176--r6-f-完成并重新通过-g6)
+- [决策 177 — 确认 R7 总体边界并提交具体清单审查](#决策-177--确认-r7-总体边界并提交具体清单审查)
 
 ---
 
@@ -3937,3 +3938,36 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 自动化测试正常退出证明非 daemon worker 泄漏已闭合；真实 adapter smoke 证明查询、rerank、删除和资源释放在实际依赖上可运行。
 - typed background result、delete finalize 和 timeout-safe close 使 partial failure 与资源所有权能够被应用层观察并安全重试。
 - R6-T 继续隔离后续迁移风险；R6 验收不构成进入 R7 或清理旧实现的授权。
+
+---
+
+### 决策 177 —— 确认 R7 总体边界并提交具体清单审查
+
+**背景：** R6-F 已重新通过 G6 并停在 R6-T。R7 启动前对实际 v2 composition、Resume 工具和 restore 边界复核后，确认生产 Application 仍只装配 Main Runtime，Artifact schema/repository 尚未建立；同时发现 `ToolContext.session_id` 在 bootstrap 时捕获初始值，连续 restore 后可能使 workspace revision grant 与 artifact provenance 使用错误 scope。原 R7 任务没有固定双 Runtime 的资源所有权、Artifact build-attempt schema 或 metadata partial failure 的恢复语义。
+
+**决定：**
+
+- R7 第一切片固定为 R7-P dynamic session identity：`SessionState` 继续是唯一长期 session id 来源，由 Orchestrator 在每次 `AgentRuntime.advance(..., session_id=...)` 时传入当前值；禁止新增全局或可变 session-id 镜像。
+- Resume 保留除 `route` 外的 v1 capability parity：`system`、`plan`、`interaction`、`web.search`、`external_file.read`、`return_to_main`、`workspace.read/write/open`、`resume.artifact` 与 `knowledge.query`。
+- Main/Resume 分别拥有 Runtime、CancellationToken、PlanService、ToolContext 与 LLM；共享 adapter 只由一个顶层 owner 关闭，跨线程取消继续只经过 `Application.request_cancel()`。
+- Artifact 使用全新 `data/v2/artifacts/` versioned repository，独立于 Memory 与 SessionSnapshot；save/restore/rewind 不删除、覆盖或回滚工作区文件和 Artifact 记录。
+- ArtifactService 是 tool-facing `ResumeArtifactPort` 的正式实现，并借用 `LocalResumeArtifacts` backend 处理静态模板和 `pdflatex`。现有工具名称、LLM 参数 schema 与 Runtime/ToolOutcome 闭合协议不变。
+- Artifact operation 使用 deterministic key 和 pending → side effect → commit；记录所有 build attempt，只有 `exit_code == 0` 且 PDF 存在时创建可用 PDF Artifact。文件成功但 metadata 提交失败时返回 typed partial failure，并允许 retry reconcile。
+- 将 R7 新文件、对象、构造依赖、公开方法、允许修改文件和六个实施切片写入 `docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认`。该具体清单尚待用户最终确认；本 checkpoint 不授权创建 R7 文件或修改代码。
+- G7 通过后仍须 checkpoint 并停止；R8 的旧 `main.py` 入口切换和遗留删除继续需要后续独立授权。
+
+**理由：**
+
+- 动态传入 session id 能保持 SessionState 的单一事实来源，并让 workspace 授权与 Artifact provenance 使用同一 scope。
+- 独立 Runtime/LLM ownership 避免两个 Agent 共享 mutable cancellation 或重复关闭同一 LLM，同时保持 Hub-and-Spoke 编排不变。
+- 独立 Artifact repository 能保存产物版本和失败编译记录，而不污染只保存 fact/preference 的 Memory，也不把外部文件副作用伪装成可 rewind 的 Session 状态。
+- 两阶段 operation 和 typed partial failure 使“文件已改变、metadata 未提交”可观察、可恢复，不会把局部完成误报成完整成功。
+- 先提交具体清单再请求最终确认，符合新模块先讨论设计、列文件/类/公开方法后再编码的受控重写门禁。
+
+**曾考虑的替代方案：**
+
+- 继续使用 bootstrap 时固定的 `ToolContext.session_id` —— 连续 restore 后可能跨 session 复用 revision grant，已拒绝。
+- Main/Resume 共用同一 LLM 或 CancellationToken —— 所有权和关闭边界不清，取消也可能污染非活动 Agent，已拒绝。
+- 把 ArtifactRef 写入 SessionSnapshot 并随 rewind 回滚文件 —— 文件系统副作用不可由对话 snapshot 原子撤销，已拒绝。
+- 只在 PDF 成功时记录、忽略失败 attempt —— 会丢失编译诊断与重试证据，已拒绝。
+- metadata 保存失败仍返回工具成功 —— 会误报 artifact/version 已持久化，已拒绝。

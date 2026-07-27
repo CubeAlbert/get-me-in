@@ -516,7 +516,97 @@ R6-T 代码审查发现启动、取消、索引一致性、后台失败可见性
 
 R6-F 允许修改 R6 已确认文件及其对应测试，并允许在 `application/app_results.py` 增加上述两个 typed job result DTO；不新增 service/module 文件。修复按“启动／取消／串行边界 → Chroma 可恢复写入 → BackgroundWorker 与 Memory 一致性 → bootstrap/cleanup/完整回归与真实 smoke”四个独立切片提交。全部通过后重新执行 G6 和 checkpoint，仍须停在 R6-T 等待用户审查。
 
-**实现结论：** 上述边界已按四个切片落地并通过 187 项自动化测试、`compileall` 与真实 Chroma/embedder/reranker smoke。worker 改为首次提交时延迟启动；若关闭超时，ResourceStack 停止关闭仍可能被后台任务使用的下游依赖。Settings 默认模型恢复为项目既有 BAAI 基线，同时通过 typed Settings 兼容旧环境变量名。G6 已重新通过，R7 仍未启动。
+**实现结论：** 上述边界已按四个切片落地并通过 187 项自动化测试、`compileall` 与真实 Chroma/embedder/reranker smoke。worker 改为首次提交时延迟启动；若关闭超时，ResourceStack 停止关闭仍可能被后台任务使用的下游依赖。Settings 默认模型恢复为项目既有 BAAI 基线，同时通过 typed Settings 兼容旧环境变量名。G6 已重新通过并曾停在 R6-T；决策 177 已在后续会话授权 R7 总体边界 Review。
+
+### 6.10 Resume 与 Artifact（R7）
+
+R7 启动前 Review 已确认总体边界，但下述新文件、对象和公开方法清单仍须由用户再次确认后才能编码。本 checkpoint 只固化设计、计划、任务和决策，不创建 R7 代码文件，不切换旧 `main.py`，也不进入 R8。
+
+#### 6.10.1 R7-P：动态 session identity
+
+当前 composition root 在创建 `ToolContext` 时捕获初始 `session_id`，但 `SessionService.restore()` 会替换规范 `SessionState`。连续恢复多个 snapshot 后，固定 id 可能使 Workspace read-before-edit grant 仍写入旧 scope，也无法为 Artifact 提供可信的当前会话 provenance。
+
+R7 coding 的第一切片必须先修复此边界：
+
+- `SessionState` 继续是 session id 的唯一长期事实来源；禁止新增可变全局变量、CLI 私有读取或第二份长期 session-id 镜像。
+- `AgentRuntime.advance(state, command, *, session_id)` 在单次转换期间接收当前 session id；`Orchestrator` 从传入的 `SessionState` 提供该值。
+- Runtime 执行工具时以当前 session id 替换其 immutable `ToolContext` 模板中的 scope；该临时值不跨 `advance()` 保存。
+- `restore`／`rewind` 清除离开的真实 session scope；连续恢复不同 snapshot 后，旧 revision grant 不得授权当前 Session 的 edit。
+- Resume Artifact 操作从同一动态 `ToolContext` 取得 `session_id` 与 `AgentKey.RESUME`，使 workspace 授权和 artifact provenance 使用同一规范身份。
+
+#### 6.10.2 Resume Agent 与资源所有权
+
+Resume 使用 immutable `AgentSpec`，不创建只用于复刻旧 14 个 `_get_*()` 方法的 stateful Agent 类。为达到当前 ResumeAgent 行为等价，capability 固定为：
+
+`system`、`plan`、`interaction`、`web.search`、`external_file.read`、`return_to_main`、`workspace.read`、`workspace.write`、`workspace.open`、`resume.artifact`、`knowledge.query`。
+
+Resume 不获得 `route`，不能调度其他子 Agent。Main 仍只通过 `AgentCatalog` 的公开 descriptor 发现 Resume，Hub-and-Spoke、handoff call-id 闭合与 `/exit_sub` 协议不变。
+
+Main/Resume 分别拥有 `AgentRuntime`、`CancellationToken`、`PlanService` 和 agent-scoped `ToolContext`。生产 composition root 为两个 Runtime 创建不同的 `LLMPort` 实例；测试注入也必须按 `AgentKey` 提供互不相同的实例。每个 Runtime 只关闭自己的 LLM，共享的 Workspace、Frontend、WebSearch、Knowledge 和 Artifact service 只由 `ResourceStack` 中的唯一 owner 关闭。
+
+Session 初始化时同时创建 Main/Resume 两份 `AgentSessionState` 与 PlanService；restore 继续拒绝当前 Application 未装配的 Agent。R7 不改变 RuntimeCommand、RuntimeEvent、HandoffFrame 或 SessionSnapshot schema。
+
+#### 6.10.3 Artifact schema 与一致性
+
+Artifact 使用全新 `data/v2/artifacts/` versioned repository，不读取旧 Session、Memory、Chroma 或 `data/temp/`。Artifact 只记录工作区产物和编译尝试，不写入 Memory；默认不向 SessionSnapshot 增加 ArtifactRef。save/restore/rewind 只恢复对话与 Agent 状态，不删除、覆盖或回滚工作区文件和 Artifact 记录。
+
+ArtifactService 是工具侧 `ResumeArtifactPort` 的正式实现，并借用低层 `ResumeArtifactBackend` 完成静态模板读取和 `pdflatex` 调用；这样 application service 不直接 import `shutil`、文件系统 adapter 或 subprocess。现有 `copy_template`／`build_pdf` 的 LLM 参数 schema 和 ToolOutcome/Runtime 闭合协议保持不变。
+
+Artifact repository 使用 deterministic operation key 和两阶段记录：
+
+1. 在文件副作用前原子保存 `PENDING` operation；key 至少包含 session、Agent、operation kind、规范化路径和输入 revision/hash。
+2. 文件操作完成后原子提交 artifact/build-attempt 结果；若最终 metadata 提交失败，原 `PENDING` 仍可用于下一次调用 reconcile。
+
+`copy_template` 先预检模板、目标 LaTeX 与 README。`.tex` 继续拒绝覆盖不同内容；README 保留 v1 的跟随复制和可覆盖行为并产生新版本。若前次 partial operation 已写入与模板完全一致的目标文件，retry 可以依据 pending intent 补齐记录，不把它误判为普通覆盖。
+
+`build_pdf` 记录成功、非零退出、超时、取消和异常尝试。只有 `exit_code == 0` 且 workspace 中目标 PDF 确实存在时才创建可用 PDF Artifact；stdout/stderr 属于 typed build-attempt record。文件已经写入或 PDF 已生成但 metadata 未提交时，工具返回明确的 typed partial failure 和已改变路径，不得报告全部成功。
+
+#### 6.10.4 R7 新文件、对象与公开边界清单（待确认）
+
+下表是建议的 R7 新代码范围。用户确认前不得创建这些文件。
+
+| 文件 | 新增对象 | 构造依赖与公开方法 |
+|------|----------|--------------------|
+| `src/get_me_in/agents/__init__.py` | package marker | 不导出运行时单例，不执行注册 |
+| `src/get_me_in/agents/resume.py` | Resume AgentSpec factory | `build_resume_spec() -> AgentSpec` |
+| `src/get_me_in/domain/artifacts.py` | `ArtifactKind`、`ArtifactOperationKind`、`ArtifactOperationStatus`、`Artifact`、`ArtifactBuildAttempt`、`ArtifactOperation` | versioned immutable DTO/StrEnum；路径只保存 workspace-relative 形式，不含 I/O 方法或开放 metadata dict |
+| `src/get_me_in/ports/artifacts.py` | `ArtifactRepository` | `get_operation(operation_key)`、`save_operation(operation)`、`next_version(path)`、`list_artifacts(path=None)`、`list_build_attempts(source_path=None)`、`close()` |
+| `src/get_me_in/application/artifact_service.py` | `ArtifactService`、`ArtifactPartialFailure` | `__init__(backend, repository, clock, id_generator)`、`copy_template(..., session_id, agent_key, workspace) -> TemplateCopyResult`、`build_pdf(..., session_id, agent_key, workspace, cancellation) -> ProcessResult`、`close()`；直接实现 `ResumeArtifactPort` |
+| `src/get_me_in/adapters/json_artifact_repository.py` | `JsonArtifactRepository` | `__init__(root)`；实现 ArtifactRepository，逐 operation versioned JSON、schema 校验、原子 replace、损坏记录 typed failure |
+| `tests/get_me_in/test_resume_agent.py` | Resume spec/composition contract tests | capability、Prompt 可见性、双 Runtime/LLM ownership、main→resume→main、取消/失败/restore |
+| `tests/get_me_in/test_artifact_service.py` | Artifact service contract tests | copy/build、version、pending reconcile、partial failure、非零退出/超时/取消、PDF existence |
+| `tests/get_me_in/test_artifact_repository.py` | JSON repository contract tests | schema、atomicity、operation key、list/filter、损坏记录与幂等 close |
+
+`src/get_me_in/ports/resume_artifacts.py` 增加低层 `ResumeArtifactBackend`，并为 tool-facing `ResumeArtifactPort.copy_template()`／`build_pdf()` 增加 keyword-only `session_id` 与 `agent_key` provenance；`LocalResumeArtifacts` 改为实现 backend，继续封装静态模板、`shutil.which()` 与 ProcessRunner，不负责持久化。
+
+允许修改的既有文件仅为：
+
+- `src/get_me_in/application/runtime.py`、`application/orchestration.py`、`application/tool_executor.py`、`application/application.py`、`application/session_service.py`、`application/settings.py`
+- `src/get_me_in/ports/resume_artifacts.py`、`adapters/local_resume_artifacts.py`、`tools/resume.py`、`bootstrap.py`、`.env.example`
+- 对应既有测试与 R7 文档
+
+公开签名调整固定为：
+
+- `AgentRuntime.advance(state, command, *, session_id: str) -> RuntimeTransition`
+- `build_application(settings, *, runtime_llms: Mapping[AgentKey, LLMPort] | None = None) -> Application`；提供映射时必须覆盖 Main/Resume 且实例互不相同
+- `Application.__init__()` 删除只代表 Main 的 `runtime`／`cancellation` 参数和公开 `cancellation` 属性；跨线程取消继续只允许 `request_cancel()`
+- `Settings` 增加 `artifacts_dir` 与 `pdf_build_timeout_seconds`，分别默认 `data/v2/artifacts/` 与 60 秒
+- `LocalResumeArtifacts.__init__(template_dir, process_runner, build_timeout_seconds)`
+
+R7 不新增 CLI 命令，不改变 25 个 ToolDefinition 名称或参数 schema，不新增 Artifact 查询工具，不修改 SessionSnapshot schema，不迁移旧运行数据。
+
+#### 6.10.5 实施与终止门禁
+
+R7 固定按六个切片实施，每个切片独立验证、独立提交：
+
+1. R7-P dynamic session identity 与跨 restore 隔离测试。
+2. Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。
+3. Artifact domain／port／JSON repository 与 schema/atomicity tests。
+4. ArtifactService、ResumeArtifactPort 替换、copy/build partial-failure tests。
+5. Settings/bootstrap/resource ownership 接入与完整自动化回归。
+6. 中文、英文、双语真实 Resume smoke 与 G7 checkpoint。
+
+只有 6.10.4 清单获得用户确认后，新会话才能从切片 1 开始 coding。G7 通过后仍须 checkpoint 并停下；未经用户后续确认，不得切换旧 `main.py` 或进入 R8 遗留删除。
 
 ## 7. 迁移策略
 
@@ -561,4 +651,4 @@ v2 只复用以下静态项目资产：
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。R0～R5 已完成；R6 设计复审与清单已获用户确认，但当前新增 R5-F thinking 契约修复门禁，没有创建或修改修复代码或 R6 代码。后续新会话必须先在 `/project-bootstrap` 后完成 G5-F、独立提交并 checkpoint，才能按 6.9.4 的第一切片开始 R6 coding；R6 完成后还必须停在 R6-T，未经后续授权不得进入 R7。
+R-D1～R-D6 已由用户确认。R0～R6、G5-F 与 R6-F 均已完成；R7 五项总体边界已由决策 177 确认，并已提交 6.10.4 的具体新文件、对象、构造依赖、公开方法与实施切片清单供用户最终确认。该清单确认前不得开始 R7 coding；G7 通过后仍须 checkpoint 并等待进入 R8 的独立授权。

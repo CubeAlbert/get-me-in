@@ -1,20 +1,21 @@
 # 当前状态
 
-**当前阶段：** R6-T —— R6 完成，等待用户审查（R7 未启动）
+**当前阶段：** R7-R —— R7 总体边界已确认，具体清单等待用户最终确认（coding 未启动）
 
-**当前任务：** R6-F 修复、G6 复验与 checkpoint 已完成
+**当前任务：** Review `docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认`
 
-**当前子任务：** 无。停在 R6-T 强制终止门禁，等待用户审查。
+**当前子任务：** 确认 R7 新文件、对象、构造依赖、公开方法、允许修改文件和六个实施切片。
 
-**当前阻塞：** R7/R8 未获用户授权；不得自行推进。
+**当前阻塞：** R7 五项总体边界已确认，但 6.10.4 具体清单尚未获得用户最终确认；不得开始 R7 coding。
 
-**会话交接说明：** R6-F 已按四个独立切片完成：启动加载、reload cancellation 与 Knowledge 串行边界提交 `05c4956`；Chroma 可恢复 replace/delete 提交 `73a1c79`；typed background result、可取消 task callback 与 Memory build/delete 一致性提交 `79c0601`；延迟启动 worker、timeout-safe close、静态 memory prompt、真实 Chroma 兼容与 Settings 模型基线提交 `38708e2`。`uv run python -m unittest discover -s tests/get_me_in -t .` 正常退出并通过 187 项测试，`compileall` 通过，`uv run python -m scripts.r6_knowledge_smoke` 输出 `R6_SMOKE_OK hits=1 score=0.961208`。G6 已重新通过；未创建或修改 R7 文件，未切换旧 `main.py`，未执行 R8 清理。
+**会话交接说明：** R6-F/G6 已完成；本次 Review 又复跑 `uv run python -m unittest discover -s tests/get_me_in -t .`，187 项测试正常退出并通过。用户确认 R7-P dynamic session identity、Resume capability parity 与 agent-scoped Runtime/LLM ownership、独立 Artifact repository、ArtifactService/build-attempt 语义及 typed partial-failure/retry 五项总体边界。活跃设计新增 6.10 R7 设计与 6.10.4 具体清单，计划/任务/决策同步更新；未创建 R7 代码文件、未切换旧 `main.py`、未进入 R8。
 
-**下一步：** 用户审查 R6-F 修复与 G6 证据；只有用户后续明确授权，才可提交 R7 设计清单。当前不得进入 R7 coding 或 R8。
+**下一步：** 用户审查并最终确认 `docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认`。确认后，新会话执行 `/project-bootstrap`，仅从切片 1 R7-P dynamic session identity 开始，独立验证、提交并停下。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
 176. **R6-F 完成并重新通过 G6** — 四个修复切片独立提交，187 项自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 通过；再次停在 R6-T，等待用户审查。
+177. **确认 R7 总体边界并提交具体清单审查** — R7-P、Resume capability/资源所有权、独立 Artifact repository、build-attempt 与 typed partial retry 已确认；6.10.4 的具体文件/公开方法清单仍待最终确认，本 checkpoint 不授权 coding。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -62,3 +63,4 @@
 174. **G6 原通过结论已由决策 175 撤销** — R6 原六个切片完成并 checkpoint，但后续审查发现一致性、取消、关闭和测试退出缺口；该决定仅保留历史过程，不再代表当前门禁状态。
 175. **撤销 G6 通过结论并授权 R6-F** — BackgroundWorker typed result/cancellation、Memory delete finalize、Knowledge 串行边界与四个修复切片已获确认；全部复验前不得进入 R7/R8。
 176. **R6-F 完成并重新通过 G6** — 四个修复提交与 187 项测试、`compileall`、真实模型 smoke 共同闭合 G6；当前再次停在 R6-T，R7/R8 未授权。
+177. **确认 R7 总体边界并提交具体清单审查** — R7 五项总体边界获确认；具体新文件、对象、构造依赖、公开方法、允许修改文件和六个切片已写入设计，等待用户最终确认后才能 coding。

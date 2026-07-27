@@ -225,7 +225,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **R6-F 验收：** 测试命令必须在打印结果后正常退出；启动后 reference/memory reload 可观察；Esc 可取消前台 reload；index/memory 任一步失败均不误报成功且可重试；worker timeout 不产生 use-after-close；真实 smoke 证据必须记录可复跑命令与结果。通过后重新认定 G6，并再次执行 R6-T checkpoint。R7 仍需后续明确授权。
 
-**完成状态：** R6-F 四个切片已独立提交；187 项核心自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 可复跑且通过。G6 已重新认定通过，当前再次停在 R6-T，R7 未启动。
+**完成状态：** R6-F 四个切片已独立提交；187 项核心自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 可复跑且通过。G6 已重新认定通过并曾再次停在 R6-T；决策 177 已在后续会话确认 R7 总体边界，具体清单仍待最终确认。
 
 ### R7 —— Resume 纵向切片与产物管理
 
@@ -233,19 +233,26 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **产出：**
 
-- 声明式 Resume AgentSpec 与 capability 集合。
-- 保留 R3 已迁移的 copy template、README 读取、workspace edit/replace、build PDF、open preview 工具契约，以 ArtifactService 替换临时 ResumeArtifactPort adapter。
-- ArtifactService/ArtifactRepository 记录 LaTeX 和 PDF 产物，不混入 Memory。
+- 先完成 R7-P：Runtime 每次从规范 SessionState 取得动态 session id，闭合连续 restore 后 workspace revision grant 与 artifact provenance 的 scope 漂移。
+- 声明式 Resume AgentSpec 与已确认的 capability parity；Main/Resume 分别拥有 Runtime、CancellationToken、PlanService、ToolContext 与 LLM 生命周期。
+- 保留 R3 已迁移的 copy template、README 读取、workspace edit/replace、build PDF、open preview 工具契约，以 ArtifactService 替换临时 tool-facing ResumeArtifactPort 实现，并继续借用低层 LocalResumeArtifacts backend。
+- ArtifactService/ArtifactRepository 在全新 `data/v2/artifacts/` 记录 LaTeX、README、PDF 与每次 build attempt，不混入 Memory，也不加入 SessionSnapshot 或随 rewind 回滚。
+- Artifact operation 使用 pending → side effect → commit；文件成功但 metadata 失败时返回 typed partial failure，并可依据 deterministic operation key 重试 reconcile。
 - JD 输入、简历修改、编译错误修复的完整流程。
 
 **验收门禁 G7：**
 
 - 新建中文、英文或双语简历流程可完成。
 - 修改已有 LaTeX、编译 PDF、失败后重试、用户拒绝操作均可完成。
+- 连续 restore 不跨 session 复用 workspace revision grant；Resume Artifact 记录使用当前 Session/Agent provenance。
+- 非零退出、超时、取消、PDF 缺失与 metadata partial failure 均有 typed 结果且不误报可用 PDF。
+- Main/Resume capability、handoff、取消、Plan、save/restore/rewind 与 LLM/资源唯一所有权通过跨组件回归。
 - ResumeAgent 不含重复的 14 个 `_get_*()` 方法。
 - 当前 ResumeAgent 已实现能力达到等价后，才允许切换主入口。
 
 **依赖：** G3、G4、G5、G6 以及 R6-T 后用户对进入 R7 的明确授权。不得与 R6 并行实现。
+
+**实施顺序：** R7-P dynamic session identity → Resume AgentSpec/双 Runtime composition → Artifact domain/port/JSON repository → ArtifactService 与 copy/build 一致性 → Settings/bootstrap/resource ownership → 真实 Resume smoke 与 G7。每个切片独立验证和提交；`docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认` 获用户确认前不得开始 coding。
 
 ### R8 —— 入口切换与旧代码删除
 
