@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 200 — 恢复 Main／Resume 剩余 Agent prompt 元数据](#决策-200--恢复-mainresume-剩余-agent-prompt-元数据)
 - [决策 199 — 恢复 Main／Resume 完整 CommunicationStyle](#决策-199--恢复-mainresume-完整-communicationstyle)
 - [决策 198 — 恢复 SubAgent XML prompt 并限定路由可见性](#决策-198--恢复-subagent-xml-prompt-并限定路由可见性)
 - [决策 197 — 恢复 legacy XML Tool prompt 结构与固定语义顺序](#决策-197--恢复-legacy-xml-tool-prompt-结构与固定语义顺序)
@@ -4529,3 +4530,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 只补 StyleRules／StyleAvoids，保留前三项概括文案 —— 仍与用户原始定义不一致，未采用。
 - 将缺失内容直接写死到 `06_communtion_style.md` —— 会让所有 Agent 共享错误规则并形成第二事实源，未采用。
 - 同时迁移 JobSearch CommunicationStyle 并装配 Agent —— 超出当前冻结范围，未采用。
+
+---
+
+### 决策 200 —— 恢复 Main／Resume 剩余 Agent prompt 元数据
+
+**背景：** 在排除 Tool、SubAgent、InputFormat、OutputFormat 后继续对照 legacy system prompt，确认 9 个静态模板、Role／Constraints 的固定 Must、Reserved 以及决策 199 已修复的 CommunicationStyle 均未发生变化。剩余差异全部来自 production Main／Resume `AgentSpec`：Name、Description、Responsibilities、PrimaryGoal、SuccessCriteria、Priorities、HardConstraints、SoftConstraints 被缩写、改写并失去项目符号／数字优先级，造成关键职责和约束缺失。
+
+**决定：**
+
+- Main 的 8 类动态元数据按 legacy `MainAgent` 原始语义完整恢复，包括 7 条 Responsibilities、5 条 SuccessCriteria、5 条数字 Priorities、10 条 HardConstraints 和 4 条 SoftConstraints；其中已不存在的 `switch_agent` 适配为当前真实工具名 `switch_to_subagent`。
+- Resume 的 8 类动态元数据按 legacy `ResumeAgent` 原始文本完整恢复，包括 5 条 Responsibilities、4 条 SuccessCriteria、5 条数字 Priorities、7 条 legacy HardConstraints 和 4 条 SoftConstraints。
+- Resume 在 legacy 基线上保留两项有独立价值的 v2 强化硬约束：“不得编造或夸大用户经历、技能等信息”和“不得路由或调度其他子 Agent；需要其他能力时应退回主 Agent”，最终共 9 条硬约束。
+- 列表前缀作为 AgentSpec 字段内容保留，使 PromptRenderer 继续只负责按换行拼接；不增加按字段猜测 bullet／number 的全局渲染规则。
+- 不修改静态 prompt 模板、PromptRenderer、AgentSpec 类型、Capability、AgentCatalog、Orchestrator、Tool 或 handoff 协议；完整 Job Search 继续冻结。
+- 新增完整 Agent metadata 对象契约测试，并通过真实 production composition prompt 验证模型实际可见内容。
+- 验证结果：32 项 bootstrap/Prompt/Catalog/orchestration 回归、完整 237 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `AGENT_METADATA_SMOKE_OK main_chars=13159 resume_chars=20806 agents=2 tools=25`，并确认未重新引入旧 `switch_agent` 标识符。
+
+**理由：**
+
+- Main 丢失的领域限制、强制路由和澄清规则会直接改变系统边界；Resume 丢失的工作区限制、真实状态优先、编辑前重读、编译诊断与最小修改规则会直接影响工具行为。
+- 恢复原始列表结构可保留优先级和规则边界，避免模型把多个独立要求理解为一段弱提示。
+- 只修正 immutable AgentSpec 数据即可闭合问题，不需要破坏 v2 声明式架构；追加两项 v2 硬约束可避免“恢复 legacy”反而撤销重构期间确认的安全强化。
+
+**曾考虑的替代方案：**
+
+- 仅恢复最严重的 HardConstraints —— Responsibilities、SuccessCriteria 和 Priorities 仍会缺失，无法完整恢复行为契约，未采用。
+- 在 PromptRenderer 中自动为 tuple 添加 bullet —— 无法区分普通列表和数字优先级，也会影响所有测试 spec，未采用。
+- 逐字恢复 legacy 并删除全部 v2 新约束 —— 会撤销真实性和子 Agent 调度边界强化，未采用。

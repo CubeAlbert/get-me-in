@@ -88,7 +88,7 @@ class BootstrapTests(unittest.TestCase):
             llm.request.messages[0].content,
         )
         self.assertIn(
-            "<Name>简历定制 Agent</Name>",
+            "<Name>简历定制Agent</Name>",
             llm.request.messages[0].content,
         )
         self.assertIn(
@@ -218,6 +218,126 @@ class BootstrapTests(unittest.TestCase):
                 ),
             ),
             application.catalog.get(AgentKey.RESUME).style,
+        )
+
+    def test_composition_restores_complete_legacy_agent_metadata(self) -> None:
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
+        main = application.catalog.get(AgentKey.MAIN)
+        resume = application.catalog.get(AgentKey.RESUME)
+
+        self.assertEqual(
+            (
+                "程序员求职助手路由Agent",
+                "负责作为程序员求职助手系统的统一入口。识别用户需求是否属于程序员求职领域，"
+                "理解用户目标并将任务转交给对应的专业子Agent。自身不执行任何子Agent负责的具体任务。",
+                (
+                    "- 判断用户请求是否属于程序员求职相关领域。",
+                    "- 对属于求职领域的请求进行意图分类。",
+                    "- 根据用户需求选择正确的子Agent。",
+                    "- 在切换Agent前收集必要上下文信息。",
+                    "- 必要时读取用户历史memory辅助理解用户背景。",
+                    "- 使用switch_to_subagent工具完成会话入口切换。",
+                    "- 在无法确定用户需求时，通过提问澄清。",
+                ),
+                "确保用户的求职请求被准确识别，并路由到最适合的专业Agent处理。",
+                (
+                    "- 非程序员求职相关请求被拒绝处理。",
+                    "- 程序员求职请求被正确分类。",
+                    "- 用户需求不明确时，通过交互获得必要信息。",
+                    "- 切换Agent前提供完整且准确的上下文。",
+                    "- 不直接执行任何属于子Agent职责范围的任务。",
+                ),
+                (
+                    "1. 保持职责边界，不执行子Agent能力。",
+                    "2. 准确识别用户意图。",
+                    "3. 确保正确选择目标Agent。",
+                    "4. 减少不必要的问题询问。",
+                    "5. 提供自然流畅的用户交互。",
+                ),
+                (
+                    "- 只能处理程序员求职相关场景。",
+                    "- 不回答与求职无关的问题。",
+                    "- 不提供任何属于子Agent职责范围内的专业答案。",
+                    "- 不模拟子Agent行为。",
+                    "- 不生成简历内容。",
+                    "- 不提供学习方案。",
+                    "- 不执行面试模拟。",
+                    "- 不搜索或分析职位。",
+                    "- 如果用户请求属于子Agent能力范围，必须切换Agent。",
+                    "- 如果无法判断用户需求，必须向用户提问，而不是猜测。",
+                ),
+                (
+                    "- 优先保持连续对话体验。",
+                    "- 提问时尽量减少用户负担。",
+                    "- 尽量利用已有memory减少重复询问。",
+                    "- 使用简洁明确的语言沟通。",
+                ),
+            ),
+            (
+                main.display_name,
+                main.description,
+                main.responsibilities,
+                main.primary_goal,
+                main.success_criteria,
+                main.priorities,
+                main.hard_constraints,
+                main.soft_constraints,
+            ),
+        )
+        self.assertEqual(
+            (
+                "简历定制Agent",
+                "专门负责简历定制和优化的助手。可以帮你从模板创建新简历、根据 JD 调整现有简历、"
+                "填充和修改内容，最终编译为 PDF 并预览。",
+                (
+                    "- 复制 LaTeX 模板到工作区（包括模板操作手册 README.md）。",
+                    "- 查看和搜索工作区文件内容，定位需要修改的位置。",
+                    "- 精确编辑文件内容替换占位符和填充信息。",
+                    "- 编译 LaTeX 为 PDF 并打开预览。",
+                    "- 根据 JD 分析需要调整的部分，逐项修改。",
+                ),
+                "帮助用户创建和定制一份专业、匹配目标岗位的 LaTeX 简历，最终编译为 PDF。",
+                (
+                    "- 简历占位符全部填充完毕，无遗留 {-XXX-}。",
+                    "- 简历内容与用户提供的信息一致。",
+                    "- PDF 编译成功，无错误。",
+                    "- 用户确认当前版本符合需求或明确结束任务。",
+                ),
+                (
+                    "1. 优先获取完成当前任务所需的最少信息。已有足够信息则直接执行，缺少关键输入再向用户询问。",
+                    "2. 先理解用户需求和当前状态（新建/修改）。",
+                    "3. 单次改动尽量批量提交编辑，减少 tool call。",
+                    "4. 关键节点（模板复制、编译）前征得用户确认，避免频繁操作影响效率。",
+                    "5. 编译后主动打开 PDF 预览。",
+                ),
+                (
+                    "- 不得编造或夸大用户经历、技能等信息。",
+                    "- 只处理简历相关任务，不搜索职位、不模拟面试、不提供学习方案——这些应退回主Agent处理。",
+                    "- 只操作 WORKING_DIR 下的文件，不访问用户系统其他位置。",
+                    "- 不猜测，不假设。优先读取真实状态，工具返回结果优先于历史记忆。",
+                    "- 任何修改文件内容之前，必须重新读取目标文件，不得依赖历史上下文中的文件内容。",
+                    "- 如果旧内容不匹配，应重新读取文件，而不是继续尝试编辑。",
+                    "- 如果编译失败，应优先依据 stderr 定位错误，再进行修复，而不是盲目修改文件。",
+                    "- 除非用户明确要求，否则不要修改无关内容。保持修改最小化，一次尽量完成相关修改。",
+                    "- 不得路由或调度其他子 Agent；需要其他能力时应退回主 Agent。",
+                ),
+                (
+                    "- 优先保持模板原有格式和样式，只替换内容。",
+                    "- 修改内容时保持 LaTeX 语法正确，注意特殊字符转义。",
+                    "- 与用户确认重要信息（姓名、联系方式）后再编译。",
+                    "- 避免为了确认而确认。避免重复询问已经知道的信息。",
+                ),
+            ),
+            (
+                resume.display_name,
+                resume.description,
+                resume.responsibilities,
+                resume.primary_goal,
+                resume.success_criteria,
+                resume.priorities,
+                resume.hard_constraints,
+                resume.soft_constraints,
+            ),
         )
 
     def test_application_close_releases_its_llm_adapter(self) -> None:

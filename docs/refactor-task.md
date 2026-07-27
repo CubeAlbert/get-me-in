@@ -471,6 +471,10 @@
 - ✅ 确认 CommunicationStyle 同样存在真实迁移缺失而非导出问题：Main／Resume 的 Tone、Verbosity、ExplanationStyle 被概括改写，StyleRules／StyleAvoids 全部为空；legacy 原始定义仍完整保留。
 - ✅ 将 Main／Resume 五类 CommunicationStyle 元数据逐项恢复到 immutable `AgentStyle`；不修改 `06_communtion_style.md`、PromptRenderer 接口或运行时协议，完整对象相等测试锁定所有规则与避免项。
 - ✅ CommunicationStyle 修复的 26 项 bootstrap/Prompt/Catalog 回归、完整 236 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `COMMUNICATION_STYLE_SMOKE_OK main_chars=12111 resume_chars=20104 agents=2 tools=25`，确认五个区块均非空且包含原始中文内容。
+- ✅ 排除 Tool、SubAgent、InputFormat、OutputFormat 后继续审计完整 system prompt：静态模板、Role／Constraints 的固定 Must、Reserved 与已修复 CommunicationStyle 均无差异；剩余差异全部来自 Main／Resume `AgentSpec` 中 Role、Mission、Constraints 动态元数据被大幅压缩和改写。
+- ✅ Main 的 Name、Description、7 条 Responsibilities、PrimaryGoal、5 条 SuccessCriteria、5 条 Priorities、10 条 HardConstraints、4 条 SoftConstraints 按 legacy 原始语义和列表前缀恢复；过时的 `switch_agent` 标识符适配为当前真实工具名 `switch_to_subagent`。
+- ✅ Resume 的 Name、Description、5 条 Responsibilities、PrimaryGoal、4 条 SuccessCriteria、5 条 Priorities、7 条 legacy HardConstraints、4 条 SoftConstraints 恢复；额外保留“不得编造/夸大经历”和“不得调度其他子 Agent”两项 v2 强化硬约束，共 9 条。
+- ✅ Agent metadata 修复的 32 项 bootstrap/Prompt/Catalog/orchestration 回归、完整 237 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `AGENT_METADATA_SMOKE_OK main_chars=13159 resume_chars=20806 agents=2 tools=25`，确认恢复内容实际进入 Main／Resume system prompt，且未重新引入旧 `switch_agent` 标识符。
 - ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。

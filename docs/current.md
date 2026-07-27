@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。Tool 提示词语义阻断已解除；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner。决策 195～198 已恢复 Tool 完整语义、legacy XML Tool/SubAgent prompt 结构和 Main-only 子 Agent 可见性。决策 199 继续闭合 CommunicationStyle 迁移缺失：Main／Resume 的 Tone、Verbosity、ExplanationStyle 以及全部 StyleRules／StyleAvoids 已逐项恢复 legacy 原始文本，不再保留空白规则区块；当前 production Catalog 仍有且仅有 Main／Resume，完整 Job Search 按 R0～R8 冻结范围未装配。相关 26 项回归、完整 236 项自动化测试、`compileall` 与 `git diff --check` 已通过；真实 composition 输出 `COMMUNICATION_STYLE_SMOKE_OK main_chars=12111 resume_chars=20104 agents=2 tools=25`。这些 prompt 修复不恢复旧全局 Registry，也不改变 v2 capability、审批、handler、ToolOutcome 或 handoff 协议。剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner。决策 195～199 已恢复 Tool 完整语义、legacy XML Tool/SubAgent prompt、Main-only 子 Agent 可见性和完整 CommunicationStyle。决策 200 进一步闭合剩余 Agent prompt 元数据迁移缺失：Main／Resume 的 Name、Description、Responsibilities、PrimaryGoal、SuccessCriteria、Priorities、HardConstraints、SoftConstraints 已恢复 legacy 原始语义与列表格式，并将过时的 `switch_agent` 适配为当前 `switch_to_subagent`；Resume 额外保留“不得编造/夸大经历”和“不得调度其他子 Agent”两项 v2 强化硬约束。相关 32 项回归、完整 237 项自动化测试、`compileall` 与 `git diff --check` 已通过；真实 composition 输出 `AGENT_METADATA_SMOKE_OK main_chars=13159 resume_chars=20806 agents=2 tools=25`。当前 production Catalog 仍有且仅有 Main／Resume，完整 Job Search 按 R0～R8 冻结范围未装配；prompt 修复不恢复旧全局 Registry，也不改变 v2 capability、审批、handler、ToolOutcome 或 handoff 协议。剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
 
 **下一步：** 从根入口完成剩余 CLI／交互、Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
@@ -38,6 +38,7 @@
 197. **恢复 legacy XML Tool prompt 结构与固定语义顺序** — Tool 外层恢复为 `<Tool name>`、`Purpose`、`UseWhen`、`DoNotUseWhen`、`Arguments`、`ExpectedOutput` 的固定顺序；Arguments 内由 v2 强类型 schema 生成有序 JSON，不恢复旧全局 Registry 或运行时边界。
 198. **恢复 SubAgent XML prompt 并限定路由可见性** — Main 以 `<SubAgent name>`、`Name`、`Description`、`Responsibilities`、`HardConstraints` 的固定顺序看见可路由子 Agent；非 Route Agent 不注入列表。JobSearchAgent 仍是冻结的 legacy 测试壳，本次不扩展 production Catalog。
 199. **恢复 Main／Resume 完整 CommunicationStyle** — v2 首次迁移缩写了 Tone／Verbosity／ExplanationStyle，并遗漏全部 StyleRules／StyleAvoids；现按 legacy 原始定义逐项恢复到 immutable AgentStyle，由 PromptRenderer 继续统一注入五个既有区块。
+200. **恢复 Main／Resume 剩余 Agent prompt 元数据** — Role、Mission、Constraints 的动态字段按 legacy 原始语义与列表格式恢复；Resume 在 legacy 基线上追加两项 v2 强化硬约束，静态模板和所有运行时边界不变。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
