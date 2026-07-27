@@ -22,6 +22,16 @@ class LocalWorkspaceTests(unittest.TestCase):
         self.assertEqual("two", self.workspace.read(Path("note.txt")).content)
         self.assertNotEqual(original.revision, updated.revision)
 
+    def test_write_preserves_existing_crlf_without_inserting_blank_lines(self) -> None:
+        content = "one\r\ntwo\r\n"
+
+        written = self.workspace.write(Path("windows.txt"), content)
+        restored = self.workspace.read(Path("windows.txt"))
+
+        self.assertEqual(content, restored.content)
+        self.assertEqual(written.revision, restored.revision)
+        self.assertEqual(content.encode("utf-8"), self.workspace.resolve(Path("windows.txt")).read_bytes())
+
     def test_content_hash_reads_binary_bytes_without_changing_text_read_contract(self) -> None:
         path = Path("resume.pdf")
         raw = b"%PDF-1.7\x00\xff\x10binary"

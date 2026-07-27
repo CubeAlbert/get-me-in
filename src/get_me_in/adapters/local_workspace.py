@@ -114,7 +114,7 @@ class LocalWorkspace:
         resolved = self.resolve(path)
         resolved.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=resolved.parent, delete=False
+            mode="w", encoding="utf-8", newline="", dir=resolved.parent, delete=False
         ) as temporary:
             temporary.write(content)
             temporary_path = Path(temporary.name)
