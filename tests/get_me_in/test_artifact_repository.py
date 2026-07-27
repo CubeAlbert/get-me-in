@@ -1,8 +1,10 @@
 """Aggregate JSON artifact repository contracts."""
 
 from datetime import datetime, timezone
+from dataclasses import asdict
 from hashlib import sha256
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
@@ -42,6 +44,38 @@ class JsonArtifactRepositoryTests(unittest.TestCase):
             (root / "bad.json").write_text("{", encoding="utf-8")
             with self.assertRaises(ArtifactRepositoryError):
                 JsonArtifactRepository(Path(temporary)).list_artifacts()
+
+    def test_structurally_corrupt_operations_are_typed_failures(self) -> None:
+        valid = asdict(_operation(ArtifactOperationStatus.COMMITTED, artifacts=(_artifact(),)))
+        cases = {
+            "not-object": [],
+            "missing-field": {"schema_version": 1},
+            "invalid-agent": {**valid, "agent_key": "invalid"},
+            "invalid-time": {**valid, "created_at": "not-a-time"},
+            "invalid-nested-schema": {
+                **valid,
+                "artifacts": [{**valid["artifacts"][0], "schema_version": 2}],
+            },
+            "pending-with-results": {
+                **valid,
+                "status": ArtifactOperationStatus.PENDING.value,
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "operations"
+            root.mkdir()
+            repository = JsonArtifactRepository(Path(temporary))
+
+            for name, payload in cases.items():
+                with self.subTest(name=name):
+                    for existing in root.glob("*.json"):
+                        existing.unlink()
+                    (root / f"{name}.json").write_text(
+                        json.dumps(payload, default=lambda value: value.value if hasattr(value, "value") else value.isoformat()),
+                        encoding="utf-8",
+                    )
+                    with self.assertRaises(ArtifactRepositoryError):
+                        repository.list_artifacts()
 
     def test_build_records_bounded_attempt_in_committed_operation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
