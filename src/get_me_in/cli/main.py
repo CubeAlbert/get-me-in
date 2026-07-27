@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import sys
 import logging
+import traceback
 
 from dotenv import load_dotenv
 
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> int:
-    """Build, run, and close the v2 CLI without changing the legacy entry point."""
+    """Build, run, and close the v2 CLI for the production entry point."""
     _ensure_utf8()
     project_root = Path(__file__).resolve().parents[3]
     load_dotenv(project_root / ".env")
@@ -32,22 +33,31 @@ def main() -> int:
         renderer.render_error(str(error))
         return 2
 
-    renderer = Renderer(show_thinking=settings.show_thinking)
-    log_path = configure_logging(settings.log_dir, settings.log_level)
-    logger.info("v2 CLI starting; log=%s level=%s", log_path, settings.log_level)
-
-    application = build_application(settings)
-    input_controller = InputController()
-    commands = build_command_registry(application, input_controller, renderer)
-    input_controller.set_completions(commands.completions)
-    worker = WorkerRunner(application, renderer)
-    app = CliApp(application, commands, input_controller, renderer, worker)
+    application = None
+    worker = None
     try:
+        renderer = Renderer(show_thinking=settings.show_thinking)
+        log_path = configure_logging(settings.log_dir, settings.log_level)
+        logger.info("v2 CLI starting; log=%s level=%s", log_path, settings.log_level)
+        application = build_application(settings)
+        input_controller = InputController()
+        commands = build_command_registry(application, input_controller, renderer)
+        input_controller.set_completions(commands.completions)
+        worker = WorkerRunner(application, renderer)
+        app = CliApp(application, commands, input_controller, renderer, worker)
         return app.run()
+    except Exception:
+        logger.info("v2 CLI startup or execution failed:\n%s", traceback.format_exc())
+        renderer.render_error("启动失败；请检查配置或日志后重试。")
+        return 1
     finally:
-        worker.close()
-        application.close()
-        logger.info("v2 CLI stopped")
+        try:
+            if worker is not None:
+                worker.close()
+        finally:
+            if application is not None:
+                application.close()
+            logger.info("v2 CLI stopped")
 
 
 def _ensure_utf8() -> None:
