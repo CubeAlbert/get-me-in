@@ -630,6 +630,54 @@ R7 固定按七个切片实施，每个切片独立验证、独立提交：
 
 6.10.5 清单及后续 temperature/log 补充均已获得用户确认。当前会话按用户要求只执行文档 checkpoint，不编码；后续新会话执行 `/project-bootstrap` 后只能从切片 1 R7-P0 开始。G7 通过后仍须 checkpoint 并停下；未经用户后续确认，不得切换旧 `main.py` 或进入 R8 遗留删除。
 
+### 6.11 InterviewAgent Workflow 前置备忘（R9，非确认清单）
+
+本节只记录 R9 未来设计时不得遗忘的兼容性结论、阻塞点和优化方向，不构成 InterviewAgent 的实现授权，也不构成新文件、类或公开方法清单。R9 启动时仍须基于 R8 后的实际代码重新 Review，并由用户确认具体边界。
+
+#### 6.11.1 与现有架构的兼容性结论
+
+Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约束的是 Agent 间拓扑：Main 是唯一调度中心，子 Agent 不直接调用其他子 Agent；ReAct 或 Workflow 属于单个 Agent 内部的执行策略。InterviewAgent 可以作为一个 spoke 使用确定性 Workflow，只要继续遵守：
+
+- 由 Orchestrator 统一开始和闭合 main → interview → main handoff；
+- `SessionState` 继续是全部长期运行状态的唯一规范所有者；
+- 对 CLI 继续使用强类型 command/event，不恢复 Request/Response、UIBridge 或魔法控制 dict；
+- 工具与外部能力继续经过 capability、port 和 service，不由 workflow node 直接访问 CLI、SDK、文件系统或全局对象；
+- workflow 内部的 question generation、answer evaluation 等步骤不是可互相 handoff 的“子 Agent”。若确实需要其他 Agent，必须先返回 Main，再由 Main 发起新的路由。
+
+推荐采用“确定性 Workflow 外壳 + 节点内 LLM”：由代码固定阶段、分支、循环、终止和恢复规则；LLM 只承担生成问题、评估回答、生成追问与总结等开放任务。不要为了实现 Workflow 引入第二套 Application、Session、CLI loop 或通用 Agent 网络。
+
+#### 6.11.2 R9 已知阻塞点
+
+1. **Executor 具体类型耦合：** 当前 Orchestrator 的 runtime map 直接声明为 `Mapping[AgentKey, AgentRuntime]`，composition root 也默认所有 Agent 使用同一种 ReAct `AgentRuntime`；Workflow executor 尚不能作为正式可替换实现注入。
+2. **状态形状偏向 ReAct：** 当前 `RuntimeTransition` 固定返回 `AgentSessionState`，后者直接包含 `RuntimePhase`、history、model call、pending tool、repair 与 Plan。Interview workflow 还需要 workflow version、稳定 step id、当前问题、收集的回答、评分进度和等待原因，不能塞入开放 metadata dict、Plan 或 runtime 私有字段。
+3. **Snapshot schema 单一：** 当前 `SessionSnapshotCodec` 只编码一种 `AgentSessionState`。Workflow 若要支持 save/restore/rewind，必须有 tagged、versioned、可校验的持久化形状，并明确旧 ReAct snapshot 的兼容或迁移策略。
+4. **“等待下一次用户输入”语义未定：** 当前 `Completed` 结束 CLI 内层循环并触发 finalize/snapshot。面试每问一答可能需要“本轮结束但 workflow 未结束”；R9 必须决定复用 `Completed` 的 turn-terminal 语义，还是增加显式 `AwaitingUserInput` 一类事件，不能用提示文本或 phase 字符串猜测。
+5. **取消与副作用恢复未定义：** 需要区分取消当前 LLM/node、暂停整场面试和结束面试；restore/rewind 不得自动重放已完成的评分、报告写入或其他外部副作用。
+6. **结果归属未定义：** 面试进度属于 Session；最终报告、逐题评分和原始回答是否进入 Artifact repository、专用 repository 或仅保留在 Session 尚待决定。Memory 仍只保存经确认的 fact/preference，不能默认成为面试记录数据库。
+7. **隐私与保留期未定义：** 原始回答、评分与反馈可能包含敏感求职信息；R9 必须明确持久化范围、日志脱敏、删除入口和 retention，再决定是否长期保存。
+8. **外部 Workflow 框架边界：** “Workflow”是控制流设计，不等于必须采用 LangGraph/LangChain 等框架。当前自研轻量框架决策仍有效；若未来希望引入外部 workflow engine，必须单独重开依赖与架构决策。
+
+#### 6.11.3 推荐调整与优化方向
+
+- 把 Orchestrator 依赖从具体 `AgentRuntime` 收敛为最小 typed executor protocol；候选能力为单步 `advance(...) -> RuntimeTransition`、跨线程 `request_cancel()` 与幂等 `close()`。最终命名和签名须在 R9 清单确认时固定。
+- 为 Session 中的 agent-local state 设计 tagged union 或 typed envelope，例如 ReAct state 与 Interview workflow state；共同字段只保留真正共享的 history、turn/provenance，禁止复制第二份长期状态。
+- Workflow definition 使用稳定 `workflow_version` 与 `step_id`，纯 transition 决定下一步；LLM、工具、时钟、ID 和持久化均通过显式依赖执行，使分支和恢复逻辑可做纯逻辑测试。
+- 每个可能产生副作用的 node 使用幂等 operation key 或明确的 pending → effect → commit 语义；snapshot 只保存可安全恢复的稳定点。
+- 复用现有 RuntimeCommand/RuntimeEvent、handoff closure、capability、ToolOutcome、CancellationToken 与 ResourceStack；只有现有协议确实不能表达“等待用户回答”等语义时才增加最小新类型。
+- Interview workflow 优先建立有限状态与有界循环：面试准备 → 出题 → 等待回答 → 评估 → 追问或下一题 → 汇总 → 返回 Main；显式限制题数、追问数、模型调用数和失败重试。
+- 将问题库／评价 rubric 视为 versioned Knowledge/reference 输入，将最终可交付报告视为候选 Artifact；不要把 prompt、workflow 定义和用户运行数据混在同一存储边界。
+- 建立两层验证：纯 workflow transition/property tests 覆盖分支、循环、取消和恢复；真实 LLM smoke 覆盖中文／英文问答、追问质量、评分稳定性与完整 main → interview → main 链路。
+
+#### 6.11.4 R9 启动前必须重新确认
+
+- InterviewAgent 的职责、非目标、面试模式与完成条件；
+- executor protocol 是否需要抽取，以及 ReAct/Workflow state 的具体 tagged schema；
+- 每问一答的 CLI command/event 语义；
+- save/restore/rewind、暂停、取消、退出和 handoff closure 规则；
+- 原始回答、评分、报告、Memory 与 Artifact 的所有权、隐私和 retention；
+- 问题库、rubric、模型调用、工具 capability 与外部依赖清单；
+- 新文件、类、构造依赖、公开方法、snapshot migration 和独立实施切片。
+
 ## 7. 迁移策略
 
 采用 Strangler Fig/纵向切片迁移：

@@ -285,13 +285,28 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **候选顺序：**
 
-1. InterviewAgent。
-2. Job Description 分析与 JobSearch 数据源决策。
-3. LearningAgent。
-4. Sticky Plan。
-5. 多会话/其他前端。
+1. R9-P：基于 R8 后实际边界 Review InterviewAgent Workflow；先确认职责、状态、交互、持久化、隐私和方法清单，不直接编码。
+2. 若 Review 证明必要，以最小 typed executor protocol 解耦 Orchestrator 与具体 ReAct `AgentRuntime`，同时保持 RuntimeCommand/RuntimeEvent 和 handoff closure 稳定。
+3. 建立 versioned Interview workflow state 与 snapshot/restore/rewind 语义，明确等待用户回答、暂停、取消和结束面试的区别。
+4. 以“确定性 Workflow 外壳 + 节点内 LLM”实现 InterviewAgent 纵向切片，完成 main → interview → main、问题生成、回答评估、追问和总结。
+5. 明确原始回答、逐题评分与最终报告的 Session/Artifact/Memory 所有权、隐私、删除和 retention。
+6. Job Description 分析与 JobSearch 数据源决策。
+7. LearningAgent。
+8. Sticky Plan。
+9. 多会话/其他前端。
 
-这些功能需要分别重新确认接口、职责边界、依赖关系和方法清单，不属于本轮架构迁移的默认范围。
+**InterviewAgent 前置风险：**
+
+- 当前 Orchestrator 与 `RuntimeTransition`／`AgentSessionState` 偏向单一 ReAct runtime，Workflow 不是零修改即插即用。
+- `Completed` 当前同时表示 CLI 内层循环终止并触发 finalize；面试“等待下一次自由文本回答”的事件语义必须先确认。
+- Workflow state 必须进入 Session 的 typed/versioned 唯一状态源，禁止藏在 runtime 实例、Plan、开放 metadata dict 或全局对象。
+- workflow node 不是子 Agent；子 Agent 之间仍禁止直接 handoff。
+- 原始回答、评分与报告涉及敏感数据，不得在未确定持久化和 retention 前默认写入 Memory 或日志。
+- 当前“不引入 LangChain/CrewAI/AutoGen 等 Agent 框架”的决策保持有效；如需外部 workflow engine，必须单独重开架构决策。
+
+**推荐门禁：** executor contract → workflow domain/state → snapshot/interaction → Interview vertical slice → privacy/report persistence → 真实 LLM smoke。每个门禁独立确认、验证和提交。
+
+这些功能需要分别重新确认接口、职责边界、依赖关系和方法清单，不属于本轮架构迁移的默认范围。上述内容是避免遗忘的前置备忘，不代表 R9 coding 已授权。
 
 **依赖：** G8。
 

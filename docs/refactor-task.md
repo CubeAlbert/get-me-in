@@ -443,7 +443,30 @@
 
 ## R9 —— 重构后功能（不在当前执行范围）
 
-- 📌 InterviewAgent。
+### 1. InterviewAgent Workflow 前置 Review
+
+- 📌 确认 Workflow 与 Hub-and-Spoke 的层次边界：Workflow 是 InterviewAgent 内部执行策略，不改变 Main 唯一调度和禁止子 Agent 直连的规则。
+- 📌 复核 Orchestrator 对具体 `AgentRuntime` 的耦合；如确有需要，先提交最小 typed executor protocol 的文件、类和公开方法清单。
+- 📌 设计 typed/versioned Interview workflow state；至少表达 workflow version、稳定 step id、当前问题、回答、评分进度、等待原因和终止原因。
+- 📌 决定 Session agent-local state 使用 tagged union 还是 typed envelope；`SessionState` 继续是唯一长期状态源，不允许 runtime 私藏 workflow 状态。
+- 📌 决定“等待下一次自由文本回答”复用 `Completed` 还是新增最小 RuntimeEvent；同步明确 finalize、snapshot 和 auto-memory 的触发时点。
+- 📌 固定 save/restore/rewind、暂停、取消、退出和 main → interview → main handoff closure；恢复不得重放已完成副作用。
+- 📌 固定原始回答、逐题评分、最终报告与 question/rubric 的 Session／Artifact／Memory／Knowledge 所有权。
+- 📌 在持久化前确认敏感数据脱敏、删除入口与 retention；不得默认把面试记录写入 Memory 或普通日志。
+- 📌 确认采用项目内“确定性 Workflow 外壳 + 节点内 LLM”；若希望引入外部 workflow engine，单独重开依赖与架构决策。
+- 📌 提交并确认 InterviewAgent 新文件、类、构造依赖、公开方法、snapshot migration 与独立实施切片；确认前不得 coding。
+
+### 2. InterviewAgent 推荐实现与验证方向
+
+- 📌 建立有界流程：准备 → 出题 → 等待回答 → 评估 → 追问或下一题 → 汇总 → 返回 Main。
+- 📌 为题数、追问数、模型调用和失败重试设置显式上限；workflow branch/loop 由纯 transition 决定。
+- 📌 复用 RuntimeCommand/RuntimeEvent、capability、ToolOutcome、CancellationToken、ResourceStack 和现有 handoff closure；只在现有协议无法表达需求时增加最小类型。
+- 📌 为副作用 node 定义 operation key 或 pending → effect → commit；snapshot 只保存可安全恢复的稳定点。
+- 📌 增加 workflow transition/property tests，覆盖分支、循环、用户输入、取消、restore/rewind 和错误恢复。
+- 📌 使用真实 LLM smoke 验证中文／英文面试、追问质量、评分、报告以及完整 main → interview → main 链路。
+
+### 3. 其他暂缓功能
+
 - 📌 Job Search 产品方案与数据源。
 - 📌 LearningAgent。
 - 📌 Sticky Plan。
