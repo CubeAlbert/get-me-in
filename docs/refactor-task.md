@@ -380,11 +380,11 @@
 - ✅ 定义 ArtifactRepository 的原子 aggregate 持久化、列举／查询、幂等 close 与损坏记录 typed failure。
 - ✅ operation key 使用 canonical JSON 的 SHA-256；每条 JSON 记录为 PENDING 或携带结果的 COMMITTED，单次 replace 原子切换。
 - ✅ ArtifactService 直接满足 ResumeArtifactPort provenance 契约，并借用 LocalResumeArtifacts backend；保持 LLM 参数 schema 与 ToolOutcome 闭合协议不变。
-- ⬜ `copy_template` 预检模板、目标 LaTeX、README 与重复后缀；明确 README 覆盖行为，并记录成功文件、来源模板和版本。
-- ⬜ `build_pdf` 复用现有 ProcessRunner，记录每次成功、非零退出、超时、取消和异常尝试；只有 exit code 为 0 且目标 PDF 确实存在时记录可用 PDF artifact。
+- ✅ `copy_template` 预检模板、目标 LaTeX、README 与重复后缀；明确 README 覆盖行为，并记录成功文件、来源模板和版本。
+- ✅ `build_pdf` 复用现有 ProcessRunner，记录每次成功、非零退出、超时、取消和异常尝试；只有 exit code 为 0 且目标 PDF 确实存在时记录可用 PDF artifact。
 - ✅ build attempt 按配置上限保存 stdout/stderr，脱敏 workspace 根、UTF-8 head/tail 截断并保存原始字节数与标记。
 - ✅ metadata 提交失败抛出 `ArtifactPartialFailure`，并映射为既有 `ToolFailure("artifact_partial_failure", ...)`。
-- ⬜ pending operation 只在下一次同 key 调用时惰性 reconcile；R7 不增加 daemon、新 CLI 或 pruning/retention policy。
+- ✅ pending operation 只在下一次同 key 调用时惰性 reconcile；R7 不增加 daemon、新 CLI 或 pruning/retention policy。
 - ✅ `workspace_open` 已在 R3 通过 Frontend/OS adapter 实现，不由 domain 直接启动 GUI；R7 只做端到端复验。
 - ⬜ Artifact repository 只保存产物与编译记录；user memory 继续只保存 fact/preference。不把 ArtifactRef 加入 SessionSnapshot，rewind 不删除或回滚工作区文件与 artifact 记录。
 
@@ -394,7 +394,7 @@
 - ✅ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。提交：待本 checkpoint 后创建。
 - ✅ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。提交：待本 checkpoint 后创建。
 - ✅ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。针对性 3 项测试通过；提交：待本 checkpoint 后创建。
-- ✅ 切片 5：ArtifactService、ResumeArtifactPort 替换、copy/build/log/partial-failure tests。针对性 8 项测试通过；提交：待本 checkpoint 后创建。
+- ✅ 切片 5：ArtifactService、ResumeArtifactPort 替换、copy/build/log/partial-failure tests。针对性 10 项测试与 `compileall` 通过；提交：本 checkpoint 创建。
 - ⬜ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。
 - ⬜ 切片 7：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。
 

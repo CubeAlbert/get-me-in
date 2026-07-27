@@ -40,12 +40,14 @@ class LocalResumeArtifacts:
         for source, destination in targets:
             if not source.is_file():
                 raise ResumeArtifactError(f"模板文件不存在: {source.name}")
-            if workspace.exists(destination):
+            if workspace.exists(destination) and workspace.read(destination).content != source.read_text(encoding="utf-8"):
                 raise ResumeArtifactError(f"目标文件已存在: {destination}")
         if not readme.is_file():
             raise ResumeArtifactError("模板说明不存在: README.md")
         for source, destination in targets:
-            workspace.write(destination, source.read_text(encoding="utf-8"))
+            content = source.read_text(encoding="utf-8")
+            if not workspace.exists(destination):
+                workspace.write(destination, content)
         workspace.write(target_dir / "README.md", readme.read_text(encoding="utf-8"))
         return TemplateCopyResult(tuple(destination for _, destination in targets) + (target_dir / "README.md",), target_dir)
 

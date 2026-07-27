@@ -4083,3 +4083,21 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：**
 
 - metadata 提交失败时原 PENDING 仍在，后续相同 key 调用可安全 reconcile；成功时状态和结果同时可见。
+
+---
+
+### 决策 183 —— R7-P5 ArtifactService 完成
+
+**背景：** Artifact aggregate repository 已完成，但 Resume 工具仍需在不改变 ToolOutcome 的前提下协调 PENDING、文件副作用、COMMITTED 结果和失败重试。
+
+**决定：**
+
+- ArtifactService 直接实现 ResumeArtifactPort；copy/build 均先持久化 PENDING，再经 LocalResumeArtifacts backend 执行副作用，并以一次 aggregate replace 提交结果。
+- 同 key 的 COMMITTED 调用返回已持久化结果；PENDING 的模板复制以相同内容预检避免重复写入，已有 PDF 的 PENDING 生成 reconcile attempt 并补提交 artifact。
+- 非零、超时、取消和 backend 异常都形成 build-attempt；只有成功且 PDF 存在时记录 PDF Artifact。metadata 提交失败继续映射为 `ArtifactPartialFailure`。
+- stdout/stderr 在 workspace 根替换与 UTF-8 安全截断后，保证持久化字节总量不超过配置上限。
+
+**理由：**
+
+- operation aggregate 保证 operation 状态与其结果对 repository 读取者原子可见；保留 PENDING 则使局部完成具备可恢复证据。
+- 将模板读取和进程调用保留在 backend，使 application service 不越过已确认的分层边界。
