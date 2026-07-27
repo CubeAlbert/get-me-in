@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 194 — 恢复固定欢迎 banner 并暂缓主题客制化](#决策-194--恢复固定欢迎-banner-并暂缓主题客制化)
 - [决策 193 — R8-O 前置审查修复入口诊断与关闭边界](#决策-193--r8-o-前置审查修复入口诊断与关闭边界)
 - [决策 192 — R8-E 已完成并建立入口回退点](#决策-192--r8-e-已完成并建立入口回退点)
 - [决策 191 — 授权 R8 实施并完成 R8-P](#决策-191--授权-r8-实施并完成-r8-p)
@@ -4361,3 +4362,29 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 以普通 `ERROR`／`CRITICAL` 同时写文件和 stderr —— 会重新向终端输出 traceback，违反入口契约，已拒绝。
 - 只调用 `Application.close()` 而不解释 `CloseReport` —— 会继续把 typed failure 静默丢弃，已拒绝。
 - 将针对性修复视为 R8-O 已完成 —— 仍缺真实链路和旧数据拒绝访问证据，已拒绝。
+
+---
+
+### 决策 194 —— 恢复固定欢迎 banner 并暂缓主题客制化
+
+**背景：** R8-E 将根 `main.py` 切换到 v2 CLI 后，真实启动观察发现旧版在首次输入前显示的 `get-me-in — AI 求职助手` 欢迎 banner 没有迁移。根入口、Rich 终端和输入链路均正常，缺失原因是 v2 `CliApp.run()` 直接读取输入，而 `Renderer` 没有对应的欢迎展示方法。该问题会降低入口切换后的产品识别和 `/help` 可发现性。
+
+**决定：**
+
+- 将 banner 丢失认定为 R8-O 观察期回归，并对决策 190／191 的“R8 不新增公开方法”边界作一次用户明确批准的最小例外：只新增 `Renderer.render_welcome() -> None`，不新增生产文件、class、service、port 或 schema。
+- `CliApp.run()` 在首次读取输入前调用 `render_welcome()` 一次；默认内容恢复为固定产品标识 `get-me-in — AI 求职助手` 和提示 `输入 /help 查看所有命令`，展示职责继续由 CLI Renderer 独占。
+- 本次不修改 `Settings`、`.env.example` 或 Runtime/Application，不增加 banner 依赖或外部资产。
+- 将显示开关、标题、副标题与样式客制化记录为 R9 增强任务。后续配置文本按普通文本安全渲染，不得默认解释为 Rich markup；实施前仍需提交 Settings／公开方法清单。
+- 验证结果为 29 项 CLI 针对性测试和完整 227 项自动化测试通过，`compileall`、`git diff --check` 与 import scan 通过；真实 `uv run python main.py` 在首次输入提示前显示 banner，`/exit` 正常返回退出码 `0`。
+
+**理由：**
+
+- banner 是入口展示行为，放在 Renderer 并由薄 CliApp 触发符合现有职责边界，也避免根 `main.py` 重新承担终端表现。
+- 固定内容足以闭合当前回归；把用户配置同时加入 R8 会扩大 Settings、示例配置和安全渲染范围，不利于观察期保持最小改动。
+- 明确测试“首次输入前且只显示一次”可以防止 restore、rewind 或多回合循环重复输出欢迎信息。
+
+**曾考虑的替代方案：**
+
+- 在根 `main.py` 直接打印 Rich Panel —— 会污染唯一生产入口的委托职责，未采用。
+- 复用 `render_notice()` 输出纯文本 —— 无法恢复旧版 Panel 产品标识，也会混淆普通通知和启动展示语义，未采用。
+- 本次直接加入 `.env` 主题配置 —— 会扩大 R8 已确认配置契约并引入 Rich markup 安全边界，延后到 R9。

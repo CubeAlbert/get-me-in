@@ -186,6 +186,17 @@ class InputControllerTests(unittest.TestCase):
 
 
 class RendererTests(unittest.TestCase):
+    def test_renders_stable_welcome_banner(self) -> None:
+        output = StringIO()
+        renderer = Renderer(console=_console(output))
+
+        self.assertIsNone(renderer.render_welcome())
+
+        text = output.getvalue()
+        self.assertIn("get-me-in", text)
+        self.assertIn("AI 求职助手", text)
+        self.assertIn("输入 /help 查看所有命令", text)
+
     def test_renders_typed_terminal_events_without_returning_commands(self) -> None:
         output = StringIO()
         renderer = Renderer(console=_console(output))

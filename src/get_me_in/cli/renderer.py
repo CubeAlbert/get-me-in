@@ -37,6 +37,13 @@ class Renderer:
         self._console = console or Console(force_terminal=True)
         self._show_thinking = show_thinking
 
+    def render_welcome(self) -> None:
+        """Render the stable product identity before the first input prompt."""
+        self._console.print()
+        self._console.print(Panel.fit("[bold green]get-me-in[/] — AI 求职助手"))
+        self._console.print("[dim]输入 /help 查看所有命令[/]")
+        self._console.print()
+
     def render_event(self, event: RuntimeEvent) -> None:
         if isinstance(event, Progress):
             self._console.print(f"[dim]🔄 {event.message}[/]")

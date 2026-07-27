@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。R8-O 完成后必须停下等待用户审查；未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 前置审查发现高日志阈值会丢失启动诊断、typed close issue 不可见以及 README／配置别名说明滞后；提交 `8e43bd7` 修复 file-only 完整诊断、关闭错误可见性和异常退出码，提交 `45b5152` 对齐观察期 README 与 `.env.example`。225 项自动化测试、`compileall`、`git diff --check` 和 import scan 通过；根入口缺失／非法配置返回 `2`，真实启动异常在 `LOG_LEVEL=ERROR` 下返回 `1`、终端无 traceback 且文件日志保留完整诊断，交互式 `/exit` 返回 `0`。R8-O 仅完成入口契约、部分 CLI 和全量回归，真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 前置审查发现高日志阈值会丢失启动诊断、typed close issue 不可见以及 README／配置别名说明滞后；提交 `8e43bd7` 修复 file-only 完整诊断、关闭错误可见性和异常退出码，提交 `45b5152` 对齐观察期 README 与 `.env.example`。观察期又确认根入口切换后遗漏旧版欢迎 banner；现已在 v2 `Renderer` 恢复固定产品标识和 `/help` 提示，并保证首次输入前只显示一次；`.env`／主题客制化已记录为 R9 增强任务。29 项针对性测试、完整 227 项自动化测试、`compileall`、`git diff --check` 和 import scan 通过；真实 `uv run python main.py` 在输入提示前显示 banner，交互式 `/exit` 返回 `0`。根入口缺失／非法配置返回 `2`，真实启动异常在 `LOG_LEVEL=ERROR` 下返回 `1`、终端无 traceback 且文件日志保留完整诊断。R8-O 仍只完成入口契约、部分 CLI 和全量回归，真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 待执行；未经用户审查不得进入 R8-D。
 
 **下一步：** 从根入口完成剩余 CLI／交互、Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
@@ -32,8 +32,9 @@
 191. **授权 R8 实施并完成 R8-P** — 用户授权从 bootstrap 后开始 R8 并要求每个阶段 checkpoint；R8-P 以 `d91e37c` 完成，保持 R8-O 用户审查门禁不变。
 192. **R8-E 已完成并建立入口回退点** — 根入口切换为 v2，入口契约测试与 222 项回归通过；`9fbeabc` 是 R8-D 前唯一需要 revert 的入口回退点。
 193. **R8-O 前置审查修复入口诊断与关闭边界** — `8e43bd7` 使启动异常在所有允许日志阈值下仅向文件写完整诊断，并让 Worker／Application 关闭异常及 `CloseReport.issues` 对用户可见且返回 `1`；`45b5152` 对齐 README 与配置兼容别名说明。225 项回归与入口 smoke 通过，R8-O 仍未完成。
+194. **恢复固定欢迎 banner 并暂缓主题客制化** — R8-O 将根入口切换后丢失的旧版欢迎体验认定为回归，允许新增 `Renderer.render_welcome()` 并在首次输入前调用一次；本次不修改 Settings，显示开关、标题、副标题和样式配置统一记录到 R9。完整 227 项测试与真实根入口 banner／`/exit` smoke 通过。
 
-**已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
+**已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
 **参考文档：** `docs/refactor-design.md`（活跃设计）／`docs/refactor-plan.md`（活跃计划）／`docs/refactor-task.md`（活跃任务）／`docs/decision.md`（决策记录）
 

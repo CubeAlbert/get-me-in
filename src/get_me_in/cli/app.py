@@ -32,6 +32,7 @@ class CliApp:
         """Read text, process CLI commands, and drive one RuntimeEvent at a time."""
         prefill: str | None = None
         try:
+            self._renderer.render_welcome()
             while True:
                 text = self._input.read(prefill)
                 prefill = None

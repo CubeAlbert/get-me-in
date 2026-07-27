@@ -13,6 +13,22 @@ from datetime import datetime, timezone
 
 
 class CliAppTests(unittest.TestCase):
+    def test_renders_welcome_once_before_first_input(self) -> None:
+        trace: list[str] = []
+        renderer = _Renderer(trace)
+        app = CliApp(
+            _Application(),
+            _Commands((CommandResult(CommandAction.EXIT),)),
+            _Input(("/exit",), trace=trace),
+            renderer,
+            _Worker(()),
+        )
+
+        self.assertEqual(0, app.run())
+
+        self.assertEqual(["welcome", "read"], trace)
+        self.assertEqual(1, renderer.welcomes)
+
     def test_drives_handoff_with_continue_and_snapshots_terminal_event(self) -> None:
         application = _Application()
         worker = _Worker((HandoffRequested("call", "main", "resume", "context"), Completed(_message())))
@@ -177,13 +193,16 @@ class _FailingCommands:
 
 
 class _Input:
-    def __init__(self, values: tuple[str, ...], *, approved: bool = True) -> None:
+    def __init__(self, values: tuple[str, ...], *, approved: bool = True, trace: list[str] | None = None) -> None:
         self.values = list(values)
         self.approved = approved
         self.confirms = 0
         self.prefills: list[str | None] = []
+        self.trace = trace
 
     def read(self, prefill: str | None) -> str | None:
+        if self.trace is not None:
+            self.trace.append("read")
         self.prefills.append(prefill)
         return self.values.pop(0)
 
@@ -199,10 +218,17 @@ class _Input:
 
 
 class _Renderer:
-    def __init__(self) -> None:
+    def __init__(self, trace: list[str] | None = None) -> None:
         self.errors: list[str] = []
         self.notices: list[str] = []
         self.application_results: list[ApplicationResult] = []
+        self.trace = trace
+        self.welcomes = 0
+
+    def render_welcome(self) -> None:
+        self.welcomes += 1
+        if self.trace is not None:
+            self.trace.append("welcome")
 
     def render_event(self, event: object) -> None:
         pass
