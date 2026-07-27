@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 188 — R7-T2 审查再次撤回 G7 并细化 R8](#决策-188--r7-t2-审查再次撤回-g7-并细化-r8)
 - [决策 187 — R7-T 修复完成并重新通过 G7](#决策-187--r7-t-修复完成并重新通过-g7)
 - [决策 186 — 撤回 G7 完成结论并记录 R7-T 审查问题](#决策-186--撤回-g7-完成结论并记录-r7-t-审查问题)
 - [决策 185 — 批准原始字节 content_hash 并完成 R7/G7](#决策-185--批准原始字节-content_hash-并完成-r7g7)
@@ -4191,3 +4192,40 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 为 PENDING operation 增加新的副作用阶段或 PDF baseline hash 字段 —— 会修改已确认的 schema/public boundary；当前重新构建已能安全闭合问题，未采用。
 - 将 `changed_paths` 加入 ToolFailure 公共 schema —— 会扩大 R7 Runtime 协议；既有 suggestion 足以表达，未采用。
 - 仅调整 smoke 脚本行号以绕过 CRLF 问题 —— 会掩盖真实用户编辑时的行号漂移，已拒绝。
+
+---
+
+### 决策 188 —— R7-T2 审查再次撤回 G7 并细化 R8
+
+**背景：** 用户要求在 R7 coding 完成后开始审查，并更新 R8 任务细节。当前环境重新运行 212 项自动化测试、`compileall` 与 `git diff --check` 均通过；但静态审查和两个临时目录最小复现发现，决策 187 所述 Artifact retry 与 aggregate typed failure 仍有未覆盖路径。R8 当前粗粒度任务也没有给出切换观察门禁、精确删除集合、配置迁移和旧数据保护方法。
+
+**决定：**
+
+- 暂时撤回决策 187 的 G7 完成结论，但保留其五个修复提交、212 项测试和真实 Resume smoke 的历史事实；R7-T2 修复与完整复验前不得进入 R8。
+- R7-T2 分为三个不扩展公开 API 的候选修复切片：
+  1. `JsonArtifactRepository` 的 save/load 共用校验补齐字段类型、deterministic operation key 与 kind/status/result shape；损坏记录统一为 `ArtifactRepositoryError`。
+  2. `ArtifactService.build_pdf()` 与 Resume tool 统一首次和重放的 backend exception／无结果状态，禁止相同 committed attempt 从 `ToolFailure` 漂移为 `ToolSuccess`。
+  3. `build_application()` 对 ResourceStack 建立前后的构造失败统一逆序关闭已创建 owner，覆盖 injected LLM validation、Memory prompt 读取和 knowledge start 失败。
+- R8 候选实施顺序固定为 R8-P 准备 → R8-E 根入口切换 → R8-O 强制观察与用户审查 → R8-D 精确遗留删除 → R8-G 文档与 G8。R8-E 和 R8-D 必须是独立提交；R8-O 未通过时使用 `git revert <R8-E commit>` 回退。
+- R8 不新增 runtime class、service、port、schema 或公开方法。根入口只允许委托现有 `src.get_me_in.cli.main.main()`；遗留删除范围和保留范围以 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单` 为准。
+- 旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 是不迁移的历史用户数据；R8 只验证 v2 不访问，禁止自动删除。`.ipynb_checkpoints` 必须按精确路径复核后单独清理。
+- 本轮只更新审查结论和 R8 任务细节，不授权或实施 R7-T2／R8 coding。
+
+**证据：**
+
+- 全量测试输出为 `Ran 212 tests ... OK`；`compileall` 与 `git diff --check` 正常结束。
+- 一个合法 JSON 形状但 `COMMITTED + BUILD_PDF + build_attempts=()` 的 operation 可被 repository 保存和读取；随后 `ArtifactService.build_pdf()` 在 `existing.build_attempts[-1]` 抛出 `IndexError`。
+- backend 首次抛出 `RuntimeError("compiler unavailable")` 后，service 保存 COMMITTED attempt 并向调用方抛错；第二次同 key 调用返回 `ProcessResult(exit_code=None, timed_out=False, cancelled=False)`，而当前 Resume tool 仅对 cancelled／timed_out 映射失败，其余结果返回 `ToolSuccess`。
+- `build_application()` 在 worker／Knowledge／Artifact owner 创建后才校验 injected Runtime LLM，并在全部 owner 创建后才建立 ResourceStack；中途异常没有统一 cleanup 边界。
+
+**理由：**
+
+- 绿色测试不能替代未覆盖的持久化 corruption 与 retry 语义；同一 operation 的首次和重放结果必须稳定，损坏记录必须在 repository 边界转换为 typed failure。
+- 入口切换会把当前 composition root 变为默认生产路径；构造失败清理、`.env.example` 与 Settings 一致性必须在切换前闭合。
+- 入口切换、观察和删除拆分后，失败可以通过单独 revert 恢复旧入口，同时保留旧代码和旧用户数据供诊断。
+
+**曾考虑的替代方案：**
+
+- 保持 G7 完成并把问题并入 R8 —— 会在已知 Artifact retry 误报与 corruption 泄漏存在时切换默认入口，已拒绝。
+- R8-E 与 R8-D 同一提交 —— 会失去可观察、可回退的旧实现缓冲期，已拒绝。
+- R8 自动删除旧运行数据 —— 与 R-D6 的“不迁移”不等于“授权删除”相冲突，已拒绝。

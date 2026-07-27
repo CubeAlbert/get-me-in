@@ -630,11 +630,56 @@ R7 固定按七个切片实施，每个切片独立验证、独立提交：
 
 6.10.5 清单及后续 temperature/log 补充均已获得用户确认。当前会话按用户要求只执行文档 checkpoint，不编码；后续新会话执行 `/project-bootstrap` 后只能从切片 1 R7-P0 开始。G7 通过后仍须 checkpoint 并停下；未经用户后续确认，不得切换旧 `main.py` 或进入 R8 遗留删除。
 
-### 6.11 InterviewAgent Workflow 前置备忘（R9，非确认清单）
+### 6.11 入口切换、观察与遗留删除（R8，待确认清单）
+
+R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、Application、Session、ToolOutcome 或 port 公共协议。R8 只允许完成生产入口切换、可回退观察、遗留代码删除和最终文档归一化。当前 R7-T2 尚未重新通过 G7，因此本节是待用户确认的具体清单，不构成 coding 授权。
+
+#### 6.11.1 强制前置门禁
+
+- R7-T2 必须先闭合 exception retry 一致性、Artifact aggregate 完整校验与 composition root 构造失败清理；重新运行完整自动化测试、`compileall`、`git diff --check` 和针对性 Artifact／composition smoke，并恢复 G7。
+- 入口切换前重新确认 G6、G7 均有效，工作区干净，`main.py` 仍是唯一生产入口；不得把 `python -m src.get_me_in.cli` 当作已经完成生产切换。
+- R8 不迁移、不覆盖也不删除 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 等旧用户运行数据。只验证 v2 不读取这些目录，并在文档中说明它们属于未迁移的历史数据。
+
+#### 6.11.2 文件、对象与公开边界
+
+入口切换切片允许修改：
+
+- `main.py`：唯一行为改动是委托 `src.get_me_in.cli.main.main()` 并以其整数返回值作为进程退出码；删除全部 legacy import、import-time tool registration 与旧 composition。
+- `src/get_me_in/cli/main.py`：只允许修正已经过时的“未改变 legacy entry point”说明；不增加第二套入口或公开 API。
+- `.env.example`：改为 v2 `Settings.from_env()` 的实际变量名、默认值和弃用说明；删除仅被 v1 消费的配置示例，保留已明确支持的兼容别名说明。
+- `README.md`：将启动命令和运行数据边界切到 v2。
+- `tests/get_me_in/test_import_boundaries.py`、`tests/get_me_in/test_settings.py` 及现有 CLI/bootstrap 测试：覆盖根入口只依赖 v2、示例配置与 Settings 对齐、退出码和关闭路径；原则上不新增生产文件、类或公开方法。
+
+遗留删除切片的精确生产源码范围：
+
+- 删除 `src/agents/`、`src/cli/`、`src/llm/`、`src/memory/`、`src/prompts/`、`src/rag/`、`src/tools/`、`src/utils/`。
+- 删除 `src/config.py`、`src/lifecycle.py`、`src/logger.py`、`src/message.py`、`src/request.py`、`src/response.py`。
+- 保留 `src/__init__.py` 与完整 `src/get_me_in/`；不得把 v2 CLI、adapter、port 或 tests 误归为 legacy。
+- 删除仓库中的 `.ipynb_checkpoints` 目录，但必须先用精确路径复核；不得借此递归清理工作区或任何 `data/` 目录。
+- `pyproject.toml`／`uv.lock` 只删除经 import 与真实 smoke 证明不再使用的依赖，不凭旧模块删除猜测依赖；若无可删项则保持不变。
+
+R8 不新建 runtime class、service、port、schema 或公开方法。若实现中发现必须增加上述对象，必须停止并重新提交清单。
+
+#### 6.11.3 五个独立切片与回退点
+
+1. **R8-P 准备：** 完成静态资产、配置、capability、命令、Agent/tool 数量、v2→legacy import 和 legacy data 非访问审计；只更新 `.env.example`、README 与验证证据，不切入口。
+2. **R8-E 入口切换：** 只切换根 `main.py` 并补入口 contract tests，形成独立 commit。该 commit 是删除前的明确回退点。
+3. **R8-O 观察门禁：** 从 `uv run python main.py` 执行完整 smoke matrix，验证启动错误无 traceback、基础对话、命令、审批／取消、Main→Resume→Main、save/restore/rewind、Knowledge/Memory、Resume copy/edit/build/open 与关闭；记录 legacy data 目录切换前后未被读取或改写。未通过时用 `git revert <R8-E commit>` 回退，不使用破坏性 reset。
+4. **R8-D 遗留删除：** 只有 R8-O 经用户审查通过后才删除精确 legacy 源码与 checkpoint 目录；同一提交补齐 import/dependency 检查，不删除旧运行数据。
+5. **R8-G 文档与 G8：** 将 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md`、README 与 AGENTS.md 更新为已落地 v2 事实；同步活跃 refactor 文档与 checkpoint，完成 G8。
+
+#### 6.11.4 R8-O／G8 证据要求
+
+- 自动化：完整 unittest、`compileall`、`git diff --check`、根入口 import boundary、Catalog 中 Agent/tool/command 数量一致性。
+- 真实 adapter：Chroma/embedder/reranker reload/query、Memory build/query/delete、中文／英文／双语 Resume copy/edit/build/open，且进程结束后后台 worker 与资源正常关闭。
+- 数据边界：只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`；v2 写入仅落在显式的 `data/workspace/` 与 `data/v2/` 边界。旧运行数据只保留，不自动迁移或删除。
+- 删除后：`main.py` 与 `src/get_me_in/` 不得 import legacy；仓库不再包含列出的 legacy production modules 或 `.ipynb_checkpoints`；文档中的 Agent、tool、command 和配置数量必须与实际 Catalog／Settings 一致。
+
+### 6.12 InterviewAgent Workflow 前置备忘（R9，非确认清单）
 
 本节只记录 R9 未来设计时不得遗忘的兼容性结论、阻塞点和优化方向，不构成 InterviewAgent 的实现授权，也不构成新文件、类或公开方法清单。R9 启动时仍须基于 R8 后的实际代码重新 Review，并由用户确认具体边界。
 
-#### 6.11.1 与现有架构的兼容性结论
+#### 6.12.1 与现有架构的兼容性结论
 
 Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约束的是 Agent 间拓扑：Main 是唯一调度中心，子 Agent 不直接调用其他子 Agent；ReAct 或 Workflow 属于单个 Agent 内部的执行策略。InterviewAgent 可以作为一个 spoke 使用确定性 Workflow，只要继续遵守：
 
@@ -646,7 +691,7 @@ Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约
 
 推荐采用“确定性 Workflow 外壳 + 节点内 LLM”：由代码固定阶段、分支、循环、终止和恢复规则；LLM 只承担生成问题、评估回答、生成追问与总结等开放任务。不要为了实现 Workflow 引入第二套 Application、Session、CLI loop 或通用 Agent 网络。
 
-#### 6.11.2 R9 已知阻塞点
+#### 6.12.2 R9 已知阻塞点
 
 1. **Executor 具体类型耦合：** 当前 Orchestrator 的 runtime map 直接声明为 `Mapping[AgentKey, AgentRuntime]`，composition root 也默认所有 Agent 使用同一种 ReAct `AgentRuntime`；Workflow executor 尚不能作为正式可替换实现注入。
 2. **状态形状偏向 ReAct：** 当前 `RuntimeTransition` 固定返回 `AgentSessionState`，后者直接包含 `RuntimePhase`、history、model call、pending tool、repair 与 Plan。Interview workflow 还需要 workflow version、稳定 step id、当前问题、收集的回答、评分进度和等待原因，不能塞入开放 metadata dict、Plan 或 runtime 私有字段。
@@ -657,7 +702,7 @@ Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约
 7. **隐私与保留期未定义：** 原始回答、评分与反馈可能包含敏感求职信息；R9 必须明确持久化范围、日志脱敏、删除入口和 retention，再决定是否长期保存。
 8. **外部 Workflow 框架边界：** “Workflow”是控制流设计，不等于必须采用 LangGraph/LangChain 等框架。当前自研轻量框架决策仍有效；若未来希望引入外部 workflow engine，必须单独重开依赖与架构决策。
 
-#### 6.11.3 推荐调整与优化方向
+#### 6.12.3 推荐调整与优化方向
 
 - 把 Orchestrator 依赖从具体 `AgentRuntime` 收敛为最小 typed executor protocol；候选能力为单步 `advance(...) -> RuntimeTransition`、跨线程 `request_cancel()` 与幂等 `close()`。最终命名和签名须在 R9 清单确认时固定。
 - 为 Session 中的 agent-local state 设计 tagged union 或 typed envelope，例如 ReAct state 与 Interview workflow state；共同字段只保留真正共享的 history、turn/provenance，禁止复制第二份长期状态。
@@ -668,7 +713,7 @@ Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约
 - 将问题库／评价 rubric 视为 versioned Knowledge/reference 输入，将最终可交付报告视为候选 Artifact；不要把 prompt、workflow 定义和用户运行数据混在同一存储边界。
 - 建立两层验证：纯 workflow transition/property tests 覆盖分支、循环、取消和恢复；真实 LLM smoke 覆盖中文／英文问答、追问质量、评分稳定性与完整 main → interview → main 链路。
 
-#### 6.11.4 R9 启动前必须重新确认
+#### 6.12.4 R9 启动前必须重新确认
 
 - InterviewAgent 的职责、非目标、面试模式与完成条件；
 - executor protocol 是否需要抽取，以及 ReAct/Workflow state 的具体 tagged schema；
@@ -721,4 +766,4 @@ v2 只复用以下静态项目资产：
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。R0～R6、G5-F 与 R6-F 均已完成；R7 五项总体边界已由决策 177 确认，具体新文件、对象、构造依赖、公开方法、七个实施切片及 temperature/log 补充已由决策 178 确认。当前会话只完成文档 checkpoint；后续新会话 bootstrap 后从 R7-P0 开始。G7 通过后仍须 checkpoint 并等待进入 R8 的独立授权。
+R-D1～R-D6 已由用户确认。R0～R6、G5-F 与 R6-F 均已完成；R7 已落地，但决策 188 的 R7-T2 审查再次撤回 G7 完成结论。6.11 已记录 R8 的候选文件、对象、公开边界、五个切片与回退清单；该清单仍待用户在 G7 恢复后独立确认，不构成 R8 coding 授权。

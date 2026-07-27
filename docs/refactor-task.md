@@ -421,36 +421,65 @@
 - ✅ 最终运行 212 项自动化测试、`compileall`、`git diff --check` 全部通过；真实 ArtifactService 在隔离工作区生成中文、英文、双语共 4 份 PDF，并另行完成已有英文简历 replace、授权清理后重新读取、精确 edit 与编译 smoke。
 - ✅ 同步 `current.md`、`refactor-task.md`、`decision.md` 并由决策 187 恢复 G7；继续停在 R8 独立授权门禁前。
 
+### 8. R7-T2 审查问题（待确认修复）
+
+- ✅ 当前环境重新运行 212 项自动化测试、`compileall` 与 `git diff --check`，均通过；工作区在审查前保持干净。
+- ✅ 最小复现确认 exception retry 不一致：首次 backend exception 被保存为 COMMITTED attempt 后抛出；第二次同 operation key 直接返回 `ProcessResult(exit_code=None)`，`tools/resume.py::_build_pdf()` 会将其包装为 `ToolSuccess`。
+- ✅ 最小复现确认 aggregate validation 不完整：`COMMITTED + BUILD_PDF + 无 build_attempt` 可通过 save/load，随后 `ArtifactService.build_pdf()` 重放泄漏非 typed `IndexError`；deterministic operation key、operation-kind result shape 与 nested 字段类型也未形成完整 invariant。
+- ✅ 静态审查确认 composition construction cleanup 不完整：`build_application()` 在 ResourceStack 注册前创建 worker／Knowledge／Artifact 等 owner，部分后续构造或 injected LLM validation 失败路径不会统一关闭已创建资源。
+- ⬜ 修复切片 1：在 `JsonArtifactRepository` 的 save/load 共用校验中闭合字段类型、deterministic operation key 与 kind/status/result shape；所有损坏记录统一为 `ArtifactRepositoryError`。不改变 schema_version、公开 repository 方法或 operation key 算法。
+- ⬜ 修复切片 2：统一 `ArtifactService.build_pdf()` 首次与重放的 backend exception／非结果状态语义，确保相同 committed attempt 永不从 `ToolFailure` 漂移为 `ToolSuccess`；补齐 tools 层 retry contract tests。不增加 ToolOutcome 字段或公开方法。
+- ⬜ 修复切片 3：让 `build_application()` 对 ResourceStack 建立前后的构造失败都按所有权逆序清理；覆盖 runtime LLM 配置错误、Memory prompt 读取失败与 knowledge start 失败，不新增全局生命周期。
+- ⬜ 每个修复切片独立测试和提交；最后运行完整自动化测试、`compileall`、`git diff --check`、Artifact retry/corruption smoke 与 composition failure cleanup smoke。
+- ⬜ 修复完成后同步 `current.md`、`refactor-task.md`、`decision.md`，重新决定 G7；在此之前不得进入 R8。
+
 ## R8 —— 切换与清理
 
-### 1. 入口切换
+> 候选具体清单已在决策 188 与 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单` 中细化。本清单尚未获得 coding 授权；R7-T2/G7 是强制前置条件。
 
-- ⬜ `main.py` 切到 v2 bootstrap，单独提交。
-- ⬜ 确认 G6、G7 均已通过；不得仅因 Resume 主路径通过而跳过 Knowledge/Memory 门禁。
-- ⬜ 运行完整 capability parity matrix。
+### 1. R8-P —— 切换准备
+
+- ⬜ 确认 R7-T2 已完成且 G6、G7 均有效；工作区干净，旧 `main.py` 尚未改动。
+- ⬜ 复核实际 Catalog：Agent、tool、command、capability 与 `docs/capability-parity-matrix.md` 一致。
 - ⬜ 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可直接作为 v2 静态输入。
-- ⬜ 确认 v2 不读取 `data/save/`、`data/memories/`、`data/chroma/` 或 `data/temp/`。
-- ⬜ 将入口切换与遗留删除拆为两个独立提交；入口切换提交是删除前回退点并由用户审查。
+- ⬜ 对旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 建立只读前后证据；确认 v2 不读取、改写、迁移或删除。
+- ⬜ 将 `.env.example` 更新为 `Settings.from_env()` 的实际变量、默认值、兼容别名与废弃项；更新 README 的 v2 启动和数据边界。
+- ⬜ 运行 v2→legacy import scan、入口前完整自动化测试、`compileall` 与 `git diff --check`；R8-P 独立提交。
 
-### 2. 遗留删除
+### 2. R8-E —— 根入口切换
 
-- ⬜ 删除旧 BaseAgent/MainAgent/ResumeAgent/JobSearchAgent 实现。
-- ⬜ 删除旧 App/Handler/Request/Response/UIBridge。
-- ⬜ 删除旧 ToolRegistry 与 import-time tool registration。
-- ⬜ 删除旧 RAG/Memory 全局 Facade 和兼容 adapter。
-- ⬜ 删除废弃 PlanStatusInfo、CONFIRM_APPROVED、SELECT/CONFIRM 协议分支。
-- ⬜ 删除源码目录中的 `.ipynb_checkpoints`。
+- ⬜ `main.py` 只 import `src.get_me_in.cli.main.main` 并 `raise SystemExit(main())`；删除 legacy composition 与 import-time registration。
+- ⬜ `src/get_me_in/cli/main.py` 只修正过时说明，不新增第二入口、类、service、port、schema 或公开方法。
+- ⬜ 在现有 `test_import_boundaries.py`、`test_settings.py` 与 CLI/bootstrap 测试中覆盖根入口只依赖 v2、配置错误退出码、正常关闭与示例配置一致性。
+- ⬜ R8-E 单独提交并记录 commit id；该提交是遗留删除前的明确回退点。
+
+### 3. R8-O —— 强制观察门禁
+
+- ⬜ 从 `uv run python main.py` 验证缺少／非法配置时可读错误退出且无 traceback，正常 `/exit` 返回成功退出码。
+- ⬜ 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke。
+- ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
+- ⬜ 对比切换前后 legacy data 目录证据，确认没有访问或修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
+- ⬜ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan。
+- ⬜ 用户审查 R8-O；未通过时以 `git revert <R8-E commit>` 回退。未获通过不得进入 R8-D。
+
+### 4. R8-D —— 遗留删除
+
+- ⬜ 删除 `src/agents/`、`src/cli/`、`src/llm/`、`src/memory/`、`src/prompts/`、`src/rag/`、`src/tools/`、`src/utils/`。
+- ⬜ 删除 `src/config.py`、`src/lifecycle.py`、`src/logger.py`、`src/message.py`、`src/request.py`、`src/response.py`。
+- ⬜ 保留 `src/__init__.py`、完整 `src/get_me_in/` 与 `tests/get_me_in/`；不删除或迁移任何旧 `data/` 运行数据。
+- ⬜ 删除经精确路径复核的仓库 `.ipynb_checkpoints`；不得使用宽泛递归清理。
 - ✅ 确认临时 `scripts/v2_runtime_smoke.py` 已随 R5 正式 CLI 落地删除。
-- ⬜ 移除所有 v2 → legacy imports。
+- ⬜ 删除后再次确认 `main.py`／`src/get_me_in/` 无 legacy import，清单中的 legacy production modules 均不存在。
+- ⬜ 审计 `pyproject.toml`／`uv.lock`；只移除经 import 与真实 smoke 证明未使用的依赖，无可删项则保持不变。
+- ⬜ R8-D 独立提交，不与入口切换或最终文档提交混合。
 
-### 3. 文档与状态
+### 5. R8-G —— 文档、状态与 G8
 
-- ⬜ 将落地架构更新到 `docs/design.md`。
-- ⬜ 将已完成迁移更新到 `docs/plan.md` 和 `docs/task.md`。
-- ⬜ 将关键重构决策追加到 `docs/decision.md`。
-- ⬜ 更新 AGENTS.md 中的架构、命令、约定和工具数。
-- ⬜ 使用 `/project-checkpoint` 更新 `docs/current.md`。
-- ⬜ 完成 G8 验收。
+- ⬜ 将已落地 v2 架构更新到 `docs/design.md`，将迁移完成状态更新到 `docs/plan.md` 和 `docs/task.md`。
+- ⬜ 更新 `docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md`、README 与 AGENTS.md；Agent、tool、command、配置和数据目录必须与实际代码一致。
+- ⬜ 同步 `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md`、`docs/decision.md` 与 `docs/current.md`。
+- ⬜ 完成删除后的完整自动化、静态、真实 adapter 与根入口 smoke matrix；确认旧数据保留说明和 R8-E 回退点完整。
+- ⬜ 完成 G8，checkpoint 后停止，等待用户审查；不得自动进入 R9。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 

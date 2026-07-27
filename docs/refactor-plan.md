@@ -263,21 +263,24 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **产出：**
 
-- `main.py` 指向 v2 bootstrap。
-- 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可被 v2 读取；不迁移旧 session/memory/temp/chroma 数据。
-- 更新 `docs/design.md`、`docs/plan.md`、`docs/task.md` 和 AGENTS.md 为已落地架构。
-- 删除旧 BaseAgent、App、Request/Response、UIBridge、全局 registries/facades 和兼容层。
-- 确认临时 `scripts/v2_runtime_smoke.py` 已在 R5 删除，不保留第二入口。
-- 清理 `.ipynb_checkpoints` 等不应进入源码树的文件。
+- R7-T2 先修复 Artifact exception retry、aggregate invariant 与 composition construction cleanup，并重新通过 G7；R8 不吸收这些缺口。
+- R8-P 先校验静态资产、Settings／`.env.example`、capability、命令、Agent/tool 数量、v2→legacy import 和 legacy data 非访问边界。
+- R8-E 仅将根 `main.py` 委托给 v2 CLI，形成独立可回退 commit；不同时删除 legacy。
+- R8-O 从根入口执行完整自动化与真实 smoke，验证入口退出码、CLI、Knowledge/Memory、Resume、handoff、审批／取消、restore/rewind 和资源关闭；用户审查通过前不进入删除。
+- R8-D 按已确认精确清单删除 legacy production modules 与 `.ipynb_checkpoints`，保留 `src/__init__.py`、完整 `src/get_me_in/` 和全部旧用户运行数据。
+- R8-G 更新 README、AGENTS.md、默认设计／计划／任务、capability matrix、smoke checklist 和活跃 refactor 文档为已落地事实。
 
 **验收门禁 G8：**
 
-- 完整 smoke matrix 全部通过。
-- 仓库中不再存在 v2 对旧架构的 import。
-- 旧入口删除前有独立可回退提交；删除后工作区与数据迁移说明完整。
-- 文档工具数、Agent 数和实际 Catalog 一致。
+- R8-E 前有通过的 G6／G7；R8-E 是可单独 `git revert` 的入口回退点，R8-O 通过并经用户审查后才允许 R8-D。
+- 完整 unittest、`compileall`、`git diff --check` 与真实 smoke matrix 全部通过，`uv run python main.py` 是唯一生产入口。
+- 仓库中不再存在 v2 对旧架构的 import，也不再存在清单中的 legacy production modules 或 `.ipynb_checkpoints`。
+- `data/reference/`、`data/prompts/`、`data/resume/template/` 作为静态输入可用；旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 未被读取、改写、迁移或删除。
+- `.env.example` 与 `Settings.from_env()` 一致；文档中的 Agent、tool、command 和配置数量与实际 Catalog／Settings 一致。
 
 **依赖：** G6、G7。
+
+**实施顺序：** R7-T2/G7 → R8-P → R8-E → R8-O（强制停止／用户审查）→ R8-D → R8-G/G8。每个切片独立验证和提交；R8 候选具体清单已记录在 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单`，尚未获得 coding 授权。
 
 ### R9 —— 新功能恢复
 
