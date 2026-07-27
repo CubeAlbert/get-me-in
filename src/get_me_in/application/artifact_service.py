@@ -54,8 +54,6 @@ class ArtifactService:
         else:
             operation = existing
         pdf = path.with_suffix(".pdf")
-        if existing is not None and workspace.exists(pdf):
-            return self._commit_reconciled_pdf(operation, path, pdf, workspace)
         backend_error: Exception | None = None
         try:
             result = self._backend.build_pdf(path, workspace=workspace, cancellation=cancellation)
@@ -98,17 +96,6 @@ class ArtifactService:
         if kind is ArtifactKind.LATEX:
             template_name = {"chn": "CHN_Template.tex", "en": "EN_Template.tex"}.get(template)
         return Artifact(1, self._ids.new_id(), session_id, agent_key, kind, path.as_posix(), self._repository.next_version(path.as_posix()), workspace.content_hash(path), self._clock.now(), template_name)
-
-    def _commit_reconciled_pdf(self, operation: ArtifactOperation, path: Path, pdf: Path, workspace) -> ProcessResult:
-        message = "Reconciled existing PDF output after an incomplete artifact operation."
-        stdout, stdout_bytes, stdout_cut = self._bound_log(message, workspace)
-        attempt = ArtifactBuildAttempt(1, self._ids.new_id(), operation.operation_key, operation.session_id, operation.agent_key, path.as_posix(), 0, stdout, "", stdout_bytes, 0, stdout_cut, False, False, False, self._clock.now())
-        artifact = self._artifact(pdf, operation.session_id, operation.agent_key, workspace)
-        try:
-            self._repository.save_operation(replace(operation, status=ArtifactOperationStatus.COMMITTED, artifacts=(artifact,), build_attempts=(attempt,)))
-        except Exception as error:
-            raise ArtifactPartialFailure("metadata_commit_failed", (pdf,), str(error)) from error
-        return ProcessResult(0, message, "")
 
     @staticmethod
     def _input_hash(**parameters: str) -> str:

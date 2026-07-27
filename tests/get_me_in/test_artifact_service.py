@@ -41,7 +41,7 @@ class ArtifactServiceTests(unittest.TestCase):
         self.assertEqual(1, self.backend.copy_calls)
         self.assertEqual(2, len(self.repository.list_artifacts()))
 
-    def test_build_records_exception_and_reconciles_existing_pdf(self) -> None:
+    def test_build_records_exception_and_pending_retry_rebuilds_existing_pdf(self) -> None:
         self.workspace.files[Path("resume.tex")] = "source"
         self.backend.build_error = RuntimeError("compiler unavailable")
         with self.assertRaisesRegex(RuntimeError, "compiler unavailable"):
@@ -51,12 +51,15 @@ class ArtifactServiceTests(unittest.TestCase):
         self.assertIn("compiler unavailable", attempt.stderr)
 
         self.workspace.files[Path("resume2.tex")] = "source"
-        self.workspace.files[Path("resume2.pdf")] = "pdf"
+        self.workspace.files[Path("resume2.pdf")] = "stale-pdf"
         revision = self.workspace.read(Path("resume2.tex")).revision
         key = ArtifactOperation.key_for(session_id="s", agent_key=AgentKey.RESUME, kind=ArtifactOperationKind.BUILD_PDF, path="resume2.tex", input_hash=revision)
         self.repository.save_operation(ArtifactOperation(1, key, "s", AgentKey.RESUME, ArtifactOperationKind.BUILD_PDF, "resume2.tex", revision, ArtifactOperationStatus.PENDING, _Clock().now()))
+        self.backend.build_error = None
         result = self.service.build_pdf(Path("resume2.tex"), workspace=self.workspace, cancellation=object(), session_id="s", agent_key=AgentKey.RESUME)
         self.assertEqual(0, result.exit_code)
+        self.assertEqual("pdf", self.workspace.files[Path("resume2.pdf")])
+        self.assertEqual(2, self.backend.build_calls)
         self.assertEqual(1, len(self.repository.list_artifacts("resume2.pdf")))
 
     def test_build_persists_non_success_process_outcomes_without_pdf_artifacts(self) -> None:
@@ -89,7 +92,7 @@ class _Workspace:
 
 
 class _Backend:
-    def __init__(self, workspace): self.workspace, self.copy_calls, self.build_error, self.result = workspace, 0, None, ProcessResult(0, "ok", "")
+    def __init__(self, workspace): self.workspace, self.copy_calls, self.build_calls, self.build_error, self.result = workspace, 0, 0, None, ProcessResult(0, "ok", "")
     def copy_template(self, template, prefix, target_dir, *, workspace):
         tex, readme = target_dir / f"{prefix}_CHN.tex", target_dir / "README.md"
         if not workspace.exists(tex):
@@ -98,6 +101,7 @@ class _Backend:
             workspace.write(readme, "readme")
         return TemplateCopyResult((tex, readme), target_dir)
     def build_pdf(self, path, *, workspace, cancellation):
+        self.build_calls += 1
         if self.build_error: raise self.build_error
         if self.result.exit_code == 0:
             workspace.write(path.with_suffix(".pdf"), "pdf")
