@@ -459,11 +459,16 @@
 
 - ✅ 从 `uv run python main.py` 验证缺少／非法配置时可读错误退出且无 traceback，正常 `/exit` 返回成功退出码。
 - ✅ 修复根入口切换后欢迎 banner 丢失的观察期回归：`Renderer.render_welcome()` 在首次输入前只渲染一次固定产品标识与 `/help` 提示；不扩展 `Settings` 或引入新依赖。
+- ✅ 确认 v2 `ToolDefinition`／`PromptRenderer` 只保留 `name/description/type/required`，实际生产 system prompt 已丢失旧版 `purpose/use_when/do_not_use_when/expected_output`、参数说明与默认值；该问题不是 Notebook 导出遗漏。
+- ✅ 核对 legacy Tool 基线仍在 `src/tools/`：9 个工具定义文件保留上述元数据，当前未被 v2 重构修改；逐项迁移审计若发现缺失或历史改写，再由用户提供原始定义。
+- ⬜ 提交并确认 Tool 提示词语义修复清单：明确 `ToolDefinition`／`ToolSchema` 的强类型字段、25 个工具逐项迁移映射、PromptRenderer 输出格式、兼容范围和测试切片；确认前不修改生产代码。
+- ⬜ 恢复全部 25 个工具的 LLM-facing 语义，至少覆盖 purpose、使用／禁用时机、预期输出、参数描述、默认值及适用的 allowed values/items；`Capability`／`ToolPolicy` 继续只负责可见性和审批，不得冒充提示词语义。
+- ⬜ 以真实 Main／Resume system prompt 导出和行为 smoke 验证工具目录完整性、capability 隔离、相似工具消歧、参数约束和结果预期；修复与完整复验前 R8-O 不得通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
 - ✅ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；banner 修复后当前为 227 项自动化测试通过。
-- ⬜ 用户审查 R8-O；未通过时以 `git revert <R8-E commit>` 回退，使用 R8-P 保留的 legacy rollback 配置恢复旧入口。未获通过不得进入 R8-D。
+- ⏸️ 用户审查 R8-O —— 当前被 Tool 提示词语义缺失阻断；修复并完成真实 prompt／行为复验前不得恢复审查，不得进入 R8-D。后续仍未通过时以 `git revert <R8-E commit>` 回退，使用 R8-P 保留的 legacy rollback 配置恢复旧入口。
 
 ### 4. R8-D —— 遗留删除
 

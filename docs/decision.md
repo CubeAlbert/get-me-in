@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 195 — Tool 提示词语义缺失阻断 R8-O](#决策-195--tool-提示词语义缺失阻断-r8-o)
 - [决策 194 — 恢复固定欢迎 banner 并暂缓主题客制化](#决策-194--恢复固定欢迎-banner-并暂缓主题客制化)
 - [决策 193 — R8-O 前置审查修复入口诊断与关闭边界](#决策-193--r8-o-前置审查修复入口诊断与关闭边界)
 - [决策 192 — R8-E 已完成并建立入口回退点](#决策-192--r8-e-已完成并建立入口回退点)
@@ -4388,3 +4389,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 在根 `main.py` 直接打印 Rich Panel —— 会污染唯一生产入口的委托职责，未采用。
 - 复用 `render_notice()` 输出纯文本 —— 无法恢复旧版 Panel 产品标识，也会混淆普通通知和启动展示语义，未采用。
 - 本次直接加入 `.env` 主题配置 —— 会扩大 R8 已确认配置契约并引入 Rich markup 安全边界，延后到 R9。
+
+---
+
+### 决策 195 —— Tool 提示词语义缺失阻断 R8-O
+
+**背景：** 使用生产 `build_application()`、真实 `AgentCatalog`／`ToolCatalog` 和 `PromptRenderer` 导出 Main／Resume system prompt 后，确认当前工具目录实际只包含 `name`、简短 `description`、参数类型和 required 列表。旧版 Tool 的 `purpose`、`use_when`、`do_not_use_when`、`expected_output`、参数描述与默认值没有进入 v2 `ToolDefinition`／`ToolSchema`，也没有被 PromptRenderer 输出；因此这不是 Notebook 导出遗漏，而是全部 25 个生产 Tool 的 LLM-facing 语义退化。现有 capability、confirmation、typed handler validation 只能控制可见性、审批和执行边界，不能替代工具选择、相似工具消歧、参数构造和结果理解所需的提示信息。
+
+**决定：**
+
+- 用户明确要求该问题必须修复，不接受维持现状。立即将其设为 R8-O/G8 阻断项；修复、完整自动化和真实 Main／Resume prompt／行为复验完成前，不得通过 R8-O、执行用户审查或进入 R8-D。
+- 本 checkpoint 只记录问题，不修改生产代码。下一步必须先提交 `ToolDefinition`／`ToolSchema` 强类型字段、PromptRenderer 输出、25 个工具逐项迁移映射、兼容边界和独立测试切片清单供用户确认。
+- 修复至少恢复 purpose、use_when、do_not_use_when、expected_output、参数 description/default，并对适用参数表达 allowed values/items；保留现有 type/required、Capability、confirmation、handler 和 ToolOutcome 运行时边界。
+- 当前 `src/tools/` 下 9 个 legacy Tool 定义文件仍保留完整元数据，Git 历史显示它们未在 v2 重构期间被修改，可作为迁移基线。逐项审计若发现某个工具缺失、描述已发生历史改写或无法确认原意，再由用户提供对应原始定义；当前无需用户额外提供。
+- 验收必须直接检查真实 Main／Resume system prompt，而不只检查 Tool 名称和数量；同时覆盖 capability 隔离、相似工具选择边界、参数说明／默认值／允许值和 expected output。既有 25 Tool 数量基线不因本修复改变。
+
+**理由：**
+
+- Runtime 拒绝非法参数只能让模型在失败后自修复，不能弥补调用前缺少使用时机、禁用条件和参数语义；继续切换会降低工具选择准确率并增加无效重试。
+- R8-D 计划删除 legacy `src/tools/`，必须在删除前完成语义迁移和逐项对照，避免唯一可直接审查的历史定义退出工作树。
+- 先确认强类型字段与迁移清单，可以避免简单复制旧 XML 字符串、重新引入全局 Registry，或把 LLM 提示语义错误塞入 ToolPolicy。
+
+**曾考虑的替代方案：**
+
+- 维持精简 `description`，依赖模型自行推断或 handler 报错 —— 用户明确拒绝，且无法满足行为对齐。
+- 把旧字段全部拼接进单个 `description` —— 会丢失结构、难以测试和演进，也无法可靠表达参数默认值／允许值，未采用。
+- 将 use/do-not-use 规则写入通用静态 prompt —— 会让 Agent 看见不可用工具规则，并产生 ToolCatalog 与 prompt 的双重事实源，未采用。
+- 先执行 R8-D，之后从 Git 历史恢复旧定义 —— 会人为移除当前最直接的逐项迁移基线，已拒绝。

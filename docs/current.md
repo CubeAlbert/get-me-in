@@ -2,15 +2,15 @@
 
 **当前阶段：** R8 —— 已完成可回退的 R8-E 入口切换，正在执行 R8-O 强制观察
 
-**当前任务：** R8-O 强制观察：从根入口执行完整 smoke matrix，验证真实链路、旧数据访问边界与资源关闭
+**当前任务：** R8-O Tool 提示词语义修复前置设计：恢复 25 个工具的 LLM-facing 元数据并重新验证真实 system prompt
 
-**当前子任务：** 继续完成基础对话与剩余 CLI／交互 smoke，再验证 Resume／Knowledge／Memory 真实链路和旧数据拒绝访问边界。
+**当前子任务：** 基于现存 legacy Tool 定义提交 `ToolDefinition`／`ToolSchema` 字段、25 个工具迁移映射、PromptRenderer 输出与测试切片清单，等待用户确认后再实施。
 
-**当前阻塞：** 无。R8-O 完成后必须停下等待用户审查；未经通过不得进入 R8-D。
+**当前阻塞：** R8-O/G8 被 Tool 提示词语义缺失阻断：v2 实际 system prompt 丢失 `use_when`、`do_not_use_when`、`expected_output`、参数说明和默认值。修复及完整复验前不得通过 R8-O 或进入 R8-D；当前 legacy 源定义仍完整，无需用户补充，逐项审计发现缺失时再请求原始定义。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 前置审查发现高日志阈值会丢失启动诊断、typed close issue 不可见以及 README／配置别名说明滞后；提交 `8e43bd7` 修复 file-only 完整诊断、关闭错误可见性和异常退出码，提交 `45b5152` 对齐观察期 README 与 `.env.example`。观察期又确认根入口切换后遗漏旧版欢迎 banner；现已在 v2 `Renderer` 恢复固定产品标识和 `/help` 提示，并保证首次输入前只显示一次；`.env`／主题客制化已记录为 R9 增强任务。29 项针对性测试、完整 227 项自动化测试、`compileall`、`git diff --check` 和 import scan 通过；真实 `uv run python main.py` 在输入提示前显示 banner，交互式 `/exit` 返回 `0`。根入口缺失／非法配置返回 `2`，真实启动异常在 `LOG_LEVEL=ERROR` 下返回 `1`、终端无 traceback 且文件日志保留完整诊断。R8-O 仍只完成入口契约、部分 CLI 和全量回归，真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 待执行；未经用户审查不得进入 R8-D。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner，最近完整基线为 227 项自动化测试、`compileall`、`git diff --check`、import scan 与真实 banner／`/exit` smoke 通过。随后从真实 system prompt 导出确认：v2 `ToolDefinition`／`PromptRenderer` 将旧版 Tool 元数据压缩为 `name/description/type/required`，全部 25 个工具缺失 `purpose/use_when/do_not_use_when/expected_output`、参数说明和默认值；该问题属于生产 prompt 行为退化，不是导出脚本问题。用户明确要求必须修复且不得维持现状。当前 `src/tools/` 下 9 个 legacy Tool 文件仍保留 104 处相关定义，v2 重构期间未改写，可作为迁移基线；若逐项审计发现缺失或历史改写，再由用户提供原始定义。本 checkpoint 只记录问题，不修改生产代码；R8-O 审查和 R8-D 均被阻断。
 
-**下一步：** 从根入口完成剩余 CLI／交互、Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
+**下一步：** 提交 Tool 语义修复的具体文件、class、公开方法、25 个工具字段迁移映射、PromptRenderer 输出格式和测试切片清单；用户确认后实施，再恢复剩余 R8-O smoke。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -33,6 +33,7 @@
 192. **R8-E 已完成并建立入口回退点** — 根入口切换为 v2，入口契约测试与 222 项回归通过；`9fbeabc` 是 R8-D 前唯一需要 revert 的入口回退点。
 193. **R8-O 前置审查修复入口诊断与关闭边界** — `8e43bd7` 使启动异常在所有允许日志阈值下仅向文件写完整诊断，并让 Worker／Application 关闭异常及 `CloseReport.issues` 对用户可见且返回 `1`；`45b5152` 对齐 README 与配置兼容别名说明。225 项回归与入口 smoke 通过，R8-O 仍未完成。
 194. **恢复固定欢迎 banner 并暂缓主题客制化** — R8-O 将根入口切换后丢失的旧版欢迎体验认定为回归，允许新增 `Renderer.render_welcome()` 并在首次输入前调用一次；本次不修改 Settings，显示开关、标题、副标题和样式配置统一记录到 R9。完整 227 项测试与真实根入口 banner／`/exit` smoke 通过。
+195. **Tool 提示词语义缺失阻断 R8-O** — 真实 system prompt 证明 v2 全部 25 个 Tool 只暴露精简描述、参数类型与必填项，旧版使用／禁用时机、预期输出、参数说明和默认值未迁移。用户明确要求必须修复；现存 legacy Tool 定义作为迁移基线，修复和真实 prompt／行为复验前不得通过 R8-O 或进入 R8-D。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
