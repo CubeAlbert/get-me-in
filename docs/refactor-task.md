@@ -435,7 +435,7 @@
 
 ## R8 —— 切换与清理
 
-> 决策 191 已授权并完成 R8-P；R8-E 正在实施。R8-O 的用户审查仍是进入 R8-D 前不可跳过的强制门禁。
+> 决策 191 已授权并完成 R8-P，决策 192 完成 R8-E；当前正在执行 R8-O。R8-O 的用户审查仍是进入 R8-D 前不可跳过的强制门禁。
 
 ### 1. R8-P —— 切换准备
 
@@ -450,18 +450,18 @@
 ### 2. R8-E —— 根入口切换
 
 - ✅ `main.py` 只 import `src.get_me_in.cli.main.main` 并 `raise SystemExit(main())`；已删除 legacy composition 与 import-time registration。
-- ✅ `src/get_me_in/cli/main.py` 已修正过时说明；Settings 错误继续渲染并返回 `2`，composition／CLI 构造或启动的 `Exception` 记录完整文件诊断、渲染简短错误并返回 `1`，正常关闭返回 `0`；不捕获 `KeyboardInterrupt`／`SystemExit`，未新增第二入口或公开 API。
-- ✅ `test_import_boundaries.py`、`test_settings.py`、既有 CLI/bootstrap 测试与 `test_cli_main.py` 覆盖根入口只依赖 v2、示例配置一致性、Settings 错误 `2`、启动错误 `1` 且无 traceback、正常关闭 `0` 与资源关闭。
+- ✅ `src/get_me_in/cli/main.py` 已修正过时说明；Settings 错误继续渲染并返回 `2`，composition／CLI 构造或启动的 `Exception` 以不受 `LOG_LEVEL` 高阈值过滤的 file-only 诊断记录完整 traceback、终端仅渲染简短错误并返回 `1`；正常关闭返回 `0`，关闭异常或 `CloseReport.issues` 对用户可见并返回 `1`。不捕获 `KeyboardInterrupt`／`SystemExit`，未新增第二入口或公开 API。
+- ✅ `test_import_boundaries.py`、`test_settings.py`、既有 CLI/bootstrap 测试与 `test_cli_main.py` 覆盖根入口只依赖 v2、示例配置一致性、Settings 错误 `2`、启动错误 `1` 且无 traceback、`LOG_LEVEL=ERROR` 文件诊断、正常关闭 `0`、关闭异常隔离与 typed close issue 可见性。
 - ✅ 未新增 `[project.scripts]` 或其他生产入口。
 - ✅ R8-E 已独立提交 `9fbeabc`；该提交是遗留删除前的明确回退点。
 
 ### 3. R8-O —— 强制观察门禁
 
-- ⬜ 从 `uv run python main.py` 验证缺少／非法配置时可读错误退出且无 traceback，正常 `/exit` 返回成功退出码。
-- ⬜ 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke。
+- ✅ 从 `uv run python main.py` 验证缺少／非法配置时可读错误退出且无 traceback，正常 `/exit` 返回成功退出码。
+- 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
-- ⬜ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan。
+- ✅ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；当前为 225 项自动化测试通过。
 - ⬜ 用户审查 R8-O；未通过时以 `git revert <R8-E commit>` 回退，使用 R8-P 保留的 legacy rollback 配置恢复旧入口。未获通过不得进入 R8-D。
 
 ### 4. R8-D —— 遗留删除

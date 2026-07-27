@@ -8,6 +8,10 @@
 
 ## 目录
 
+- [决策 193 — R8-O 前置审查修复入口诊断与关闭边界](#决策-193--r8-o-前置审查修复入口诊断与关闭边界)
+- [决策 192 — R8-E 已完成并建立入口回退点](#决策-192--r8-e-已完成并建立入口回退点)
+- [决策 191 — 授权 R8 实施并完成 R8-P](#决策-191--授权-r8-实施并完成-r8-p)
+- [决策 190 — R8 设计审查收紧入口错误、回退配置与验收证据](#决策-190--r8-设计审查收紧入口错误回退配置与验收证据)
 - [决策 189 — R7-T2 修复完成并再次恢复 G7](#决策-189--r7-t2-修复完成并再次恢复-g7)
 - [决策 188 — R7-T2 审查再次撤回 G7 并细化 R8](#决策-188--r7-t2-审查再次撤回-g7-并细化-r8)
 - [决策 187 — R7-T 修复完成并重新通过 G7](#决策-187--r7-t-修复完成并重新通过-g7)
@@ -4330,3 +4334,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 
 - 让 `logger.exception()` 直接输出 traceback 到 stderr —— 会违反入口错误不向用户显示 traceback 的观察门禁，未采用。
+
+---
+
+### 决策 193 —— R8-O 前置审查修复入口诊断与关闭边界
+
+**背景：** R8-E checkpoint 后进入 R8-O 前置审查。审查与真实根入口复现发现：启动异常使用 `INFO` 记录，`LOG_LEVEL` 为 `WARNING`／`ERROR`／`CRITICAL` 时完整诊断不会写入文件；`Application.close()` 返回的 `CloseReport.issues` 被入口忽略，关闭失败或超时仍可能返回 `0`；README 仍把 v2 模块入口描述为切换前预览，`.env.example` 又把 v2 实际支持的三个 RAG 兼容别名放入“v2 不读取”的 legacy-only 段。
+
+**决定：**
+
+- 提交 `8e43bd7` 在既有日志配置中增加内部 file-only record 标记。启动／运行异常以 `CRITICAL` 写入文件并由 stderr handler 过滤；因此所有允许的 `LOG_LEVEL` 都保留完整 traceback，终端仍只显示简短错误。日志配置本身失败时不尝试向未配置 logger 写 traceback。
+- 同一提交让入口分别隔离 Worker 与 Application 的关闭异常，始终尝试关闭两者；`CloseReport.issues` 的失败／超时会写入 file-only 诊断、向用户显示资源名称和原因，并将进程退出码改为 `1`。无关闭问题的正常 `/exit` 保持 `0`。
+- 提交 `45b5152` 将 README 更新为“根 `main.py` 是唯一 v2 生产入口、模块入口仅用于诊断”，并把 `BI_ENCODER_MODEL`、`CROSS_ENCODER_MODEL`、`EMBED_BATCH_SIZE` 移到 v2 兼容别名段；真正仅供旧入口回退的变量继续保留在 legacy-only 段。
+- 验证结果为 225 项自动化测试、`compileall`、`git diff --check` 和 import scan 通过。真实根入口缺失／非法配置均返回 `2`；`LOG_LEVEL=ERROR` 下的真实启动异常返回 `1`，终端无 traceback、临时文件日志含完整 traceback；交互式 `/exit` 返回 `0`。
+- R8-O 只完成入口契约、`/help`、`/approval`、`/exit`、正常关闭和全量回归；其余 CLI、真实 Agent／Knowledge／Memory／Resume 及旧数据拒绝访问边界仍待执行。不得据此进入 R8-D，R8-O 完成后仍必须等待用户审查。
+
+**理由：**
+
+- 启动失败提示用户检查日志时，诊断不能因用户选择更高日志阈值而消失；file-only 高优先级记录同时满足文件完整、终端简洁两个契约。
+- `CloseReport` 是关闭失败和超时的强类型事实，入口忽略它会把异常关闭误报为成功；返回 `1` 能区分正常与异常关闭，同时保留失败隔离和逆序资源策略。
+- 观察期文档必须描述当前入口和实际 Settings 行为，才能保证单提交回退说明可执行且不会把兼容别名误认为 v2 禁用变量。
+
+**曾考虑的替代方案：**
+
+- 继续以 `INFO` 记录异常并要求生产环境使用 `LOG_LEVEL=INFO` —— 会让受支持的高日志阈值失去诊断，已拒绝。
+- 以普通 `ERROR`／`CRITICAL` 同时写文件和 stderr —— 会重新向终端输出 traceback，违反入口契约，已拒绝。
+- 只调用 `Application.close()` 而不解释 `CloseReport` —— 会继续把 typed failure 静默丢弃，已拒绝。
+- 将针对性修复视为 R8-O 已完成 —— 仍缺真实链路和旧数据拒绝访问证据，已拒绝。

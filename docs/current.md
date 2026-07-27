@@ -4,13 +4,13 @@
 
 **当前任务：** R8-O 强制观察：从根入口执行完整 smoke matrix，验证真实链路、旧数据访问边界与资源关闭
 
-**当前子任务：** 验证根入口的错误／成功退出码、CLI 命令与交互、Resume／Knowledge／Memory 链路，以及旧数据拒绝访问边界。
+**当前子任务：** 继续完成基础对话与剩余 CLI／交互 smoke，再验证 Resume／Knowledge／Memory 真实链路和旧数据拒绝访问边界。
 
 **当前阻塞：** 无。R8-O 完成后必须停下等待用户审查；未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c` 保留回退配置并完成配置／数据边界审计。R8-E 提交 `9fbeabc` 将根 `main.py` 切换为唯一的 v2 CLI 委托；Settings 错误为退出码 `2`，启动异常为无 traceback 的用户可读错误及退出码 `1`，正常关闭为 `0`。222 项自动化测试、`compileall` 与 `git diff --check` 均通过。R8-O 若不通过，执行 `git revert 9fbeabc`，使用 R8-P 保留的 legacy rollback only 配置恢复旧入口；不得触碰旧运行数据。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 前置审查发现高日志阈值会丢失启动诊断、typed close issue 不可见以及 README／配置别名说明滞后；提交 `8e43bd7` 修复 file-only 完整诊断、关闭错误可见性和异常退出码，提交 `45b5152` 对齐观察期 README 与 `.env.example`。225 项自动化测试、`compileall`、`git diff --check` 和 import scan 通过；根入口缺失／非法配置返回 `2`，真实启动异常在 `LOG_LEVEL=ERROR` 下返回 `1`、终端无 traceback 且文件日志保留完整诊断，交互式 `/exit` 返回 `0`。R8-O 仅完成入口契约、部分 CLI 和全量回归，真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
 
-**下一步：** 执行 R8-O 真实 smoke matrix、旧数据拒绝访问边界和全量复验；完成后 checkpoint 并停下等待用户审查。
+**下一步：** 从根入口完成剩余 CLI／交互、Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -31,6 +31,7 @@
 190. **R8 设计审查收紧入口错误、回退配置与验收证据** — 五切片顺序不变；R8-E 增加启动异常退出码 `1` 契约，R8-P 保留 legacy rollback 配置，旧数据未读／未写使用不同证据，Catalog 固定为 2 Agent／25 tool／10 command。本轮只更新候选文档，R8 coding 仍未授权。
 191. **授权 R8 实施并完成 R8-P** — 用户授权从 bootstrap 后开始 R8 并要求每个阶段 checkpoint；R8-P 以 `d91e37c` 完成，保持 R8-O 用户审查门禁不变。
 192. **R8-E 已完成并建立入口回退点** — 根入口切换为 v2，入口契约测试与 222 项回归通过；`9fbeabc` 是 R8-D 前唯一需要 revert 的入口回退点。
+193. **R8-O 前置审查修复入口诊断与关闭边界** — `8e43bd7` 使启动异常在所有允许日志阈值下仅向文件写完整诊断，并让 Worker／Application 关闭异常及 `CloseReport.issues` 对用户可见且返回 `1`；`45b5152` 对齐 README 与配置兼容别名说明。225 项回归与入口 smoke 通过，R8-O 仍未完成。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
