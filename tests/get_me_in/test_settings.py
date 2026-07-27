@@ -30,6 +30,23 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual("INFO", settings.log_level)
         self.assertEqual("BAAI/bge-base-zh-v1.5", settings.embedding_model)
         self.assertEqual("BAAI/bge-reranker-v2-m3", settings.reranker_model)
+        self.assertEqual(Path("project/data/v2/artifacts"), settings.artifacts_dir)
+        self.assertEqual(60.0, settings.pdf_build_timeout_seconds)
+        self.assertEqual(65536, settings.artifact_log_max_bytes)
+
+    def test_from_env_validates_artifact_settings(self) -> None:
+        env = {
+            "OPENAI_API_KEY": "key", "OPENAI_BASE_URL": "https://example.test",
+            "LLM_PRO_MODEL": "pro", "LLM_FLASH_MODEL": "flash",
+            "PDF_BUILD_TIMEOUT_SECONDS": "12.5", "ARTIFACT_LOG_MAX_BYTES": "1024",
+        }
+        settings = Settings.from_env(env, project_root=Path("project"))
+        self.assertEqual(12.5, settings.pdf_build_timeout_seconds)
+        self.assertEqual(1024, settings.artifact_log_max_bytes)
+        for name, value in (("PDF_BUILD_TIMEOUT_SECONDS", "0"), ("ARTIFACT_LOG_MAX_BYTES", "0")):
+            invalid = {**env, name: value}
+            with self.assertRaises(SettingsValidationError):
+                Settings.from_env(invalid, project_root=Path("project"))
 
     def test_from_env_accepts_legacy_rag_model_names_through_typed_settings(self) -> None:
         settings = Settings.from_env(

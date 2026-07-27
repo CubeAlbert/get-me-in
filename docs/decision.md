@@ -4101,3 +4101,19 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - operation aggregate 保证 operation 状态与其结果对 repository 读取者原子可见；保留 PENDING 则使局部完成具备可恢复证据。
 - 将模板读取和进程调用保留在 backend，使 application service 不越过已确认的分层边界。
+
+---
+
+### 决策 184 —— R7-P6 production composition 完成
+
+**背景：** P5 已具备 ArtifactService，但 production composition 仍没有将 repository、日志上限和实际 pdflatex timeout 作为 Settings 管理的依赖。
+
+**决定：**
+
+- Settings 增加 `artifacts_dir`、`pdf_build_timeout_seconds`、`artifact_log_max_bytes`，默认分别为 `data/v2/artifacts/`、60 秒和 65536 bytes；环境变量为 `PDF_BUILD_TIMEOUT_SECONDS` 与 `ARTIFACT_LOG_MAX_BYTES`，均拒绝非正值。
+- bootstrap 以 LocalResumeArtifacts 作为低层 backend，构造唯一的 JsonArtifactRepository 与 ArtifactService，并将同一个 service 注入 Main/Resume ToolContext。
+- ResourceStack 只登记 ArtifactService 的 `close()`，由它关闭 repository；不改变 ToolOutcome、SessionSnapshot 或旧 `main.py`。
+
+**理由：**
+
+- 配置化使生产 timeout 与日志边界可显式审计、可测试；单一资源 owner 避免共享 repository 的重复关闭。

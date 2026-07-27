@@ -19,9 +19,10 @@ class LocalResumeArtifacts:
 
     _templates = {"chn": "CHN_Template.tex", "en": "EN_Template.tex"}
 
-    def __init__(self, template_dir: Path, process_runner: ProcessRunner) -> None:
+    def __init__(self, template_dir: Path, process_runner: ProcessRunner, build_timeout_seconds: float) -> None:
         self._template_dir = template_dir
         self._process_runner = process_runner
+        self._build_timeout_seconds = build_timeout_seconds
 
     def copy_template(
         self, template: str, prefix: str, target_dir: Path, *, workspace: WorkspacePort
@@ -65,6 +66,6 @@ class LocalResumeArtifacts:
         return self._process_runner.run(
             (pdflatex, "-synctex=1", "-interaction=nonstopmode", source.name),
             cwd=source.parent,
-            timeout_seconds=60,
+            timeout_seconds=self._build_timeout_seconds,
             cancellation=cancellation,
         )

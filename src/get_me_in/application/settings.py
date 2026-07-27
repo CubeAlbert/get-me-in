@@ -40,6 +40,9 @@ class Settings:
     retrieval_top_k: int = 8
     shutdown_timeout_seconds: float = 5.0
     auto_memory_on_exit: bool = False
+    artifacts_dir: Path = Path("data/v2/artifacts")
+    pdf_build_timeout_seconds: float = 60.0
+    artifact_log_max_bytes: int = 65536
 
     @classmethod
     def from_env(cls, env: Mapping[str, str], *, project_root: Path) -> "Settings":
@@ -119,6 +122,16 @@ class Settings:
                 raise SettingsValidationError(f"{name} must be at least one")
             return value
 
+        def positive_float(name: str, default: float) -> float:
+            raw = env.get(name, str(default))
+            try:
+                value = float(raw)
+            except ValueError as error:
+                raise SettingsValidationError(f"{name} must be a number: {raw!r}") from error
+            if value <= 0:
+                raise SettingsValidationError(f"{name} must be greater than zero")
+            return value
+
         shutdown_raw = env.get("SHUTDOWN_TIMEOUT_SECONDS", "5")
         try:
             shutdown_timeout = float(shutdown_raw)
@@ -172,4 +185,7 @@ class Settings:
             retrieval_top_k=positive_int("RETRIEVAL_TOP_K", 8),
             shutdown_timeout_seconds=shutdown_timeout,
             auto_memory_on_exit=boolean_values[auto_memory_raw],
+            artifacts_dir=Path(env.get("ARTIFACTS_DIR", project_root / "data" / "v2" / "artifacts")),
+            pdf_build_timeout_seconds=positive_float("PDF_BUILD_TIMEOUT_SECONDS", 60),
+            artifact_log_max_bytes=positive_int("ARTIFACT_LOG_MAX_BYTES", 65536),
         )

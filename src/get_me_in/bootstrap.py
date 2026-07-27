@@ -19,6 +19,7 @@ from src.get_me_in.adapters.json_memory_repository import JsonMemoryRepository
 from src.get_me_in.adapters.local_knowledge_sources import LocalKnowledgeSourceRepository
 from src.get_me_in.adapters.markdown_chunker import MarkdownChunker
 from src.get_me_in.adapters.local_resume_artifacts import LocalResumeArtifacts
+from src.get_me_in.adapters.json_artifact_repository import JsonArtifactRepository
 from src.get_me_in.adapters.subprocess_runner import SubprocessRunner
 from src.get_me_in.adapters.json_session_repository import JsonSessionRepository
 from src.get_me_in.application.agent_catalog import AgentCatalog
@@ -35,6 +36,7 @@ from src.get_me_in.application.orchestration import Orchestrator
 from src.get_me_in.application.knowledge_service import KnowledgeService
 from src.get_me_in.application.memory_extractor import MemoryExtractor
 from src.get_me_in.application.memory_service import MemoryService
+from src.get_me_in.application.artifact_service import ArtifactService
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
@@ -119,6 +121,14 @@ def build_application(
     resume_artifacts = LocalResumeArtifacts(
         settings.resume_template_dir,
         SubprocessRunner(cancel_grace_seconds=settings.cancel_grace_seconds),
+        settings.pdf_build_timeout_seconds,
+    )
+    artifacts = ArtifactService(
+        resume_artifacts,
+        JsonArtifactRepository(settings.artifacts_dir),
+        clock,
+        id_generator,
+        settings.artifact_log_max_bytes,
     )
     workspace_access = WorkspaceAccessState()
     main_plan = PlanService(id_generator)
@@ -183,7 +193,7 @@ def build_application(
             web_search=web_search,
             external_files=external_files,
             retrieval=knowledge,
-            resume_artifacts=resume_artifacts,
+            resume_artifacts=artifacts,
             workspace_access=workspace_access,
         ),
     )
@@ -196,7 +206,7 @@ def build_application(
         tool_context=ToolContext(
             session_id=session_id, agent_key=AgentKey.RESUME, cancellation=resume_cancellation,
             plan=resume_plan, workspace=workspace, frontend=frontend, web_search=web_search,
-            external_files=external_files, retrieval=knowledge, resume_artifacts=resume_artifacts,
+            external_files=external_files, retrieval=knowledge, resume_artifacts=artifacts,
             workspace_access=workspace_access,
         ),
     )
@@ -222,6 +232,7 @@ def build_application(
     resources.register("sessions", sessions.close)
     resources.register("knowledge", knowledge.close)
     resources.register("memory", memory.close)
+    resources.register("artifacts", artifacts.close)
     resources.register("background_worker", worker.close)
     application = Application(
         settings=settings,

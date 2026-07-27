@@ -57,7 +57,7 @@ class ResumeToolTests(unittest.TestCase):
             (templates / "README.md").write_text("说明", encoding="utf-8")
             workspace = LocalWorkspace(root / "workspace")
             workspace.write(Path("resume/README.md"), "旧说明")
-            adapter = LocalResumeArtifacts(templates, _Runner())
+            adapter = LocalResumeArtifacts(templates, _Runner(), 60)
 
             result = adapter.copy_template("all", "candidate_CHN", Path("resume"), workspace=workspace)
 

@@ -395,7 +395,7 @@
 - ✅ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。提交：待本 checkpoint 后创建。
 - ✅ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。针对性 3 项测试通过；提交：待本 checkpoint 后创建。
 - ✅ 切片 5：ArtifactService、ResumeArtifactPort 替换、copy/build/log/partial-failure tests。针对性 10 项测试与 `compileall` 通过；提交：本 checkpoint 创建。
-- ⬜ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。
+- ✅ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。全量 202 项测试与 `compileall` 通过；提交：本 checkpoint 创建。
 - ⬜ 切片 7：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。
 
 ### 6. 端到端验证

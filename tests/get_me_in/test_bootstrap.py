@@ -193,6 +193,16 @@ class BootstrapTests(unittest.TestCase):
         )
         self.assertEqual(expected, application._memory._extractor._prompt)
 
+    def test_composition_owns_one_shared_artifact_service(self) -> None:
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
+        runtimes = application._sessions._orchestrator._runtimes
+
+        self.assertIs(
+            runtimes[AgentKey.MAIN]._tool_context.resume_artifacts,
+            runtimes[AgentKey.RESUME]._tool_context.resume_artifacts,
+        )
+        self.assertEqual(60.0, runtimes[AgentKey.RESUME]._tool_context.resume_artifacts._backend._build_timeout_seconds)
+
     def test_composition_failure_does_not_leave_background_thread(self) -> None:
         before = {id(thread) for thread in enumerate_threads()}
 
