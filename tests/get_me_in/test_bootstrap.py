@@ -5,9 +5,9 @@ from threading import enumerate as enumerate_threads
 from unittest.mock import patch
 
 from src.get_me_in.bootstrap import build_application
-from src.get_me_in.application.commands import Continue, UserMessage
+from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
 from src.get_me_in.application.app_commands import DumpSession, RestoreSession, RewindSession
-from src.get_me_in.application.events import Completed, Progress, ToolFinished, ToolStarted
+from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress, ToolFinished, ToolStarted
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.sessions import RuntimePhase
@@ -202,6 +202,70 @@ class BootstrapTests(unittest.TestCase):
             runtimes[AgentKey.RESUME]._tool_context.resume_artifacts,
         )
         self.assertEqual(60.0, runtimes[AgentKey.RESUME]._tool_context.resume_artifacts._backend._build_timeout_seconds)
+
+    def test_resume_handoff_prompt_temperatures_and_snapshot_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            main_llm = _FakeLlm([
+                '{"content":"","thinking":"delegate","tool_call":{"name":"switch_to_subagent","arguments":{"agent_name":"resume","context":"Tailor the resume"}}}',
+                '{"content":"main complete","thinking":"done"}',
+            ])
+            resume_llm = _FakeLlm(
+                '{"content":"","thinking":"return","tool_call":{"name":"switch_to_mainagent","arguments":{"summary":"resume complete"}}}'
+            )
+            application = build_application(
+                _settings(sessions_dir=Path(temporary)),
+                runtime_llms={AgentKey.MAIN: main_llm, AgentKey.RESUME: resume_llm},
+            )
+            self.addCleanup(application.close)
+
+            main_approval = _pump(application, UserMessage("Tailor my resume"))[-1]
+            handoff = application.handle(Approve(main_approval.call_id))
+            resume_approval = _pump(application, Continue())[-1]
+            completed = _pump(application, Approve(resume_approval.call_id))[-1]
+
+            self.assertIsInstance(main_approval, ApprovalRequested)
+            self.assertIsInstance(handoff, HandoffRequested)
+            self.assertIsInstance(resume_approval, ApprovalRequested)
+            self.assertIsInstance(completed, Completed)
+            self.assertEqual(0.1, main_llm.request.temperature)
+            self.assertEqual(0.2, resume_llm.request.temperature)
+            resume_prompt = resume_llm.request.messages[0].content
+            for tool_name in (
+                "create_plan", "web_search", "read_customer_file",
+                "workspace_edit", "workspace_replace", "workspace_open",
+                "query_memory", "query_reference_data", "copy_template",
+                "build_pdf", "switch_to_mainagent",
+            ):
+                self.assertIn(tool_name, resume_prompt)
+            self.assertNotIn("switch_to_subagent", resume_prompt)
+            self.assertEqual(AgentKey.MAIN, application.view().active_agent)
+            self.assertEqual((), application._sessions._session.handoff_stack)
+
+            snapshot = application.snapshot()
+            turn_id = application.view().rewind_points[0].turn_id
+            rewound = application.handle(RewindSession(turn_id))
+            restored = application.handle(RestoreSession(snapshot.session.session_id))
+
+            self.assertEqual(RuntimePhase.READY, rewound.phase)
+            self.assertEqual(RuntimePhase.COMPLETED, restored.phase)
+            self.assertEqual(AgentKey.MAIN, restored.active_agent)
+            self.assertTrue(snapshot.session.agents[AgentKey.RESUME].history)
+
+    def test_rejected_resume_handoff_stays_in_main(self) -> None:
+        application = self._build_application(
+            _settings(),
+            llm=_FakeLlm(
+                '{"content":"","thinking":"delegate","tool_call":{"name":"switch_to_subagent","arguments":{"agent_name":"resume"}}}'
+            ),
+        )
+
+        approval = _pump(application, UserMessage("Delegate this"))[-1]
+        rejected = application.handle(Reject(approval.call_id, "User rejected approval"))
+
+        self.assertIsInstance(approval, ApprovalRequested)
+        self.assertIsInstance(rejected, Cancelled)
+        self.assertEqual(AgentKey.MAIN, application.view().active_agent)
+        self.assertEqual((), application._sessions._session.handoff_stack)
 
     def test_composition_failure_does_not_leave_background_thread(self) -> None:
         before = {id(thread) for thread in enumerate_threads()}
