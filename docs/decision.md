@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 198 — 恢复 SubAgent XML prompt 并限定路由可见性](#决策-198--恢复-subagent-xml-prompt-并限定路由可见性)
 - [决策 197 — 恢复 legacy XML Tool prompt 结构与固定语义顺序](#决策-197--恢复-legacy-xml-tool-prompt-结构与固定语义顺序)
 - [决策 196 — 恢复 25 个 Tool 的完整 LLM-facing 语义](#决策-196--恢复-25-个-tool-的完整-llm-facing-语义)
 - [决策 195 — Tool 提示词语义缺失阻断 R8-O](#决策-195--tool-提示词语义缺失阻断-r8-o)
@@ -4473,3 +4474,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 只移除 `sort_keys=True`、继续输出 Tool JSON —— 可以修复顺序，但仍保留 `<Tools>` 包裹 JSON 的混合结构，未采用。
 - 把 Arguments 也改为逐字段 XML —— 会增加冗长程度和转义负担，且参数对象用 JSON 已足够清晰，未采用。
 - 恢复完整 legacy Tool／Registry 实现 —— 会破坏 v2 显式 composition root 与强类型执行边界，继续拒绝。
+
+---
+
+### 决策 198 —— 恢复 SubAgent XML prompt 并限定路由可见性
+
+**背景：** v2 PromptRenderer 将 AgentDescriptor 序列化为按字母排序的单行 JSON，只输出 key、name、description，遗漏 legacy SubAgentDescriptor 中用于路由判断的 responsibilities 与 hard constraints。它还简单排除“当前 Agent”后输出其余全部 Agent，导致 Resume prompt 把 Main 错列为可切换子 Agent。用户要求 SubAgent 与 Tool 使用一致的 XML 风格，并询问为何 production prompt 只有 Resume、没有 Job Search。
+
+**决定：**
+
+- SubAgent 恢复 `<SubAgent name="key">` XML，字段顺序固定为 `Name`、`Description`、`Responsibilities`、`HardConstraints`；多个 SubAgent 块使用一个空行分隔。
+- 所有内容仍从 immutable AgentDescriptor／AgentSpec 生成，不恢复 legacy AgentRegistry、import-time 注册或 Agent 私有方法读取。
+- 只有声明 `Capability.ROUTE` 的 Agent 才注入 SubAgent 列表；当前 Main 看见 Resume，Resume 的 `<SubAgents>` 内容为空。
+- production Catalog 继续只装配 Main 与 Resume。legacy JobSearchAgent 明确标记为测试壳，完整 Job Search 在 R0～R8 冻结并列入后续产品能力；保留 `AgentKey.JOB_SEARCH` 和通用 orchestration 测试，不将其误报为当前可用 Agent。
+- 本变更仅修复模型可见的路由描述与可见性，不改变 AgentCatalog、Orchestrator、handoff protocol 或 Tool capability。
+- 验证结果：30 项 Prompt/bootstrap/Catalog/orchestration 回归、完整 235 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `SUBAGENT_XML_SMOKE_OK main_chars=11930 resume_chars=19809 agents=2 tools=25`，并验证字段顺序、完整中文元数据、Main-only 可见性和 JobSearch 未装配。
+
+**理由：**
+
+- responsibilities 与 hard constraints 是 Main 判断是否路由、是否越权所需的核心信息，不能压缩为 display name 和 description。
+- XML 层级与 `<SubAgents>` 静态模板、Tool prompt 结构及 legacy 行为保持一致，减少混合格式和模型解析歧义。
+- 用 Route capability 表达可见性比按具体 AgentKey 特判更符合 v2 capability 架构，也防止专业子 Agent 把 Main 或其他 Agent 当作可直接调度目标。
+
+**曾考虑的替代方案：**
+
+- 只把现有三字段 JSON 改为 XML —— 仍会遗漏路由边界并保留 Resume 反向看见 Main 的错误，未采用。
+- 立即把 legacy JobSearchAgent 加入 production composition —— 该实现只是测试壳，且违反 R0～R8 冻结完整 Job Search 的已确认范围，未采用。
+- 恢复 legacy AgentRegistry —— 会重新引入全局可变注册与 Agent 私有状态读取，继续拒绝。

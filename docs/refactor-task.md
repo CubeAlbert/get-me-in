@@ -465,6 +465,9 @@
 - ✅ 全部 25 个工具已与 9 个 legacy 定义文件一一对应并完成迁移；`workspace_edit.revision` 等 v2 已确认接口差异保留并补充准确说明，没有工具缺失，无需用户另行提供原始定义。
 - ✅ 修复 Tool prompt 字段被 `sort_keys=True` 重排为字母顺序的问题；模型固定先看到用途和使用边界，再看到参数及预期输出。恢复 XML 仅影响 LLM-facing 序列化，不恢复 legacy import-time Registry。
 - ✅ 相邻 `<Tool>` 块使用 `\n\n` 分隔，在模型可见 prompt 中保留一个空行；回归测试锁定 `</Tool>\n\n<Tool ...>` 格式。
+- ✅ 核对 production Catalog 只有 Main／Resume 是既定范围而非迁移遗漏：legacy JobSearchAgent 仅为 M4 测试壳，完整 Job Search 在 R0～R8 冻结，保留 `AgentKey.JOB_SEARCH` 与通用 handoff 测试作为未来扩展点，本次不新增 Agent。
+- ✅ SubAgent prompt 恢复 legacy XML 语义结构：`<SubAgent name>` 内固定输出 `Name`、`Description`、`Responsibilities`、`HardConstraints`，多个块以空行分隔；只有具备 Route capability 的 Agent 注入列表，修复 Resume prompt 把 Main 错列为子 Agent 的问题。
+- ✅ SubAgent 修复的 30 项 Prompt/bootstrap/Catalog/orchestration 回归、完整 235 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 production composition 输出 `SUBAGENT_XML_SMOKE_OK main_chars=11930 resume_chars=19809 agents=2 tools=25`，确认 Main 只见 Resume、Resume 不见任何 SubAgent、JobSearch 未被误装配。
 - ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。

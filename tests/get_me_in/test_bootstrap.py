@@ -83,6 +83,14 @@ class BootstrapTests(unittest.TestCase):
             '"description": "搜索查询，使用自然语言或关键词"',
             llm.request.messages[0].content,
         )
+        self.assertIn(
+            '<SubAgent name="resume">',
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
+            "<Name>简历定制 Agent</Name>",
+            llm.request.messages[0].content,
+        )
         self.assertNotIn("workspace_write", llm.request.messages[0].content)
         self.assertNotIn("copy_template", llm.request.messages[0].content)
         self.assertFalse(llm.cancellation.is_cancelled)
@@ -266,6 +274,7 @@ class BootstrapTests(unittest.TestCase):
                 '"description": "最近一次 workspace_read 返回的文件 revision；文件变化后旧 revision 会被拒绝"',
                 resume_prompt,
             )
+            self.assertNotIn("<SubAgent name=", resume_prompt)
             self.assertNotIn("switch_to_subagent", resume_prompt)
             self.assertEqual(AgentKey.MAIN, application.view().active_agent)
             self.assertEqual((), application._sessions._session.handoff_stack)

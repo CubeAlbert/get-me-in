@@ -1,13 +1,20 @@
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from src.get_me_in.application.prompt_renderer import (
     PromptRenderer,
     UnexpectedPromptVariableError,
 )
-from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
+from src.get_me_in.domain.agents import (
+    AgentDescriptor,
+    AgentKey,
+    AgentSpec,
+    AgentStyle,
+    Capability,
+)
 from src.get_me_in.domain.tools import (
     ToolDefinition,
     ToolParameter,
@@ -171,3 +178,60 @@ class PromptRendererTests(unittest.TestCase):
             rendered = PromptRenderer(root.parent).render_output_format()
 
         self.assertEqual("<OutputFormat>canonical</OutputFormat>", rendered)
+
+    def test_renders_sub_agents_as_xml_only_for_routing_agent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir) / "general_agent"
+            root.mkdir()
+            (root / "01.md").write_text(
+                "{{SUB_AGENTS_LIST}}",
+                encoding="utf-8",
+            )
+            main = AgentDescriptor.from_spec(_spec())
+            resume = AgentDescriptor(
+                key=AgentKey.RESUME,
+                display_name="Resume Agent",
+                description="Tailors resumes",
+                responsibilities=("Read the resume", "Build the PDF"),
+                hard_constraints=("Stay in the workspace",),
+            )
+            job_search = AgentDescriptor(
+                key=AgentKey.JOB_SEARCH,
+                display_name="Job Search Agent",
+                description="Searches for jobs",
+                responsibilities=("Search current listings",),
+                hard_constraints=("Use current sources",),
+            )
+            renderer = PromptRenderer(root.parent)
+
+            main_rendered = renderer.render(
+                _spec(),
+                agents=(main, resume, job_search),
+            )
+            resume_rendered = renderer.render(
+                replace(
+                    _spec(),
+                    key=AgentKey.RESUME,
+                    capabilities=frozenset(),
+                ),
+                agents=(main, resume, job_search),
+            )
+
+        expected_sections = (
+            '<SubAgent name="resume">',
+            "<Name>Resume Agent</Name>",
+            "<Description>Tailors resumes</Description>",
+            "<Responsibilities>Read the resume\nBuild the PDF</Responsibilities>",
+            "<HardConstraints>Stay in the workspace</HardConstraints>",
+            "</SubAgent>",
+        )
+        positions = tuple(
+            main_rendered.index(section) for section in expected_sections
+        )
+        self.assertEqual(tuple(sorted(positions)), positions)
+        self.assertIn(
+            '</SubAgent>\n\n<SubAgent name="job_search">',
+            main_rendered,
+        )
+        self.assertNotIn('<SubAgent name="main">', main_rendered)
+        self.assertEqual("", resume_rendered)

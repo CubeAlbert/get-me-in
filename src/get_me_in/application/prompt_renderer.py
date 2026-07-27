@@ -5,7 +5,7 @@ import json
 from collections.abc import Iterable
 from pathlib import Path
 
-from src.get_me_in.domain.agents import AgentDescriptor, AgentSpec
+from src.get_me_in.domain.agents import AgentDescriptor, AgentSpec, Capability
 from src.get_me_in.domain.tools import ToolDefinition, ToolParameter
 
 
@@ -162,13 +162,23 @@ class PromptRenderer:
 
     @staticmethod
     def _render_agents(spec: AgentSpec, agents: Iterable[AgentDescriptor]) -> str:
-        descriptors = (
-            {
-                "key": agent.key.value,
-                "name": agent.display_name,
-                "description": agent.description,
-            }
+        if Capability.ROUTE not in spec.capabilities:
+            return ""
+        return "\n\n".join(
+            PromptRenderer._render_agent(agent)
             for agent in agents
             if agent.key is not spec.key
         )
-        return "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in descriptors)
+
+    @staticmethod
+    def _render_agent(agent: AgentDescriptor) -> str:
+        responsibilities = "\n".join(agent.responsibilities)
+        hard_constraints = "\n".join(agent.hard_constraints)
+        return (
+            f'<SubAgent name="{agent.key.value}">\n'
+            f"<Name>{agent.display_name}</Name>\n"
+            f"<Description>{agent.description}</Description>\n"
+            f"<Responsibilities>{responsibilities}</Responsibilities>\n"
+            f"<HardConstraints>{hard_constraints}</HardConstraints>\n"
+            "</SubAgent>"
+        )
