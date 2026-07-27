@@ -54,11 +54,9 @@ class ArtifactService:
         else:
             operation = existing
         pdf = path.with_suffix(".pdf")
-        backend_error: Exception | None = None
         try:
             result = self._backend.build_pdf(path, workspace=workspace, cancellation=cancellation)
         except Exception as error:
-            backend_error = error
             result = ProcessResult(None, "", str(error))
         stdout, stdout_bytes, stdout_cut = self._bound_log(result.stdout, workspace)
         stderr, stderr_bytes, stderr_cut = self._bound_log(result.stderr, workspace)
@@ -73,8 +71,6 @@ class ArtifactService:
             self._repository.save_operation(replace(operation, status=ArtifactOperationStatus.COMMITTED, artifacts=artifacts, build_attempts=(attempt,)))
         except Exception as error:
             raise ArtifactPartialFailure("metadata_commit_failed", changed_paths, str(error)) from error
-        if backend_error is not None:
-            raise backend_error
         return result
 
     def _bound_log(self, value: str, workspace) -> tuple[str, int, bool]:

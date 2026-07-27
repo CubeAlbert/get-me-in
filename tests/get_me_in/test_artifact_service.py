@@ -54,11 +54,13 @@ class ArtifactServiceTests(unittest.TestCase):
     def test_build_records_exception_and_pending_retry_rebuilds_existing_pdf(self) -> None:
         self.workspace.files[Path("resume.tex")] = "source"
         self.backend.build_error = RuntimeError("compiler unavailable")
-        with self.assertRaisesRegex(RuntimeError, "compiler unavailable"):
-            self.service.build_pdf(Path("resume.tex"), workspace=self.workspace, cancellation=object(), session_id="s", agent_key=AgentKey.RESUME)
+        first = self.service.build_pdf(Path("resume.tex"), workspace=self.workspace, cancellation=object(), session_id="s", agent_key=AgentKey.RESUME)
+        replay = self.service.build_pdf(Path("resume.tex"), workspace=self.workspace, cancellation=object(), session_id="s", agent_key=AgentKey.RESUME)
         attempt = self.repository.list_build_attempts()[0]
+        self.assertEqual(first, replay)
         self.assertIsNone(attempt.exit_code)
         self.assertIn("compiler unavailable", attempt.stderr)
+        self.assertEqual(1, self.backend.build_calls)
 
         self.workspace.files[Path("resume2.tex")] = "source"
         self.workspace.files[Path("resume2.pdf")] = "stale-pdf"

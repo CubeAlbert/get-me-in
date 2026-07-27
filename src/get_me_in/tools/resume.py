@@ -65,6 +65,9 @@ def _build_pdf(arguments: Mapping[str, object], context: ResumeToolContext) -> T
         return ToolFailure("build_pdf_cancelled", "PDF build was cancelled")
     if result.timed_out:
         return ToolFailure("build_pdf_timed_out", "PDF build timed out")
+    if result.exit_code is None:
+        message = result.stderr or result.stdout or "PDF build failed before producing an exit code"
+        return ToolFailure("build_pdf_failed", message)
     return ToolSuccess({"stdout": result.stdout, "stderr": result.stderr, "exit_code": result.exit_code})
 
 

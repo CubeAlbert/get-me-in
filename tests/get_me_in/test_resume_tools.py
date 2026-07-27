@@ -49,6 +49,17 @@ class ResumeToolTests(unittest.TestCase):
 
         self.assertEqual(ToolFailure("build_pdf_cancelled", "PDF build was cancelled"), outcome)
 
+    def test_build_exception_result_is_a_typed_failure(self) -> None:
+        self.artifacts.result = ProcessResult(None, "", "compiler unavailable")
+        approved = self.context.__class__(**{**self.context.__dict__, "approved": True})
+
+        outcome = self.executor.execute("call", "build_pdf", {"path": "resume.tex"}, approved)
+
+        self.assertEqual(
+            ToolFailure("build_pdf_failed", "compiler unavailable"),
+            outcome,
+        )
+
     def test_partial_failure_reports_changed_paths(self) -> None:
         self.artifacts.error = ArtifactPartialFailure(
             "metadata_commit_failed",
