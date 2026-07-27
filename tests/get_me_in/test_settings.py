@@ -5,6 +5,30 @@ from src.get_me_in.application.settings import Settings, SettingsValidationError
 
 
 class SettingsTests(unittest.TestCase):
+    def test_example_configuration_documents_v2_settings_and_legacy_rollback(self) -> None:
+        example = (Path(__file__).resolve().parents[2] / ".env.example").read_text(
+            encoding="utf-8"
+        )
+
+        for name in (
+            "OPENAI_API_KEY",
+            "OPENAI_BASE_URL",
+            "LLM_PRO_MODEL",
+            "LLM_FLASH_MODEL",
+            "LLM_TIMEOUT",
+            "AGENT_MAX_MODEL_CALLS",
+            "WORKSPACE_DIR",
+            "SESSIONS_DIR",
+            "ARTIFACTS_DIR",
+            "EMBEDDING_MODEL",
+            "RERANKER_MODEL",
+            "PDF_BUILD_TIMEOUT_SECONDS",
+            "ARTIFACT_LOG_MAX_BYTES",
+        ):
+            self.assertIn(name, example)
+        self.assertIn("legacy rollback only", example)
+        self.assertIn("AGENT_MAX_ROUNDS", example)
+
     def test_from_env_builds_typed_static_asset_paths(self) -> None:
         settings = Settings.from_env(
             {
@@ -79,6 +103,28 @@ class SettingsTests(unittest.TestCase):
         )
 
         self.assertEqual(Path("custom-workspace"), settings.workspace_dir)
+
+    def test_from_env_never_uses_legacy_runtime_data_paths(self) -> None:
+        root = Path("sentinel-project-root")
+        settings = Settings.from_env(
+            {
+                "OPENAI_API_KEY": "key",
+                "OPENAI_BASE_URL": "https://example.test",
+                "LLM_PRO_MODEL": "pro",
+                "LLM_FLASH_MODEL": "flash",
+                "CHROMA_PERSIST_DIR": "data/chroma",
+                "MEMORIES_BASE_DIR": "data/memories",
+                "WORKING_DIR": "data/temp",
+                "SAVE_DIR": "data/save",
+            },
+            project_root=root,
+        )
+
+        self.assertEqual(root / "data" / "workspace", settings.workspace_dir)
+        self.assertEqual(root / "data" / "v2" / "sessions", settings.sessions_dir)
+        self.assertEqual(root / "data" / "v2" / "knowledge" / "chroma", settings.knowledge_chroma_dir)
+        self.assertEqual(root / "data" / "v2" / "memories", settings.memories_dir)
+        self.assertEqual(root / "data" / "v2" / "artifacts", settings.artifacts_dir)
 
     def test_from_env_parses_thinking_setting(self) -> None:
         settings = Settings.from_env(

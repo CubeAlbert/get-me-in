@@ -9,9 +9,18 @@ V2_ROOT = Path(__file__).resolve().parents[2] / "src" / "get_me_in"
 FORBIDDEN_PREFIXES = (
     "src.agents",
     "src.cli",
+    "src.config",
+    "src.lifecycle",
+    "src.llm",
+    "src.logger",
+    "src.message",
+    "src.memory",
+    "src.prompts",
     "src.tools",
     "src.rag",
-    "src.memory",
+    "src.request",
+    "src.response",
+    "src.utils",
 )
 LAYER_PREFIXES = {
     "domain": ("src.get_me_in.domain",),
