@@ -11,10 +11,19 @@ from src.get_me_in.domain.tools import (
     ConfirmationMode,
     ToolDefinition,
     ToolFailure,
+    ToolParameter,
     ToolPolicy,
     ToolSchema,
     ToolSuccess,
 )
+from src.get_me_in.tools.customer_file import build_customer_file_tools
+from src.get_me_in.tools.plan import build_plan_tools
+from src.get_me_in.tools.resume import build_resume_tools
+from src.get_me_in.tools.retrieval import build_retrieval_tools
+from src.get_me_in.tools.switch import build_switch_tools
+from src.get_me_in.tools.system import build_system_tools
+from src.get_me_in.tools.web import build_web_tools
+from src.get_me_in.tools.workspace import build_workspace_tools
 
 
 class ToolCatalogTests(unittest.TestCase):
@@ -32,11 +41,90 @@ class ToolCatalogTests(unittest.TestCase):
         self.assertEqual((self.public,), visible)
 
     def test_export_descriptors_reflects_real_catalog(self) -> None:
-        self.assertEqual(("clock", "resume_read"), tuple(item["name"] for item in self.catalog.export_descriptors()))
+        descriptors = self.catalog.export_descriptors()
+
+        self.assertEqual(
+            ("clock", "resume_read"),
+            tuple(item["name"] for item in descriptors),
+        )
+        self.assertEqual("clock", descriptors[0]["purpose"])
+        self.assertEqual("when needed", descriptors[0]["use_when"])
+
+    def test_schema_rejects_undeclared_required_argument(self) -> None:
+        with self.assertRaises(ValueError):
+            ToolSchema({}, frozenset({"missing"}))
+
+    def test_schema_rejects_required_argument_with_default(self) -> None:
+        with self.assertRaises(ValueError):
+            ToolSchema(
+                {"text": ToolParameter(str, "text", default="value")},
+                frozenset({"text"}),
+            )
+
+    def test_null_default_requires_explicit_nullable_contract(self) -> None:
+        with self.assertRaises(ValueError):
+            ToolParameter(str, "optional filter", default=None)
 
     def test_duplicate_names_are_rejected(self) -> None:
         with self.assertRaises(ValueError):
             ToolCatalog((self.public, _tool("clock")))
+
+
+class ProductionToolMetadataTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.definitions = (
+            *build_system_tools(object()),
+            *build_plan_tools(),
+            *build_workspace_tools(),
+            *build_web_tools(),
+            *build_switch_tools(),
+            *build_customer_file_tools(),
+            *build_retrieval_tools(),
+            *build_resume_tools(),
+        )
+        self.by_name = {
+            definition.name: definition for definition in self.definitions
+        }
+
+    def test_all_25_tools_have_complete_llm_facing_guidance(self) -> None:
+        self.assertEqual(25, len(self.definitions))
+        self.assertEqual(25, len(self.by_name))
+        for definition in self.definitions:
+            self.assertTrue(definition.purpose.strip(), definition.name)
+            self.assertTrue(definition.use_when.strip(), definition.name)
+            self.assertTrue(definition.expected_output.strip(), definition.name)
+            for name, parameter in definition.schema.properties.items():
+                self.assertTrue(parameter.description.strip(), f"{definition.name}.{name}")
+
+    def test_legacy_selection_boundaries_and_defaults_are_preserved(self) -> None:
+        memory = self.by_name["query_memory"]
+        reference = self.by_name["query_reference_data"]
+        self.assertIn("query_reference_data", memory.do_not_use_when)
+        self.assertIn("query_memory", reference.do_not_use_when)
+        self.assertEqual(5, memory.schema.properties["top_k"].default)
+        self.assertEqual(
+            ("fact", "preference"),
+            memory.schema.properties["memory_type"].allowed_values,
+        )
+
+        edit = self.by_name["workspace_edit"]
+        self.assertIn("workspace_read", edit.use_when)
+        self.assertIn("revision", edit.schema.properties)
+        self.assertIs(dict, edit.schema.properties["edits"].items)
+
+        choices = self.by_name["provide_choices"]
+        self.assertIs(str, choices.schema.properties["choices"].items)
+
+    def test_catalog_export_keeps_runtime_policy_separate_from_prompt_guidance(self) -> None:
+        catalog = ToolCatalog(self.definitions)
+        descriptor = next(
+            item
+            for item in catalog.export_descriptors()
+            if item["name"] == "workspace_write"
+        )
+
+        self.assertIn("新建文件", descriptor["use_when"])
+        self.assertEqual("always", descriptor["confirmation"])
 
 
 class ToolExecutorTests(unittest.TestCase):
@@ -92,7 +180,10 @@ class ToolExecutorTests(unittest.TestCase):
         captured: dict[str, object] = {}
         definition = ToolDefinition(
             name="inspect_context",
-            description="inspect context",
+            purpose="inspect context",
+            use_when="when needed",
+            do_not_use_when="otherwise",
+            expected_output="captured context",
             schema=ToolSchema(properties={}, required=frozenset()),
             policy=ToolPolicy(),
             handler=lambda arguments, context: _capture_context(captured, context),
@@ -114,6 +205,38 @@ class ToolExecutorTests(unittest.TestCase):
         self.assertIsInstance(outcome, ToolSuccess)
         self.assertEqual({"echo": "x"}, outcome.output)
 
+    def test_nullable_optional_argument_reaches_handler(self) -> None:
+        definition = ToolDefinition(
+            name="optional_filter",
+            purpose="inspect an optional filter",
+            use_when="a filter may be supplied",
+            do_not_use_when="otherwise",
+            expected_output="the supplied filter",
+            schema=ToolSchema(
+                {
+                    "filter": ToolParameter(
+                        str,
+                        "optional filter",
+                        default=None,
+                        nullable=True,
+                    )
+                }
+            ),
+            policy=ToolPolicy(),
+            handler=lambda arguments, context: ToolSuccess(arguments["filter"]),
+        )
+        executor = ToolExecutor(ToolCatalog((definition,)))
+
+        outcome = executor.execute(
+            "call",
+            "optional_filter",
+            {"filter": None},
+            self.context,
+        )
+
+        self.assertIsInstance(outcome, ToolSuccess)
+        self.assertIsNone(outcome.output)
+
 
 def _tool(
     name: str,
@@ -123,8 +246,14 @@ def _tool(
 ) -> ToolDefinition:
     return ToolDefinition(
         name=name,
-        description=name,
-        schema=ToolSchema(properties={"text": str}, required=frozenset({"text"})),
+        purpose=name,
+        use_when="when needed",
+        do_not_use_when="otherwise",
+        expected_output="typed output",
+        schema=ToolSchema(
+            properties={"text": ToolParameter(str, "text to echo")},
+            required=frozenset({"text"}),
+        ),
         policy=ToolPolicy(capabilities, confirmation),
         handler=lambda arguments, context: ToolSuccess({"echo": arguments["text"]}),
     )

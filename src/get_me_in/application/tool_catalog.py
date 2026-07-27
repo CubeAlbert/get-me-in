@@ -33,7 +33,10 @@ class ToolCatalog:
         return tuple(
             {
                 "name": definition.name,
-                "description": definition.description,
+                "purpose": definition.purpose,
+                "use_when": definition.use_when,
+                "do_not_use_when": definition.do_not_use_when,
+                "expected_output": definition.expected_output,
                 "required": tuple(sorted(definition.schema.required)),
                 "properties": tuple(sorted(definition.schema.properties)),
                 "required_capabilities": tuple(

@@ -377,7 +377,10 @@ def _tool(
 ) -> ToolDefinition:
     return ToolDefinition(
         name=name,
-        description=name,
+        purpose=name,
+        use_when="when needed",
+        do_not_use_when="otherwise",
+        expected_output="typed output",
         schema=ToolSchema(properties={}),
         policy=ToolPolicy(confirmation=confirmation),
         handler=handler or (lambda arguments, context: ToolSuccess({"tool": name})),

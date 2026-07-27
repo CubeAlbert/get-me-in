@@ -13,6 +13,7 @@ from src.get_me_in.domain.tools import (
     ToolFailure,
     ToolInteraction,
     ToolOutcome,
+    ToolParameter,
 )
 from src.get_me_in.ports.workspace import WorkspacePort
 from src.get_me_in.ports.frontend import FrontendPort
@@ -86,7 +87,7 @@ class ToolExecutor:
     @staticmethod
     def _validate_arguments(
         arguments: Mapping[str, object],
-        properties: Mapping[str, type],
+        properties: Mapping[str, ToolParameter],
         required: frozenset[str],
     ) -> ToolFailure | None:
         missing = required - arguments.keys()
@@ -96,7 +97,10 @@ class ToolExecutor:
         if unexpected:
             return ToolFailure("unexpected_argument", f"Unexpected arguments: {', '.join(sorted(unexpected))}")
         for name, value in arguments.items():
-            expected_type = properties[name]
+            parameter = properties[name]
+            expected_type = parameter.value_type
+            if value is None and parameter.nullable:
+                continue
             if not isinstance(value, expected_type):
                 return ToolFailure(
                     "invalid_argument_type",

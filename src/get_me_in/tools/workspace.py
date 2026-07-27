@@ -9,6 +9,7 @@ from src.get_me_in.domain.tools import (
     ToolDefinition,
     ToolFailure,
     ToolHandlerContext,
+    ToolParameter,
     ToolPolicy,
     ToolSchema,
     ToolSuccess,
@@ -25,27 +26,88 @@ class WorkspaceToolContext(ToolHandlerContext, Protocol):
 
 
 def build_workspace_tools() -> tuple[ToolDefinition, ...]:
-    """Build the read-only v2 workspace tools."""
+    """Build the capability-scoped v2 workspace tools."""
     return (
         ToolDefinition(
             name="workspace_read",
-            description="读取工作区文本文件，返回一基行号与文件 revision。",
-            schema=ToolSchema({"path": str, "offset": int, "limit": int}, frozenset({"path"})),
+            purpose="读取工作区内的文本文件，返回带行号的结构化内容和 revision。行号、内容与 revision 可用于 workspace_edit 精确修改。",
+            use_when="需要查看工作区内某个文件的内容时",
+            do_not_use_when="文件不存在或 path 是目录时",
+            expected_output='{"path": "...", "revision": "...", "total_lines": N, "offset": 1, "limit": 100, "truncated": false, "lines": [[1, "..."], ...]}',
+            schema=ToolSchema(
+                {
+                    "path": ToolParameter(
+                        str,
+                        "文件相对路径，基于工作区根目录。例如 'output/main.tex'",
+                    ),
+                    "offset": ToolParameter(
+                        int,
+                        "起始行号（1-indexed），默认从第 1 行开始",
+                        default=1,
+                    ),
+                    "limit": ToolParameter(
+                        int,
+                        "最多返回的行数，默认 100 行",
+                        default=100,
+                    ),
+                },
+                frozenset({"path"}),
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
             handler=_read,
         ),
         ToolDefinition(
             name="workspace_list",
-            description="列出工作区目录的单层文件与子目录。",
-            schema=ToolSchema({"path": str}),
+            purpose="列出工作区内目录的内容（仅单层，不递归子目录）。",
+            use_when="需要了解工作区某个目录下有哪些文件和子目录时",
+            do_not_use_when="path 不是目录时",
+            expected_output='{"path": ".", "entries": [{"name": "main.tex", "type": "file"}, {"name": "sections", "type": "dir"}]}',
+            schema=ToolSchema(
+                {
+                    "path": ToolParameter(
+                        str,
+                        "目录相对路径，默认 '.' 即工作区根目录",
+                        default=".",
+                    )
+                }
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
             handler=_list,
         ),
         ToolDefinition(
             name="workspace_grep",
-            description="在受限工作区中搜索文本，可按路径、glob 和正则表达式过滤。",
+            purpose="在工作区内搜索文件内容（类似 grep），返回匹配的行号和内容。不提供上下文行，需要时自行调用 workspace_read。",
+            use_when="需要查找包含特定内容的文件时；先用 workspace_search_file 定位文件再用 grep 搜索内容效率更高",
+            do_not_use_when="不确定搜索范围时 — 先用 workspace_list 了解目录结构",
+            expected_output='{"pattern": "...", "total_matches": N, "files": {"path": [[line, content]]}, "truncated": false}',
             schema=ToolSchema(
-                {"pattern": str, "path": str, "glob": str, "regex": bool, "max_matches": int},
+                {
+                    "pattern": ToolParameter(
+                        str,
+                        "搜索字符串（或正则表达式，当 regex=true 时）",
+                    ),
+                    "path": ToolParameter(
+                        str,
+                        "搜索范围（相对路径）。可以是文件或目录，默认 '.' 即整个工作区",
+                        default=".",
+                    ),
+                    "glob": ToolParameter(
+                        str,
+                        "文件名过滤 glob 模式，如 '*.tex'、'*.md'，不填则搜索所有文本文件",
+                        default=None,
+                        nullable=True,
+                    ),
+                    "regex": ToolParameter(
+                        bool,
+                        "是否将 pattern 作为正则表达式解析，默认 false",
+                        default=False,
+                    ),
+                    "max_matches": ToolParameter(
+                        int,
+                        "匹配结果上限，达到后截断，默认 50",
+                        default=50,
+                    ),
+                },
                 frozenset({"pattern"}),
             ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
@@ -53,50 +115,154 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
         ),
         ToolDefinition(
             name="workspace_search_file",
-            description="按文件名 glob 递归搜索受限工作区文件。",
-            schema=ToolSchema({"pattern": str, "path": str, "max_results": int}, frozenset({"pattern"})),
+            purpose="按文件名搜索工作区内的文件（fnmatch glob），返回匹配的文件相对路径列表。",
+            use_when="需要查找特定名称模式的文件时，如 '*.tex'、'resume*'",
+            do_not_use_when="需要搜索文件内容时 — 用 workspace_grep",
+            expected_output='{"pattern": "*.tex", "total_results": N, "files": ["main.tex", "sections/skills.tex"], "truncated": false}',
+            schema=ToolSchema(
+                {
+                    "pattern": ToolParameter(
+                        str,
+                        "文件名匹配模式（fnmatch glob），如 '*.tex'、'main*'",
+                    ),
+                    "path": ToolParameter(
+                        str,
+                        "搜索范围（相对路径）。目录时递归搜索子目录，默认 '.' 即整个工作区",
+                        default=".",
+                    ),
+                    "max_results": ToolParameter(
+                        int,
+                        "结果上限，达到后截断，默认 50",
+                        default=50,
+                    ),
+                },
+                frozenset({"pattern"}),
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
             handler=_search_file,
         ),
         ToolDefinition(
             name="workspace_replace",
-            description="原子替换文件内全部匹配文本。",
-            schema=ToolSchema({"path": str, "old_str": str, "new_str": str}, frozenset({"path", "old_str", "new_str"})),
+            purpose="将文件中所有匹配的字符串全部替换为新字符串，返回替换次数。前置条件：必须先通过 workspace_read 读完完整文件或 workspace_grep 确认全部匹配位置；未掌握全部匹配项时应使用 workspace_edit 逐处精确修改。",
+            use_when="需要对工作区文件做全局替换，且已通过 workspace_read 全文或 workspace_grep 确认了所有匹配位置时",
+            do_not_use_when="未读完文件完整内容、未确认所有匹配位置时 — 必须用 workspace_edit；需要精确的行级修改时 — 用 workspace_edit；需要新建文件时 — 用 workspace_write",
+            expected_output='{"path": "...", "replacements": N}',
+            schema=ToolSchema(
+                {
+                    "path": ToolParameter(
+                        str,
+                        "文件相对路径，基于工作区根目录",
+                    ),
+                    "old_str": ToolParameter(
+                        str,
+                        "要被替换的字符串（匹配所有出现处）",
+                    ),
+                    "new_str": ToolParameter(str, "替换后的新字符串"),
+                },
+                frozenset({"path", "old_str", "new_str"}),
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_replace,
         ),
         ToolDefinition(
             name="workspace_write",
-            description="创建新的工作区文本文件，拒绝覆盖已有文件。",
-            schema=ToolSchema({"path": str, "content": str}, frozenset({"path", "content"})),
+            purpose="在工作区内创建新文件，自动创建父目录；目标已存在时拒绝覆盖。",
+            use_when="需要新建文件时",
+            do_not_use_when="目标文件已存在时 — 用 workspace_edit 或 workspace_replace 修改；需要覆盖时先 workspace_delete 再 write",
+            expected_output='{"path": "...", "written": true}',
+            schema=ToolSchema(
+                {
+                    "path": ToolParameter(
+                        str,
+                        "新文件相对路径，基于工作区根目录。父目录不存在时自动创建",
+                    ),
+                    "content": ToolParameter(str, "要写入文件的完整文本内容"),
+                },
+                frozenset({"path", "content"}),
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_write,
         ),
         ToolDefinition(
             name="workspace_delete",
-            description="批量删除工作区文件或空目录，并返回逐路径结果。",
-            schema=ToolSchema({"paths": list}, frozenset({"paths"})),
+            purpose="批量删除工作区内的文件或空目录。目录非空时拒绝删除。支持一次删除多个路径。",
+            use_when="需要删除工作区文件或清理空目录时，可一次删除多个",
+            do_not_use_when="目录非空时 — 需先逐文件删除再删目录",
+            expected_output='{"deleted": ["...", "..."], "errors": []}',
+            schema=ToolSchema(
+                {
+                    "paths": ToolParameter(
+                        list,
+                        "要删除的文件或空目录相对路径列表，如 ['main.aux', 'main.log']",
+                        items=str,
+                    )
+                },
+                frozenset({"paths"}),
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_delete,
         ),
         ToolDefinition(
             name="workspace_move",
-            description="移动或重命名工作区路径，拒绝覆盖已有目标。",
-            schema=ToolSchema({"src": str, "dst": str}, frozenset({"src", "dst"})),
+            purpose="移动或重命名工作区内的文件或目录。目标已存在时拒绝覆盖，目标父目录自动创建。",
+            use_when="需要重命名文件/目录、移动到子目录或跨目录整理文件时",
+            do_not_use_when="目标路径已存在时",
+            expected_output='{"src": "...", "dst": "...", "moved": true}',
+            schema=ToolSchema(
+                {
+                    "src": ToolParameter(str, "源文件或目录的相对路径"),
+                    "dst": ToolParameter(
+                        str,
+                        "目标相对路径。dst 已存在时报错；dst 父目录不存在时自动创建",
+                    ),
+                },
+                frozenset({"src", "dst"}),
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_move,
         ),
         ToolDefinition(
             name="workspace_edit",
-            description="按读取时返回的 revision 精确编辑多行；任一校验失败则不写入。",
-            schema=ToolSchema({"path": str, "revision": str, "edits": list}, frozenset({"path", "revision", "edits"})),
+            purpose="基于 workspace_read 返回的 revision 精确编辑工作区文件。用新内容替换指定行，可一次提交多行编辑；所有行号引用修改前的原始文件，任一 revision、行号或原内容校验失败则不写入。",
+            use_when="需要精确修改文件的特定行、插入新行或删除行时；必须先调用 workspace_read 获取当前 revision、精确行号和内容",
+            do_not_use_when="已确认全部匹配位置的全局替换用 workspace_replace；新建文件用 workspace_write；没有当前 revision 或文件可能已变化时必须重新 workspace_read",
+            expected_output='{"path": "...", "revision": "...", "edits_applied": N, "edits": [{"line": N, "status": "applied"}]}',
+            schema=ToolSchema(
+                {
+                    "path": ToolParameter(
+                        str,
+                        "要编辑的文件相对路径",
+                    ),
+                    "revision": ToolParameter(
+                        str,
+                        "最近一次 workspace_read 返回的文件 revision；文件变化后旧 revision 会被拒绝",
+                    ),
+                    "edits": ToolParameter(
+                        list,
+                        "编辑操作列表，按原始行号引用。每项包含 {line, old_content, content}：line 是 1-indexed 行号；old_content 必须与当前行完全一致；content 是替换内容，可含换行，空字符串表示删除该行。",
+                        items=dict,
+                    ),
+                },
+                frozenset({"path", "revision", "edits"}),
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_WRITE}), ConfirmationMode.ALWAYS),
             handler=_edit,
         ),
         ToolDefinition(
             name="workspace_open",
-            description="用前端或操作系统默认程序打开工作区中的已有文件。",
-            schema=ToolSchema({"path": str}, frozenset({"path"})),
+            purpose="用系统默认工具打开工作区中的文件（如 PDF 预览）。",
+            use_when="需要让用户预览生成的文件（如 PDF）时",
+            do_not_use_when="文件不存在时",
+            expected_output='{"path": "...", "opened": true}',
+            schema=ToolSchema(
+                {
+                    "path": ToolParameter(
+                        str,
+                        "要打开的文件相对路径，基于工作区根目录",
+                    )
+                },
+                frozenset({"path"}),
+            ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_OPEN}), ConfirmationMode.ALWAYS),
             handler=_open,
         ),
@@ -162,7 +328,7 @@ def _grep(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
     try:
         matches = workspace.search(
             arguments["pattern"], path=Path(arguments.get("path", ".")),
-            glob=arguments.get("glob", "**/*"), regex=arguments.get("regex", False), max_matches=max_matches,
+            glob=arguments.get("glob") or "**/*", regex=arguments.get("regex", False), max_matches=max_matches,
         )
     except (OSError, ValueError, WorkspaceError) as error:
         return ToolFailure("workspace_search_failed", str(error))

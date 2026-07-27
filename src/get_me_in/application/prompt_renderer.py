@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from src.get_me_in.domain.agents import AgentDescriptor, AgentSpec
-from src.get_me_in.domain.tools import ToolDefinition
+from src.get_me_in.domain.tools import ToolDefinition, ToolParameter
 
 
 _PLACEHOLDER_RE = re.compile(r"\{\{(\w+)\}\}")
@@ -106,17 +106,48 @@ class PromptRenderer:
         descriptors = (
             {
                 "name": tool.name,
-                "description": tool.description,
+                "purpose": tool.purpose,
+                "use_when": tool.use_when,
+                "do_not_use_when": tool.do_not_use_when,
                 "input_schema": {
                     "properties": {
-                        name: value.__name__ for name, value in tool.schema.properties.items()
+                        name: PromptRenderer._render_parameter(parameter)
+                        for name, parameter in tool.schema.properties.items()
                     },
                     "required": sorted(tool.schema.required),
                 },
+                "expected_output": tool.expected_output,
             }
             for tool in tools
         )
         return "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in descriptors)
+
+    @staticmethod
+    def _render_parameter(parameter: ToolParameter) -> dict[str, object]:
+        rendered: dict[str, object] = {
+            "type": PromptRenderer._json_type(parameter.value_type),
+            "description": parameter.description,
+        }
+        if parameter.nullable:
+            rendered["type"] = [rendered["type"], "null"]
+        if parameter.has_default:
+            rendered["default"] = parameter.default
+        if parameter.items is not None:
+            rendered["items"] = {"type": PromptRenderer._json_type(parameter.items)}
+        if parameter.allowed_values:
+            rendered["allowed_values"] = parameter.allowed_values
+        return rendered
+
+    @staticmethod
+    def _json_type(value_type: type) -> str:
+        return {
+            str: "string",
+            int: "integer",
+            float: "number",
+            bool: "boolean",
+            list: "array",
+            dict: "object",
+        }.get(value_type, "object")
 
     @staticmethod
     def _render_agents(spec: AgentSpec, agents: Iterable[AgentDescriptor]) -> str:

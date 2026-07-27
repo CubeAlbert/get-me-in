@@ -461,14 +461,14 @@
 - ✅ 修复根入口切换后欢迎 banner 丢失的观察期回归：`Renderer.render_welcome()` 在首次输入前只渲染一次固定产品标识与 `/help` 提示；不扩展 `Settings` 或引入新依赖。
 - ✅ 确认 v2 `ToolDefinition`／`PromptRenderer` 只保留 `name/description/type/required`，实际生产 system prompt 已丢失旧版 `purpose/use_when/do_not_use_when/expected_output`、参数说明与默认值；该问题不是 Notebook 导出遗漏。
 - ✅ 核对 legacy Tool 基线仍在 `src/tools/`：9 个工具定义文件保留上述元数据，当前未被 v2 重构修改；逐项迁移审计若发现缺失或历史改写，再由用户提供原始定义。
-- ⬜ 提交并确认 Tool 提示词语义修复清单：明确 `ToolDefinition`／`ToolSchema` 的强类型字段、25 个工具逐项迁移映射、PromptRenderer 输出格式、兼容范围和测试切片；确认前不修改生产代码。
-- ⬜ 恢复全部 25 个工具的 LLM-facing 语义，至少覆盖 purpose、使用／禁用时机、预期输出、参数描述、默认值及适用的 allowed values/items；`Capability`／`ToolPolicy` 继续只负责可见性和审批，不得冒充提示词语义。
-- ⬜ 以真实 Main／Resume system prompt 导出和行为 smoke 验证工具目录完整性、capability 隔离、相似工具消歧、参数约束和结果预期；修复与完整复验前 R8-O 不得通过。
+- ✅ Tool 提示词语义修复清单已确认并实施：`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，`ToolSchema` 使用强类型 `ToolParameter` 表达 description/default/items/allowed_values/nullable；PromptRenderer 输出结构化 JSON，保持 v2 capability、审批、handler 与 ToolOutcome 边界。
+- ✅ 全部 25 个工具已与 9 个 legacy 定义文件一一对应并完成迁移；`workspace_edit.revision` 等 v2 已确认接口差异保留并补充准确说明，没有工具缺失，无需用户另行提供原始定义。
+- ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束和 capability 隔离均可见；Main prompt 10899 字符、Resume prompt 18085 字符。56 项针对性测试、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
 - ✅ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；banner 修复后当前为 227 项自动化测试通过。
-- ⏸️ 用户审查 R8-O —— 当前被 Tool 提示词语义缺失阻断；修复并完成真实 prompt／行为复验前不得恢复审查，不得进入 R8-D。后续仍未通过时以 `git revert <R8-E commit>` 回退，使用 R8-P 保留的 legacy rollback 配置恢复旧入口。
+- ⬜ 用户审查 R8-O；Tool 提示词语义阻断已解除，但剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 完成前仍不得审查或进入 R8-D。后续未通过时以 `git revert <R8-E commit>` 回退，使用 R8-P 保留的 legacy rollback 配置恢复旧入口。
 
 ### 4. R8-D —— 遗留删除
 

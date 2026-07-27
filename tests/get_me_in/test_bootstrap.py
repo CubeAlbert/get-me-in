@@ -71,6 +71,15 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("completed", events[-1].message.content)
         self.assertIn("Help me prepare for an interview", llm.request.messages[-1].content)
         self.assertIn("get_current_datetime", llm.request.messages[0].content)
+        self.assertIn('"use_when": "需要知道当前时间时"', llm.request.messages[0].content)
+        self.assertIn(
+            '"expected_output": "YYYY-MM-DD HH:mm:ss ±HHMM 格式的带时区日期时间字符串"',
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
+            '"description": "搜索查询，使用自然语言或关键词"',
+            llm.request.messages[0].content,
+        )
         self.assertNotIn("workspace_write", llm.request.messages[0].content)
         self.assertNotIn("copy_template", llm.request.messages[0].content)
         self.assertFalse(llm.cancellation.is_cancelled)
@@ -238,6 +247,18 @@ class BootstrapTests(unittest.TestCase):
                 "build_pdf", "switch_to_mainagent",
             ):
                 self.assertIn(tool_name, resume_prompt)
+            self.assertIn(
+                '"do_not_use_when": "需要查询用户个人记忆时 — 用 query_memory"',
+                resume_prompt,
+            )
+            self.assertIn(
+                '"default": 5, "description": "返回结果数量，默认 5"',
+                resume_prompt,
+            )
+            self.assertIn(
+                '"description": "最近一次 workspace_read 返回的文件 revision；文件变化后旧 revision 会被拒绝"',
+                resume_prompt,
+            )
             self.assertNotIn("switch_to_subagent", resume_prompt)
             self.assertEqual(AgentKey.MAIN, application.view().active_agent)
             self.assertEqual((), application._sessions._session.handoff_stack)

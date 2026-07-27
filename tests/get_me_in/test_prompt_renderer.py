@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,7 +8,13 @@ from src.get_me_in.application.prompt_renderer import (
     UnexpectedPromptVariableError,
 )
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
-from src.get_me_in.domain.tools import ToolDefinition, ToolPolicy, ToolSchema, ToolSuccess
+from src.get_me_in.domain.tools import (
+    ToolDefinition,
+    ToolParameter,
+    ToolPolicy,
+    ToolSchema,
+    ToolSuccess,
+)
 
 
 def _spec() -> AgentSpec:
@@ -67,16 +74,54 @@ class PromptRendererTests(unittest.TestCase):
                 "{{ADDITION_TOOLS}}\n{{SUB_AGENTS_LIST}}", encoding="utf-8"
             )
             visible = ToolDefinition(
-                "clock",
-                "time",
-                ToolSchema({}),
-                ToolPolicy(),
-                lambda arguments, context: ToolSuccess("ok"),
+                name="clock",
+                purpose="Get accurate time",
+                use_when="The current time is needed",
+                do_not_use_when="The request is unrelated to time",
+                expected_output="ISO timestamp",
+                schema=ToolSchema(
+                    {
+                        "timezone": ToolParameter(
+                            str,
+                            "IANA timezone name",
+                            default="UTC",
+                            allowed_values=("UTC", "Asia/Shanghai"),
+                        ),
+                        "labels": ToolParameter(
+                            list,
+                            "Labels to include",
+                            items=str,
+                        ),
+                    }
+                ),
+                policy=ToolPolicy(),
+                handler=lambda arguments, context: ToolSuccess("ok"),
             )
 
             rendered = PromptRenderer(root.parent).render(_spec(), tools=(visible,))
 
-        self.assertIn('"name": "clock"', rendered)
+        tool = json.loads(rendered.splitlines()[0])
+        self.assertEqual("clock", tool["name"])
+        self.assertEqual("Get accurate time", tool["purpose"])
+        self.assertEqual("The current time is needed", tool["use_when"])
+        self.assertEqual(
+            "The request is unrelated to time",
+            tool["do_not_use_when"],
+        )
+        self.assertEqual("ISO timestamp", tool["expected_output"])
+        self.assertEqual(
+            {
+                "type": "string",
+                "description": "IANA timezone name",
+                "default": "UTC",
+                "allowed_values": ["UTC", "Asia/Shanghai"],
+            },
+            tool["input_schema"]["properties"]["timezone"],
+        )
+        self.assertEqual(
+            {"type": "string"},
+            tool["input_schema"]["properties"]["labels"]["items"],
+        )
         self.assertNotIn("workspace_write", rendered)
 
     def test_reads_canonical_output_format_for_repair(self) -> None:

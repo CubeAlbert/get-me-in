@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 196 — 恢复 25 个 Tool 的完整 LLM-facing 语义](#决策-196--恢复-25-个-tool-的完整-llm-facing-语义)
 - [决策 195 — Tool 提示词语义缺失阻断 R8-O](#决策-195--tool-提示词语义缺失阻断-r8-o)
 - [决策 194 — 恢复固定欢迎 banner 并暂缓主题客制化](#决策-194--恢复固定欢迎-banner-并暂缓主题客制化)
 - [决策 193 — R8-O 前置审查修复入口诊断与关闭边界](#决策-193--r8-o-前置审查修复入口诊断与关闭边界)
@@ -4416,3 +4417,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 把旧字段全部拼接进单个 `description` —— 会丢失结构、难以测试和演进，也无法可靠表达参数默认值／允许值，未采用。
 - 将 use/do-not-use 规则写入通用静态 prompt —— 会让 Agent 看见不可用工具规则，并产生 ToolCatalog 与 prompt 的双重事实源，未采用。
 - 先执行 R8-D，之后从 Git 历史恢复旧定义 —— 会人为移除当前最直接的逐项迁移基线，已拒绝。
+
+---
+
+### 决策 196 —— 恢复 25 个 Tool 的完整 LLM-facing 语义
+
+**背景：** 决策 195 将 Tool 提示词语义缺失设为 R8-O 阻断项。实施前逐项盘点确认 v2 的 25 个 Tool 均能在 9 个 legacy Tool 文件中找到同名原始定义，不需要用户补充；但 `workspace_edit.revision`、capability、审批和 typed outcome 等属于 v2 已确认的新边界，不能用旧 Registry 或旧 handler 覆盖。
+
+**决定：**
+
+- `ToolDefinition` 使用显式 `purpose`、`use_when`、`do_not_use_when`、`expected_output`，不再用单个精简 description 承载全部 LLM-facing 语义。
+- 新增 immutable `ToolParameter`，与 `ToolSchema.required` 共同表达参数 value type、description、default、list items、allowed values 和 nullable。构造时拒绝未声明 required、required+default、required+nullable、类型错误的 default／allowed value，以及非 list 参数的 items。
+- PromptRenderer 为每个当前 Agent 可见 Tool 输出结构化 JSON：name、四类工具指导字段、properties、required 和 expected output；参数类型使用 JSON Schema 名称，nullable 输出类型联合。`ToolPolicy` 继续只控制 capability 可见性和审批，不注入为工具选择语义。
+- ToolExecutor 改为从 `ToolParameter.value_type/nullable` 执行既有参数边界校验；handler、ToolOutcome、RuntimeCommand/RuntimeEvent、25 个 Tool 名称与 capability 数量均不改变。
+- 25 个定义以 legacy 文本为语义基线迁移；对 v2 已改变的真实行为做准确适配，例如 `workspace_edit` 保留 revision 参数和原子校验，Main 只见路由能力，Resume 不见 `switch_to_subagent`。全部定义均找到，无需用户提供原始版本。
+- 验证结果：56 项 Tool/Prompt/Runtime/bootstrap 针对性测试、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 production composition 直接渲染 Main／Resume system prompt并输出 `PROMPT_SMOKE_OK main_chars=10899 resume_chars=18085 tools=25`；完整字段、参数元数据和 capability 隔离断言通过，资源正常关闭。
+- 决策 195 的 Tool 阻断解除；R8-O 仍有剩余 CLI、真实 Agent／Knowledge／Memory／Resume 和旧数据拒绝访问 smoke，不因此视为整体完成，也不得提前进入 R8-D。
+
+**理由：**
+
+- 独立强类型字段恢复了旧版经过实践验证的工具选择和参数指导，同时保留 v2 显式 Catalog、capability 和 typed execution 的架构收益。
+- 将参数描述、默认值和列表／枚举约束放在同一个 `ToolParameter` 中，可以防止多个平行映射漂移，并让 Runtime 校验与 Prompt 序列化引用同一份定义。
+- 真实 composition prompt 验收直接覆盖模型实际看到的内容，避免再次出现“Catalog 名称和数量正确，但提示词语义缺失”的假阳性。
+
+**曾考虑的替代方案：**
+
+- 恢复旧 `Tool` dataclass、XML 与 import-time Registry —— 会重新引入已删除的全局注册和 agent 特判，已拒绝。
+- 仅扩展 PromptRenderer、继续从其他位置拼接说明 —— 会形成第二份工具元数据事实源，已拒绝。
+- 用 legacy 定义覆盖 `workspace_edit` 等 v2 接口 —— 会破坏 revision-aware edit 和已确认运行时边界，已拒绝。

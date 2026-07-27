@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from src.get_me_in.domain.agents import Capability
-from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandlerContext, ToolPolicy, ToolSchema, ToolSuccess
+from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandlerContext, ToolParameter, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.retrieval import RetrievalPort
 
 
@@ -31,14 +31,72 @@ class RetrievalToolContext(ToolHandlerContext, Protocol):
 def build_retrieval_tools() -> tuple[ToolDefinition, ...]:
     return (
         ToolDefinition(
-            "query_memory", "查询已保存的用户事实或偏好。",
-            ToolSchema({"query": str, "memory_type": str, "top_k": int}, frozenset({"query"})),
-            ToolPolicy(frozenset({Capability.KNOWLEDGE_QUERY}), ConfirmationMode.NEVER), _query_memory,
+            name="query_memory",
+            purpose="语义检索用户记忆库，返回匹配的记忆条目（事实和偏好）。",
+            use_when="需要查询用户之前存储的个人信息时，如技能、经历、偏好、期望等",
+            do_not_use_when="需要查询技术参考、面试题、公司信息等公共数据时 — 用 query_reference_data",
+            expected_output='{"query": "...", "total_results": N, "results": [{"content": "...", "metadata": {...}}]}',
+            schema=ToolSchema(
+                {
+                    "query": ToolParameter(
+                        str,
+                        "自然语言查询，如 'Python 开发经验'、'期望薪资'",
+                    ),
+                    "memory_type": ToolParameter(
+                        str,
+                        "记忆类型过滤；不填则搜索全部",
+                        default=None,
+                        allowed_values=tuple(item.value for item in MemoryType),
+                        nullable=True,
+                    ),
+                    "top_k": ToolParameter(
+                        int,
+                        "返回结果数量，默认 5",
+                        default=5,
+                    ),
+                },
+                frozenset({"query"}),
+            ),
+            policy=ToolPolicy(
+                frozenset({Capability.KNOWLEDGE_QUERY}),
+                ConfirmationMode.NEVER,
+            ),
+            handler=_query_memory,
         ),
         ToolDefinition(
-            "query_reference_data", "查询已导入的求职参考资料。",
-            ToolSchema({"query": str, "category": str, "top_k": int}, frozenset({"query"})),
-            ToolPolicy(frozenset({Capability.KNOWLEDGE_QUERY}), ConfirmationMode.NEVER), _query_reference_data,
+            name="query_reference_data",
+            purpose="语义检索参考数据库，返回匹配的公共参考内容（技术知识、面试题、公司信息等）。",
+            use_when="需要查询面试题、技术知识点、公司信息、简历示例、推荐资料等",
+            do_not_use_when="需要查询用户个人记忆时 — 用 query_memory",
+            expected_output='{"query": "...", "total_results": N, "results": [{"content": "...", "metadata": {...}}]}',
+            schema=ToolSchema(
+                {
+                    "query": ToolParameter(
+                        str,
+                        "自然语言查询，如 '快速排序'、'阿里巴巴 Java 面试题'",
+                    ),
+                    "category": ToolParameter(
+                        str,
+                        "参考数据分类过滤；不填则搜索全部",
+                        default=None,
+                        allowed_values=tuple(
+                            item.value for item in ReferenceCategory
+                        ),
+                        nullable=True,
+                    ),
+                    "top_k": ToolParameter(
+                        int,
+                        "返回结果数量，默认 5",
+                        default=5,
+                    ),
+                },
+                frozenset({"query"}),
+            ),
+            policy=ToolPolicy(
+                frozenset({Capability.KNOWLEDGE_QUERY}),
+                ConfirmationMode.NEVER,
+            ),
+            handler=_query_reference_data,
         ),
     )
 
