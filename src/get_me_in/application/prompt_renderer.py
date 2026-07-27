@@ -103,7 +103,7 @@ class PromptRenderer:
 
     @staticmethod
     def _render_tools(tools: Iterable[ToolDefinition]) -> str:
-        return "\n".join(PromptRenderer._render_tool(tool) for tool in tools)
+        return "\n\n".join(PromptRenderer._render_tool(tool) for tool in tools)
 
     @staticmethod
     def _render_tool(tool: ToolDefinition) -> str:

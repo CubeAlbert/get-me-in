@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。Tool 提示词语义阻断已解除；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner。决策 195 记录的 Tool 提示词语义退化也已闭合：全部 25 个 v2 Tool 与 9 个 legacy 文件一一对应，`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，新增强类型 `ToolParameter` 表达参数 description/default/items/allowed_values/nullable。决策 197 进一步恢复 legacy `<Tool>` XML 的模型可见结构和语义顺序，`Arguments` 仍由同一份强类型 schema 生成有序 JSON；未恢复旧全局 Registry，v2 capability、审批、handler、ToolOutcome 和 `workspace_edit.revision` 等接口保持不变。没有缺失定义，无需用户补充原始版本。XML 修复的 39 项针对性回归、完整 234 项自动化测试与 `compileall` 已通过；真实 production composition prompt smoke 输出 `PROMPT_XML_SMOKE_OK main_chars=11722 resume_chars=19857 tools=25`，并验证中文元数据、XML 顺序和 Main/Resume capability 隔离。Tool 阻断已解除，但剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner。决策 195 记录的 Tool 提示词语义退化也已闭合：全部 25 个 v2 Tool 与 9 个 legacy 文件一一对应，`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，新增强类型 `ToolParameter` 表达参数 description/default/items/allowed_values/nullable。决策 197 进一步恢复 legacy `<Tool>` XML 的模型可见结构和语义顺序，`Arguments` 仍由同一份强类型 schema 生成有序 JSON，相邻 Tool 块以一个空行分隔；未恢复旧全局 Registry，v2 capability、审批、handler、ToolOutcome 和 `workspace_edit.revision` 等接口保持不变。没有缺失定义，无需用户补充原始版本。相关 23 项回归、完整 234 项自动化测试与 `compileall` 已通过；最新真实 production composition prompt smoke 输出 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`，并验证中文元数据、XML 顺序、Tool 块空行和 Main/Resume capability 隔离。Tool 阻断已解除，但剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
 
 **下一步：** 从根入口完成剩余 CLI／交互、Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 

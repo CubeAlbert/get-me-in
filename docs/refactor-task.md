@@ -464,7 +464,8 @@
 - ✅ Tool 提示词语义修复清单已确认并实施：`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，`ToolSchema` 使用强类型 `ToolParameter` 表达 description/default/items/allowed_values/nullable；PromptRenderer 恢复 legacy `<Tool>` XML 外层与固定语义顺序，`Arguments` 内由强类型 schema 生成有序 JSON；保持 v2 capability、审批、handler 与 ToolOutcome 边界。
 - ✅ 全部 25 个工具已与 9 个 legacy 定义文件一一对应并完成迁移；`workspace_edit.revision` 等 v2 已确认接口差异保留并补充准确说明，没有工具缺失，无需用户另行提供原始定义。
 - ✅ 修复 Tool prompt 字段被 `sort_keys=True` 重排为字母顺序的问题；模型固定先看到用途和使用边界，再看到参数及预期输出。恢复 XML 仅影响 LLM-facing 序列化，不恢复 legacy import-time Registry。
-- ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序和 capability 隔离均可见；最新输出为 `PROMPT_XML_SMOKE_OK main_chars=11722 resume_chars=19857 tools=25`。XML 修复的 39 项针对性回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
+- ✅ 相邻 `<Tool>` 块使用 `\n\n` 分隔，在模型可见 prompt 中保留一个空行；回归测试锁定 `</Tool>\n\n<Tool ...>` 格式。
+- ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。

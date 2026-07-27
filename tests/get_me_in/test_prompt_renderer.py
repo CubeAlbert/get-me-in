@@ -97,8 +97,21 @@ class PromptRendererTests(unittest.TestCase):
                 policy=ToolPolicy(),
                 handler=lambda arguments, context: ToolSuccess("ok"),
             )
+            second = ToolDefinition(
+                name="calendar",
+                purpose="Get a calendar",
+                use_when="A calendar is needed",
+                do_not_use_when="The request is unrelated to dates",
+                expected_output="Calendar data",
+                schema=ToolSchema({}),
+                policy=ToolPolicy(),
+                handler=lambda arguments, context: ToolSuccess("ok"),
+            )
 
-            rendered = PromptRenderer(root.parent).render(_spec(), tools=(visible,))
+            rendered = PromptRenderer(root.parent).render(
+                _spec(),
+                tools=(visible, second),
+            )
 
         expected_sections = (
             '<Tool name="clock">',
@@ -144,6 +157,7 @@ class PromptRendererTests(unittest.TestCase):
             arguments["labels"]["items"],
         )
         self.assertFalse(arguments["labels"]["required"])
+        self.assertIn("</Tool>\n\n<Tool name=\"calendar\">", rendered)
         self.assertNotIn("workspace_write", rendered)
 
     def test_reads_canonical_output_format_for_repair(self) -> None:
