@@ -4,19 +4,21 @@
 
 ## 当前入口与观察期
 
-当前生产入口仍是：
+R8-E 已将唯一生产入口切换到 v2：
 
 ```powershell
 uv run python main.py
 ```
 
-在 R8 入口切换完成前，可用以下命令预览 v2 CLI：
+以下模块入口使用同一套 v2 CLI，仅用于诊断：
 
 ```powershell
 uv run python -m src.get_me_in.cli
 ```
 
-`.env.example` 的 v2 配置与 `Settings.from_env()` 对齐。观察期内保留其中标记为 **legacy rollback only** 的变量，以便在根入口切换后可单独回退入口提交；v2 不读取这些变量。
+当前仍处于 R8-O 强制观察期，未经用户审查通过不得进入 R8-D 遗留删除。
+
+`.env.example` 的 v2 配置与 `Settings.from_env()` 对齐。观察期内保留其中标记为 **legacy rollback only** 的变量，以便单独回退入口提交；v2 不读取这些变量。旧 RAG 模型变量若被 v2 作为兼容别名读取，会单独标记，不归入 legacy-only 段。
 
 ## 数据边界
 
