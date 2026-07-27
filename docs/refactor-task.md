@@ -461,9 +461,10 @@
 - ✅ 修复根入口切换后欢迎 banner 丢失的观察期回归：`Renderer.render_welcome()` 在首次输入前只渲染一次固定产品标识与 `/help` 提示；不扩展 `Settings` 或引入新依赖。
 - ✅ 确认 v2 `ToolDefinition`／`PromptRenderer` 只保留 `name/description/type/required`，实际生产 system prompt 已丢失旧版 `purpose/use_when/do_not_use_when/expected_output`、参数说明与默认值；该问题不是 Notebook 导出遗漏。
 - ✅ 核对 legacy Tool 基线仍在 `src/tools/`：9 个工具定义文件保留上述元数据，当前未被 v2 重构修改；逐项迁移审计若发现缺失或历史改写，再由用户提供原始定义。
-- ✅ Tool 提示词语义修复清单已确认并实施：`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，`ToolSchema` 使用强类型 `ToolParameter` 表达 description/default/items/allowed_values/nullable；PromptRenderer 输出结构化 JSON，保持 v2 capability、审批、handler 与 ToolOutcome 边界。
+- ✅ Tool 提示词语义修复清单已确认并实施：`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，`ToolSchema` 使用强类型 `ToolParameter` 表达 description/default/items/allowed_values/nullable；PromptRenderer 恢复 legacy `<Tool>` XML 外层与固定语义顺序，`Arguments` 内由强类型 schema 生成有序 JSON；保持 v2 capability、审批、handler 与 ToolOutcome 边界。
 - ✅ 全部 25 个工具已与 9 个 legacy 定义文件一一对应并完成迁移；`workspace_edit.revision` 等 v2 已确认接口差异保留并补充准确说明，没有工具缺失，无需用户另行提供原始定义。
-- ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束和 capability 隔离均可见；Main prompt 10899 字符、Resume prompt 18085 字符。56 项针对性测试、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
+- ✅ 修复 Tool prompt 字段被 `sort_keys=True` 重排为字母顺序的问题；模型固定先看到用途和使用边界，再看到参数及预期输出。恢复 XML 仅影响 LLM-facing 序列化，不恢复 legacy import-time Registry。
+- ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序和 capability 隔离均可见；最新输出为 `PROMPT_XML_SMOKE_OK main_chars=11722 resume_chars=19857 tools=25`。XML 修复的 39 项针对性回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。

@@ -71,9 +71,12 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("completed", events[-1].message.content)
         self.assertIn("Help me prepare for an interview", llm.request.messages[-1].content)
         self.assertIn("get_current_datetime", llm.request.messages[0].content)
-        self.assertIn('"use_when": "需要知道当前时间时"', llm.request.messages[0].content)
         self.assertIn(
-            '"expected_output": "YYYY-MM-DD HH:mm:ss ±HHMM 格式的带时区日期时间字符串"',
+            "<UseWhen>需要知道当前时间时</UseWhen>",
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
+            "<ExpectedOutput>YYYY-MM-DD HH:mm:ss ±HHMM 格式的带时区日期时间字符串</ExpectedOutput>",
             llm.request.messages[0].content,
         )
         self.assertIn(
@@ -248,11 +251,15 @@ class BootstrapTests(unittest.TestCase):
             ):
                 self.assertIn(tool_name, resume_prompt)
             self.assertIn(
-                '"do_not_use_when": "需要查询用户个人记忆时 — 用 query_memory"',
+                "<DoNotUseWhen>需要查询用户个人记忆时 — 用 query_memory</DoNotUseWhen>",
                 resume_prompt,
             )
             self.assertIn(
-                '"default": 5, "description": "返回结果数量，默认 5"',
+                '"description": "返回结果数量，默认 5"',
+                resume_prompt,
+            )
+            self.assertIn(
+                '"default": 5',
                 resume_prompt,
             )
             self.assertIn(

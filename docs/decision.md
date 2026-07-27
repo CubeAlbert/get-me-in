@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 197 — 恢复 legacy XML Tool prompt 结构与固定语义顺序](#决策-197--恢复-legacy-xml-tool-prompt-结构与固定语义顺序)
 - [决策 196 — 恢复 25 个 Tool 的完整 LLM-facing 语义](#决策-196--恢复-25-个-tool-的完整-llm-facing-语义)
 - [决策 195 — Tool 提示词语义缺失阻断 R8-O](#决策-195--tool-提示词语义缺失阻断-r8-o)
 - [决策 194 — 恢复固定欢迎 banner 并暂缓主题客制化](#决策-194--恢复固定欢迎-banner-并暂缓主题客制化)
@@ -4445,3 +4446,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 恢复旧 `Tool` dataclass、XML 与 import-time Registry —— 会重新引入已删除的全局注册和 agent 特判，已拒绝。
 - 仅扩展 PromptRenderer、继续从其他位置拼接说明 —— 会形成第二份工具元数据事实源，已拒绝。
 - 用 legacy 定义覆盖 `workspace_edit` 等 v2 接口 —— 会破坏 revision-aware edit 和已确认运行时边界，已拒绝。
+
+---
+
+### 决策 197 —— 恢复 legacy XML Tool prompt 结构与固定语义顺序
+
+**背景：** 决策 196 首次实现将每个 Tool 序列化为单行 JSON，并使用 `sort_keys=True`。这会按字母顺序把 `do_not_use_when` 放到最前，破坏工具说明原有的阅读顺序；同时静态模板 `04_tools.md` 已使用 `<Tools>` 外层，最终形成 XML 外壳包裹 JSON Tool 的混合结构。legacy `Tool.to_xml()` 已提供经过使用验证的语义顺序，因此没有必要继续保留这一混合格式。
+
+**决定：**
+
+- PromptRenderer 恢复 `<Tool name="...">` 结构，内部顺序固定为 `Purpose`、`UseWhen`、`DoNotUseWhen`、`Arguments`、`ExpectedOutput`。
+- `Arguments` 内保留 JSON，直接以参数名为 key；每个参数的字段顺序固定为 `description`、`type`、`required`，随后按适用性输出 `items`、`default`、`enum`。nullable 类型沿用 legacy 的 `type|null` 表达。
+- Arguments 继续完全由 v2 immutable `ToolParameter`／`ToolSchema` 生成，Tool 元数据仍只有一个事实源；不恢复 legacy `Tool` dataclass、decorator 注册、import-time Registry、handler 或 agent 特判。
+- 本变更只调整 LLM-facing prompt 序列化，不改变 ToolCatalog、Capability、审批、ToolExecutor、ToolOutcome、25 个 Tool 名称及任何公开运行时协议。
+- 决策 196 中“输出结构化 JSON”的格式部分由本决策替代；其强类型元数据、执行校验、逐项迁移和 capability 边界继续有效。
+- 验证结果：39 项 Prompt/bootstrap/ToolCatalog 针对性回归、完整 234 项自动化测试与 `compileall` 通过；真实 production composition 输出 `PROMPT_XML_SMOKE_OK main_chars=11722 resume_chars=19857 tools=25`，中文元数据、XML 顺序和 Main/Resume capability 隔离断言均通过。
+
+**理由：**
+
+- 固定的语义顺序先告诉模型工具用途和使用边界，再提供参数和预期输出，比按字母排序更符合工具选择与参数构造流程。
+- `<Tools>`／`<Tool>` 层级保持一致，避免 XML 外壳与单行 JSON Tool 混用，同时 Arguments 中的 JSON 仍便于稳定生成和精确测试。
+- 序列化格式与 Registry 架构是两个独立问题；恢复 XML 不需要、也不应恢复可变全局注册机制。
+
+**曾考虑的替代方案：**
+
+- 只移除 `sort_keys=True`、继续输出 Tool JSON —— 可以修复顺序，但仍保留 `<Tools>` 包裹 JSON 的混合结构，未采用。
+- 把 Arguments 也改为逐字段 XML —— 会增加冗长程度和转义负担，且参数对象用 JSON 已足够清晰，未采用。
+- 恢复完整 legacy Tool／Registry 实现 —— 会破坏 v2 显式 composition root 与强类型执行边界，继续拒绝。

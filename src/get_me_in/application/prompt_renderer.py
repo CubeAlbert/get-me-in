@@ -103,39 +103,50 @@ class PromptRenderer:
 
     @staticmethod
     def _render_tools(tools: Iterable[ToolDefinition]) -> str:
-        descriptors = (
-            {
-                "name": tool.name,
-                "purpose": tool.purpose,
-                "use_when": tool.use_when,
-                "do_not_use_when": tool.do_not_use_when,
-                "input_schema": {
-                    "properties": {
-                        name: PromptRenderer._render_parameter(parameter)
-                        for name, parameter in tool.schema.properties.items()
-                    },
-                    "required": sorted(tool.schema.required),
-                },
-                "expected_output": tool.expected_output,
-            }
-            for tool in tools
-        )
-        return "\n".join(json.dumps(item, ensure_ascii=False, sort_keys=True) for item in descriptors)
+        return "\n".join(PromptRenderer._render_tool(tool) for tool in tools)
 
     @staticmethod
-    def _render_parameter(parameter: ToolParameter) -> dict[str, object]:
-        rendered: dict[str, object] = {
-            "type": PromptRenderer._json_type(parameter.value_type),
-            "description": parameter.description,
+    def _render_tool(tool: ToolDefinition) -> str:
+        arguments = {
+            name: PromptRenderer._render_parameter(
+                parameter,
+                required=name in tool.schema.required,
+            )
+            for name, parameter in tool.schema.properties.items()
         }
+        rendered_arguments = json.dumps(arguments, ensure_ascii=False, indent=2)
+        return (
+            f'<Tool name="{tool.name}">\n'
+            f"<Purpose>{tool.purpose}</Purpose>\n"
+            f"<UseWhen>{tool.use_when}</UseWhen>\n"
+            f"<DoNotUseWhen>{tool.do_not_use_when}</DoNotUseWhen>\n"
+            "<Arguments>\n"
+            f"{rendered_arguments}\n"
+            "</Arguments>\n"
+            f"<ExpectedOutput>{tool.expected_output}</ExpectedOutput>\n"
+            "</Tool>"
+        )
+
+    @staticmethod
+    def _render_parameter(
+        parameter: ToolParameter,
+        *,
+        required: bool,
+    ) -> dict[str, object]:
+        value_type = PromptRenderer._json_type(parameter.value_type)
         if parameter.nullable:
-            rendered["type"] = [rendered["type"], "null"]
-        if parameter.has_default:
-            rendered["default"] = parameter.default
+            value_type = f"{value_type}|null"
+        rendered: dict[str, object] = {
+            "description": parameter.description,
+            "type": value_type,
+            "required": required,
+        }
         if parameter.items is not None:
             rendered["items"] = {"type": PromptRenderer._json_type(parameter.items)}
+        if parameter.has_default:
+            rendered["default"] = parameter.default
         if parameter.allowed_values:
-            rendered["allowed_values"] = parameter.allowed_values
+            rendered["enum"] = parameter.allowed_values
         return rendered
 
     @staticmethod

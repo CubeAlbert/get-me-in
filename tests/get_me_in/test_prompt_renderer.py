@@ -100,28 +100,50 @@ class PromptRendererTests(unittest.TestCase):
 
             rendered = PromptRenderer(root.parent).render(_spec(), tools=(visible,))
 
-        tool = json.loads(rendered.splitlines()[0])
-        self.assertEqual("clock", tool["name"])
-        self.assertEqual("Get accurate time", tool["purpose"])
-        self.assertEqual("The current time is needed", tool["use_when"])
-        self.assertEqual(
-            "The request is unrelated to time",
-            tool["do_not_use_when"],
+        expected_sections = (
+            '<Tool name="clock">',
+            "<Purpose>Get accurate time</Purpose>",
+            "<UseWhen>The current time is needed</UseWhen>",
+            "<DoNotUseWhen>The request is unrelated to time</DoNotUseWhen>",
+            "<Arguments>",
+            "<ExpectedOutput>ISO timestamp</ExpectedOutput>",
+            "</Tool>",
         )
-        self.assertEqual("ISO timestamp", tool["expected_output"])
+        positions = tuple(rendered.index(section) for section in expected_sections)
+        self.assertEqual(tuple(sorted(positions)), positions)
+        arguments_text = rendered.split("<Arguments>\n", 1)[1].split(
+            "\n</Arguments>", 1
+        )[0]
+        arguments = json.loads(arguments_text)
+        timezone_text = arguments_text.split('"timezone": {', 1)[1].split(
+            "\n  },", 1
+        )[0]
+        parameter_fields = (
+            '"description"',
+            '"type"',
+            '"required"',
+            '"default"',
+            '"enum"',
+        )
+        field_positions = tuple(
+            timezone_text.index(field) for field in parameter_fields
+        )
+        self.assertEqual(tuple(sorted(field_positions)), field_positions)
         self.assertEqual(
             {
-                "type": "string",
                 "description": "IANA timezone name",
+                "type": "string",
+                "required": False,
                 "default": "UTC",
-                "allowed_values": ["UTC", "Asia/Shanghai"],
+                "enum": ["UTC", "Asia/Shanghai"],
             },
-            tool["input_schema"]["properties"]["timezone"],
+            arguments["timezone"],
         )
         self.assertEqual(
             {"type": "string"},
-            tool["input_schema"]["properties"]["labels"]["items"],
+            arguments["labels"]["items"],
         )
+        self.assertFalse(arguments["labels"]["required"])
         self.assertNotIn("workspace_write", rendered)
 
     def test_reads_canonical_output_format_for_repair(self) -> None:
