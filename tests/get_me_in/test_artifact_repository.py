@@ -8,6 +8,9 @@ import unittest
 from src.get_me_in.adapters.json_artifact_repository import ArtifactRepositoryError, JsonArtifactRepository
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.artifacts import Artifact, ArtifactKind, ArtifactOperation, ArtifactOperationKind, ArtifactOperationStatus
+from src.get_me_in.application.artifact_service import ArtifactService
+from src.get_me_in.application.cancellation import CancellationToken
+from src.get_me_in.ports.process import ProcessResult
 
 
 class JsonArtifactRepositoryTests(unittest.TestCase):
@@ -39,6 +42,16 @@ class JsonArtifactRepositoryTests(unittest.TestCase):
             with self.assertRaises(ArtifactRepositoryError):
                 JsonArtifactRepository(Path(temporary)).list_artifacts()
 
+    def test_build_records_bounded_attempt_in_committed_operation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = JsonArtifactRepository(Path(temporary))
+            service = ArtifactService(_Backend(), repository, _Clock(), _Ids(), 64)
+            result = service.build_pdf(Path("resume.tex"), workspace=_Workspace(), cancellation=CancellationToken(), session_id="s", agent_key=AgentKey.RESUME)
+            attempt = repository.list_build_attempts()[0]
+            self.assertEqual(0, result.exit_code)
+            self.assertTrue(attempt.stdout_truncated)
+            self.assertIn("<workspace>", attempt.stdout)
+
 
 def _operation(status, artifacts=()):
     return ArtifactOperation(1, "operation", "session", AgentKey.RESUME, ArtifactOperationKind.COPY_TEMPLATE, "resume.tex", "hash", status, _now(), artifacts)
@@ -50,3 +63,15 @@ def _artifact():
 
 def _now():
     return datetime(2026, 7, 27, tzinfo=timezone.utc)
+
+class _Clock:
+    def now(self): return _now()
+class _Ids:
+    def __init__(self): self.value = 0
+    def new_id(self): self.value += 1; return str(self.value)
+class _Workspace:
+    def read(self, path): return type("S", (), {"revision": "r", "content": "pdf"})()
+    def exists(self, path): return path.suffix == ".pdf"
+    def resolve(self, path): return Path("C:/workspace") / path
+class _Backend:
+    def build_pdf(self, path, *, workspace, cancellation): return ProcessResult(0, "C:/workspace/" + "x" * 100, "")

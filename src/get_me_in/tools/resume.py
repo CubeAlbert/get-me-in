@@ -7,6 +7,7 @@ from typing import Protocol
 from src.get_me_in.domain.agents import Capability
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandlerContext, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.resume_artifacts import ResumeArtifactPort
+from src.get_me_in.application.artifact_service import ArtifactPartialFailure
 from src.get_me_in.ports.workspace import WorkspacePort
 
 
@@ -39,8 +40,10 @@ def _copy_template(arguments: Mapping[str, object], context: ResumeToolContext) 
         return ToolFailure("workspace_unavailable", "This tool requires a configured workspace")
     try:
         result = artifacts.copy_template(
-            arguments["template"], arguments["prefix"], Path(arguments.get("target_dir", ".")), workspace=context.workspace,
+            arguments["template"], arguments["prefix"], Path(arguments.get("target_dir", ".")), workspace=context.workspace, session_id=context.session_id, agent_key=context.agent_key,
         )
+    except ArtifactPartialFailure as error:
+        return ToolFailure("artifact_partial_failure", str(error))
     except Exception as error:
         return ToolFailure("copy_template_failed", str(error))
     return ToolSuccess({"files": tuple(str(path) for path in result.files), "target_dir": str(result.target_dir)})
@@ -53,7 +56,9 @@ def _build_pdf(arguments: Mapping[str, object], context: ResumeToolContext) -> T
     if context.workspace is None:
         return ToolFailure("workspace_unavailable", "This tool requires a configured workspace")
     try:
-        result = artifacts.build_pdf(Path(arguments["path"]), workspace=context.workspace, cancellation=context.cancellation)
+        result = artifacts.build_pdf(Path(arguments["path"]), workspace=context.workspace, cancellation=context.cancellation, session_id=context.session_id, agent_key=context.agent_key)
+    except ArtifactPartialFailure as error:
+        return ToolFailure("artifact_partial_failure", str(error))
     except Exception as error:
         return ToolFailure("build_pdf_failed", str(error))
     if result.cancelled:

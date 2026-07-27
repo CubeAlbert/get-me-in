@@ -75,11 +75,11 @@ class _Artifacts:
     build_path: Path | None = None
     result = ProcessResult(0, "ok", "", False, False)
 
-    def copy_template(self, template: str, prefix: str, target_dir: Path, *, workspace: _Workspace) -> TemplateCopyResult:
+    def copy_template(self, template: str, prefix: str, target_dir: Path, *, workspace: _Workspace, session_id: str, agent_key: AgentKey) -> TemplateCopyResult:
         self.template = template
         return TemplateCopyResult((Path("resume_CHN.tex"), Path("README.md")), Path("."))
 
-    def build_pdf(self, path: Path, *, workspace: _Workspace, cancellation: CancellationToken) -> ProcessResult:
+    def build_pdf(self, path: Path, *, workspace: _Workspace, cancellation: CancellationToken, session_id: str, agent_key: AgentKey) -> ProcessResult:
         self.build_path = path
         return self.result
 
