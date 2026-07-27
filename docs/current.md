@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 —— 已完成 R8-P 切换准备，正在实施可回退的 R8-E 入口切换
+**当前阶段：** R8 —— 已完成可回退的 R8-E 入口切换，正在执行 R8-O 强制观察
 
-**当前任务：** R8-E 根入口切换：以独立提交切换 `main.py` 至 v2，并闭合入口异常与退出码契约
+**当前任务：** R8-O 强制观察：从根入口执行完整 smoke matrix，验证真实链路、旧数据访问边界与资源关闭
 
-**当前子任务：** 修改根 `main.py` 与 v2 CLI 启动边界，补充根入口、三种退出码、无 traceback 和资源关闭的自动化测试。
+**当前子任务：** 验证根入口的错误／成功退出码、CLI 命令与交互、Resume／Knowledge／Memory 链路，以及旧数据拒绝访问边界。
 
-**当前阻塞：** 无。R8-O 完成后必须停下等待用户审查，未经通过不得进入 R8-D。
+**当前阻塞：** 无。R8-O 完成后必须停下等待用户审查；未经通过不得进入 R8-D。
 
-**会话交接说明：** 决策 191 已授权 R8 coding。R8-P 提交 `d91e37c`：`.env.example` 已按 v2 Settings 对齐并保留 legacy rollback only 段，README 已写入过渡说明；导入扫描扩大至全部 legacy production modules，Settings sentinel 证明旧运行数据路径与旧环境变量未被 v2 消费。完整自动化 218 项、`compileall` 与 `git diff --check` 均通过；Catalog 取证为 2 Agent、25 ToolDefinition、10 CLI 命令。旧数据拒绝访问启动／smoke 边界将在 R8-O 继续执行。
+**会话交接说明：** R8-P 提交 `d91e37c` 保留回退配置并完成配置／数据边界审计。R8-E 提交 `9fbeabc` 将根 `main.py` 切换为唯一的 v2 CLI 委托；Settings 错误为退出码 `2`，启动异常为无 traceback 的用户可读错误及退出码 `1`，正常关闭为 `0`。222 项自动化测试、`compileall` 与 `git diff --check` 均通过。R8-O 若不通过，执行 `git revert 9fbeabc`，使用 R8-P 保留的 legacy rollback only 配置恢复旧入口；不得触碰旧运行数据。
 
-**下一步：** 完成 R8-E，运行入口契约与完整回归，形成可单独 revert 的入口提交；随后执行 R8-O 观察矩阵并停下等待用户审查。
+**下一步：** 执行 R8-O 真实 smoke matrix、旧数据拒绝访问边界和全量复验；完成后 checkpoint 并停下等待用户审查。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -30,6 +30,7 @@
 189. **R7-T2 修复完成并再次恢复 G7** — 三个独立提交闭合 aggregate validation、retry typed failure 与 construction cleanup；216 项测试、`compileall`、`git diff --check` 和真实中英文 PDF smoke 通过。继续停在 R8 独立授权门禁前。
 190. **R8 设计审查收紧入口错误、回退配置与验收证据** — 五切片顺序不变；R8-E 增加启动异常退出码 `1` 契约，R8-P 保留 legacy rollback 配置，旧数据未读／未写使用不同证据，Catalog 固定为 2 Agent／25 tool／10 command。本轮只更新候选文档，R8 coding 仍未授权。
 191. **授权 R8 实施并完成 R8-P** — 用户授权从 bootstrap 后开始 R8 并要求每个阶段 checkpoint；R8-P 以 `d91e37c` 完成，保持 R8-O 用户审查门禁不变。
+192. **R8-E 已完成并建立入口回退点** — 根入口切换为 v2，入口契约测试与 222 项回归通过；`9fbeabc` 是 R8-D 前唯一需要 revert 的入口回退点。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 

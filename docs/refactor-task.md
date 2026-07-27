@@ -449,11 +449,11 @@
 
 ### 2. R8-E —— 根入口切换
 
-- ⬜ `main.py` 只 import `src.get_me_in.cli.main.main` 并 `raise SystemExit(main())`；删除 legacy composition 与 import-time registration。
-- ⬜ `src/get_me_in/cli/main.py` 修正过时说明；Settings 错误继续渲染并返回 `2`，composition／CLI 构造或启动的 `Exception` 记录完整诊断、渲染简短错误并返回 `1`，正常关闭返回 `0`；不得吞掉 `KeyboardInterrupt`／`SystemExit`，不得新增第二入口或公开 API。
-- ⬜ 在 `test_import_boundaries.py`、`test_settings.py`、既有 CLI/bootstrap 测试与新 `test_cli_main.py` 中覆盖根入口只依赖 v2、示例配置一致性、Settings 错误 `2`、启动错误 `1` 且无 traceback、正常关闭 `0` 与资源关闭。
-- ⬜ 不新增 `[project.scripts]` 或其他生产入口。
-- ⬜ R8-E 单独提交并记录 commit id；该提交是遗留删除前的明确回退点。
+- ✅ `main.py` 只 import `src.get_me_in.cli.main.main` 并 `raise SystemExit(main())`；已删除 legacy composition 与 import-time registration。
+- ✅ `src/get_me_in/cli/main.py` 已修正过时说明；Settings 错误继续渲染并返回 `2`，composition／CLI 构造或启动的 `Exception` 记录完整文件诊断、渲染简短错误并返回 `1`，正常关闭返回 `0`；不捕获 `KeyboardInterrupt`／`SystemExit`，未新增第二入口或公开 API。
+- ✅ `test_import_boundaries.py`、`test_settings.py`、既有 CLI/bootstrap 测试与 `test_cli_main.py` 覆盖根入口只依赖 v2、示例配置一致性、Settings 错误 `2`、启动错误 `1` 且无 traceback、正常关闭 `0` 与资源关闭。
+- ✅ 未新增 `[project.scripts]` 或其他生产入口。
+- ✅ R8-E 已独立提交 `9fbeabc`；该提交是遗留删除前的明确回退点。
 
 ### 3. R8-O —— 强制观察门禁
 

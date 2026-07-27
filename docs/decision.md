@@ -4308,3 +4308,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 
 - 跳过 R8-O 用户审查并连续删除 legacy —— 与已确认的强制观察门禁冲突，未采用。
+
+---
+
+### 决策 192 —— R8-E 已完成并建立入口回退点
+
+**背景：** R8-P 已完成过渡配置、README、导入边界和 Settings 数据路径审计。根 `main.py` 仍运行 legacy composition，R8-E 需要在不新增生产 API 的边界内把唯一生产入口委托给既有 v2 CLI，并保证启动失败不会向用户泄漏 traceback。
+
+**决定：**
+
+- 根 `main.py` 现在只导入 `src.get_me_in.cli.main.main`，并以 `raise SystemExit(main())` 传递其退出码；legacy composition 和 import-time registration 不再由根入口加载。
+- v2 CLI 对 `SettingsValidationError` 保持用户可读错误和退出码 `2`；对 composition、CLI 构造、启动或运行的 `Exception` 将完整 traceback 写入日志、只显示简短错误并返回 `1`。`KeyboardInterrupt` 与 `SystemExit` 不被捕获；正常关闭返回 `0` 并关闭 Worker 与 Application。
+- 新增 `tests/get_me_in/test_cli_main.py` 覆盖根入口依赖、三个退出码、无 traceback 及关闭路径。完整自动化 222 项、`compileall`、`git diff --check` 通过。
+- R8-E 独立提交 `9fbeabc`。R8-D 前的回退仅可执行 `git revert 9fbeabc`；R8-O 必须先完成并经用户审查，才允许删除 legacy。
+
+**理由：**
+
+- 入口切换独立于删除提交，才能在观察期间保留可验证、可恢复的 legacy 实现。
+- 运行日志保留完整诊断，同时把终端错误限制为可操作的简短消息，满足生产入口的稳定性与可读性契约。
+
+**曾考虑的替代方案：**
+
+- 让 `logger.exception()` 直接输出 traceback 到 stderr —— 会违反入口错误不向用户显示 traceback 的观察门禁，未采用。
