@@ -632,7 +632,7 @@ R7 固定按七个切片实施，每个切片独立验证、独立提交：
 
 ### 6.11 入口切换、观察与遗留删除（R8，待确认清单）
 
-R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、Application、Session、ToolOutcome 或 port 公共协议。R8 只允许完成生产入口切换、可回退观察、遗留代码删除和最终文档归一化。当前 R7-T2 尚未重新通过 G7，因此本节是待用户确认的具体清单，不构成 coding 授权。
+R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、Application、Session、ToolOutcome 或 port 公共协议。R8 只允许完成生产入口切换、可回退观察、遗留代码删除和最终文档归一化。决策 189 已在 R7-T2 后恢复 G7；本节仍是待用户确认的具体清单，不构成 coding 授权。
 
 #### 6.11.1 强制前置门禁
 
@@ -766,4 +766,4 @@ v2 只复用以下静态项目资产：
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。R0～R6、G5-F 与 R6-F 均已完成；R7 已落地，但决策 188 的 R7-T2 审查再次撤回 G7 完成结论。6.11 已记录 R8 的候选文件、对象、公开边界、五个切片与回退清单；该清单仍待用户在 G7 恢复后独立确认，不构成 R8 coding 授权。
+R-D1～R-D6 已由用户确认。R0～R7、G5-F、R6-F 与 R7-T2 均已完成；决策 189 已再次恢复 G7。6.11 已记录 R8 的候选文件、对象、公开边界、五个切片与回退清单；该清单仍待用户独立确认，不构成 R8 coding 授权。

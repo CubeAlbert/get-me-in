@@ -335,7 +335,7 @@
 
 ## R7 —— Resume 纵向切片
 
-> ✅ R7 七个已确认切片与 R7-T 审查修复均已完成；决策 187 已恢复 G7 完成结论。当前停在 R8 独立授权门禁前。
+> ✅ R7 七个已确认切片、R7-T 与 R7-T2 审查修复均已完成；决策 189 已再次恢复 G7 完成结论。当前停在 R8 独立授权门禁前。
 
 ### 0. R7 启动前 Review 门禁
 
@@ -408,7 +408,7 @@
 - ✅ 外部简历/JD 读取、Memory/Reference 检索和可选 Web Search 的 capability 与 Resume prompt 可见性符合确认清单。
 - ✅ pdflatex 缺失、非零退出、超时、取消、编译失败修复、build log 脱敏／截断与完整 metadata partial failure 均有自动化覆盖；真实 smoke 覆盖成功编译。
 - ✅ 审批拒绝、Esc cancel、save/restore/rewind、main → resume → main 闭环均通过分层与 production composition 回归。
-- ✅ 决策 187 已恢复 G7 完成结论；未经用户后续确认不得进入 R8 入口切换或遗留删除。
+- ✅ 决策 189 已在 R7-T2 后再次恢复 G7 完成结论；未经用户后续确认不得进入 R8 入口切换或遗留删除。
 
 ### 7. R7-T 审查修复（已完成）
 
@@ -421,21 +421,21 @@
 - ✅ 最终运行 212 项自动化测试、`compileall`、`git diff --check` 全部通过；真实 ArtifactService 在隔离工作区生成中文、英文、双语共 4 份 PDF，并另行完成已有英文简历 replace、授权清理后重新读取、精确 edit 与编译 smoke。
 - ✅ 同步 `current.md`、`refactor-task.md`、`decision.md` 并由决策 187 恢复 G7；继续停在 R8 独立授权门禁前。
 
-### 8. R7-T2 审查问题（待确认修复）
+### 8. R7-T2 审查修复（已完成）
 
 - ✅ 当前环境重新运行 212 项自动化测试、`compileall` 与 `git diff --check`，均通过；工作区在审查前保持干净。
 - ✅ 最小复现确认 exception retry 不一致：首次 backend exception 被保存为 COMMITTED attempt 后抛出；第二次同 operation key 直接返回 `ProcessResult(exit_code=None)`，`tools/resume.py::_build_pdf()` 会将其包装为 `ToolSuccess`。
 - ✅ 最小复现确认 aggregate validation 不完整：`COMMITTED + BUILD_PDF + 无 build_attempt` 可通过 save/load，随后 `ArtifactService.build_pdf()` 重放泄漏非 typed `IndexError`；deterministic operation key、operation-kind result shape 与 nested 字段类型也未形成完整 invariant。
 - ✅ 静态审查确认 composition construction cleanup 不完整：`build_application()` 在 ResourceStack 注册前创建 worker／Knowledge／Artifact 等 owner，部分后续构造或 injected LLM validation 失败路径不会统一关闭已创建资源。
-- ⬜ 修复切片 1：在 `JsonArtifactRepository` 的 save/load 共用校验中闭合字段类型、deterministic operation key 与 kind/status/result shape；所有损坏记录统一为 `ArtifactRepositoryError`。不改变 schema_version、公开 repository 方法或 operation key 算法。
-- ⬜ 修复切片 2：统一 `ArtifactService.build_pdf()` 首次与重放的 backend exception／非结果状态语义，确保相同 committed attempt 永不从 `ToolFailure` 漂移为 `ToolSuccess`；补齐 tools 层 retry contract tests。不增加 ToolOutcome 字段或公开方法。
-- ⬜ 修复切片 3：让 `build_application()` 对 ResourceStack 建立前后的构造失败都按所有权逆序清理；覆盖 runtime LLM 配置错误、Memory prompt 读取失败与 knowledge start 失败，不新增全局生命周期。
-- ⬜ 每个修复切片独立测试和提交；最后运行完整自动化测试、`compileall`、`git diff --check`、Artifact retry/corruption smoke 与 composition failure cleanup smoke。
-- ⬜ 修复完成后同步 `current.md`、`refactor-task.md`、`decision.md`，重新决定 G7；在此之前不得进入 R8。
+- ✅ 修复切片 1：`JsonArtifactRepository` 的 save/load 共用校验已闭合字段类型、deterministic operation key 与 kind/status/result shape；所有损坏记录统一为 `ArtifactRepositoryError`。未改变 schema_version、公开 repository 方法或 operation key 算法。提交：`e963b11`。
+- ✅ 修复切片 2：`ArtifactService.build_pdf()` 首次与重放的 backend exception／非结果状态语义已统一；相同 committed attempt 稳定映射为 `build_pdf_failed`，不再漂移为 `ToolSuccess`。未增加 ToolOutcome 字段或公开方法。提交：`e0e2041`。
+- ✅ 修复切片 3：`build_application()` 使用临时 construction ownership stack 清理 ResourceStack 交接前后的失败；覆盖 runtime LLM 配置错误、Memory prompt 读取失败与 knowledge start 失败，不新增全局生命周期。提交：`6af22a3`。
+- ✅ 最终运行 216 项自动化测试、`compileall` 与 `git diff --check`；真实临时工作区完成中文／英文模板复制与两份 pdflatex 编译，exit code 均为 0，记录 5 个 artifacts 与 2 个 build attempts。
+- ✅ 同步 `current.md`、`refactor-task.md`、`decision.md` 并由决策 189 恢复 G7；继续停在 R8 独立授权门禁前。
 
 ## R8 —— 切换与清理
 
-> 候选具体清单已在决策 188 与 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单` 中细化。本清单尚未获得 coding 授权；R7-T2/G7 是强制前置条件。
+> 候选具体清单已在决策 188 与 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单` 中细化。决策 189 已满足 R7-T2/G7 前置条件，但本清单尚未获得 coding 授权。
 
 ### 1. R8-P —— 切换准备
 

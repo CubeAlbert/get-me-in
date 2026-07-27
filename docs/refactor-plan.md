@@ -255,7 +255,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **依赖：** G3、G4、G5、G6 以及 R6-T 后用户对进入 R7 的明确授权。不得与 R6 并行实现。
 
-**实施顺序：** R7-P0 temperature contract → R7-P dynamic session identity → Resume AgentSpec/双 Runtime composition → Artifact domain/port/JSON repository → ArtifactService 与 copy/build/log 一致性 → Settings/bootstrap/resource ownership → 真实 Resume smoke 与 G7。每个切片独立验证和提交。清单与 temperature/log 补充均已确认；当前会话只做文档 checkpoint，后续新会话 bootstrap 后从 R7-P0 开始。
+**实施顺序：** R7-P0 temperature contract → R7-P dynamic session identity → Resume AgentSpec/双 Runtime composition → Artifact domain/port/JSON repository → ArtifactService 与 copy/build/log 一致性 → Settings/bootstrap/resource ownership → 真实 Resume smoke 与 G7。七个原始切片、R7-T 与 R7-T2 均已独立验证和提交；决策 189 已再次恢复 G7。
 
 ### R8 —— 入口切换与旧代码删除
 
@@ -263,7 +263,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **产出：**
 
-- R7-T2 先修复 Artifact exception retry、aggregate invariant 与 composition construction cleanup，并重新通过 G7；R8 不吸收这些缺口。
+- R7-T2 已修复 Artifact exception retry、aggregate invariant 与 composition construction cleanup，并由决策 189 重新通过 G7；R8 不吸收这些缺口。
 - R8-P 先校验静态资产、Settings／`.env.example`、capability、命令、Agent/tool 数量、v2→legacy import 和 legacy data 非访问边界。
 - R8-E 仅将根 `main.py` 委托给 v2 CLI，形成独立可回退 commit；不同时删除 legacy。
 - R8-O 从根入口执行完整自动化与真实 smoke，验证入口退出码、CLI、Knowledge/Memory、Resume、handoff、审批／取消、restore/rewind 和资源关闭；用户审查通过前不进入删除。

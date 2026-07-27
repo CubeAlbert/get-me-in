@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R7 —— R7-T2 审查问题已记录；G7 完成结论暂时撤回
+**当前阶段：** R7 —— R7-T2 三个修复切片与完整复验已完成；G7 已恢复，停在 R8 独立授权门禁前
 
-**当前任务：** 审查发现 Artifact retry／aggregate validation 与 composition construction cleanup 缺口；等待确认 R7-T2 修复清单
+**当前任务：** R7/G7 已重新完成；不得进入 R8 coding
 
-**当前子任务：** 无。本轮只完成审查与 R8 任务细化，不实施 R7-T2 或 R8 coding。
+**当前子任务：** 无。等待用户审查 R7-T2 修复与 R8 候选具体清单。
 
-**当前阻塞：** 必须先完成 R7-T2 并重新通过 G7；之后仍需用户独立确认 R8 具体清单。旧 `main.py` 未改动。
+**当前阻塞：** R8 仍需用户独立确认具体清单并授权；旧 `main.py` 未改动。
 
-**会话交接说明：** 当前环境重新运行 212 项自动化测试、`compileall` 与 `git diff --check` 均通过，但 R7-T2 审查用最小复现确认三类未覆盖缺口：首次 `build_pdf` backend exception 会持久化为 COMMITTED attempt 并抛错，而第二次同 key 调用返回 `ProcessResult(exit_code=None)`，随后被 Resume tool 包装成 `ToolSuccess`；`COMMITTED + BUILD_PDF + 无 build_attempt` 的损坏 aggregate 会被 repository 接受并在重放时泄漏 `IndexError`，deterministic operation key 与字段类型也未形成完整 load/save invariant；`build_application()` 在 ResourceStack 建立前的部分构造失败路径不会关闭已经创建的 owner。决策 187 的历史修复与 smoke 事实保留，但 G7 完成结论由决策 188 暂时撤回。R8 已细化为准备、入口切换、R8-O 观察门禁、遗留删除、最终文档五个切片；尚未授权 coding。
+**会话交接说明：** R7-T2 已按三个独立切片完成：`e963b11` 让 Artifact save/load 共用校验覆盖字段类型、deterministic operation key 与 kind/status/result shape；`e0e2041` 让 backend exception 的首次调用与同 key 重放稳定返回 `build_pdf_failed` typed failure；`6af22a3` 使用临时 construction ownership stack 清理 ResourceStack 交接前的部分构造失败。最终 216 项自动化测试、`compileall` 与 `git diff --check` 通过；真实临时工作区完成中文／英文模板复制与两份 PDF 编译，exit code 均为 0，记录 5 个 artifacts 与 2 个 build attempts。决策 189 恢复 G7；R8 候选清单保持 R8-P／R8-E／R8-O／R8-D／R8-G 五个切片，尚未授权 coding。
 
-**下一步：** 用户先审查并确认 R7-T2 的三个修复切片；修复、完整复验和 checkpoint 后重新决定 G7。G7 恢复后，再独立确认 R8 的文件／对象／公开方法与回退清单。
+**下一步：** 用户审查 R7-T2 修复与 R8 候选具体清单；若继续，先独立确认 R8 文件／对象／公开方法、五个切片与回退清单，再从 R8-P 开始。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -27,6 +27,7 @@
 186. **撤回 G7 完成结论并记录 R7-T 审查问题** — R7 代码切片与既有测试事实保留，但审查发现 Artifact reconcile、typed partial failure、损坏记录 typed failure 与 G7 验收证据缺口；问题修复与完整复验前不得恢复 G7 或进入 R8。本 checkpoint 只记录状态，不实施。
 187. **R7-T 修复完成并重新通过 G7** — 四类审查问题与编辑 smoke 新发现的 Windows CRLF 问题均已修复，五个独立提交通过针对性验证；最终 212 项自动化测试、`compileall`、`git diff --check`、四份真实 Resume PDF smoke 与已有简历 edit/replace smoke 通过。恢复 G7 完成结论并继续停在 R8 独立授权门禁前。
 188. **R7-T2 审查再次撤回 G7 并细化 R8** — 212 项测试与静态验证仍通过，但最小复现确认 exception retry 会在第二次调用中误报成功、损坏的 committed build aggregate 会泄漏非 typed `IndexError`，且 composition root 构造失败清理不完整；修复并完整复验前不得进入 R8。R8 候选清单已拆为五个独立切片，尚待后续确认。
+189. **R7-T2 修复完成并再次恢复 G7** — 三个独立提交闭合 aggregate validation、retry typed failure 与 construction cleanup；216 项测试、`compileall`、`git diff --check` 和真实中英文 PDF smoke 通过。继续停在 R8 独立授权门禁前。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 

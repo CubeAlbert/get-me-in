@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 189 — R7-T2 修复完成并再次恢复 G7](#决策-189--r7-t2-修复完成并再次恢复-g7)
 - [决策 188 — R7-T2 审查再次撤回 G7 并细化 R8](#决策-188--r7-t2-审查再次撤回-g7-并细化-r8)
 - [决策 187 — R7-T 修复完成并重新通过 G7](#决策-187--r7-t-修复完成并重新通过-g7)
 - [决策 186 — 撤回 G7 完成结论并记录 R7-T 审查问题](#决策-186--撤回-g7-完成结论并记录-r7-t-审查问题)
@@ -4229,3 +4230,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保持 G7 完成并把问题并入 R8 —— 会在已知 Artifact retry 误报与 corruption 泄漏存在时切换默认入口，已拒绝。
 - R8-E 与 R8-D 同一提交 —— 会失去可观察、可回退的旧实现缓冲期，已拒绝。
 - R8 自动删除旧运行数据 —— 与 R-D6 的“不迁移”不等于“授权删除”相冲突，已拒绝。
+
+---
+
+### 决策 189 —— R7-T2 修复完成并再次恢复 G7
+
+**背景：** 用户确认修复决策 188 记录的三个 R7-T2 问题。修复继续遵守不改变 Artifact schema/version、operation key 算法、ToolOutcome schema、public repository/service 方法与全局生命周期的边界，并按三个独立切片实施。
+
+**决定：**
+
+- `JsonArtifactRepository` 的 save/load 使用同一 aggregate validator，验证顶层和 nested 字段类型、deterministic operation key、PENDING/COMMITTED 与 COPY_TEMPLATE/BUILD_PDF 的 result shape；损坏记录统一抛出 `ArtifactRepositoryError`。提交：`e963b11`。
+- `ArtifactService.build_pdf()` 将 backend exception 规范化为持久化的 `ProcessResult(exit_code=None)`，首次和同 key replay 返回相同结果；Resume tool 将无 exit code、非 timeout、非 cancelled 的结果稳定映射为 `ToolFailure("build_pdf_failed", ...)`。提交：`e0e2041`。
+- `build_application()` 使用临时 `ExitStack` 持有部分 composition 资源；成功后把所有权交给现有 Application/ResourceStack，任一步失败则关闭已构造 owner。runtime LLM mapping 在资源创建前校验，并覆盖 Memory prompt 读取和 Knowledge start 失败。提交：`6af22a3`。
+- 最终 216 项自动化测试、`compileall` 与 `git diff --check` 通过。真实临时工作区成功复制中文／英文模板并编译两份 PDF，两个 build exit code 均为 0，repository 记录 5 个 artifacts 与 2 个 build attempts。
+- 再次恢复 G7 完成结论。继续停在 R8 独立授权门禁前；决策 188 细化的 R8 五切片仍只是候选清单，未经用户确认不得 coding。
+
+**理由：**
+
+- Aggregate 在 repository 边界被完整验证后，service 不再需要防御无法成立的 committed shape，也不会泄漏 `IndexError`。
+- 将 backend exception 归一为可持久化结果，使首次执行和 replay 具有相同的工具语义，同时保留原始诊断文本。
+- 临时 construction ownership 与稳定运行期 ResourceStack 分离，既覆盖部分构造失败，又不改变正常关闭顺序和唯一 owner。
+
+**曾考虑的替代方案：**
+
+- 为 backend exception 新增 Artifact schema 字段或异常类型 —— 会扩大已确认公共边界，现有 `exit_code=None` 与 stderr 已足够表达，未采用。
+- 只提前校验已知失败点而不建立统一 cleanup —— 仍会遗漏未来新增构造步骤，已拒绝。
