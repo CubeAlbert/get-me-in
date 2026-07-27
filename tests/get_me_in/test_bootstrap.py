@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from pathlib import Path
 import tempfile
 from threading import enumerate as enumerate_threads
@@ -280,6 +281,67 @@ class BootstrapTests(unittest.TestCase):
             if id(thread) not in before and thread.name == "knowledge-memory"
         ]
         self.assertEqual([], leaked)
+
+    def test_invalid_runtime_llms_fail_before_resource_construction(self) -> None:
+        with patch("chromadb.PersistentClient") as persistent_client:
+            with self.assertRaisesRegex(ValueError, "exactly Main and Resume"):
+                build_application(
+                    _settings(),
+                    runtime_llms={AgentKey.MAIN: _FakeLlm("unused")},
+                )
+
+        persistent_client.assert_not_called()
+
+    def test_memory_prompt_failure_closes_all_constructed_owners(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            settings = replace(
+                _settings(),
+                prompts_dir=Path(temporary) / "missing-prompts",
+            )
+            main_llm = _FakeLlm("main")
+            resume_llm = _FakeLlm("resume")
+            memory_llm = _FakeLlm("memory")
+            with (
+                patch("src.get_me_in.bootstrap.OpenAIWebSearchAdapter") as web_type,
+                patch("src.get_me_in.bootstrap.BackgroundWorker") as worker_type,
+                patch("src.get_me_in.bootstrap.KnowledgeService") as knowledge_type,
+                patch("src.get_me_in.bootstrap.ArtifactService") as artifact_type,
+                patch("src.get_me_in.bootstrap.OpenAILLMAdapter", return_value=memory_llm),
+                patch("chromadb.PersistentClient"),
+            ):
+                with self.assertRaises(FileNotFoundError):
+                    build_application(
+                        settings,
+                        runtime_llms={
+                            AgentKey.MAIN: main_llm,
+                            AgentKey.RESUME: resume_llm,
+                        },
+                    )
+
+            web_type.return_value.close.assert_called_once_with()
+            worker_type.return_value.close.assert_called_once_with()
+            knowledge_type.return_value.close.assert_called_once_with()
+            artifact_type.return_value.close.assert_called_once_with()
+            self.assertTrue(main_llm.closed)
+            self.assertTrue(resume_llm.closed)
+            self.assertTrue(memory_llm.closed)
+
+    def test_knowledge_start_failure_closes_composed_runtime_llms(self) -> None:
+        main_llm = _FakeLlm("main")
+        resume_llm = _FakeLlm("resume")
+        self.knowledge_start.side_effect = RuntimeError("startup failed")
+
+        with self.assertRaisesRegex(RuntimeError, "startup failed"):
+            build_application(
+                _settings(),
+                runtime_llms={
+                    AgentKey.MAIN: main_llm,
+                    AgentKey.RESUME: resume_llm,
+                },
+            )
+
+        self.assertTrue(main_llm.closed)
+        self.assertTrue(resume_llm.closed)
 
 
 class _FakeLlm:

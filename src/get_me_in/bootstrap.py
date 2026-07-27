@@ -2,6 +2,7 @@
 
 import os
 from collections.abc import Mapping
+from contextlib import ExitStack
 
 from src.get_me_in.adapters.system import SystemClock, UuidGenerator
 from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
@@ -61,7 +62,18 @@ def build_application(
     *,
     runtime_llms: Mapping[AgentKey, LLMPort] | None = None,
 ) -> Application:
-    """Build one isolated R1 application without import-time side effects."""
+    """Build one isolated application and clean up every partial composition."""
+    with ExitStack() as construction:
+        application = _build_application(settings, runtime_llms, construction)
+        construction.pop_all()
+        return application
+
+
+def _build_application(
+    settings: Settings,
+    runtime_llms: Mapping[AgentKey, LLMPort] | None,
+    construction: ExitStack,
+) -> Application:
     if settings.hf_endpoint:
         os.environ["HF_ENDPOINT"] = settings.hf_endpoint
 
@@ -96,6 +108,11 @@ def build_application(
     )
     resume_spec = build_resume_spec()
     catalog = AgentCatalog((main_spec, resume_spec))
+    if runtime_llms is not None:
+        if set(runtime_llms) != {AgentKey.MAIN, AgentKey.RESUME}:
+            raise ValueError("runtime_llms must provide exactly Main and Resume instances")
+        if runtime_llms[AgentKey.MAIN] is runtime_llms[AgentKey.RESUME]:
+            raise ValueError("Main and Resume runtime LLM instances must be distinct")
     prompt_renderer = PromptRenderer(settings.prompts_dir)
     clock = SystemClock()
     id_generator = UuidGenerator()
@@ -104,20 +121,28 @@ def build_application(
     workspace = LocalWorkspace(settings.workspace_dir)
     frontend = OSFrontend()
     web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
+    construction.callback(web_search.close)
     external_files = AuthorizedFileReader()
     worker = BackgroundWorker("knowledge-memory", settings.shutdown_timeout_seconds)
+    construction.callback(worker.close)
     from chromadb import PersistentClient
+    knowledge_construction = ExitStack()
+    construction.callback(knowledge_construction.close)
+    knowledge_index = ChromaKnowledgeIndex(
+        PersistentClient(path=str(settings.knowledge_chroma_dir)),
+        SentenceTransformerEmbedder(settings.embedding_model, settings.embedding_batch_size),
+        CrossEncoderReranker(settings.reranker_model, settings.rerank_batch_size, settings.retrieval_top_k),
+    )
+    knowledge_construction.callback(knowledge_index.close)
     knowledge = KnowledgeService(
         (LocalKnowledgeSourceRepository(settings.reference_dir), JsonMemoryRepository(settings.memories_dir, clock)),
         MarkdownChunker(),
-        ChromaKnowledgeIndex(
-            PersistentClient(path=str(settings.knowledge_chroma_dir)),
-            SentenceTransformerEmbedder(settings.embedding_model, settings.embedding_batch_size),
-            CrossEncoderReranker(settings.reranker_model, settings.rerank_batch_size, settings.retrieval_top_k),
-        ),
+        knowledge_index,
         JsonManifestRepository(settings.knowledge_manifest_path),
         worker,
     )
+    knowledge_construction.pop_all()
+    construction.callback(knowledge.close)
     resume_artifacts = LocalResumeArtifacts(
         settings.resume_template_dir,
         SubprocessRunner(cancel_grace_seconds=settings.cancel_grace_seconds),
@@ -130,6 +155,7 @@ def build_application(
         id_generator,
         settings.artifact_log_max_bytes,
     )
+    construction.callback(artifacts.close)
     workspace_access = WorkspaceAccessState()
     main_plan = PlanService(id_generator)
     resume_plan = PlanService(id_generator)
@@ -138,6 +164,8 @@ def build_application(
         (*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools(), *build_resume_tools())
     )
     tool_executor = ToolExecutor(tool_catalog)
+    runtime_construction = ExitStack()
+    construction.callback(runtime_construction.close)
     if runtime_llms is None:
         runtime_llms = {
             key: OpenAILLMAdapter(
@@ -148,16 +176,17 @@ def build_application(
             )
             for key in (AgentKey.MAIN, AgentKey.RESUME)
         }
-    if set(runtime_llms) != {AgentKey.MAIN, AgentKey.RESUME}:
-        raise ValueError("runtime_llms must provide exactly Main and Resume instances")
-    if runtime_llms[AgentKey.MAIN] is runtime_llms[AgentKey.RESUME]:
-        raise ValueError("Main and Resume runtime LLM instances must be distinct")
+    runtime_construction.callback(runtime_llms[AgentKey.MAIN].close)
+    runtime_construction.callback(runtime_llms[AgentKey.RESUME].close)
+    memory_construction = ExitStack()
+    construction.callback(memory_construction.close)
     memory_llm = OpenAILLMAdapter(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
         model_names={ModelProfile.PRO: settings.llm_pro_model, ModelProfile.FLASH: settings.llm_flash_model},
         thinking_enabled=False,
     )
+    memory_construction.callback(memory_llm.close)
     memory = MemoryService(
         JsonMemoryRepository(settings.memories_dir, clock),
         MemoryExtractor(
@@ -170,6 +199,8 @@ def build_application(
         knowledge,
         worker,
     )
+    memory_construction.pop_all()
+    construction.callback(memory.close)
     main_runtime = AgentRuntime(
         spec=main_spec,
         prompt_renderer=prompt_renderer,
@@ -227,6 +258,8 @@ def build_application(
         id_generator=id_generator,
         workspace_access=workspace_access,
     )
+    runtime_construction.pop_all()
+    construction.callback(sessions.close)
     resources = ResourceStack()
     resources.register("web_search", web_search.close)
     resources.register("sessions", sessions.close)
@@ -246,9 +279,5 @@ def build_application(
         knowledge=knowledge,
         memory=memory,
     )
-    try:
-        knowledge.start()
-    except Exception:
-        application.close()
-        raise
+    knowledge.start()
     return application
