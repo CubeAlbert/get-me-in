@@ -645,10 +645,11 @@ R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、A
 入口切换切片允许修改：
 
 - `main.py`：唯一行为改动是委托 `src.get_me_in.cli.main.main()` 并以其整数返回值作为进程退出码；删除全部 legacy import、import-time tool registration 与旧 composition。
-- `src/get_me_in/cli/main.py`：只允许修正已经过时的“未改变 legacy entry point”说明；不增加第二套入口或公开 API。
-- `.env.example`：改为 v2 `Settings.from_env()` 的实际变量名、默认值和弃用说明；删除仅被 v1 消费的配置示例，保留已明确支持的兼容别名说明。
-- `README.md`：将启动命令和运行数据边界切到 v2。
-- `tests/get_me_in/test_import_boundaries.py`、`tests/get_me_in/test_settings.py` 及现有 CLI/bootstrap 测试：覆盖根入口只依赖 v2、示例配置与 Settings 对齐、退出码和关闭路径；原则上不新增生产文件、类或公开方法。
+- `src/get_me_in/cli/main.py`：修正已经过时的“未改变 legacy entry point”说明，并在 `Settings` 已加载、composition／CLI 构造或启动失败时记录完整诊断、向用户渲染简短错误并返回退出码 `1`；只捕获 `Exception`，不得吞掉 `KeyboardInterrupt`／`SystemExit`。既有 `SettingsValidationError` 继续返回 `2`，正常关闭继续返回 `0`；不增加第二套入口或公开 API。
+- `.env.example`：R8-P 先补齐 v2 `Settings.from_env()` 的实际变量名、默认值和已支持兼容别名；仅被 v1 消费的变量暂时保留在明确标注的“legacy rollback only”段，确保观察期可单独回退 R8-E。R8-D 完成后再由 R8-G 删除这些 legacy-only 示例。
+- `README.md`：当前文件为空。R8-P 先写最小过渡说明，同时列出尚在生产使用的 `uv run python main.py` 与 v2 预览入口 `uv run python -m src.get_me_in.cli`、静态资产和新旧运行数据边界；R8-E 才把根命令标为 v2 正式入口，R8-G 在 legacy 删除后移除回滚期说明。
+- `tests/get_me_in/test_import_boundaries.py`、`tests/get_me_in/test_settings.py`、既有 CLI/bootstrap 测试及新测试文件 `tests/get_me_in/test_cli_main.py`：覆盖根入口只依赖 v2、示例配置与 Settings 对齐、Settings 错误 `2`、composition／启动错误 `1` 且不输出 traceback、正常关闭 `0` 与资源关闭路径。新测试文件只测试既有入口函数；原则上不新增生产文件、类或公开方法。
+- `pyproject.toml` 不新增 `[project.scripts]` 或其他生产入口；R8 继续以根 `main.py` 为唯一生产入口，以 `python -m src.get_me_in.cli` 为诊断／预览入口。
 
 遗留删除切片的精确生产源码范围：
 
@@ -656,24 +657,26 @@ R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、A
 - 删除 `src/config.py`、`src/lifecycle.py`、`src/logger.py`、`src/message.py`、`src/request.py`、`src/response.py`。
 - 保留 `src/__init__.py` 与完整 `src/get_me_in/`；不得把 v2 CLI、adapter、port 或 tests 误归为 legacy。
 - 删除仓库中的 `.ipynb_checkpoints` 目录，但必须先用精确路径复核；不得借此递归清理工作区或任何 `data/` 目录。
+- 当前复核到的本地路径是 `.ipynb_checkpoints/`、`src/.ipynb_checkpoints/`、`src/llm/.ipynb_checkpoints/`，均未被 Git 跟踪；R8-D 将其作为单独的本地清理和证据项，不伪装成版本提交内容。执行前必须再次复核精确路径。
 - `pyproject.toml`／`uv.lock` 只删除经 import 与真实 smoke 证明不再使用的依赖，不凭旧模块删除猜测依赖；若无可删项则保持不变。
 
 R8 不新建 runtime class、service、port、schema 或公开方法。若实现中发现必须增加上述对象，必须停止并重新提交清单。
 
 #### 6.11.3 五个独立切片与回退点
 
-1. **R8-P 准备：** 完成静态资产、配置、capability、命令、Agent/tool 数量、v2→legacy import 和 legacy data 非访问审计；只更新 `.env.example`、README 与验证证据，不切入口。
-2. **R8-E 入口切换：** 只切换根 `main.py` 并补入口 contract tests，形成独立 commit。该 commit 是删除前的明确回退点。
-3. **R8-O 观察门禁：** 从 `uv run python main.py` 执行完整 smoke matrix，验证启动错误无 traceback、基础对话、命令、审批／取消、Main→Resume→Main、save/restore/rewind、Knowledge/Memory、Resume copy/edit/build/open 与关闭；记录 legacy data 目录切换前后未被读取或改写。未通过时用 `git revert <R8-E commit>` 回退，不使用破坏性 reset。
+1. **R8-P 准备：** 完成静态资产、配置、capability、命令、Agent/tool 数量、v2→legacy import 和 legacy data 非访问审计；只更新过渡态 `.env.example`、README 与验证证据，不切入口、不删除 legacy rollback 配置。
+2. **R8-E 入口切换：** 切换根 `main.py`，补齐 `cli.main` 启动异常映射和入口 contract tests，形成独立 commit。该 commit 是删除前的明确回退点。
+3. **R8-O 观察门禁：** 从 `uv run python main.py` 执行完整 smoke matrix，验证启动错误无 traceback、基础对话、命令、审批／取消、Main→Resume→Main、save/restore/rewind、Knowledge/Memory、Resume copy/edit/build/open 与关闭。未通过时用 `git revert <R8-E commit>` 回退，不使用破坏性 reset；R8-P 保留的 legacy rollback 配置使旧入口仍可启动。
 4. **R8-D 遗留删除：** 只有 R8-O 经用户审查通过后才删除精确 legacy 源码与 checkpoint 目录；同一提交补齐 import/dependency 检查，不删除旧运行数据。
-5. **R8-G 文档与 G8：** 将 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md`、README 与 AGENTS.md 更新为已落地 v2 事实；同步活跃 refactor 文档与 checkpoint，完成 G8。
+5. **R8-G 文档与 G8：** 删除 `.env.example`／README 的 legacy rollback 段，将 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md`、README 与 AGENTS.md 更新为已落地 v2 事实；同步活跃 refactor 文档与 checkpoint，完成 G8。历史 smoke/capability 表保留为明确标记的 baseline，不把旧 `/auto-approve-switch` 改写成当前命令。
 
 #### 6.11.4 R8-O／G8 证据要求
 
-- 自动化：完整 unittest、`compileall`、`git diff --check`、根入口 import boundary、Catalog 中 Agent/tool/command 数量一致性。
+- 自动化：完整 unittest、`compileall`、`git diff --check`、根入口 import boundary；固定验收 Catalog 为 2 个 Agent（Main／Resume）、25 个 ToolDefinition、10 个 CLI 命令（`/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、`/approval`、`/exit`）。数量与名称分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 派生，不手工维护第二份运行时注册表。
 - 真实 adapter：Chroma/embedder/reranker reload/query、Memory build/query/delete、中文／英文／双语 Resume copy/edit/build/open，且进程结束后后台 worker 与资源正常关闭。
-- 数据边界：只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`；v2 写入仅落在显式的 `data/workspace/` 与 `data/v2/` 边界。旧运行数据只保留，不自动迁移或删除。
+- 数据边界：只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`；v2 写入仅落在显式的 `data/workspace/` 与 `data/v2/` 边界。旧运行数据只保留，不自动迁移或删除。证明“未访问”必须组合使用：静态扫描 v2 源码／Settings 中的禁用路径和 legacy-only 环境变量、以 sentinel project root 构造 Settings 并断言全部运行路径、在启动／smoke 中安装拒绝访问旧目录的测试边界；目录 mtime／hash 前后对比只能证明“未改写”，不得单独作为“未读取”的证据。
 - 删除后：`main.py` 与 `src/get_me_in/` 不得 import legacy；仓库不再包含列出的 legacy production modules 或 `.ipynb_checkpoints`；文档中的 Agent、tool、command 和配置数量必须与实际 Catalog／Settings 一致。
+- 回退：R8-D 前只需 revert R8-E；R8-D 后的紧急回退必须按逆序先 revert R8-D、再 revert R8-E，恢复源码后才允许重新启用 legacy-only 配置。任何回退都不得触碰旧 `data/` 运行数据。
 
 ### 6.12 InterviewAgent Workflow 前置备忘（R9，非确认清单）
 

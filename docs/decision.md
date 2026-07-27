@@ -4255,3 +4255,34 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 为 backend exception 新增 Artifact schema 字段或异常类型 —— 会扩大已确认公共边界，现有 `exit_code=None` 与 stderr 已足够表达，未采用。
 - 只提前校验已知失败点而不建立统一 cleanup —— 仍会遗漏未来新增构造步骤，已拒绝。
+
+---
+
+### 决策 190 —— R8 设计审查收紧入口错误、回退配置与验收证据
+
+**背景：** G7 恢复后对 R8 候选清单与实际 v2 composition、Settings、Catalog、CLI 文档和仓库状态进行只读复核。五切片顺序仍然成立，但发现四个会削弱切换门禁的问题：`cli.main.main()` 只处理 Settings 校验错误，composition／启动异常仍会向根入口泄漏 traceback；R8-P 原计划在切换前删除 v1-only `.env.example` 项，导致单独 revert R8-E 后旧入口可能缺少回退配置；目录 mtime／hash 不能证明 v2 没有读取旧数据；Catalog 验收只写“数量一致”而没有固定当前实际数量。另确认 README 当前为空，capability／legacy smoke 文档仍含历史 `/auto-approve-switch`，本地有三个未跟踪 `.ipynb_checkpoints` 目录。
+
+**决定：**
+
+- 保留 R8-P → R8-E → R8-O → R8-D → R8-G 的顺序和 R8-O 用户审查门禁。R8-P 只建立过渡态配置／README：补齐 v2 设置，但把 v1-only 变量保留在“legacy rollback only”段；R8-D 完成后才由 R8-G 删除。
+- R8-E 允许在既有 `src/get_me_in/cli/main.py` 内增加最小启动异常映射：`SettingsValidationError` 返回 `2`，composition／CLI 构造或启动的 `Exception` 记录诊断、渲染简短错误并返回 `1`，正常关闭返回 `0`；不得吞掉 `KeyboardInterrupt`／`SystemExit`，不得增加公开 API。
+- R8-E 允许新建纯测试文件 `tests/get_me_in/test_cli_main.py`，与既有 import/settings/CLI/bootstrap 测试共同覆盖根入口委托、三个退出码、无 traceback 与资源关闭。R8 不新增生产文件、class、service、port、schema、公开方法或 `[project.scripts]`。
+- 固定 R8 验收基线为 2 个 Agent（Main／Resume）、25 个 ToolDefinition、10 个 CLI 命令；名称和数量分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 取证。
+- “旧数据未访问”必须由静态禁用路径／legacy 环境变量扫描、sentinel project root 的 Settings 路径断言、拒绝访问旧目录的启动／smoke 边界共同证明；mtime／hash 前后对比只证明未改写。`data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 始终保留，不迁移、不删除。
+- `.ipynb_checkpoints/`、`src/.ipynb_checkpoints/`、`src/llm/.ipynb_checkpoints/` 当前均未被 Git 跟踪；R8-D 执行前再次按精确路径复核，作为本地清理证据，不伪装成提交内容。
+- R8-D 前回退只 revert R8-E；R8-D 后的紧急回退按逆序先 revert R8-D、再 revert R8-E。capability／smoke 旧表保留时必须明确标为历史 baseline，不能把旧 `/auto-approve-switch` 冒充当前 `/approval`。
+- 本决策只更新 R8 候选设计、计划和任务，不构成 R8 coding 授权；根 `main.py`、`.env.example`、README 和生产代码本轮均不修改。
+
+**理由：**
+
+- 根入口成为默认生产路径后，用户可读的启动失败和稳定退出码属于入口契约，而不是可推迟到真实 smoke 才发现的实现细节。
+- 入口提交只有在旧源码和必要旧配置同时保留时才真正可以单独回退；提前清理配置会让 Git 上的“可 revert”失去运行层面的意义。
+- 文件元数据只能观察写副作用，无法证明没有读；把静态、配置和拒绝访问边界组合起来，才能覆盖“未读取”和“未改写”两个不同命题。
+- 固定 Catalog 数量与派生来源可以防止最终文档只做模糊的自洽检查，也避免另建一份运行时注册事实。
+
+**曾考虑的替代方案：**
+
+- 保持 `cli.main.main()` 不变，仅在 smoke 接受 traceback —— 不满足当前 R8-O 已写明的用户可读启动错误门禁，已拒绝。
+- R8-P 直接删除所有 v1-only 配置 —— 会破坏观察期单提交回退，延后到 R8-G。
+- 只比较旧数据目录 hash／mtime —— 只能证明未写，不能证明未读，未采用。
+- 在 R8 增加 console script —— 当前根入口与模块诊断入口已经足够，会扩大待确认生产入口面，未采用。

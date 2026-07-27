@@ -264,19 +264,20 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 **产出：**
 
 - R7-T2 已修复 Artifact exception retry、aggregate invariant 与 composition construction cleanup，并由决策 189 重新通过 G7；R8 不吸收这些缺口。
-- R8-P 先校验静态资产、Settings／`.env.example`、capability、命令、Agent/tool 数量、v2→legacy import 和 legacy data 非访问边界。
-- R8-E 仅将根 `main.py` 委托给 v2 CLI，形成独立可回退 commit；不同时删除 legacy。
+- R8-P 先校验静态资产、Settings／`.env.example`、capability、命令、Agent/tool 数量、v2→legacy import 和 legacy data 非访问边界；`.env.example` 与 README 保留清晰标记的 legacy rollback 段，不在切换前破坏旧入口回退条件。
+- R8-E 将根 `main.py` 委托给 v2 CLI，并补齐 composition／启动异常的用户可读错误和退出码 `1`；形成独立可回退 commit，不同时删除 legacy。
 - R8-O 从根入口执行完整自动化与真实 smoke，验证入口退出码、CLI、Knowledge/Memory、Resume、handoff、审批／取消、restore/rewind 和资源关闭；用户审查通过前不进入删除。
 - R8-D 按已确认精确清单删除 legacy production modules 与 `.ipynb_checkpoints`，保留 `src/__init__.py`、完整 `src/get_me_in/` 和全部旧用户运行数据。
-- R8-G 更新 README、AGENTS.md、默认设计／计划／任务、capability matrix、smoke checklist 和活跃 refactor 文档为已落地事实。
+- R8-G 删除过渡期 legacy rollback 配置说明，更新 README、AGENTS.md、默认设计／计划／任务、capability matrix、smoke checklist 和活跃 refactor 文档为已落地事实；历史 baseline 明确保留为历史，不冒充当前命令。
 
 **验收门禁 G8：**
 
 - R8-E 前有通过的 G6／G7；R8-E 是可单独 `git revert` 的入口回退点，R8-O 通过并经用户审查后才允许 R8-D。
 - 完整 unittest、`compileall`、`git diff --check` 与真实 smoke matrix 全部通过，`uv run python main.py` 是唯一生产入口。
 - 仓库中不再存在 v2 对旧架构的 import，也不再存在清单中的 legacy production modules 或 `.ipynb_checkpoints`。
-- `data/reference/`、`data/prompts/`、`data/resume/template/` 作为静态输入可用；旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 未被读取、改写、迁移或删除。
-- `.env.example` 与 `Settings.from_env()` 一致；文档中的 Agent、tool、command 和配置数量与实际 Catalog／Settings 一致。
+- `data/reference/`、`data/prompts/`、`data/resume/template/` 作为静态输入可用；旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 未被读取、改写、迁移或删除。“未读取”由静态扫描、sentinel Settings 路径断言和拒绝访问边界证明；mtime／hash 只证明未改写。
+- `.env.example` 与 `Settings.from_env()` 一致；实际 Catalog 固定为 2 个 Agent、25 个 ToolDefinition、10 个 CLI 命令，文档名称和数量与 `AgentCatalog`、`ToolCatalog`、`CommandRegistry` 一致。
+- R8-D 前回退只 revert R8-E；R8-D 后紧急回退按逆序先恢复删除提交、再恢复入口提交，且始终不触碰旧运行数据。
 
 **依赖：** G6、G7。
 

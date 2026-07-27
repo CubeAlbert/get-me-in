@@ -435,22 +435,24 @@
 
 ## R8 —— 切换与清理
 
-> 候选具体清单已在决策 188 与 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单` 中细化。决策 189 已满足 R7-T2/G7 前置条件，但本清单尚未获得 coding 授权。
+> 候选具体清单已在决策 188、190 与 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单` 中细化。决策 189 已满足 R7-T2/G7 前置条件；决策 190 只完成 R8 设计审查，本清单尚未获得 coding 授权。
 
 ### 1. R8-P —— 切换准备
 
 - ⬜ 确认 R7-T2 已完成且 G6、G7 均有效；工作区干净，旧 `main.py` 尚未改动。
-- ⬜ 复核实际 Catalog：Agent、tool、command、capability 与 `docs/capability-parity-matrix.md` 一致。
+- ⬜ 复核实际 Catalog：2 个 Agent（Main／Resume）、25 个 ToolDefinition、10 个 CLI 命令；分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 取证，并与 capability 文档一致。
 - ⬜ 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可直接作为 v2 静态输入。
-- ⬜ 对旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 建立只读前后证据；确认 v2 不读取、改写、迁移或删除。
-- ⬜ 将 `.env.example` 更新为 `Settings.from_env()` 的实际变量、默认值、兼容别名与废弃项；更新 README 的 v2 启动和数据边界。
+- ⬜ 对旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 建立组合证据：静态扫描禁用路径／legacy-only 环境变量、sentinel project root 的 Settings 路径断言、启动／smoke 拒绝访问边界；mtime／hash 前后证据只用于确认未改写。
+- ⬜ 将 `.env.example` 补齐为 `Settings.from_env()` 的实际变量、默认值与兼容别名；v1-only 变量暂放在“legacy rollback only”段，R8-O 前不得删除。
+- ⬜ 为当前空的 README 写过渡说明：同时记录旧生产根入口与 v2 预览入口、静态资产、新旧运行数据和回退边界；不提前宣称根入口已切换。
 - ⬜ 运行 v2→legacy import scan、入口前完整自动化测试、`compileall` 与 `git diff --check`；R8-P 独立提交。
 
 ### 2. R8-E —— 根入口切换
 
 - ⬜ `main.py` 只 import `src.get_me_in.cli.main.main` 并 `raise SystemExit(main())`；删除 legacy composition 与 import-time registration。
-- ⬜ `src/get_me_in/cli/main.py` 只修正过时说明，不新增第二入口、类、service、port、schema 或公开方法。
-- ⬜ 在现有 `test_import_boundaries.py`、`test_settings.py` 与 CLI/bootstrap 测试中覆盖根入口只依赖 v2、配置错误退出码、正常关闭与示例配置一致性。
+- ⬜ `src/get_me_in/cli/main.py` 修正过时说明；Settings 错误继续渲染并返回 `2`，composition／CLI 构造或启动的 `Exception` 记录完整诊断、渲染简短错误并返回 `1`，正常关闭返回 `0`；不得吞掉 `KeyboardInterrupt`／`SystemExit`，不得新增第二入口或公开 API。
+- ⬜ 在 `test_import_boundaries.py`、`test_settings.py`、既有 CLI/bootstrap 测试与新 `test_cli_main.py` 中覆盖根入口只依赖 v2、示例配置一致性、Settings 错误 `2`、启动错误 `1` 且无 traceback、正常关闭 `0` 与资源关闭。
+- ⬜ 不新增 `[project.scripts]` 或其他生产入口。
 - ⬜ R8-E 单独提交并记录 commit id；该提交是遗留删除前的明确回退点。
 
 ### 3. R8-O —— 强制观察门禁
@@ -458,25 +460,26 @@
 - ⬜ 从 `uv run python main.py` 验证缺少／非法配置时可读错误退出且无 traceback，正常 `/exit` 返回成功退出码。
 - ⬜ 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
-- ⬜ 对比切换前后 legacy data 目录证据，确认没有访问或修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
+- ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
 - ⬜ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan。
-- ⬜ 用户审查 R8-O；未通过时以 `git revert <R8-E commit>` 回退。未获通过不得进入 R8-D。
+- ⬜ 用户审查 R8-O；未通过时以 `git revert <R8-E commit>` 回退，使用 R8-P 保留的 legacy rollback 配置恢复旧入口。未获通过不得进入 R8-D。
 
 ### 4. R8-D —— 遗留删除
 
 - ⬜ 删除 `src/agents/`、`src/cli/`、`src/llm/`、`src/memory/`、`src/prompts/`、`src/rag/`、`src/tools/`、`src/utils/`。
 - ⬜ 删除 `src/config.py`、`src/lifecycle.py`、`src/logger.py`、`src/message.py`、`src/request.py`、`src/response.py`。
 - ⬜ 保留 `src/__init__.py`、完整 `src/get_me_in/` 与 `tests/get_me_in/`；不删除或迁移任何旧 `data/` 运行数据。
-- ⬜ 删除经精确路径复核的仓库 `.ipynb_checkpoints`；不得使用宽泛递归清理。
+- ⬜ 再次精确复核并删除本地 `.ipynb_checkpoints/`、`src/.ipynb_checkpoints/`、`src/llm/.ipynb_checkpoints/`；当前三者均未被 Git 跟踪，作为本地清理证据而非提交内容，不得使用宽泛递归清理。
 - ✅ 确认临时 `scripts/v2_runtime_smoke.py` 已随 R5 正式 CLI 落地删除。
 - ⬜ 删除后再次确认 `main.py`／`src/get_me_in/` 无 legacy import，清单中的 legacy production modules 均不存在。
 - ⬜ 审计 `pyproject.toml`／`uv.lock`；只移除经 import 与真实 smoke 证明未使用的依赖，无可删项则保持不变。
 - ⬜ R8-D 独立提交，不与入口切换或最终文档提交混合。
+- ⬜ 记录删除后的紧急回退顺序：先 revert R8-D 恢复源码，再 revert R8-E 恢复入口；禁止触碰旧运行数据。
 
 ### 5. R8-G —— 文档、状态与 G8
 
 - ⬜ 将已落地 v2 架构更新到 `docs/design.md`，将迁移完成状态更新到 `docs/plan.md` 和 `docs/task.md`。
-- ⬜ 更新 `docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md`、README 与 AGENTS.md；Agent、tool、command、配置和数据目录必须与实际代码一致。
+- ⬜ 删除 `.env.example`／README 的 legacy rollback 段；更新 `docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md`、README 与 AGENTS.md；Agent、tool、command、配置和数据目录必须与实际代码一致，旧 `/auto-approve-switch` 等内容只保留为明确历史 baseline。
 - ⬜ 同步 `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md`、`docs/decision.md` 与 `docs/current.md`。
 - ⬜ 完成删除后的完整自动化、静态、真实 adapter 与根入口 smoke matrix；确认旧数据保留说明和 R8-E 回退点完整。
 - ⬜ 完成 G8，checkpoint 后停止，等待用户审查；不得自动进入 R9。

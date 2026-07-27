@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R7 —— R7-T2 三个修复切片与完整复验已完成；G7 已恢复，停在 R8 独立授权门禁前
+**当前阶段：** R7 —— G7 已恢复；R8 候选设计已完成复审，仍停在独立授权门禁前
 
-**当前任务：** R7/G7 已重新完成；不得进入 R8 coding
+**当前任务：** R8 设计、计划与任务细节已按实际代码收紧；不得进入 R8 coding
 
-**当前子任务：** 无。等待用户审查 R7-T2 修复与 R8 候选具体清单。
+**当前子任务：** 无。等待用户审查决策 190 与修订后的 R8 候选具体清单。
 
 **当前阻塞：** R8 仍需用户独立确认具体清单并授权；旧 `main.py` 未改动。
 
-**会话交接说明：** R7-T2 已按三个独立切片完成：`e963b11` 让 Artifact save/load 共用校验覆盖字段类型、deterministic operation key 与 kind/status/result shape；`e0e2041` 让 backend exception 的首次调用与同 key 重放稳定返回 `build_pdf_failed` typed failure；`6af22a3` 使用临时 construction ownership stack 清理 ResourceStack 交接前的部分构造失败。最终 216 项自动化测试、`compileall` 与 `git diff --check` 通过；真实临时工作区完成中文／英文模板复制与两份 PDF 编译，exit code 均为 0，记录 5 个 artifacts 与 2 个 build attempts。决策 189 恢复 G7；R8 候选清单保持 R8-P／R8-E／R8-O／R8-D／R8-G 五个切片，尚未授权 coding。
+**会话交接说明：** 决策 189 已恢复 G7。随后只读复核 R8 文档与实际代码，确认五切片顺序保持不变，但决策 190 收紧四项边界：R8-E 必须把 composition／启动异常映射为用户可读错误和退出码 `1`；R8-P 的 `.env.example`／README 必须保留 legacy rollback 段直到 R8-D 后；旧数据“未读取”使用静态扫描、sentinel Settings 路径与拒绝访问边界证明，mtime／hash 只证明未改写；Catalog 验收固定为 2 个 Agent、25 个 ToolDefinition、10 个 CLI 命令。当前 README 为空，本地三个 `.ipynb_checkpoints` 未被 Git 跟踪，均已写入候选任务。本轮未修改 `main.py`、`.env.example`、README 或任何生产代码。
 
-**下一步：** 用户审查 R7-T2 修复与 R8 候选具体清单；若继续，先独立确认 R8 文件／对象／公开方法、五个切片与回退清单，再从 R8-P 开始。
+**下一步：** 用户审查并独立确认决策 190 后的 R8 文件／对象／公开方法、五个切片与回退清单；若授权 coding，新会话从 R8-P 开始，不直接切换入口。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -28,6 +28,7 @@
 187. **R7-T 修复完成并重新通过 G7** — 四类审查问题与编辑 smoke 新发现的 Windows CRLF 问题均已修复，五个独立提交通过针对性验证；最终 212 项自动化测试、`compileall`、`git diff --check`、四份真实 Resume PDF smoke 与已有简历 edit/replace smoke 通过。恢复 G7 完成结论并继续停在 R8 独立授权门禁前。
 188. **R7-T2 审查再次撤回 G7 并细化 R8** — 212 项测试与静态验证仍通过，但最小复现确认 exception retry 会在第二次调用中误报成功、损坏的 committed build aggregate 会泄漏非 typed `IndexError`，且 composition root 构造失败清理不完整；修复并完整复验前不得进入 R8。R8 候选清单已拆为五个独立切片，尚待后续确认。
 189. **R7-T2 修复完成并再次恢复 G7** — 三个独立提交闭合 aggregate validation、retry typed failure 与 construction cleanup；216 项测试、`compileall`、`git diff --check` 和真实中英文 PDF smoke 通过。继续停在 R8 独立授权门禁前。
+190. **R8 设计审查收紧入口错误、回退配置与验收证据** — 五切片顺序不变；R8-E 增加启动异常退出码 `1` 契约，R8-P 保留 legacy rollback 配置，旧数据未读／未写使用不同证据，Catalog 固定为 2 Agent／25 tool／10 command。本轮只更新候选文档，R8 coding 仍未授权。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
