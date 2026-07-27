@@ -1,21 +1,22 @@
 # 当前状态
 
-**当前阶段：** R7-R —— R7 总体边界已确认，具体清单等待用户最终确认（coding 未启动）
+**当前阶段：** R7 —— 设计与清单已确认，等待新会话从 R7-P0 开始（当前会话不 coding）
 
-**当前任务：** Review `docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认`
+**当前任务：** R7-P0 —— LLM temperature 契约修复
 
-**当前子任务：** 确认 R7 新文件、对象、构造依赖、公开方法、允许修改文件和六个实施切片。
+**当前子任务：** 为 `AgentSpec`／`LLMRequest` 增加显式 temperature，并固定 Main `0.1`、Resume `0.2`、MemoryExtractor `0.0`。
 
-**当前阻塞：** R7 五项总体边界已确认，但 6.10.4 具体清单尚未获得用户最终确认；不得开始 R7 coding。
+**当前阻塞：** 无技术或设计阻塞；用户要求当前会话仅完成文档 checkpoint，R7 coding 留到新会话。
 
-**会话交接说明：** R6-F/G6 已完成；本次 Review 又复跑 `uv run python -m unittest discover -s tests/get_me_in -t .`，187 项测试正常退出并通过。用户确认 R7-P dynamic session identity、Resume capability parity 与 agent-scoped Runtime/LLM ownership、独立 Artifact repository、ArtifactService/build-attempt 语义及 typed partial-failure/retry 五项总体边界。活跃设计新增 6.10 R7 设计与 6.10.4 具体清单，计划/任务/决策同步更新；未创建 R7 代码文件、未切换旧 `main.py`、未进入 R8。
+**会话交接说明：** R6-F/G6 已完成；R7 启动 Review 中复跑的 `uv run python -m unittest discover -s tests/get_me_in -t .` 已正常退出并通过 187 项测试。用户已确认 R7 总体边界、具体文件／对象／公开方法清单及七个实施切片；补充确认显式 temperature 契约，以及 Artifact build log 的 65536 bytes 上限、workspace 路径脱敏、UTF-8 安全 head/tail 截断和诊断 metadata。本会话只同步设计、计划、任务、current 与决策，未修改代码、未切换旧 `main.py`、未进入 R8。
 
-**下一步：** 用户审查并最终确认 `docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认`。确认后，新会话执行 `/project-bootstrap`，仅从切片 1 R7-P dynamic session identity 开始，独立验证、提交并停下。
+**下一步：** 新会话执行 `/project-bootstrap`，仅实施切片 1 R7-P0 temperature contract，补齐对应测试，独立验证、提交并停下；不得同批进入 R7-P dynamic session identity。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
 176. **R6-F 完成并重新通过 G6** — 四个修复切片独立提交，187 项自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 通过；再次停在 R6-T，等待用户审查。
-177. **确认 R7 总体边界并提交具体清单审查** — R7-P、Resume capability/资源所有权、独立 Artifact repository、build-attempt 与 typed partial retry 已确认；6.10.4 的具体文件/公开方法清单仍待最终确认，本 checkpoint 不授权 coding。
+177. **确认 R7 总体边界并提交具体清单审查** — R7-P、Resume capability/资源所有权、独立 Artifact repository、build-attempt 与 typed partial retry 已确认；当时的具体清单待确认状态已由决策 178 解除。
+178. **确认 R7 具体清单与 temperature/log 补充** — 用户确认具体文件、对象、公开方法和七个切片；先以 R7-P0 恢复 Main `0.1`、Resume `0.2`、MemoryExtractor `0.0`，Artifact build log 采用有界、脱敏、UTF-8 安全截断。本会话只做文档 checkpoint，后续新会话可从切片 1 开始。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 等新功能统一放到 R9；R0～R8 只做 v2 重构
 
@@ -63,4 +64,5 @@
 174. **G6 原通过结论已由决策 175 撤销** — R6 原六个切片完成并 checkpoint，但后续审查发现一致性、取消、关闭和测试退出缺口；该决定仅保留历史过程，不再代表当前门禁状态。
 175. **撤销 G6 通过结论并授权 R6-F** — BackgroundWorker typed result/cancellation、Memory delete finalize、Knowledge 串行边界与四个修复切片已获确认；全部复验前不得进入 R7/R8。
 176. **R6-F 完成并重新通过 G6** — 四个修复提交与 187 项测试、`compileall`、真实模型 smoke 共同闭合 G6；当前再次停在 R6-T，R7/R8 未授权。
-177. **确认 R7 总体边界并提交具体清单审查** — R7 五项总体边界获确认；具体新文件、对象、构造依赖、公开方法、允许修改文件和六个切片已写入设计，等待用户最终确认后才能 coding。
+177. **确认 R7 总体边界并提交具体清单审查** — R7 五项总体边界获确认；当时提交的具体清单和六个切片处于待确认状态，已由决策 178 的最终清单和七个切片取代。
+178. **确认 R7 具体清单与 temperature/log 补充** — R7 具体清单和七个切片已确认；temperature 恢复显式 per-caller 契约，Artifact build log 固定上限、脱敏与诊断字段。当前会话只做文档 checkpoint；新会话从 R7-P0 开始。

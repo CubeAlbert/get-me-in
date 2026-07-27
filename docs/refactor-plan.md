@@ -233,26 +233,29 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **产出：**
 
+- 先完成 R7-P0：恢复 Main 0.1、Resume 0.2、MemoryExtractor 0.0 的显式 temperature 契约，不再依赖 provider 默认值。
 - 先完成 R7-P：Runtime 每次从规范 SessionState 取得动态 session id，闭合连续 restore 后 workspace revision grant 与 artifact provenance 的 scope 漂移。
 - 声明式 Resume AgentSpec 与已确认的 capability parity；Main/Resume 分别拥有 Runtime、CancellationToken、PlanService、ToolContext 与 LLM 生命周期。
 - 保留 R3 已迁移的 copy template、README 读取、workspace edit/replace、build PDF、open preview 工具契约，以 ArtifactService 替换临时 tool-facing ResumeArtifactPort 实现，并继续借用低层 LocalResumeArtifacts backend。
 - ArtifactService/ArtifactRepository 在全新 `data/v2/artifacts/` 记录 LaTeX、README、PDF 与每次 build attempt，不混入 Memory，也不加入 SessionSnapshot 或随 rewind 回滚。
 - Artifact operation 使用 pending → side effect → commit；文件成功但 metadata 失败时返回 typed partial failure，并可依据 deterministic operation key 重试 reconcile。
+- build log 规范化 workspace 绝对路径，stdout/stderr 各按 `ARTIFACT_LOG_MAX_BYTES` 有界保存头尾内容，并记录原始 bytes 与 truncated flag。
 - JD 输入、简历修改、编译错误修复的完整流程。
 
 **验收门禁 G7：**
 
 - 新建中文、英文或双语简历流程可完成。
 - 修改已有 LaTeX、编译 PDF、失败后重试、用户拒绝操作均可完成。
+- Main/Resume/Memory temperature 分别为 0.1/0.2/0.0，非法范围在 provider 调用前拒绝。
 - 连续 restore 不跨 session 复用 workspace revision grant；Resume Artifact 记录使用当前 Session/Agent provenance。
-- 非零退出、超时、取消、PDF 缺失与 metadata partial failure 均有 typed 结果且不误报可用 PDF。
+- 非零退出、超时、取消、PDF 缺失与 metadata partial failure 均有 typed 结果且不误报可用 PDF；超长日志按确认策略截断且不破坏 UTF-8。
 - Main/Resume capability、handoff、取消、Plan、save/restore/rewind 与 LLM/资源唯一所有权通过跨组件回归。
 - ResumeAgent 不含重复的 14 个 `_get_*()` 方法。
 - 当前 ResumeAgent 已实现能力达到等价后，才允许切换主入口。
 
 **依赖：** G3、G4、G5、G6 以及 R6-T 后用户对进入 R7 的明确授权。不得与 R6 并行实现。
 
-**实施顺序：** R7-P dynamic session identity → Resume AgentSpec/双 Runtime composition → Artifact domain/port/JSON repository → ArtifactService 与 copy/build 一致性 → Settings/bootstrap/resource ownership → 真实 Resume smoke 与 G7。每个切片独立验证和提交；`docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认` 获用户确认前不得开始 coding。
+**实施顺序：** R7-P0 temperature contract → R7-P dynamic session identity → Resume AgentSpec/双 Runtime composition → Artifact domain/port/JSON repository → ArtifactService 与 copy/build/log 一致性 → Settings/bootstrap/resource ownership → 真实 Resume smoke 与 G7。每个切片独立验证和提交。清单与 temperature/log 补充均已确认；当前会话只做文档 checkpoint，后续新会话 bootstrap 后从 R7-P0 开始。
 
 ### R8 —— 入口切换与旧代码删除
 

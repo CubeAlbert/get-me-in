@@ -192,6 +192,7 @@
 - [决策 175 — 撤销 G6 通过结论并授权 R6-F 审查修复](#决策-175--撤销-g6-通过结论并授权-r6-f-审查修复)
 - [决策 176 — R6-F 完成并重新通过 G6](#决策-176--r6-f-完成并重新通过-g6)
 - [决策 177 — 确认 R7 总体边界并提交具体清单审查](#决策-177--确认-r7-总体边界并提交具体清单审查)
+- [决策 178 — 确认 R7 具体清单与 temperature/log 补充](#决策-178--确认-r7-具体清单与-temperaturelog-补充)
 
 ---
 
@@ -3971,3 +3972,34 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 把 ArtifactRef 写入 SessionSnapshot 并随 rewind 回滚文件 —— 文件系统副作用不可由对话 snapshot 原子撤销，已拒绝。
 - 只在 PDF 成功时记录、忽略失败 attempt —— 会丢失编译诊断与重试证据，已拒绝。
 - metadata 保存失败仍返回工具成功 —— 会误报 artifact/version 已持久化，已拒绝。
+
+---
+
+### 决策 178 —— 确认 R7 具体清单与 temperature/log 补充
+
+**背景：** 决策 177 已确认 R7 五项总体边界，但具体文件、对象、构造依赖、公开方法与实施切片仍处于最终确认门禁。补充审查发现 v2 `LLMRequest` 和 OpenAI adapter 没有表达旧决策 117 中 Main `0.1`、Resume `0.2`、MemoryBuilder `0` 的显式 temperature 行为；Artifact build attempt 若无限保存 stdout/stderr 或写入 workspace 绝对路径，也会形成持久化膨胀与路径泄露风险。
+
+**决定：**
+
+- 用户确认 `docs/refactor-design.md#6105-r7-新文件对象与公开边界清单已确认` 中的新文件、对象、构造依赖、公开方法、允许修改文件和七个实施切片；R7 的 coding 清单门禁解除。
+- 新增独立前置切片 R7-P0：`AgentSpec.temperature: float` 固定 Main `0.1`、Resume `0.2`；`LLMRequest.temperature: float | None = None`；MemoryExtractor 显式传入 `0.0`。OpenAI adapter 只透传非 `None` 值，并校验其为 `[0, 2]` 内的有限数。
+- Artifact 使用 `schema_version=1`；Artifact 保存 `content_hash`，模板来源只保存 `template_name`，operation key 使用 canonical JSON 的 SHA-256。
+- 每次 build attempt 的 stdout/stderr 各自最多持久化 65536 bytes。保存前将 workspace 绝对根替换为 `<workspace>/`，再按 UTF-8 安全的 head/tail 截断，默认各保留 32768 bytes；同时保存原始字节数与 truncated 标记。
+- `ArtifactPartialFailure` 保留 typed code、changed_paths、message，并映射到既有 `ToolFailure`，不扩展 ToolOutcome。pending operation 只在后续相同 operation key 调用时惰性 reconcile；R7 不新增 daemon、CLI 查询命令或 pruning/retention policy。
+- R7 按七个切片实施：R7-P0 temperature → R7-P dynamic session identity → Resume composition → Artifact domain/repository → ArtifactService/copy/build/log → Settings/bootstrap/resource ownership → 真实 Resume smoke/G7。每个切片独立验证、提交并停止。
+- 用户明确要求当前会话仍不 coding，只同步活跃设计、计划、任务、current 和本决策并创建文档 checkpoint。后续新会话执行 `/project-bootstrap` 后，只能从 R7-P0 开始；G7 通过后仍须 checkpoint 并等待 R8 的独立授权。
+
+**理由：**
+
+- 显式 temperature 保留已验证的角色差异，避免 provider 默认值变化悄然改变 Main、Resume 或 Memory 提取行为；独立 R7-P0 可在引入 Artifact 副作用前验证该横切契约。
+- 固定日志上限与路径脱敏能保留编译首尾诊断，同时避免巨大或敏感的本机输出进入长期 repository；原始长度和截断标记使诊断方明确知道记录不完整。
+- schema version、content hash 与 deterministic operation key 为幂等重试和未来迁移提供稳定依据；惰性 reconcile 足以闭合当前 tool 调用，不需要提前引入后台协调器。
+- 维持既有 ToolOutcome 和 SessionSnapshot 边界，可把 R7 变更限制在已确认的 Resume/Artifact 纵向切片内。
+
+**曾考虑的替代方案：**
+
+- 继续依赖 provider 默认 temperature —— 行为随 adapter 或 provider 漂移，且无法表达 MemoryExtractor 的确定性偏好，已拒绝。
+- 为所有 LLM 请求强制一个全局 temperature —— 会抹平 Main、Resume 与 MemoryExtractor 的职责差异，已拒绝。
+- 完整保存 build stdout/stderr —— 可能无限膨胀 repository 并泄露绝对路径，已拒绝。
+- 只保存固定前缀或仅保留失败摘要 —— 容易丢失编译器末尾的最终错误和上下文，已拒绝。
+- 在 R7 增加后台 reconcile、日志清理命令或自动 retention —— 超出当前纵向切片且引入额外生命周期，延后到有真实容量证据后再决策。
