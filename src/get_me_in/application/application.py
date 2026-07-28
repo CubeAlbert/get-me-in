@@ -71,7 +71,7 @@ class Application:
         if isinstance(command, RewindSession):
             return self.rewind(command.turn_id)
         if isinstance(command, ExitSubAgent):
-            return self.exit_subagent()
+            return self.exit_subagent(command.summarize)
         if isinstance(command, DumpSession):
             return self.dump()
         if isinstance(command, ReloadKnowledge):
@@ -102,8 +102,8 @@ class Application:
     def dump(self) -> Path:
         return self._sessions.dump()
 
-    def exit_subagent(self) -> RuntimeEvent:
-        return self._sessions.exit_subagent()
+    def exit_subagent(self, summarize: bool = True) -> RuntimeEvent:
+        return self._sessions.exit_subagent(summarize)
 
     def request_cancel(self, reason: str = "Cancelled by user") -> None:
         """Cancel an active blocking call without mutating Runtime state cross-thread."""

@@ -143,6 +143,23 @@ class CoreCommandTests(unittest.TestCase):
         self.assertEqual([], self.renderer.notices)
         self.assertEqual(CommandAction.DRIVE, result.action)
         self.assertEqual(ToolFinished("call", "switch_to_subagent", "closed"), result.event)
+        self.assertEqual(ExitSubAgent(summarize=True), self.application.commands[-1])
+
+    def test_exit_subagent_accepts_true_false_and_rejects_other_arguments(self) -> None:
+        self.assertEqual(CommandAction.DRIVE, self.registry.dispatch("/exit_sub true").action)
+        self.assertEqual(ExitSubAgent(summarize=True), self.application.commands[-1])
+
+        self.assertEqual(CommandAction.DRIVE, self.registry.dispatch("/exit_sub false").action)
+        self.assertEqual(ExitSubAgent(summarize=False), self.application.commands[-1])
+
+        invalid = self.registry.dispatch("/exit_sub maybe")
+        self.assertEqual(CommandAction.HANDLED, invalid.action)
+        self.assertIn("true|false", invalid.text)
+
+    def test_exit_subagent_help_describes_summary_switch(self) -> None:
+        entries = dict(self.registry.help_entries())
+        self.assertIn("默认 true", entries["/exit_sub"])
+        self.assertIn("false", entries["/exit_sub"])
 
 
 class InputControllerTests(unittest.TestCase):

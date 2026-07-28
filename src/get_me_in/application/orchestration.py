@@ -10,6 +10,12 @@ from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, SessionState
 
 
+_EXIT_SUBAGENT_SUMMARY_PROMPT = (
+    "用户请求主动退出当前子 Agent。请整理本次会话做了什么、结论、关键发现和需要主 Agent 继续跟进的事项，"
+    "然后调用 switch_to_mainagent，并将这份总结作为 summary 返回。"
+)
+
+
 @dataclass(frozen=True)
 class SessionTransition:
     session: SessionState
@@ -29,20 +35,22 @@ class Orchestrator:
         session = self._replace_agent(session, source, transition.state)
         event = transition.event
         if not isinstance(event, HandoffRequested):
-            if isinstance(event, (Cancelled, Failed)) and session.handoff_stack:
+            if isinstance(event, Failed) and session.handoff_stack:
                 return self._close_active_handoff(session, event)
             return SessionTransition(session, event)
         return self._handoff(session, event)
 
-    def exit_subagent(self, session: SessionState) -> SessionTransition:
-        """Return from the active sub-agent by closing the original handoff call."""
+    def exit_subagent(self, session: SessionState, summarize: bool = True) -> SessionTransition:
+        """Return from the active sub-agent, optionally asking it to summarize first."""
         if not session.handoff_stack or session.active_agent is AgentKey.MAIN:
             raise ValueError("No sub-agent handoff is active")
+        if summarize:
+            return self.handle(session, UserMessage(_EXIT_SUBAGENT_SUMMARY_PROMPT))
         frame = session.handoff_stack[-1]
         runtime = self._runtimes[frame.source]
         transition = runtime.advance(
             session.agents[frame.source],
-            FailHandoff(frame.call_id, "subagent_exited", "Sub-agent exited before completing"),
+            FailHandoff(frame.call_id, "subagent_exited", "用户主动退出"),
             session_id=session.session_id,
         )
         session = self._replace_agent(session, frame.source, transition.state)

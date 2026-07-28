@@ -20,7 +20,7 @@ class RewindSession(ApplicationCommand):
 
 @dataclass(frozen=True)
 class ExitSubAgent(ApplicationCommand):
-    pass
+    summarize: bool = True
 
 
 @dataclass(frozen=True)

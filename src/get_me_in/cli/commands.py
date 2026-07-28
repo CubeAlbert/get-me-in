@@ -166,8 +166,14 @@ def build_command_registry(application: object, input_controller: object, render
     def build_memory_command(_: str) -> CommandResult:
         return CommandResult(CommandAction.RUN, command=BuildMemory())
 
-    def exit_subagent_command(_: str) -> CommandResult:
-        event = application.handle(ExitSubAgent())
+    def exit_subagent_command(arguments: str) -> CommandResult:
+        if not arguments:
+            summarize = True
+        elif arguments.casefold() in {"true", "false"}:
+            summarize = arguments.casefold() == "true"
+        else:
+            return handled("用法：/exit_sub [true|false]；默认 true，会让子 Agent 总结后退回。")
+        event = application.handle(ExitSubAgent(summarize=summarize))
         if not isinstance(event, RuntimeEvent):
             raise TypeError("ExitSubAgent must return a RuntimeEvent")
         return CommandResult(CommandAction.DRIVE, event=event)
@@ -189,7 +195,7 @@ def build_command_registry(application: object, input_controller: object, render
     registry.register(CommandSpec("/rewind", "选择或指定 turn_id 回退到用户回合", rewind_command))
     registry.register(CommandSpec("/ragreload", "重载知识库（可选 target；R6 前不可用）", unavailable_command))
     registry.register(CommandSpec("/build-memory", "构建记忆（R6 前不可用）", unavailable_command))
-    registry.register(CommandSpec("/exit_sub", "退出当前子 Agent", exit_subagent_command))
+    registry.register(CommandSpec("/exit_sub", "退出当前子 Agent（默认 true：总结后退回；false：用户主动退出）", exit_subagent_command))
     registry.register(CommandSpec("/approval", "切换审批模式（可选参数：prompt|auto）", approval_command))
     registry.register(CommandSpec("/exit", "退出 CLI", lambda _: CommandResult(CommandAction.EXIT)))
     registry.replace(CommandSpec("/ragreload", "重载知识库（可选 target）", reload_command))

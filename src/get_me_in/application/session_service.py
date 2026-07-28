@@ -128,9 +128,13 @@ class SessionService:
             plan.restore(None)
         return self.view()
 
-    def exit_subagent(self) -> RuntimeEvent:
-        transition = self._orchestrator.exit_subagent(self._session)
-        self._session = replace(transition.session, updated_at=self._clock.now())
+    def exit_subagent(self, summarize: bool = True) -> RuntimeEvent:
+        active_key = self._session.active_agent
+        self._plans[active_key].restore(self._session.agents[active_key].plan)
+        transition = self._orchestrator.exit_subagent(self._session, summarize)
+        agents = dict(transition.session.agents)
+        agents[active_key] = replace(agents[active_key], plan=self._plans[active_key].snapshot())
+        self._session = replace(transition.session, agents=agents, updated_at=self._clock.now())
         return transition.event
 
     def request_cancel(self, reason: str = "Cancelled by user") -> None:

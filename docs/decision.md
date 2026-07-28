@@ -9,6 +9,8 @@
 ## 目录
 
 - [决策 219 — finish thinking 恢复为可选摘要](#决策-219--finish-thinking-恢复为可选摘要)
+- [决策 223 — Esc 取消当前 SubAgent run 但保留 handoff](#决策-223--esc-取消当前-subagent-run-但保留-handoff)
+- [决策 222 — `/exit_sub` 默认总结，false 允许直接退出](#决策-222--exit_sub-默认总结false-允许直接退出)
 - [决策 217 — SessionSnapshot 持久化 agent turn_id 并兼容旧 handoff 快照](#决策-217--sessionsnapshot-持久化-agent-turn_id-并兼容旧-handoff-快照)
 - [决策 216 — 模型回复解析失败暂停当前 SubAgent，由用户继续](#决策-216--模型回复解析失败暂停当前-subagent-由用户继续)
 - [决策 215 — 模型调用上限默认调整为 100 且 Main／Resume 计数独立](#决策-215--模型调用上限默认调整为-100-且-mainresume-计数独立)
@@ -5190,3 +5192,59 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - Runtime、CLI、Orchestrator 和真实 bootstrap 的审批拒绝定向回归 65 项通过；覆盖 Resume 子 Agent 拒绝后 handoff 保留、无额外 LLM 调用及下一条用户消息继续。
 - 全量 unittest 279 项通过，`git diff --check` 通过。
+
+---
+
+### 决策 222 —— `/exit_sub` 默认总结，false 允许直接退出
+
+**背景：** 当前 `/exit_sub` 直接通过 `FailHandoff` 关闭原始 handoff，没有让 SubAgent 先整理上下文；同时用户需要在不调用 LLM 的情况下主动退出。已有 `switch_to_mainagent(summary)` 工具可以承载正常的 SubAgent 总结返回。
+
+**决定：**
+
+- `ExitSubAgent` 增加 `summarize: bool = True` 参数；`/exit_sub` 和 `/exit_sub true` 向当前 SubAgent 发送退出总结指令，要求其整理执行内容并调用 `switch_to_mainagent(summary)`。
+- `/exit_sub false` 直接闭合原始 handoff，向 Main 写入 `code: "subagent_exited"`、`message: "用户主动退出"` 的结果，不伪造 summary。
+- CLI 对参数仅接受 `true`／`false`，默认 `true`；帮助文本必须说明默认行为和直接退出模式。
+
+**理由：**
+
+- 默认保留 SubAgent 总结，可以让 Main 获得真实的执行结论和后续事项。
+- `false` 为用户提供明确的快速退出路径，且消息语义不再误称为“SubAgent 未完成退出”。
+- 复用既有 `switch_to_mainagent` 和 handoff closure，避免新增第二套总结协议。
+
+**曾考虑的替代方案：**
+
+- `/exit_sub` 始终直接退出并生成固定 summary —— 会丢失 SubAgent 的真实上下文，未采用。
+- 新增独立的总结事件 —— 会扩大 Runtime 公共协议，已有 handoff 工具足够，未采用。
+
+**验证：**
+
+- CLI 回归覆盖默认、`true`、`false` 和非法参数；Orchestrator 回归确认总结路径先调用 SubAgent，再由 `switch_to_mainagent` 闭合原始 call。
+
+---
+
+### 决策 223 —— Esc 取消当前 SubAgent run 但保留 handoff
+
+**背景：** WorkerRunner 检测 Esc 后调用 `Application.request_cancel()`；活动 Resume 返回 `Cancelled` 时，Orchestrator 原先按全局取消语义执行 `FailHandoff`，导致用户只是想停止当前模型／工具执行，却被自动退回 Main。
+
+**决定：**
+
+- 活动 handoff 下收到 SubAgent 的 `Cancelled` 时，保留当前 active SubAgent、handoff frame 和 Main 的 `WAITING_FOR_HANDOFF` 状态，不自动闭合源 tool call。
+- CLI 仍将 `Cancelled` 作为本轮终点并恢复用户输入；下一条 `UserMessage` 继续发送给原 SubAgent。
+- `Failed` 仍按业务／provider 失败路径执行 `FailHandoff` 并退回 Main；选择交互继续使用独立的 `CancelSelection` 语义。
+
+**理由：**
+
+- Esc 的用户意图是取消当前阻塞执行，不是放弃当前 SubAgent 任务。
+- 保留 handoff 可以让用户在中断后补充指令继续 Resume，而不会让 Main 在没有新用户意图时自行接管。
+- 将取消与失败分开处理，维持失败 call closure，同时避免扩大 RuntimeEvent 或新增取消事件。
+
+**曾考虑的替代方案：**
+
+- 继续由 Orchestrator 自动关闭 handoff —— 会复现 Esc 误退回 Main 的问题，未采用。
+- 在 CLI 中拦截所有 `Cancelled` —— 会让编排层无法保持 session/handoff 一致性，未采用。
+- 将 Esc 映射为 `Paused` —— 会混淆用户主动取消与模型解析失败暂停，未采用。
+
+**验证：**
+
+- Orchestrator 回归确认 Esc 后 active agent 仍为 Resume、handoff frame 保留、Main 仍等待 handoff，下一条用户消息继续进入 Resume。
+- 定向测试 59 项通过，全量 unittest 283 项通过，`git diff --check` 通过。

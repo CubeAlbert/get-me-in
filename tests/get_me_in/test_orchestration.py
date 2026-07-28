@@ -44,24 +44,61 @@ class OrchestratorTests(unittest.TestCase):
         orchestrator = Orchestrator({AgentKey.MAIN: _FakeRuntime(AgentKey.MAIN), AgentKey.RESUME: _FakeRuntime(AgentKey.RESUME)})
         started = orchestrator.handle(_session(), UserMessage("delegate"))
 
-        exited = orchestrator.exit_subagent(started.session)
+        requested = orchestrator.exit_subagent(started.session)
+        exited = orchestrator.handle(requested.session, Continue())
 
         self.assertIsInstance(exited.event, ToolFinished)
         self.assertEqual("call-main", exited.event.call_id)
         self.assertEqual(AgentKey.MAIN, exited.session.active_agent)
         self.assertEqual((), exited.session.handoff_stack)
 
-    def test_subagent_cancellation_closes_original_handoff_call(self) -> None:
-        orchestrator = Orchestrator({AgentKey.MAIN: _FakeRuntime(AgentKey.MAIN), AgentKey.RESUME: _FakeRuntime(AgentKey.RESUME)})
+    def test_exit_subagent_summary_path_asks_subagent_to_return_with_summary(self) -> None:
+        main = _FakeRuntime(AgentKey.MAIN)
+        resume = _FakeRuntime(AgentKey.RESUME)
+        orchestrator = Orchestrator({AgentKey.MAIN: main, AgentKey.RESUME: resume})
+        started = orchestrator.handle(_session(), UserMessage("delegate"))
+
+        requested = orchestrator.exit_subagent(started.session, summarize=True)
+        self.assertIsInstance(requested.event, Progress)
+        self.assertIsInstance(resume.commands[-1], UserMessage)
+        self.assertIn("调用 switch_to_mainagent", resume.commands[-1].text)
+
+        exited = orchestrator.handle(requested.session, Continue())
+
+        self.assertIsInstance(exited.event, ToolFinished)
+        self.assertEqual(AgentKey.MAIN, exited.session.active_agent)
+        self.assertEqual((), exited.session.handoff_stack)
+    def test_exit_subagent_without_summary_uses_user_exit_message(self) -> None:
+        main = _FakeRuntime(AgentKey.MAIN)
+        resume = _FakeRuntime(AgentKey.RESUME)
+        orchestrator = Orchestrator({AgentKey.MAIN: main, AgentKey.RESUME: resume})
+        started = orchestrator.handle(_session(), UserMessage("delegate"))
+
+        exited = orchestrator.exit_subagent(started.session, summarize=False)
+
+        self.assertIsInstance(exited.event, ToolFinished)
+        self.assertIsInstance(main.commands[-1], FailHandoff)
+        self.assertEqual("用户主动退出", main.commands[-1].message)
+
+    def test_subagent_cancellation_keeps_original_handoff_active(self) -> None:
+        main = _FakeRuntime(AgentKey.MAIN)
+        resume = _FakeRuntime(AgentKey.RESUME)
+        orchestrator = Orchestrator({AgentKey.MAIN: main, AgentKey.RESUME: resume})
         started = orchestrator.handle(_session(), UserMessage("delegate"))
 
         cancelled = orchestrator.handle(started.session, Cancel("stop delegated work"))
 
-        self.assertIsInstance(cancelled.event, ToolFinished)
-        self.assertEqual("call-main", cancelled.event.call_id)
-        self.assertEqual(AgentKey.MAIN, cancelled.session.active_agent)
-        self.assertEqual((), cancelled.session.handoff_stack)
-        self.assertEqual(RuntimePhase.MODEL_QUEUED, cancelled.session.agents[AgentKey.MAIN].phase)
+        self.assertIsInstance(cancelled.event, Cancelled)
+        self.assertEqual(AgentKey.RESUME, cancelled.session.active_agent)
+        self.assertEqual(1, len(cancelled.session.handoff_stack))
+        self.assertEqual(RuntimePhase.CANCELLED, cancelled.session.agents[AgentKey.RESUME].phase)
+        self.assertEqual(RuntimePhase.WAITING_FOR_HANDOFF, cancelled.session.agents[AgentKey.MAIN].phase)
+
+        continued = orchestrator.handle(cancelled.session, UserMessage("continue in the subagent"))
+
+        self.assertEqual(AgentKey.RESUME, continued.session.active_agent)
+        self.assertEqual(1, len(continued.session.handoff_stack))
+        self.assertEqual(UserMessage("continue in the subagent"), resume.commands[-1])
 
     def test_subagent_failure_returns_to_main_without_queuing_another_model_call(self) -> None:
         orchestrator = Orchestrator(
