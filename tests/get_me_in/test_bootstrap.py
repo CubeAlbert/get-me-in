@@ -513,6 +513,10 @@ class BootstrapTests(unittest.TestCase):
             )
             self.assertEqual(AgentKey.MAIN, application.view().active_agent)
             self.assertEqual((), application._sessions._session.handoff_stack)
+            agent_states = application._sessions._session.agents
+            self.assertEqual(2, agent_states[AgentKey.MAIN].model_calls)
+            self.assertEqual(1, agent_states[AgentKey.RESUME].model_calls)
+            self.assertIsNot(agent_states[AgentKey.MAIN], agent_states[AgentKey.RESUME])
 
             snapshot = application.snapshot()
             turn_id = application.view().rewind_points[0].turn_id

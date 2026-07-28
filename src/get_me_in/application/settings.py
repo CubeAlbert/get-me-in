@@ -27,7 +27,7 @@ class Settings:
     sessions_dir: Path
     log_dir: Path = Path("data/logs")
     log_level: str = "INFO"
-    max_model_calls_per_run: int = 12
+    max_model_calls_per_run: int = 100
     cancel_grace_seconds: float = 2.0
     show_thinking: bool = False
     knowledge_manifest_path: Path = Path("data/v2/knowledge/manifest.json")
@@ -68,7 +68,7 @@ class Settings:
         if timeout <= 0:
             raise SettingsValidationError("LLM_TIMEOUT must be greater than zero")
 
-        max_calls_raw = env.get("AGENT_MAX_MODEL_CALLS", "12")
+        max_calls_raw = env.get("AGENT_MAX_MODEL_CALLS", "100")
         try:
             max_calls = int(max_calls_raw)
         except ValueError as error:

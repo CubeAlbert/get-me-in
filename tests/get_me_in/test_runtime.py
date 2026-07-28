@@ -413,7 +413,7 @@ def _pump(runtime: AgentRuntime, command: object) -> list[object]:
 def _runtime(
     responses: list[object],
     *,
-    max_model_calls: int = 12,
+    max_model_calls: int = 100,
     timeout_seconds: float = 60,
     definitions: tuple[ToolDefinition, ...] = (),
 ) -> tuple["_RuntimeDriver", "_FakeLlm", tempfile.TemporaryDirectory[str]]:

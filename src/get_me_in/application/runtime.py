@@ -82,7 +82,7 @@ class AgentRuntime:
         agent_catalog: AgentCatalog,
         tool_catalog: ToolCatalog,
         conversation_codec: ConversationCodec | None = None,
-        max_model_calls: int = 12,
+        max_model_calls: int = 100,
         model_timeout_seconds: float = 60,
         tool_executor: ToolExecutor | None = None,
         tool_context: ToolContext | None = None,

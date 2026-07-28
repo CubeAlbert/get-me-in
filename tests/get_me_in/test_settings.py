@@ -27,6 +27,7 @@ class SettingsTests(unittest.TestCase):
         ):
             self.assertIn(name, example)
         self.assertIn("legacy rollback only", example)
+        self.assertIn("AGENT_MAX_MODEL_CALLS=100", example)
         self.assertIn("AGENT_MAX_ROUNDS", example)
 
     def test_from_env_builds_typed_static_asset_paths(self) -> None:
@@ -57,6 +58,19 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(Path("project/data/v2/artifacts"), settings.artifacts_dir)
         self.assertEqual(60.0, settings.pdf_build_timeout_seconds)
         self.assertEqual(65536, settings.artifact_log_max_bytes)
+
+    def test_from_env_defaults_model_call_limit_to_100(self) -> None:
+        settings = Settings.from_env(
+            {
+                "OPENAI_API_KEY": "key",
+                "OPENAI_BASE_URL": "https://example.test",
+                "LLM_PRO_MODEL": "pro",
+                "LLM_FLASH_MODEL": "flash",
+            },
+            project_root=Path("project"),
+        )
+
+        self.assertEqual(100, settings.max_model_calls_per_run)
 
     def test_from_env_validates_artifact_settings(self) -> None:
         env = {
