@@ -101,22 +101,18 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotEqual("untrusted", events[-1].message.event_id)
         self.assertEqual("answer", events[-1].message.content)
 
-    def test_empty_finish_thinking_uses_one_model_repair(self) -> None:
+    def test_empty_finish_thinking_is_accepted_without_repair(self) -> None:
         runtime, llm, temporary_dir = _runtime(
-            [_finish("invalid", ""), _finish("answer", "summary")]
+            [_finish("answer", "")]
         )
         self.addCleanup(temporary_dir.cleanup)
 
         events = _pump(runtime, UserMessage("question"))
 
         self.assertIsInstance(events[-1], Completed)
-        self.assertEqual(2, len(llm.requests))
+        self.assertEqual(1, len(llm.requests))
         self.assertEqual("answer", events[-1].message.content)
-        self.assertEqual("summary", events[-1].message.thinking)
-        self.assertIn(
-            "finish thinking must be non-empty",
-            llm.requests[1].messages[-1].content,
-        )
+        self.assertEqual("", events[-1].message.thinking)
 
     def test_unrecoverable_reply_fails_after_one_model_repair(self) -> None:
         runtime, llm, temporary_dir = _runtime(
@@ -133,7 +129,7 @@ class RuntimeTests(unittest.TestCase):
     def test_semantic_error_uses_model_repair_without_local_default(self) -> None:
         runtime, llm, temporary_dir = _runtime(
             [
-                '{"event_type":"finish","message":"missing thinking"}',
+                '{"event_type":"finish","message":"invalid thinking","thinking":1}',
                 _finish("repaired", "summary"),
             ]
         )

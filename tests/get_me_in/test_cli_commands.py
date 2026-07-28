@@ -246,6 +246,14 @@ class RendererTests(unittest.TestCase):
             shown_output.getvalue().index("done"),
         )
 
+    def test_does_not_render_blank_thinking_summary(self) -> None:
+        output = StringIO()
+        message = MessageRecord("event", Role.ASSISTANT, "done", _now(), "turn", " \n\t")
+
+        Renderer(console=_console(output), show_thinking=True).render_event(Completed(message))
+
+        self.assertNotIn("思考摘要", output.getvalue())
+
 
 @dataclass(frozen=True)
 class _Turn:

@@ -32,9 +32,10 @@ class ModelReplyParserTests(unittest.TestCase):
         self.assertIsNone(reply.thinking)
         self.assertEqual("Searching", reply.content)
 
-    def test_rejects_finish_without_thinking_but_allows_tool_call_without_it(self) -> None:
-        with self.assertRaisesRegex(ModelReplyParseError, "thinking"):
-            self.parser.parse('{"event_type": "finish", "message": "answer"}')
+    def test_allows_finish_without_thinking_and_tool_call_without_it(self) -> None:
+        reply = self.parser.parse('{"event_type": "finish", "message": "answer"}')
+
+        self.assertIsNone(reply.thinking)
 
         reply = self.parser.parse(
             '{"event_type": "tool_call", "message": "", "tool": "search", '
@@ -53,19 +54,20 @@ class ModelReplyParserTests(unittest.TestCase):
                 '"tool": "search", "event_payload": {}}'
             )
 
-    def test_rejects_empty_or_whitespace_finish_thinking(self) -> None:
-        for thinking in ("", "   ", "\n\t"):
+    def test_allows_empty_or_whitespace_finish_thinking(self) -> None:
+        for thinking in (None, "", "   ", "\n\t"):
             with self.subTest(thinking=repr(thinking)):
-                with self.assertRaisesRegex(ModelReplyParseError, "non-empty"):
-                    self.parser.parse(
-                        json.dumps(
-                            {
-                                "event_type": "finish",
-                                "message": "answer",
-                                "thinking": thinking,
-                            }
-                        )
+                reply = self.parser.parse(
+                    json.dumps(
+                        {
+                            "event_type": "finish",
+                            "message": "answer",
+                            "thinking": thinking,
+                        }
                     )
+                )
+
+                self.assertEqual(thinking, reply.thinking)
 
     def test_allows_empty_tool_call_thinking(self) -> None:
         reply = self.parser.parse(

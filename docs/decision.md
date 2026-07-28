@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 219 — finish thinking 恢复为可选摘要](#决策-219--finish-thinking-恢复为可选摘要)
 - [决策 217 — SessionSnapshot 持久化 agent turn_id 并兼容旧 handoff 快照](#决策-217--sessionsnapshot-持久化-agent-turn_id-并兼容旧-handoff-快照)
 - [决策 216 — 模型回复解析失败暂停当前 SubAgent，由用户继续](#决策-216--模型回复解析失败暂停当前-subagent-由用户继续)
 - [决策 215 — 模型调用上限默认调整为 100 且 Main／Resume 计数独立](#决策-215--模型调用上限默认调整为-100-且-mainresume-计数独立)
@@ -5098,3 +5099,34 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - Memory、logging、CLI 定向回归 17 项通过。
 - 全量 unittest 275 项通过，`git diff --check` 通过。
+
+---
+
+### 决策 219 —— finish thinking 恢复为可选摘要
+
+**背景：** 决策 212 将 `finish.thinking` 收紧为非空、非纯空白字符串，但真实运行中并非每次最终回复都需要向用户展示思考摘要。该强制要求会把本可正常完成的 finish 回复送入额外 repair，增加模型调用和延迟。用户明确要求推翻该约束。
+
+**决定：**
+
+- `finish` 可以省略 `thinking` 字段。
+- `finish.thinking` 可以省略、使用 `null`、空字符串或空白字符串；这些情况均表示没有摘要并允许正常完成。
+- `finish.thinking` 如果提供其他非空值，必须是字符串；`null` 不再视为类型错误。
+- `finish.message` 仍必须是非空字符串；finish 的 `tool` 和 `event_payload` 约束不变；tool_call 的 thinking 规则不变。
+- 决策 219 取代决策 212 对 finish thinking 非空的要求，并同步更新 OutputFormat、Parser、Runtime 回归和 R8 文档契约。
+
+**理由：**
+
+- 思考摘要是可选的展示信息，不应阻断业务上已经完整的最终回复。
+- 保留非空非字符串值的类型校验，可以避免把任意结构静默写入会话消息；`null` 明确作为无摘要值处理。
+- 取消不必要的 repair 调用，降低真实对话延迟和模型调用次数。
+
+**曾考虑的替代方案：**
+
+- 继续要求模型始终生成非空摘要 —— 会把可选展示字段错误升级为必需业务字段，拒绝。
+- 缺少 thinking 时由 Runtime 自动补充默认摘要 —— 会制造并非模型生成的展示内容，拒绝。
+- 拒绝 `thinking: null` —— 会把明确表示“无摘要”的值错误升级为格式错误，未采用。
+
+**验证：**
+
+- Parser 回归覆盖 finish 缺少 thinking、`null`、空字符串、空白字符串和非字符串类型。
+- Runtime 回归确认无摘要 finish 不触发 repair；全量 unittest 276 项通过，`git diff --check` 通过。

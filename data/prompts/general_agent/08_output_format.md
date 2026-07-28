@@ -34,7 +34,7 @@ JSON — 你的每次回复必须且只能使用本节定义的格式
 - 必须是单个合法 JSON 对象，不得输出 Markdown 代码围栏或 JSON 之外的文字。
 - **JSON 字符串内不得包含物理换行。** 多行文本中的换行必须转义为 `\n`，否则 JSON 将无法解析。
 - `event_type` 只能是 `finish` 或 `tool_call`；`message` 始终必须是字符串。
-- `finish` 必须提供非空字符串 `message` 和非空、非纯空白字符串 `thinking`；`thinking` 必须是供用户查看的简洁思考摘要，不得使用 `""` 或仅包含空白；不得提供非 null 的 `tool` 或 `event_payload`。
+- `finish` 必须提供非空字符串 `message`；`thinking` 为可选的用户可见摘要，省略、使用 `null`、空字符串或空白字符串均表示没有摘要；如果提供其他值则必须是字符串；不得提供非 null 的 `tool` 或 `event_payload`。
 - `tool_call` 必须提供非空字符串 `tool` 和 object 类型 `event_payload`；`tool` 只能使用 <Tools> 中已定义的名称。
 - `tool_call` 的 `thinking` 可省略，也可使用空字符串；如果提供则必须是字符串。
 - 系统将在内部验证业务字段，忽略其他顶层字段，并生成 id、role、timestamp、tool_call_id 和 plan_status。

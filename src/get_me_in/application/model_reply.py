@@ -49,13 +49,9 @@ class ModelReplyParser:
         if event_type == "finish":
             if not content.strip():
                 raise ModelReplyParseError("finish message must be non-empty")
-            if "thinking" not in payload:
-                raise ModelReplyParseError("finish requires a string thinking field")
-            thinking = payload["thinking"]
-            if not isinstance(thinking, str):
+            thinking = payload.get("thinking")
+            if thinking is not None and not isinstance(thinking, str):
                 raise ModelReplyParseError("thinking must be a string")
-            if not thinking.strip():
-                raise ModelReplyParseError("finish thinking must be non-empty")
             if payload.get("tool") is not None:
                 raise ModelReplyParseError("finish tool must be null or omitted")
             if payload.get("event_payload") is not None:

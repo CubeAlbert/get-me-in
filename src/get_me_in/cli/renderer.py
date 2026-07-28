@@ -117,7 +117,7 @@ class Renderer:
         self._console.print(f"[dim]{message}[/]")
 
     def _render_thinking(self, thinking: str | None) -> None:
-        if self._show_thinking and thinking:
+        if self._show_thinking and thinking and thinking.strip():
             self._console.print(Panel(thinking, title="思考摘要", border_style="dim"))
 
     def status(self, message: str) -> AbstractContextManager[Any]:
