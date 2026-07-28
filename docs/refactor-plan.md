@@ -168,7 +168,7 @@
 - Session snapshot 对 assistant message/tool call 的 thinking 做可选字段 round-trip；缺失字段按 `None` 兼容当前 v2 snapshot，不迁移 v1 数据，不重放活动副作用。
 - v2 Settings 增加独立 `show_thinking`，从 `SHOW_THINKING` 读取；Renderer 只在该值为 true 且摘要非空时展示“思考摘要”。`LLM_THINKING_ENABLED` 仍只控制 provider 端 thinking 模式。
 - ConversationCodec 对所有发往 LLM 的历史记录显式排除 thinking；不得把前轮摘要写入 JSON message，也不得读取 provider 原生 `reasoning_content`。
-- 仅修改既有 `data/prompts/general_agent/07_output_format.md`、`domain/messages.py`、`application/model_reply.py`、`application/runtime.py`、`application/events.py`、`application/conversation_codec.py`、`application/session_codec.py`、`application/settings.py`、`cli/renderer.py`、`cli/main.py` 与对应既有测试；不创建新代码文件，不修改 R6/R7 service。
+- 仅修改既有 OutputFormat 模板（当前文件名为 `data/prompts/general_agent/08_output_format.md`）、`domain/messages.py`、`application/model_reply.py`、`application/runtime.py`、`application/events.py`、`application/conversation_codec.py`、`application/session_codec.py`、`application/settings.py`、`cli/renderer.py`、`cli/main.py` 与对应既有测试；不创建新代码文件，不修改 R6/R7 service。
 
 **验收门禁 G5-F：**
 

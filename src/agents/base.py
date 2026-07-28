@@ -153,7 +153,7 @@ class BaseAgent(Handler):
         system_prompt = prompts.get(**placeholders)
 
         self._llm = llm
-        self._output_format = prompts.get_raw("general_agent/07_output_format")
+        self._output_format = prompts.get_raw("general_agent/08_output_format")
         self._system_prompt = system_prompt
         self._history: list[Message] = []
         self._max_rounds = int(config.AGENT_MAX_ROUNDS)

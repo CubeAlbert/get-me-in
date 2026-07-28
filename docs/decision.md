@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 213 — system prompt 顺序只由模板文件名决定](#决策-213--system-prompt-顺序只由模板文件名决定)
 - [决策 212 — finish thinking 必须是非空用户可见摘要](#决策-212--finish-thinking-必须是非空用户可见摘要)
 - [决策 211 — uv 唯一默认镜像切换为 TUNA 并拆分依赖添加与同步](#决策-211--uv-唯一默认镜像切换为-tuna-并拆分依赖添加与同步)
 - [决策 210 — 新增 Resume-only PDF 合并工具并纳入 Artifact aggregate](#决策-210--新增-resume-only-pdf-合并工具并纳入-artifact-aggregate)
@@ -4916,3 +4917,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - Renderer 为 `""` 显示空面板 —— 没有用户价值，且掩盖模型未履行输出契约。
 - Runtime 为 `""` 自动生成默认摘要 —— 不是模型真实输出，违反 thinking 数据来源边界。
 - 仅修改 prompt、不修改 Parser —— 模型仍可能输出空值并静默通过，无法形成可靠契约。
+
+---
+
+### 决策 213 —— system prompt 顺序只由模板文件名决定
+
+**背景：** 决策 201 为降低模型复制 InputFormat envelope 的概率，在 PromptRenderer 中增加了特殊重排：先按文件名排序，再把 `07_output_format.md` 强制移动到所有模板之后。真实最终顺序因此变成 `01～06 → 08_input_format → 09_reserved → 07_output_format`，目录文件名不再能够解释 system prompt，测试还把这一隐藏规则固定下来。
+
+**决定：**
+
+- PromptRenderer 只执行 `sorted(general_agent/*.md)` 并按该顺序拼接，不得在代码中为任何模板设置位置特例。
+- 将 `08_input_format.md` 重命名为 `07_input_format.md`，将 `07_output_format.md` 重命名为 `08_output_format.md`；`09_reserved.md` 保持不变。
+- 最终静态区块顺序为 `01_role → 02_mission → 03_constraint → 04_tools → 05_sub_agents → 06_communtion_style → 07_input_format → 08_output_format → 09_reserved`。
+- v2 `render_output_format()` 从目录中发现且要求唯一的 `*_output_format.md`，不绑定数字前缀；legacy rollback BaseAgent 同步读取当前 `08_output_format.md`，格式修复契约不变。
+- 决策 201 中“OutputFormat 固定为 system prompt 最后一节”的排序策略被本决策取代；决策 201 的最小业务字段、内部字段生成与解析校验仍然有效。
+- PromptRenderer／Runtime／bootstrap 定向 47 项和完整 264 项自动化测试通过；production 模板顺序回归与 legacy OutputFormat 读取 smoke 通过。
+
+**理由：**
+
+- 数字文件名前缀应当是模板顺序的唯一事实来源，目录检查、运行时行为和测试预期必须一致。
+- 删除二次重排可避免未来新增模板时产生无法从文件名发现的顺序变化。
+- InputFormat 先于 OutputFormat，模型先理解收到的历史结构，再读取自身输出契约；Reserved 继续作为最终保留约束。
+
+**曾考虑的替代方案：**
+
+- 保留文件名并继续在代码中移动 OutputFormat —— 顺序规则隐藏在实现中，明确拒绝。
+- 只修改测试期待但保留重排 —— 不能改变真实运行行为，拒绝。
+- 将 OutputFormat 改为 `99_output_format.md` 继续保持最后 —— 用户明确要求调整 07/08，且 `09_reserved.md` 应继续承担最终保留约束，未采用。

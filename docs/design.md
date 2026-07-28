@@ -202,8 +202,8 @@ get-me-in/
 │       │   ├── 04_tools.md
 │       │   ├── 05_sub_agents.md
 │       │   ├── 06_communtion_style.md
-│       │   ├── 07_output_format.md
-│       │   ├── 08_input_format.md
+│       │   ├── 07_input_format.md
+│       │   ├── 08_output_format.md
 │       │   └── 09_reserved.md
 │       ├── PLACEHOLDER.md    # 占位符清单（15 个占位符，不参与拼接）
 │       ├── memory/
@@ -313,8 +313,8 @@ get-me-in/
 | `04_tools.md` | `{{ADDITION_TOOLS}}` | 专属工具 |
 | `05_sub_agents.md` | `{{SUB_AGENTS_LIST}}` | 可切换子 Agent 列表 |
 | `06_communtion_style.md` | `{{TONE}}`, `{{VERBOSITY}}`, `{{EXPLANATION_STYLE}}`, `{{STYLE_RULES}}`, `{{STYLE_AVOIDS}}` | 沟通风格 |
-| `07_output_format.md` | 无 | 固定 |
-| `08_input_format.md` | 无 | 固定 |
+| `07_input_format.md` | 无 | 固定 |
+| `08_output_format.md` | 无 | 固定 |
 | `09_reserved.md` | 无 | 固定 |
 
 完整清单及各占位符说明见 `data/prompts/PLACEHOLDER.md`。
@@ -924,12 +924,12 @@ class EventType(StrEnum):
 | `tool` | 工具名，串联调用链 | `"get_current_datetime"` |
 | `tool_call_id` | 对应 `tool_call` 消息的 `id` | `"550e8400-e29b-41d4-a716-446655440000"` |
 | `event_payload` | `dict | None`：`tool_call` 时为参数，`tool_call_result` 时为结果 | `{"datetime": "2026-07-06 19:30:00 +0800"}` |
-| `thinking` | LLM 推理过程，对齐 `07_output_format.md`。**发送 LLM 前由 `_to_openai()` 剥离**（`dataclasses.replace(m, thinking=None)`），仅保留在 LLM 回复中 | user 消息恒为 `None` |
+| `thinking` | LLM 推理过程，对齐 `08_output_format.md`。**发送 LLM 前由 `_to_openai()` 剥离**（`dataclasses.replace(m, thinking=None)`），仅保留在 LLM 回复中 | user 消息恒为 `None` |
 
 **与 prompt 的映射：**
 
-- **输出侧（`07_output_format.md`）**：LLM 输出扁平 JSON → `Message.from_llm_reply()` 反序列化。`role` 固定 `"assistant"`，`event_type∈{tool_call, finish}`。
-- **输入侧（`08_input_format.md`）**：对话历史经 `_to_openai()` 序列化（`dataclasses.replace(m, thinking=None).to_json()` 剥离 thinking 后注入）。`role∈{user, assistant, system}`（由 `m.role` 透传），`event_type∈{user_input, tool_call_result, system_message, tool_call, finish}`。
+- **输出侧（`08_output_format.md`）**：LLM 输出扁平 JSON → `Message.from_llm_reply()` 反序列化。`role` 固定 `"assistant"`，`event_type∈{tool_call, finish}`。
+- **输入侧（`07_input_format.md`）**：对话历史经 `_to_openai()` 序列化（`dataclasses.replace(m, thinking=None).to_json()` 剥离 thinking 后注入）。`role∈{user, assistant, system}`（由 `m.role` 透传），`event_type∈{user_input, tool_call_result, system_message, tool_call, finish}`。
 
 **序列化/反序列化：**
 
@@ -941,7 +941,7 @@ class EventType(StrEnum):
 - **`EventType(StrEnum)` 枚举化** — `StrEnum` 继承 `str`，JSON 序列化后为字符串，与 LLM 交互无摩擦；代码中禁用裸字符串
 - **`message` 默认 `""`** — `event_type` 是唯一 required 字段，`tool_call_result` 场景无需强制填 message
 - **`tool` / `tool_call_id` 一级字段** — 比嵌套在 `event_payload` 内部更易于检索和追踪
-- **输入/输出分文件** — `07_output_format.md`（输出 schema）+ `08_input_format.md`（输入 schema），字段互不越界，LLM 清楚区分
+- **输入/输出分文件** — `07_input_format.md`（输入 schema）+ `08_output_format.md`（输出 schema），字段互不越界，LLM 清楚区分
 - **role 保留** — `event_type` 不能替代 `role`：role 回答"谁发的"，event_type 回答"什么类型"
 - **thinking 独立字段** — 不混入 `message`，由 `SHOW_THINKING` flag 控制是否展示；发送 LLM 前剥离，避免将前轮推理过程送回模型浪费 token
 - **event_payload 用 dict** — 足够灵活承载任意结构化载荷

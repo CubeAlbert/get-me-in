@@ -43,19 +43,37 @@ def _spec() -> AgentSpec:
 
 
 class PromptRendererTests(unittest.TestCase):
-    def test_renders_sorted_templates_with_output_format_last(self) -> None:
+    def test_renders_templates_in_filename_order(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir) / "general_agent"
             root.mkdir()
             (root / "02.md").write_text("{{AGENT_NAME}}", encoding="utf-8")
             (root / "01.md").write_text("{{PRIMARY_GOAL}}", encoding="utf-8")
-            (root / "07_output_format.md").write_text("output", encoding="utf-8")
-            (root / "08_input_format.md").write_text("input", encoding="utf-8")
+            (root / "07_input_format.md").write_text("input", encoding="utf-8")
+            (root / "08_output_format.md").write_text("output", encoding="utf-8")
             (root / "09_reserved.md").write_text("reserved", encoding="utf-8")
 
             rendered = PromptRenderer(root.parent).render(_spec())
 
-        self.assertEqual("目标\n主 Agent\ninput\nreserved\noutput", rendered)
+        self.assertEqual("目标\n主 Agent\ninput\noutput\nreserved", rendered)
+
+    def test_production_templates_follow_their_numeric_filenames(self) -> None:
+        rendered = PromptRenderer(Path("data/prompts")).render(_spec())
+
+        sections = (
+            "<Role>",
+            "<Mission>",
+            "<Constraints>",
+            "<Tools>",
+            "<SubAgents>",
+            "<CommunicationStyle>",
+            "<InputFormat>",
+            "<OutputFormat>",
+            "<Reserved>",
+        )
+        positions = tuple(rendered.index(section) for section in sections)
+
+        self.assertEqual(tuple(sorted(positions)), positions)
 
     def test_rejects_unsupported_template_variable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -174,7 +192,7 @@ class PromptRendererTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir) / "general_agent"
             root.mkdir()
-            (root / "07_output_format.md").write_text(
+            (root / "42_output_format.md").write_text(
                 "<OutputFormat>canonical</OutputFormat>", encoding="utf-8"
             )
 

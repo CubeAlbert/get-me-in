@@ -25,9 +25,7 @@ class UnexpectedPromptVariableError(PromptTemplateError):
 
 
 class PromptRenderer:
-    """Render deterministic templates with the output contract placed last."""
-
-    _OUTPUT_TEMPLATE = "07_output_format.md"
+    """Render deterministic templates in filename order."""
 
     _ALLOWED_VARIABLES = frozenset(
         {
@@ -64,10 +62,6 @@ class PromptRenderer:
             raise FileNotFoundError(
                 f"No prompt templates found in {self._general_agent_dir}"
             )
-        files = [
-            *(path for path in files if path.name != self._OUTPUT_TEMPLATE),
-            *(path for path in files if path.name == self._OUTPUT_TEMPLATE),
-        ]
         template = "\n".join(path.read_text(encoding="utf-8") for path in files)
         placeholders = set(_PLACEHOLDER_RE.findall(template))
         unexpected = placeholders - self._ALLOWED_VARIABLES
@@ -102,10 +96,16 @@ class PromptRenderer:
 
     def render_output_format(self) -> str:
         """Return the canonical model-output contract used for format repair."""
-        path = self._general_agent_dir / "07_output_format.md"
-        if not path.is_file():
-            raise FileNotFoundError(f"Output format template not found: {path}")
-        return path.read_text(encoding="utf-8")
+        paths = tuple(sorted(self._general_agent_dir.glob("*_output_format.md")))
+        if not paths:
+            raise FileNotFoundError(
+                f"Output format template not found in {self._general_agent_dir}"
+            )
+        if len(paths) != 1:
+            raise PromptTemplateError(
+                f"Expected exactly one output format template, found {len(paths)}"
+            )
+        return paths[0].read_text(encoding="utf-8")
 
     @staticmethod
     def _render_tools(tools: Iterable[ToolDefinition]) -> str:

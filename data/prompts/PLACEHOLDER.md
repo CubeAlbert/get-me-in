@@ -48,11 +48,11 @@
 | `{{STYLE_RULES}}` | 偏好行为 |
 | `{{STYLE_AVOIDS}}` | 应避免的行为 |
 
-## 07_output_format.md
+## 07_input_format.md
 
 无占位符（固定内容，所有 Agent 统一）。
 
-## 08_input_format.md
+## 08_output_format.md
 
 无占位符（固定内容，所有 Agent 统一）。
 

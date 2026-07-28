@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。决策 206 的空 Memory collection 查询缺陷及决策 207 的 targeted reload 非目标删除缺陷均已修复并复验；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施空 Memory collection 正常零命中和两份 legacy 记忆的一次性迁移；决策 207 已修复 targeted reload 对非目标 manifest entries 的误删风险；Chroma 为 `memories=36`、`references=34` chunks。决策 208 恢复 startup reload 后台预热 embedding／reranker 与 CLI 权重输出静默。决策 209 修复 selection Ctrl+C 错误退出 SubAgent。决策 210 新增 Resume-only `merge_pdfs`，当前 production Catalog 为 26 个 Tool。决策 211 将 uv 唯一默认镜像切换为清华 TUNA，保持 Windows／Ubuntu/Linux universal lock，并固定 `uv add --no-sync` → `uv sync` 分步工作流；普通 `uv lock`、`uv sync --locked`、133 包版本一致性、无禁用 registry、58 项定向测试、完整 261 项测试、`compileall`、`git diff --check` 与 import boundary 均通过。决策 212 要求 `finish.thinking` 必须非空且不能只含空白，空摘要进入既有一次模型 repair；完整 263 项测试、`compileall` 与 `git diff --check` 已通过。R8-O 其余 smoke 仍待完成。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施空 Memory collection 正常零命中和两份 legacy 记忆的一次性迁移；决策 207 已修复 targeted reload 对非目标 manifest entries 的误删风险；Chroma 为 `memories=36`、`references=34` chunks。决策 208 恢复 startup reload 后台预热 embedding／reranker 与 CLI 权重输出静默。决策 209 修复 selection Ctrl+C 错误退出 SubAgent。决策 210 新增 Resume-only `merge_pdfs`，当前 production Catalog 为 26 个 Tool。决策 211 将 uv 唯一默认镜像切换为清华 TUNA，保持 Windows／Ubuntu/Linux universal lock，并固定 `uv add --no-sync` → `uv sync` 分步工作流；普通 `uv lock`、`uv sync --locked`、133 包版本一致性、无禁用 registry、58 项定向测试、完整 261 项测试、`compileall`、`git diff --check` 与 import boundary 均通过。决策 212 要求 `finish.thinking` 必须非空且不能只含空白，空摘要进入既有一次模型 repair。决策 213 将模板重命名为 `07_input_format.md`、`08_output_format.md`，撤销 PromptRenderer 的硬编码重排，system prompt 严格按文件名顺序拼接；完整 264 项测试和 legacy OutputFormat 读取 smoke 已通过。R8-O 其余 smoke 仍待完成。
 
 **下一步：** 继续完成剩余 CLI／交互、Main→Resume→Main、审批拒绝、Plan、Memory delete、真实 Resume 与旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
@@ -39,7 +39,7 @@
 198. **恢复 SubAgent XML prompt 并限定路由可见性** — Main 以 `<SubAgent name>`、`Name`、`Description`、`Responsibilities`、`HardConstraints` 的固定顺序看见可路由子 Agent；非 Route Agent 不注入列表。JobSearchAgent 仍是冻结的 legacy 测试壳，本次不扩展 production Catalog。
 199. **恢复 Main／Resume 完整 CommunicationStyle** — v2 首次迁移缩写了 Tone／Verbosity／ExplanationStyle，并遗漏全部 StyleRules／StyleAvoids；现按 legacy 原始定义逐项恢复到 immutable AgentStyle，由 PromptRenderer 继续统一注入五个既有区块。
 200. **恢复 Main／Resume 剩余 Agent prompt 元数据** — Role、Mission、Constraints 的动态字段按 legacy 原始语义与列表格式恢复；Resume 在 legacy 基线上追加两项 v2 强化硬约束，静态模板和所有运行时边界不变。
-201. **收敛模型输出协议并由 Runtime 填充内部事件字段** — 模型只需输出最小业务字段，OutputFormat 固定为 system prompt 最后一节并明确区分 InputFormat；解析器移除双协议兼容并验证业务字段与条件组合。Runtime 生成事件／调用链 UUID、role、timestamp 与 plan_status，历史工具调用使用 `id=event_id`、`tool_call_id=call_id`，record 级 Plan 快照向后兼容持久化。
+201. **收敛模型输出协议并由 Runtime 填充内部事件字段** — 模型只需输出最小业务字段并明确区分 InputFormat；当时将 OutputFormat 固定在 system prompt 最后的排序策略已由决策 213 取代。解析器移除双协议兼容并验证业务字段与条件组合。Runtime 生成事件／调用链 UUID、role、timestamp 与 plan_status，历史工具调用使用 `id=event_id`、`tool_call_id=call_id`，record 级 Plan 快照向后兼容持久化。
 202. **多余模型字段采用允许列表投影而非格式修复** — 决策 201 中“内部／未知字段触发 repair”的部分被替代；Parser 忽略未消费的顶层字段，Runtime 始终重建可信内部字段。必需业务字段、类型与 finish/tool_call 条件仍严格验证。
 203. **恢复 v2 provider JSON mode** — OpenAILLMAdapter 对所有 completion 显式发送 `response_format={"type":"json_object"}`，恢复 legacy provider 约束；AgentRuntime 与 MemoryExtractor 的输出均为 JSON 对象，Web Search 独立 adapter 不变，一次格式 repair 继续作为异常兜底。
 204. **在单次模型修复前增加本地 JSON repair** — ModelReplyParser 在 `json.loads` 语法失败后调用 `json_repair.loads`，但修复结果仍必须是 JSON object 并通过严格业务校验；纯文本、JSON string／array、缺少 finish thinking 或其他语义错误不得本地归一化。本地修复失败或语义校验失败时沿用决策 172/203 的一次模型 repair，第二次仍失败才返回 typed failure。
@@ -51,6 +51,7 @@
 210. **新增 Resume-only PDF 合并工具并纳入 Artifact aggregate** — `merge_pdfs` 按 first → second 合并两个工作区 PDF，可省略后缀且需审批；二进制 I/O 留在受限 LocalResumeArtifacts，ArtifactService 以源文件 hash 实现幂等并记录输出 hash/version/page count。Main 不可见，不增加通用二进制 Workspace API；当前 ToolCatalog 从历史 25 增至 26。
 211. **uv 唯一默认镜像切换为 TUNA 并拆分依赖添加与同步** — `pyproject.toml` 只配置清华 TUNA，不设置平台限制、官方 PyPI、第二镜像或 PyTorch 专源；继续生成 Windows／Ubuntu/Linux universal lock。新增依赖统一先 `uv add <package> --no-sync`，再 `uv sync`；锁定前先排除并发 uv 操作并耐心等待。
 212. **finish thinking 必须是非空用户可见摘要** — `finish.thinking` 必须是非空、非纯空白字符串；空值不得静默通过或由 Runtime 补齐，而是进入既有一次模型 repair。`tool_call.thinking` 继续可选。
+213. **system prompt 顺序只由模板文件名决定** — PromptRenderer 仅按 `*.md` 文件名排序并拼接，不得在代码中强制移动任何模板；InputFormat／OutputFormat 分别重命名为 `07_input_format.md`／`08_output_format.md`，`09_reserved.md` 保持最后。格式修复仍从 canonical OutputFormat 文件读取。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 

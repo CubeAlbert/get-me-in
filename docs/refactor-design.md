@@ -362,7 +362,7 @@ R4 新增文件、类和公开方法清单如下，编码前仍需用户确认�
 
 #### 6.6.1 JSON `thinking` 契约（R6 前置修复）
 
-静态 `07_output_format.md` 中的 `thinking` 是模型生成、允许向用户展示的推理摘要，与 provider 原生 `reasoning_content` 和 `LLM_THINKING_ENABLED` 完全分离。finish 回复必须包含非空、非纯空白 string thinking；tool_call 可省略。该规则由决策 171 取代决策 77 对 finish thinking 的可选化，并由决策 212 进一步取代决策 172 的空字符串容错；tool_call 的容错保持不变。v2 继续执行决策 136，不读取、保存或展示 provider 原生 reasoning_content。
+静态 `08_output_format.md` 中的 `thinking` 是模型生成、允许向用户展示的推理摘要，与 provider 原生 `reasoning_content` 和 `LLM_THINKING_ENABLED` 完全分离。finish 回复必须包含非空、非纯空白 string thinking；tool_call 可省略。该规则由决策 171 取代决策 77 对 finish thinking 的可选化，并由决策 212 进一步取代决策 172 的空字符串容错；tool_call 的容错保持不变。v2 继续执行决策 136，不读取、保存或展示 provider 原生 reasoning_content。
 
 `MessageRecord` 和 `ToolCallRecord` 保存可选 thinking；Runtime 必须把 `ModelReplyParser` 的结果投影到 Completed/ToolStarted，使 Renderer 可在独立 `SHOW_THINKING` setting 开启时显示“思考摘要”。Session snapshot 对 assistant message/tool call 的 thinking 做可选 round-trip，缺失字段兼容为 `None`。thinking 不参与业务状态转换、tool closure、handoff、rewind 边界或 Plan。
 

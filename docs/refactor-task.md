@@ -244,7 +244,7 @@
 
 ### 1. 输出、domain 与事件契约
 
-- ✅ 对齐当时的 `07_output_format.md`：finish 必须包含 string `thinking` 字段但允许空字符串，tool_call 可省略或为空；missing/type error 注入“具体错误 + 完整 canonical output format”并最多修复一次。finish 空字符串容错后由决策 212 收紧。
+- ✅ 对齐 OutputFormat（当前文件名为 `08_output_format.md`）：finish 必须包含 string `thinking` 字段；早期允许空字符串的容错后由决策 212 收紧。tool_call 可省略或为空；missing/type error 注入“具体错误 + 完整 canonical output format”并最多修复一次。
 - ✅ 为 assistant `MessageRecord` 与 `ToolCallRecord` 增加可选 thinking；user/system/tool result 不产生 thinking。
 - ✅ AgentRuntime 不再丢弃 `ModelReply.thinking`；Completed 通过 MessageRecord、ToolStarted 通过显式字段向前端投影。
 - ✅ 保持 provider-neutral 边界：不得读取或保存 OpenAI/DeepSeek 原生 `reasoning_content`。
@@ -477,7 +477,8 @@
 - ✅ Agent metadata 修复的 32 项 bootstrap/Prompt/Catalog/orchestration 回归、完整 237 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `AGENT_METADATA_SMOKE_OK main_chars=13159 resume_chars=20806 agents=2 tools=25`，确认恢复内容实际进入 Main／Resume system prompt，且未重新引入旧 `switch_agent` 标识符。
 - ✅ 定位偶发 model reply warning：模型返回了 InputFormat 风格的完整历史消息 envelope，在 `event_type=finish` 时遗漏 OutputFormat 必填的字符串 `thinking`；一次格式修复虽能恢复，但增加模型调用和延迟。
 - ✅ 模型输出协议收敛为 `event_type/message/thinking/tool/event_payload` 五类业务字段；`id/role/timestamp/tool_call_id/plan_status` 明确由 Runtime 生成。解析器移除 `content + nested tool_call` 隐式兼容，按事件类型严格验证必需业务字段、类型和 finish/tool_call 条件组合。
-- ✅ PromptRenderer 不再仅依赖文件名字典序：保留其他模板既有顺序，但将 `07_output_format.md` 显式置于完整 system prompt 最后；OutputFormat 增加 Input/Output 区别、完整 finish/tool_call 示例和内部字段禁用说明。
+- ✅ 决策 201 曾将 `07_output_format.md` 显式置于完整 system prompt 最后；该硬编码重排已由决策 213 撤销，当前改由 `07_input_format.md`、`08_output_format.md` 文件名表达顺序，PromptRenderer 严格按文件名排序拼接。
+- ✅ PromptRenderer／Runtime／bootstrap 定向 47 项和完整 264 项测试通过；production 模板回归锁定九个 XML 区块与数字文件名顺序一致，legacy PromptLoader 可按新名称读取 OutputFormat。
 - ✅ 修正 conversation tool-call correlation：tool_call 历史使用 `id=event_id`、`tool_call_id=call_id`，对应 tool result 复用相同 `tool_call_id`；Runtime 生成的 record 保存当时 Plan 快照，ConversationCodec 投影 `{current, completed, remaining}`，SessionSnapshotCodec 对缺失 record plan 保持向后兼容。
 - ✅ 用户复审后将多余字段策略改为允许列表投影：`id/role/timestamp/tool_call_id/plan_status` 和任意未知顶层字段均直接忽略，Runtime 重新生成可信内部值，不为可安全丢弃的信息消耗 repair 调用；业务字段错误仍沿用一次修复边界。
 - ✅ 调整后的 62 项 Parser/Prompt/Conversation/Session/Runtime/bootstrap 定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `OUTPUT_PROJECTION_SMOKE_OK chars=12825 tools=25`，确认末尾 OutputFormat 与忽略／重建规则可见。
