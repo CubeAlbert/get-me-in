@@ -146,10 +146,11 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(UserMessage("继续当前简历任务"), resume.commands[-1])
 
     def test_selection_cancellation_keeps_subagent_handoff_active(self) -> None:
+        resume = _FakeRuntime(AgentKey.RESUME)
         orchestrator = Orchestrator(
             {
                 AgentKey.MAIN: _FakeRuntime(AgentKey.MAIN),
-                AgentKey.RESUME: _FakeRuntime(AgentKey.RESUME),
+                AgentKey.RESUME: resume,
             }
         )
         session = _active_selection_handoff_session()
@@ -159,14 +160,20 @@ class OrchestratorTests(unittest.TestCase):
             CancelSelection("choice-call"),
         )
 
-        self.assertIsInstance(result.event, ToolFinished)
-        self.assertEqual("choice-call", result.event.call_id)
+        self.assertIsInstance(result.event, Paused)
+        self.assertEqual("selection_cancelled", result.event.code)
         self.assertEqual(AgentKey.RESUME, result.session.active_agent)
         self.assertEqual(1, len(result.session.handoff_stack))
         self.assertEqual(
-            RuntimePhase.MODEL_QUEUED,
+            RuntimePhase.WAITING_FOR_USER,
             result.session.agents[AgentKey.RESUME].phase,
         )
+
+        continued = orchestrator.handle(result.session, UserMessage("continue after cancelling choices"))
+
+        self.assertEqual(AgentKey.RESUME, continued.session.active_agent)
+        self.assertEqual(1, len(continued.session.handoff_stack))
+        self.assertEqual(UserMessage("continue after cancelling choices"), resume.commands[-1])
 
     def test_nested_subagent_handoff_is_rejected_and_source_call_is_closed(self) -> None:
         runtimes = {
@@ -212,14 +219,10 @@ class _FakeRuntime:
             return RuntimeTransition(
                 replace(
                     state,
-                    phase=RuntimePhase.MODEL_QUEUED,
+                    phase=RuntimePhase.WAITING_FOR_USER,
                     pending_tool=None,
                 ),
-                ToolFinished(
-                    command.request_id,
-                    "provide_choices",
-                    command.reason,
-                ),
+                Paused("selection_cancelled", command.reason),
             )
         if self._key is AgentKey.MAIN:
             target = self._target or AgentKey.RESUME

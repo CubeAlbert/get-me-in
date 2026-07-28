@@ -9,6 +9,7 @@
 ## 目录
 
 - [决策 219 — finish thinking 恢复为可选摘要](#决策-219--finish-thinking-恢复为可选摘要)
+- [决策 224 — provide_choices 取消后暂停当前 Agent](#决策-224--provide_choices-取消后暂停当前-agent)
 - [决策 223 — Esc 取消当前 SubAgent run 但保留 handoff](#决策-223--esc-取消当前-subagent-run-但保留-handoff)
 - [决策 222 — `/exit_sub` 默认总结，false 允许直接退出](#决策-222--exit_sub-默认总结false-允许直接退出)
 - [决策 217 — SessionSnapshot 持久化 agent turn_id 并兼容旧 handoff 快照](#决策-217--sessionsnapshot-持久化-agent-turn_id-并兼容旧-handoff-快照)
@@ -5248,3 +5249,33 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - Orchestrator 回归确认 Esc 后 active agent 仍为 Resume、handoff frame 保留、Main 仍等待 handoff，下一条用户消息继续进入 Resume。
 - 定向测试 59 项通过，全量 unittest 283 项通过，`git diff --check` 通过。
+
+---
+
+### 决策 224 —— provide_choices 取消后暂停当前 Agent
+
+**背景：** 决策 209 为 `provide_choices` 的 Ctrl+C／EOF 增加了 typed `CancelSelection`，但实现将取消结果写入历史后进入 `MODEL_QUEUED`，CLI 自动发送 `Continue()`，导致模型在用户取消选择后立即再次调用 LLM。用户要求取消工具后先把控制权交还 CLI，下一条用户消息再继续当前会话。
+
+**决定：**
+
+- `CancelSelection` 仍校验当前 `request_id` 并写入 `ToolResultRecord`，结果为 `{"code":"cancelled","message": reason}`。
+- 当前 Agent 状态改为 `WAITING_FOR_USER`，返回 `Paused("selection_cancelled", reason)`；不设置全局 cancellation token，不进入 `MODEL_QUEUED`，不自动触发下一次 LLM 调用。
+- CLI 将该 `Paused` 作为当前回合终点，恢复用户输入；下一条 `UserMessage` 与取消结果按历史顺序一起发送给当前 Agent，活动 SubAgent handoff 保持不变。
+- 本决定取代决策 209 中“取消后产生 `ToolFinished`、进入 `MODEL_QUEUED` 并继续模型循环”的部分；`CancelSelection` 与真正的全局 `Cancel` 仍保持不同作用域。
+
+**理由：**
+
+- 用户取消的是一次选择交互，不是授权 LLM 自行决定下一步；继续调用模型会绕过用户输入边界。
+- `Paused/WAITING_FOR_USER` 与审批拒绝、模型解析失败保持一致，能保留工具取消结果并等待明确的新指令。
+- 保留 typed `CancelSelection` 和 request-id 校验，不把 UI 取消重新混入全局 `Cancel` 或 handoff unwind。
+
+**曾考虑的替代方案：**
+
+- 保持 `ToolFinished` 并让 CLI 继续 `Continue()` —— 会复现用户取消后自动调用 LLM 的问题，未采用。
+- 直接丢弃取消结果 —— 会丢失当前工具 call 的审计和后续上下文，未采用。
+- 将选择取消映射为全局 `Cancel` —— 会再次触发 SubAgent／handoff 取消，未采用。
+
+**验证：**
+
+- Runtime、CLI、Orchestrator 定向测试 46 项通过，覆盖无额外 LLM 调用、回到 CLI、下一条用户消息继续及活动 handoff 保留。
+- 全量测试复跑时出现既有 KnowledgeService 锁释放时序波动；相关单测单独重跑通过，`git diff --check` 通过。

@@ -506,7 +506,7 @@
 - ✅ 恢复生产 CLI 权重加载静默配置：在 build application 前固定设置 `HF_HUB_DISABLE_PROGRESS_BARS=1`、`TQDM_DISABLE=1`、`TRANSFORMERS_VERBOSITY=error`，并将 Hugging Face／transformers／sentence-transformers logger 限制为 ERROR；继续保留 encode／predict 的 `show_progress_bar=False`。
 - ✅ 后台预热修复的 41 项 Knowledge/Adapter/Retrieval/CLI 定向测试、完整 253 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 `uv run python main.py` 在欢迎界面出现后后台等待 20 秒，终端无权重／进度输出；首次 `query_memory` 约 2 秒完成真实命中且无延迟加载输出，`/exit` 返回 0。
 - ✅ 修复 selection Ctrl+C 错误退出 SubAgent：新增 typed `CancelSelection(request_id, reason)`，只把 cancelled result 写回 `provide_choices` 并继续当前 Agent；CliApp 不再把 selection 的 `None` 映射为全局 `Cancel`。Esc／运行取消产生 `Cancelled` 但保留活动 SubAgent handoff，业务失败仍按既有规则关闭 handoff。
-- ✅ selection 局部取消的 48 项 Runtime/CLI/Orchestrator/Session 定向测试与完整 256 项自动化测试通过，`compileall` 与 `git diff --check` 通过；真实 questionary 自定义输入 Ctrl+C 输出 `SELECTION_RESULT None`，应用回归确认该值只生成 `CancelSelection`，Resume handoff 保持活动。
+- ✅ selection 局部取消改为 `Paused/WAITING_FOR_USER`：取消结果写入历史并回到 CLI，下一条用户消息再继续当前 Agent；Runtime/CLI/Orchestrator 定向测试 46 项通过，`git diff --check` 通过。全量测试复跑时仅出现既有 KnowledgeService 锁释放时序波动，相关单测单独重跑通过。
 - ✅ 按用户提供的 legacy 定义新增 Resume-only `merge_pdfs`：保留 first → second 顺序与可选 `.pdf` 后缀，使用既有 capability/审批/ToolOutcome 边界；Main 不可见。
 - ✅ PDF 合并经 `ResumeArtifactPort → ArtifactService → LocalResumeArtifacts` 实现；不扩展文本型 `WorkspacePort.read()`，适配器只在 `workspace.resolve()` 约束后用 `pypdf` 读取，并通过同目录临时文件原子替换输出。拒绝相同输入及输出覆盖源文件。
 - ✅ Artifact operation 增加 `MERGE_PDFS`，输入使用两个源 PDF 的原始字节 hash，输出 Artifact 记录 hash/version/page count；COMMITTED replay 不重复写入，metadata commit 失败返回 typed partial failure。项目显式依赖 `pypdf>=6.0.0`，锁定 6.14.2。
@@ -516,7 +516,7 @@
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
-- ✅ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；当前为 283 项自动化测试通过。
+- 🔄 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；当前定向 46 项通过，全量复跑受既有 KnowledgeService 锁释放时序波动影响，相关单测单独重跑通过。
 - ⬜ 用户审查 R8-O；Tool 提示词语义阻断已解除，但剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 完成前仍不得审查或进入 R8-D。后续未通过时以 `git revert <R8-E commit>` 回退，使用 R8-P 保留的 legacy rollback 配置恢复旧入口。
 
 ### 4. R8-D —— 遗留删除

@@ -275,7 +275,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("pick", requested.prompt)
         self.assertEqual(("a", "b"), requested.choices)
 
-    def test_selection_cancellation_returns_tool_result_without_cancelling_agent(self) -> None:
+    def test_selection_cancellation_pauses_until_next_user_message(self) -> None:
         runtime, llm, temporary_dir = _runtime(
             [
                 _tool_call(
@@ -289,14 +289,18 @@ class RuntimeTests(unittest.TestCase):
         self.addCleanup(temporary_dir.cleanup)
 
         requested = _pump(runtime, UserMessage("question"))[-1]
-        completed = _pump(
-            runtime,
-            CancelSelection(requested.request_id),
-        )
+        cancelled = runtime.handle(CancelSelection(requested.request_id))
 
         self.assertIsInstance(requested, SelectionRequested)
+        self.assertIsInstance(cancelled, Paused)
+        self.assertEqual("selection_cancelled", cancelled.code)
+        self.assertEqual(1, len(llm.requests))
+
+        completed = _pump(runtime, UserMessage("continue after cancelling the choices"))
+
         self.assertIsInstance(completed[-1], Completed)
-        tool_result = json.loads(llm.requests[1].messages[-1].content)
+        self.assertEqual(2, len(llm.requests))
+        tool_result = json.loads(llm.requests[1].messages[-2].content)
         self.assertEqual(
             {
                 "code": "cancelled",
@@ -304,6 +308,7 @@ class RuntimeTests(unittest.TestCase):
             },
             tool_result["event_payload"],
         )
+        self.assertIn("continue after cancelling the choices", llm.requests[1].messages[-1].content)
 
     def test_handoff_preserves_call_id_and_waits_for_orchestrator(self) -> None:
         runtime, _, temporary_dir = _runtime(

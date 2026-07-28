@@ -484,11 +484,25 @@ class AgentRuntime:
         )
         if failure is not None:
             return failure
-        assert self._state.pending_tool is not None
-        return self._finish_tool(
-            self._state.pending_tool,
-            {"code": "cancelled", "message": command.reason},
+        pending = self._state.pending_tool
+        assert pending is not None
+        output = {"code": "cancelled", "message": command.reason}
+        record = ToolResultRecord(
+            event_id=self._id_generator.new_id(),
+            call_id=pending.call_id,
+            tool_name=pending.tool_name,
+            output=output,
+            timestamp=self._clock.now(),
+            turn_id=self._state.turn_id,
+            plan=self._state.plan,
         )
+        self._state = replace(
+            self._state,
+            phase=RuntimePhase.WAITING_FOR_USER,
+            history=(*self._state.history, record),
+            pending_tool=None,
+        )
+        return Paused("selection_cancelled", command.reason)
 
     def _resume_external_tool(self, command: ToolResult) -> RuntimeEvent:
         failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_TOOL_RESULT)

@@ -85,17 +85,12 @@ class CliAppTests(unittest.TestCase):
         self.assertEqual((UserMessage("hello"),), worker.commands)
         self.assertEqual(1, application.snapshots)
 
-    def test_cancelled_selection_closes_only_the_interaction_and_continues_agent(self) -> None:
+    def test_cancelled_selection_returns_to_cli_until_next_user_message(self) -> None:
         application = _Application()
         worker = _Worker(
             (
                 SelectionRequested("choice-call", "pick", ("a", "b")),
-                ToolFinished(
-                    "choice-call",
-                    "provide_choices",
-                    '{"code":"cancelled","message":"Selection cancelled by user"}',
-                ),
-                Completed(_message()),
+                Paused("selection_cancelled", "Selection cancelled by user"),
             )
         )
         app = CliApp(
@@ -112,7 +107,6 @@ class CliAppTests(unittest.TestCase):
             (
                 UserMessage("hello"),
                 CancelSelection("choice-call"),
-                Continue(),
             ),
             worker.commands,
         )
