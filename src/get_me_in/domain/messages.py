@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from src.get_me_in.domain.plans import Plan
+
 
 class Role(StrEnum):
     """Speaker roles used by ordinary conversation messages."""
@@ -22,6 +24,7 @@ class MessageRecord:
     timestamp: datetime
     turn_id: str = ""
     thinking: str | None = None
+    plan: Plan | None = None
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,8 @@ class ToolCallRecord:
     timestamp: datetime
     turn_id: str = ""
     thinking: str | None = None
+    plan: Plan | None = None
+    content: str = ""
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,7 @@ class ToolResultRecord:
     output: object
     timestamp: datetime
     turn_id: str = ""
+    plan: Plan | None = None
 
 
 ConversationRecord = MessageRecord | ToolCallRecord | ToolResultRecord

@@ -300,6 +300,13 @@ class AgentRuntime:
                 repair_attempted=True,
             )
             return Progress("Repairing model response format")
+        if reply.repair_kind is not None:
+            logger.info(
+                "Model reply normalized locally: agent=%s turn=%s kind=%s",
+                self._spec.key.value,
+                self._state.turn_id,
+                reply.repair_kind,
+            )
 
         if reply.tool_name is not None:
             call_id = self._id_generator.new_id()
@@ -311,6 +318,8 @@ class AgentRuntime:
                 timestamp=self._clock.now(),
                 turn_id=self._state.turn_id,
                 thinking=reply.thinking,
+                plan=self._state.plan,
+                content=reply.content,
             )
             self._state = replace(
                 self._state,
@@ -399,6 +408,7 @@ class AgentRuntime:
         *,
         plan: Plan | None = None,
     ) -> RuntimeEvent:
+        record_plan = plan if plan is not None else self._state.plan
         record = ToolResultRecord(
             event_id=self._id_generator.new_id(),
             call_id=pending.call_id,
@@ -406,6 +416,7 @@ class AgentRuntime:
             output=output,
             timestamp=self._clock.now(),
             turn_id=self._state.turn_id,
+            plan=record_plan,
         )
         rendered = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False, sort_keys=True)
         self._state = replace(
@@ -413,6 +424,7 @@ class AgentRuntime:
             phase=RuntimePhase.MODEL_QUEUED,
             history=(*self._state.history, record),
             pending_tool=None,
+            plan=record_plan,
         )
         return ToolFinished(pending.call_id, pending.tool_name, rendered, plan)
 
@@ -443,6 +455,7 @@ class AgentRuntime:
             output=output,
             timestamp=self._clock.now(),
             turn_id=self._state.turn_id,
+            plan=self._state.plan,
         )
         self._state = replace(
             self._state,
@@ -509,6 +522,7 @@ class AgentRuntime:
                 output=output,
                 timestamp=self._clock.now(),
                 turn_id=self._state.turn_id,
+                plan=self._state.plan,
             )
             self._state = replace(
                 self._state,
@@ -540,4 +554,5 @@ class AgentRuntime:
             timestamp=self._clock.now(),
             turn_id=turn_id,
             thinking=thinking if role is Role.ASSISTANT else None,
+            plan=self._state.plan,
         )

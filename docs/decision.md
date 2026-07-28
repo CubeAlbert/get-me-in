@@ -4558,3 +4558,118 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 仅恢复最严重的 HardConstraints —— Responsibilities、SuccessCriteria 和 Priorities 仍会缺失，无法完整恢复行为契约，未采用。
 - 在 PromptRenderer 中自动为 tuple 添加 bullet —— 无法区分普通列表和数字优先级，也会影响所有测试 spec，未采用。
 - 逐字恢复 legacy 并删除全部 v2 新约束 —— 会撤销真实性和子 Agent 调度边界强化，未采用。
+
+---
+
+### 决策 201 —— 收敛模型输出协议并由 Runtime 填充内部事件字段
+
+**背景：** R8-O 真实对话偶发出现 `Invalid model reply ... finish requires a string thinking field`。原始回复是合法 JSON，但完整复制了 InputFormat 的历史消息 envelope：包含 `id/role/timestamp/tool_call_id/plan_status`，同时像历史 assistant 消息一样不含 `thinking`。当前模板按文件名排序，OutputFormat 后仍有 InputFormat 和 Reserved；ConversationCodec 也持续向模型展示无 thinking 的 assistant 历史。解析器同时兼容 `content + nested tool_call` 与 `message/event_type/tool/event_payload` 两套形状，并未验证 prompt 声明的多个字段，进一步造成公开契约与内部行为不一致。检查同时发现 tool_call 历史错误地把 `call_id` 写入 `id`，并把 `tool_call_id` 留为 null；所有 record 的 `plan_status` 也始终为 null，与源设计的系统注入语义不符。
+
+**决定：**
+
+- 模型输出只保留业务字段 `event_type`、`message`、`thinking`、`tool`、`event_payload`。`id`、`role`、`timestamp`、`tool_call_id`、`plan_status` 由 Runtime／ConversationCodec 内部生成，模型提供这些字段时视为格式错误并进入既有一次修复流程。
+- 唯一输出协议只有两种条件形状：finish 必须提供 string `message` 与 string `thinking`，并不得提供非 null 的 tool 数据；tool_call 必须提供 string `message`、非空 string `tool` 与 object `event_payload`，thinking 可省略但存在时必须是 string。
+- `ModelReplyParser` 删除决策 141 中 `content + nested tool_call` 过渡形状兼容，只接受新的最小事件协议；拒绝未知 event type、未知／内部字段、缺失字段、错误类型和非法 finish/tool_call 字段组合。决策 141 的双协议兼容部分由本决策替代。
+- `PromptRenderer` 保持其他模板稳定排序，但显式将 `07_output_format.md` 放在完整 system prompt 最后，不再让关键输出契约的位置依赖后续文件名。OutputFormat 增加 Input/Output 区别、两种完整示例和禁止复制内部字段的明确说明。
+- Runtime 继续以注入的 IdGenerator 与 Clock 生成记录字段；每条 tool call 同时生成独立 `event_id` 和调用链 `call_id`。ConversationCodec 对历史 tool call 输出 `id=event_id`、`tool_call_id=call_id`，对应 tool result 使用自身 event id 并复用相同 tool_call_id。
+- MessageRecord、ToolCallRecord、ToolResultRecord 以可选 Plan 保存生成记录时的系统状态；ConversationCodec 只投影 legacy `{current, completed, remaining}` 摘要且继续剥离 thinking。SessionSnapshotCodec 对 record plan 做可选持久化，旧 schema_version=2 快照缺少该字段时仍按 null 读取，不要求数据迁移。
+- 本修复不改变 LLM provider、ToolDefinition、ToolExecutor、Capability、审批、ToolOutcome、handoff 或 production Agent/Tool Catalog。
+- 验证结果：61 项 Parser/Prompt/Conversation/Session/Runtime/bootstrap 定向测试、完整 239 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 production composition 输出 `OUTPUT_CONTRACT_SMOKE_OK chars=12794 tools=25`，确认 OutputFormat 位于末尾、Input/Output 区分可见且 Catalog 数量未变。
+
+**理由：**
+
+- 模型只应表达业务决定，UUID、角色、时间与计划属于可信运行时状态；删除重复字段既缩短回复，也消除模型模仿输入 envelope 的主要诱因。
+- 将 OutputFormat 固定在最后并直接展示正反边界，比依靠 repair warning 或继续增加弱提示更稳定；一次 repair 仍保留为异常兜底。
+- 分离 event id 与 tool call correlation id 可保证一条调用及其结果既有各自事件身份，又能通过稳定 call id 精确闭合。
+- record 级 Plan 快照恢复源设计的“系统在消息生成时盖章”语义，避免用当前最终计划倒灌覆盖历史状态；可选字段保持现有快照向后兼容。
+
+**曾考虑的替代方案：**
+
+- 只把 OutputFormat 移到最后 —— 可以降低误仿概率，但继续保留冗余模型字段、双解析协议和错误 UUID 映射，未采用。
+- 将 finish 的 thinking 改为可选或吞掉 warning —— 会破坏已确认的思考摘要展示契约并隐藏格式漂移，未采用。
+- 接受并忽略模型生成的内部字段 —— 无法及时识别模型复制 InputFormat，也容易让未来代码误用不可信 UUID、时间或计划状态，未采用。
+- 为 record plan 提升 snapshot schema version —— 新字段完全可选且旧数据可无损解释为 null，强制迁移没有收益，未采用。
+
+---
+
+### 决策 202 —— 多余模型字段采用允许列表投影而非格式修复
+
+**背景：** 决策 201 的首版实现把所有未声明顶层字段视为格式错误，包括模型模仿 InputFormat 生成的 `id/role/timestamp/tool_call_id/plan_status`。用户复审指出这些字段本就会由系统重新生成；仅为删除不可信字段额外调用一次模型没有收益，而且历史输入继续包含系统生成的完整 envelope，模型偶尔复制这些字段是可安全兜底的偏差。
+
+**决定：**
+
+- `ModelReplyParser` 只读取 `event_type/message/thinking/tool/event_payload`，其余内部字段和任意未知顶层字段直接忽略，不触发 repair，也不进入 ModelReply 或 conversation record。
+- Runtime 始终使用注入的 IdGenerator、Clock、固定 assistant role、当前调用链和 Plan 快照生成 `id/role/timestamp/tool_call_id/plan_status`；同名模型值即使存在也无法覆盖内部值。
+- repair 只用于无法安全解释业务意图的错误：非法／缺失 event_type、缺失或错误类型的 message/thinking/tool/event_payload，以及 finish 携带非 null tool 数据等条件冲突。
+- OutputFormat 将“不得输出，否则报错”改为“无需输出；即使出现也会忽略并重新生成”，并明确其他未消费顶层字段同样忽略。
+- 决策 201 中“模型提供内部／未知字段时视为格式错误”和“拒绝未知／内部字段”的部分由本决策替代；最小业务协议、OutputFormat 末尾顺序、双协议移除、业务字段严格验证、内部字段生成、UUID correlation 与 Plan 快照决定继续有效。
+- 增加 Runtime 回归，证明包含伪造内部字段及未知字段的合法 finish 只调用模型一次，最终事件 id 不采用模型值。验证结果为 62 项定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `OUTPUT_PROJECTION_SMOKE_OK chars=12825 tools=25`，确认末尾 OutputFormat 与忽略／重建规则可见。
+
+**理由：**
+
+- 忽略不消费的数据等价于在应用边界做允许列表投影，可以把模型输出降为最小业务 DTO，同时不信任任何模型生成的系统状态。
+- 多余字段不改变 event_type 或必需业务字段的含义，确定性丢弃比请求模型重写更快、更省调用，也更能容忍模型模仿历史 envelope。
+- 对语义冲突继续 repair，可避免把同时声称 finish 和工具调用的回复武断解释为某一种意图。
+
+**曾考虑的替代方案：**
+
+- 保持所有多余字段触发 repair —— 安全性没有额外收益，却增加延迟和模型调用，用户明确否决。
+- 只忽略已知内部字段、拒绝其他未知字段 —— 会让无害的 provider／模型扩展字段再次触发无意义 repair；统一允许列表投影更简单。
+- 接受模型字段并在缺失时才由 Runtime 补齐 —— 会让不可信 UUID、角色、时间和计划状态进入领域边界，继续拒绝。
+
+---
+
+### 决策 203 —— 恢复 v2 provider JSON mode
+
+**背景：** R8-O 真实 Resume 链路在 `workspace_list` 返回空目录后，第三次模型调用输出了 249 字符纯 Markdown 而非 JSON。Runtime 正确记录 `Model response is not valid JSON`，注入 canonical OutputFormat，并在第四次调用恢复合法 finish；但额外调用耗时约 45 秒。审查确认旧 BaseAgent 的 `_pro_params/_flash_params` 默认包含 `response_format={"type":"json_object"}`，v2 OpenAILLMAdapter 只传 model/messages/timeout/temperature/thinking，遗漏 provider 层 JSON mode，导致系统目前完全依赖 prompt 约束。
+
+**决定：**
+
+- OpenAILLMAdapter 的每次 `chat.completions.create()` 固定携带 `response_format={"type":"json_object"}`，恢复 legacy 已使用的 provider 约束。
+- 不扩展 LLMRequest 公开协议：当前 OpenAILLMAdapter 的生产调用方只有 AgentRuntime 与 MemoryExtractor，二者 canonical 输出都要求 JSON object；Web Search 使用独立 OpenAIWebSearchAdapter 和 function-call 协议，不经过本 adapter。
+- Prompt 末尾 OutputFormat、ModelReplyParser／MemoryExtractor 的内部解析，以及 Runtime 的一次格式 repair 全部保留。provider JSON mode 减少格式漂移，不能替代业务字段和条件校验。
+- `LLM_THINKING_ENABLED` 行为不变；json_object 与既有 thinking extra_body、temperature、timeout、request-scoped client 和 cancellation 同时传递。
+- 用户确认 Resume 可以通过 `read_customer_file` 读取用户明确指定的工作区外文件，因此本次不把修复后回复中的外部路径提示认定为问题，也不收紧 Resume 的外部文件读取能力。
+- 增加 adapter 请求契约断言，确认 provider 实际收到 json_object。49 项 OpenAI adapter/Runtime/Memory/bootstrap 定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 Pro 模型输出 `PROVIDER_JSON_MODE_SMOKE_OK keys=['ok']`，确认当前 provider 接受 json_object 并返回可解析对象。
+
+**理由：**
+
+- 结构化输出应同时由 provider、prompt 与内部 parser 三层保护；只靠提示词无法阻止模型在工具结果后偶发回到自然语言模式。
+- 当前 adapter 的所有生产消费者都声明 JSON object 输出，固定参数比为 LLMRequest 增加当前没有调用方差异的可选字段更小、更明确。
+- repair 仍有必要处理 provider 不支持／未遵循 JSON mode、截断或业务 schema 不合法等异常情况。
+
+**曾考虑的替代方案：**
+
+- 将纯文本自动包装为 finish —— 无法可靠判断模型原本是否意图调用工具，也无法生成可信 thinking，未采用。
+- 仅加强 OutputFormat 文案 —— 本次真实 prompt 已把 OutputFormat 放在最后，仍出现纯文本，证据表明 prompt-only 不足。
+- 给 LLMRequest 增加 response mode 字段 —— 当前没有非 JSON 的 OpenAILLMAdapter 调用方，会扩大公开协议和全部构造点，暂不采用；未来出现普通文本消费者时再显式拆分。
+
+---
+
+### 决策 204 —— 在单次模型修复前增加本地 JSON repair
+
+**背景：** 决策 203 恢复 provider JSON mode 后，继续审查 v2 格式恢复链路发现 ModelReplyParser 只使用标准库 `json.loads`。项目仍声明 `json-repair` 依赖，但只有 legacy `src/message.py` 调用；v2 对尾逗号、JSON 字符串中的物理换行等可确定修复的语法瑕疵也会注入 OutputFormat 并额外调用一次模型。实测 json_repair 0.61.2 能把尾逗号和物理换行修复为 dict，但对普通自然语言返回空字符串。
+
+**决定：**
+
+- ModelReplyParser 先调用 `json.loads`；仅在 JSON 语法失败时调用 `json_repair.loads`。修复结果仍必须是 JSON object，并进入同一业务字段、类型和 finish/tool_call 条件校验；json_repair 只处理语法，不替代语义验证。
+- 尾逗号、JSON string 内物理换行等可确定修复的语法瑕疵在本地恢复并继续执行，不增加模型调用。成功恢复只记录 INFO `Model reply normalized locally`，历史中仅写入 Runtime 生成的标准 MessageRecord／ToolCallRecord。
+- 普通纯文本、合法 JSON string／array、缺少 event_type/message、finish 缺少 string thinking、非法 tool_call 字段或 finish/tool 数据冲突均视为解析失败；不得把纯文本包装为 finish，不得为缺失 thinking 自动补空字符串，也不得猜测或执行工具。
+- 本地 json_repair 无法产生合规回复，或标准／修复后的 JSON 未通过语义校验时，AgentRuntime 沿用既有格式修复流程：注入具体错误与完整 canonical OutputFormat，设置 `repair_attempted=true`，并允许模型自修一次；第二次仍失败才返回 typed `invalid_model_reply`。
+- 原始畸形回复不进入 conversation history；模型自修时只增加 Runtime 生成的 system repair message。`AgentSessionState.repair_attempted` 与 snapshot 字段继续承担运行时重试边界和 schema_version=2 持久化职责。
+- 本决策不替代决策 172/203 的一次模型 repair，而是在其前增加本地语法修复层；provider json_object、末尾 OutputFormat、允许列表投影、内部字段生成和严格业务校验继续有效。
+- 验证结果：61 项 Parser/Runtime/provider/bootstrap/snapshot 定向测试与完整 244 项自动化测试通过；`compileall` 与 `git diff --check` 通过。
+
+**理由：**
+
+- 确定性的语法修复应在本地完成，避免不必要的延迟、费用和模型调用；标准 parser 优先可避免 json_repair 对本来合法回复做不必要改写。
+- finish 的 thinking 是已确认的用户可见摘要契约，不能由 Runtime 无依据地生成空值；纯文本也无法证明模型选择了 finish 而不是 tool_call。
+- 一次模型自修保留了严格协议和可恢复性之间的平衡：本地层不猜业务意图，模型有一次机会按 canonical OutputFormat 重新表达，失败后再稳定退出。
+
+**曾考虑的替代方案：**
+
+- 本地 repair 失败后立即返回 invalid_model_reply —— 放弃了既有且已验证的一次模型自修能力，未采用。
+- 将纯文本或 JSON string 自动包装为 finish —— 无法生成可信 thinking，也无法确认模型没有工具调用意图，未采用。
+- finish 缺少 thinking 时自动补空字符串 —— 会绕过已确认的输出契约并制造并非由模型生成的展示数据，未采用。
+- 从纯文本中推断工具名和参数 —— 可能误执行副作用，违反 typed tool boundary，明确拒绝。
+- 立即删除 repair_attempted 与升级 snapshot schema —— 会扩大本次修复并破坏旧 schema v2 快照兼容，暂不采用。

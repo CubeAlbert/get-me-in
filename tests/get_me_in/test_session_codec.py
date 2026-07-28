@@ -6,6 +6,7 @@ import unittest
 from src.get_me_in.application.session_codec import SessionSnapshot, SessionSnapshotCodec
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord
+from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, RuntimePhase, SessionState
 
 
@@ -20,6 +21,7 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         self.assertIsInstance(record, MessageRecord)
         self.assertEqual("turn-1", record.turn_id)
         self.assertEqual("summary", record.thinking)
+        self.assertEqual("plan-1", record.plan.plan_id)
         self.assertEqual("session-1", restored.session.session_id)
 
     def test_round_trip_preserves_tool_call_thinking_and_accepts_missing_fields(self) -> None:
@@ -31,6 +33,7 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         tool_call = restored.session.agents[AgentKey.MAIN].history[2]
         self.assertIsInstance(tool_call, ToolCallRecord)
         self.assertEqual("tool summary", tool_call.thinking)
+        self.assertEqual("Searching", tool_call.content)
 
         del payload["agents"]["main"]["history"][1]["thinking"]
         restored_without_thinking = codec.decode(payload)
@@ -80,12 +83,16 @@ class SessionSnapshotCodecTests(unittest.TestCase):
 
 
 def _snapshot(*, phase: RuntimePhase = RuntimePhase.READY, tool_thinking: bool = False) -> SessionSnapshot:
+    plan = Plan(
+        "plan-1",
+        (PlanItem("item-1", "step", PlanStatus.IN_PROGRESS),),
+    )
     history = [
-        MessageRecord("event-1", Role.USER, "hello", _now(), "turn-1"),
-        MessageRecord("event-2", Role.ASSISTANT, "answer", _now(), "turn-1", "summary"),
+        MessageRecord("event-1", Role.USER, "hello", _now(), "turn-1", plan=plan),
+        MessageRecord("event-2", Role.ASSISTANT, "answer", _now(), "turn-1", "summary", plan),
     ]
     if tool_thinking:
-        history.append(ToolCallRecord("event-3", "call-1", "search", {}, _now(), "turn-1", "tool summary"))
+        history.append(ToolCallRecord("event-3", "call-1", "search", {}, _now(), "turn-1", "tool summary", plan, "Searching"))
     session = SessionState(
         session_id="session-1",
         active_agent=AgentKey.MAIN,

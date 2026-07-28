@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import replace
+import json
 from pathlib import Path
 import tempfile
 from threading import enumerate as enumerate_threads
@@ -116,8 +117,8 @@ class BootstrapTests(unittest.TestCase):
             _settings(),
             llm=_FakeLlm(
                 [
-                    '{"content": "", "tool_call": {"name": "get_current_datetime"}}',
-                    '{"content": "done", "thinking": "done"}',
+                    _tool_call("get_current_datetime"),
+                    _finish("done", "done"),
                 ]
             ),
         )
@@ -411,11 +412,19 @@ class BootstrapTests(unittest.TestCase):
     def test_resume_handoff_prompt_temperatures_and_snapshot_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             main_llm = _FakeLlm([
-                '{"content":"","thinking":"delegate","tool_call":{"name":"switch_to_subagent","arguments":{"agent_name":"resume","context":"Tailor the resume"}}}',
-                '{"content":"main complete","thinking":"done"}',
+                _tool_call(
+                    "switch_to_subagent",
+                    {"agent_name": "resume", "context": "Tailor the resume"},
+                    thinking="delegate",
+                ),
+                _finish("main complete", "done"),
             ])
             resume_llm = _FakeLlm(
-                '{"content":"","thinking":"return","tool_call":{"name":"switch_to_mainagent","arguments":{"summary":"resume complete"}}}'
+                _tool_call(
+                    "switch_to_mainagent",
+                    {"summary": "resume complete"},
+                    thinking="return",
+                )
             )
             application = build_application(
                 _settings(sessions_dir=Path(temporary)),
@@ -493,7 +502,11 @@ class BootstrapTests(unittest.TestCase):
         application = self._build_application(
             _settings(),
             llm=_FakeLlm(
-                '{"content":"","thinking":"delegate","tool_call":{"name":"switch_to_subagent","arguments":{"agent_name":"resume"}}}'
+                _tool_call(
+                    "switch_to_subagent",
+                    {"agent_name": "resume"},
+                    thinking="delegate",
+                )
             ),
         )
 
@@ -594,7 +607,7 @@ class _FakeLlm:
         response = self._responses.pop(0)
         if response.startswith("{"):
             return LLMResult(content=response)
-        return LLMResult(content=f'{{"content": "{response}", "thinking": "summary"}}')
+        return LLMResult(content=_finish(response, "summary"))
 
     def close(self) -> None:
         self.closed = True
@@ -605,3 +618,31 @@ def _pump(application, command) -> list[object]:
     while isinstance(events[-1], (Progress, ToolStarted, ToolFinished)):
         events.append(application.handle(Continue()))
     return events
+
+
+def _finish(message: str, thinking: str) -> str:
+    return json.dumps(
+        {
+            "event_type": "finish",
+            "message": message,
+            "thinking": thinking,
+        },
+        ensure_ascii=False,
+    )
+
+
+def _tool_call(
+    name: str,
+    arguments: dict[str, object] | None = None,
+    *,
+    thinking: str | None = None,
+) -> str:
+    payload: dict[str, object] = {
+        "event_type": "tool_call",
+        "message": "",
+        "tool": name,
+        "event_payload": arguments or {},
+    }
+    if thinking is not None:
+        payload["thinking"] = thinking
+    return json.dumps(payload, ensure_ascii=False)

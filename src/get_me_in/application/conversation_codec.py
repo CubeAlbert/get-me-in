@@ -10,6 +10,7 @@ from src.get_me_in.domain.messages import (
     ToolCallRecord,
     ToolResultRecord,
 )
+from src.get_me_in.domain.plans import Plan, PlanStatus
 from src.get_me_in.ports.llm import LLMMessage
 
 
@@ -43,20 +44,20 @@ class ConversationCodec:
                 "tool": None,
                 "tool_call_id": None,
                 "event_payload": None,
-                "plan_status": None,
+                "plan_status": _plan_status(record.plan),
             }
             role = record.role
         elif isinstance(record, ToolCallRecord):
             payload = {
-                "id": record.call_id,
+                "id": record.event_id,
                 "role": Role.ASSISTANT.value,
                 "timestamp": record.timestamp.isoformat(),
                 "event_type": "tool_call",
-                "message": "",
+                "message": record.content,
                 "tool": record.tool_name,
-                "tool_call_id": None,
+                "tool_call_id": record.call_id,
                 "event_payload": dict(record.arguments),
-                "plan_status": None,
+                "plan_status": _plan_status(record.plan),
             }
             role = Role.ASSISTANT
         else:
@@ -73,7 +74,30 @@ class ConversationCodec:
                 "tool": record.tool_name,
                 "tool_call_id": record.call_id,
                 "event_payload": event_payload,
-                "plan_status": None,
+                "plan_status": _plan_status(record.plan),
             }
             role = Role.USER
         return LLMMessage(role, json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+def _plan_status(plan: Plan | None) -> dict[str, object] | None:
+    if plan is None:
+        return None
+    current: str | None = None
+    completed: list[str] = []
+    remaining: list[str] = []
+    for index, item in enumerate(plan.items):
+        label = f"{index}|{item.description}"
+        if item.status is PlanStatus.IN_PROGRESS:
+            current = label
+        elif item.status is PlanStatus.COMPLETED:
+            completed.append(label)
+        elif item.status is PlanStatus.PENDING:
+            remaining.append(label)
+    if current is None and not remaining:
+        return None
+    return {
+        "current": current,
+        "completed": completed,
+        "remaining": remaining,
+    }

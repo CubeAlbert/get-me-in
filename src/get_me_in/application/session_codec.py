@@ -162,13 +162,20 @@ class SessionSnapshotCodec:
             payload = {**base, "kind": "message", "role": record.role.value, "content": record.content}
             if record.role is Role.ASSISTANT and record.thinking is not None:
                 payload["thinking"] = record.thinking
+            if record.plan is not None:
+                payload["plan"] = SessionSnapshotCodec._encode_plan(record.plan)
             return payload
         if isinstance(record, ToolCallRecord):
-            payload = {**base, "kind": "tool_call", "call_id": record.call_id, "tool_name": record.tool_name, "arguments": dict(record.arguments)}
+            payload = {**base, "kind": "tool_call", "call_id": record.call_id, "tool_name": record.tool_name, "arguments": dict(record.arguments), "content": record.content}
             if record.thinking is not None:
                 payload["thinking"] = record.thinking
+            if record.plan is not None:
+                payload["plan"] = SessionSnapshotCodec._encode_plan(record.plan)
             return payload
-        return {**base, "kind": "tool_result", "call_id": record.call_id, "tool_name": record.tool_name, "output": record.output}
+        payload = {**base, "kind": "tool_result", "call_id": record.call_id, "tool_name": record.tool_name, "output": record.output}
+        if record.plan is not None:
+            payload["plan"] = SessionSnapshotCodec._encode_plan(record.plan)
+        return payload
 
     @staticmethod
     def _decode_record(payload: Mapping[str, object]) -> MessageRecord | ToolCallRecord | ToolResultRecord:
@@ -179,11 +186,11 @@ class SessionSnapshotCodec:
             thinking = _optional_thinking(payload) if role is Role.ASSISTANT else None
             if role is not Role.ASSISTANT and "thinking" in payload:
                 raise ValueError("Only assistant messages may contain thinking")
-            return MessageRecord(common[0], role, _text(payload["content"], "content"), common[1], common[2], thinking)
+            return MessageRecord(common[0], role, _text(payload["content"], "content"), common[1], common[2], thinking, SessionSnapshotCodec._decode_plan(payload.get("plan")))
         if kind == "tool_call":
-            return ToolCallRecord(common[0], _text(payload["call_id"], "call_id"), _text(payload["tool_name"], "tool_name"), _mapping(payload["arguments"], "arguments"), common[1], common[2], _optional_thinking(payload))
+            return ToolCallRecord(common[0], _text(payload["call_id"], "call_id"), _text(payload["tool_name"], "tool_name"), _mapping(payload["arguments"], "arguments"), common[1], common[2], _optional_thinking(payload), SessionSnapshotCodec._decode_plan(payload.get("plan")), _string(payload.get("content", ""), "content"))
         if kind == "tool_result":
-            return ToolResultRecord(common[0], _text(payload["call_id"], "call_id"), _text(payload["tool_name"], "tool_name"), payload["output"], common[1], common[2])
+            return ToolResultRecord(common[0], _text(payload["call_id"], "call_id"), _text(payload["tool_name"], "tool_name"), payload["output"], common[1], common[2], SessionSnapshotCodec._decode_plan(payload.get("plan")))
         raise ValueError(f"Unknown conversation record kind: {kind}")
 
     @staticmethod
@@ -223,6 +230,12 @@ def _sequence(value: object, label: str) -> list[object]:
 def _text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise TypeError(f"{label} must be a non-empty string")
+    return value
+
+
+def _string(value: object, label: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{label} must be a string")
     return value
 
 

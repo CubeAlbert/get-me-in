@@ -475,6 +475,19 @@
 - ✅ Main 的 Name、Description、7 条 Responsibilities、PrimaryGoal、5 条 SuccessCriteria、5 条 Priorities、10 条 HardConstraints、4 条 SoftConstraints 按 legacy 原始语义和列表前缀恢复；过时的 `switch_agent` 标识符适配为当前真实工具名 `switch_to_subagent`。
 - ✅ Resume 的 Name、Description、5 条 Responsibilities、PrimaryGoal、4 条 SuccessCriteria、5 条 Priorities、7 条 legacy HardConstraints、4 条 SoftConstraints 恢复；额外保留“不得编造/夸大经历”和“不得调度其他子 Agent”两项 v2 强化硬约束，共 9 条。
 - ✅ Agent metadata 修复的 32 项 bootstrap/Prompt/Catalog/orchestration 回归、完整 237 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `AGENT_METADATA_SMOKE_OK main_chars=13159 resume_chars=20806 agents=2 tools=25`，确认恢复内容实际进入 Main／Resume system prompt，且未重新引入旧 `switch_agent` 标识符。
+- ✅ 定位偶发 model reply warning：模型返回了 InputFormat 风格的完整历史消息 envelope，在 `event_type=finish` 时遗漏 OutputFormat 必填的字符串 `thinking`；一次格式修复虽能恢复，但增加模型调用和延迟。
+- ✅ 模型输出协议收敛为 `event_type/message/thinking/tool/event_payload` 五类业务字段；`id/role/timestamp/tool_call_id/plan_status` 明确由 Runtime 生成。解析器移除 `content + nested tool_call` 隐式兼容，按事件类型严格验证必需业务字段、类型和 finish/tool_call 条件组合。
+- ✅ PromptRenderer 不再仅依赖文件名字典序：保留其他模板既有顺序，但将 `07_output_format.md` 显式置于完整 system prompt 最后；OutputFormat 增加 Input/Output 区别、完整 finish/tool_call 示例和内部字段禁用说明。
+- ✅ 修正 conversation tool-call correlation：tool_call 历史使用 `id=event_id`、`tool_call_id=call_id`，对应 tool result 复用相同 `tool_call_id`；Runtime 生成的 record 保存当时 Plan 快照，ConversationCodec 投影 `{current, completed, remaining}`，SessionSnapshotCodec 对缺失 record plan 保持向后兼容。
+- ✅ 用户复审后将多余字段策略改为允许列表投影：`id/role/timestamp/tool_call_id/plan_status` 和任意未知顶层字段均直接忽略，Runtime 重新生成可信内部值，不为可安全丢弃的信息消耗 repair 调用；业务字段错误仍沿用一次修复边界。
+- ✅ 调整后的 62 项 Parser/Prompt/Conversation/Session/Runtime/bootstrap 定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `OUTPUT_PROJECTION_SMOKE_OK chars=12825 tools=25`，确认末尾 OutputFormat 与忽略／重建规则可见。
+- ✅ 定位工具结果后偶发纯文本回复：09:39:42 Resume call 3 完全未输出 JSON，Runtime 正确 repair 并在 call 4 恢复，但增加一次 provider 调用和约 45 秒延迟；v2 OpenAILLMAdapter 相比 legacy 丢失 `response_format={"type":"json_object"}` 是直接回归。
+- ✅ OpenAILLMAdapter 对所有 completion 恢复 provider JSON object mode；当前调用方只有要求 JSON 对象的 AgentRuntime 与 MemoryExtractor，OpenAIWebSearchAdapter 保持独立协议。保留 Prompt OutputFormat、内部 Parser 和一次 repair 三层边界。
+- ✅ provider JSON mode 的 49 项 OpenAI adapter/Runtime/Memory/bootstrap 定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 Pro 模型输出 `PROVIDER_JSON_MODE_SMOKE_OK keys=['ok']`，确认当前 provider 接受 json_object 并返回可解析对象。
+- ✅ 确认 v2 ModelReplyParser 曾只使用 `json.loads`，`json-repair` 虽仍在依赖中但仅被 legacy `src/message.py` 使用；任何 JSON 语法错误都会触发额外模型调用，属于迁移遗漏。
+- ✅ v2 在既有模型修复前增加本地 JSON 语法修复：标准 `json.loads` 失败后调用 `json_repair.loads`；尾逗号、物理换行等修复结果仍须为 object 并继续完整业务校验，成功时不增加模型调用。
+- ✅ 保持严格输出契约：纯文本、JSON string／array、缺少 finish string thinking、错误业务字段类型或 finish/tool 冲突均不得归一化；本地 repair 失败或语义校验失败时，AgentRuntime 注入具体错误与 canonical OutputFormat 并只允许模型自修一次，第二次仍失败返回 `invalid_model_reply`。`repair_attempted` 继续承担运行时重试边界和 snapshot 持久化职责。
+- ✅ 本地 repair／单次模型自修边界的 61 项 Parser/Runtime/provider/bootstrap/snapshot 定向测试与完整 244 项自动化测试通过；`compileall` 与 `git diff --check` 通过。
 - ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。

@@ -1,6 +1,7 @@
 """Tests for the pull-driven typed agent runtime."""
 
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -34,7 +35,7 @@ from src.get_me_in.tools.plan import build_plan_tools
 
 class RuntimeTests(unittest.TestCase):
     def test_user_message_completes_and_never_replays_thinking(self) -> None:
-        runtime, llm, temporary_dir = _runtime(['{"content": "answer", "thinking": "private"}'])
+        runtime, llm, temporary_dir = _runtime([_finish("answer", "private")])
         self.addCleanup(temporary_dir.cleanup)
 
         events = _pump(runtime, UserMessage("question"))
@@ -44,21 +45,63 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("private", events[-1].message.thinking)
         self.assertFalse(any("private" in item.content for item in llm.requests[0].messages))
 
-    def test_invalid_reply_is_repaired_once(self) -> None:
-        runtime, llm, temporary_dir = _runtime(["broken", '{"content": "repaired", "thinking": "fixed"}'])
+    def test_plain_text_reply_uses_one_model_repair_after_local_repair_fails(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            ["plain **markdown** answer", _finish("repaired", "summary")]
+        )
         self.addCleanup(temporary_dir.cleanup)
 
         events = _pump(runtime, UserMessage("question"))
 
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual(2, len(llm.requests))
+        self.assertEqual("repaired", events[-1].message.content)
         repair_message = llm.requests[1].messages[-1]
         self.assertEqual("system", repair_message.role.value)
-        self.assertIn("Model response is not valid JSON", repair_message.content)
+        self.assertIn("Model response must be a JSON object", repair_message.content)
         self.assertIn("<OutputFormat>canonical contract</OutputFormat>", repair_message.content)
 
+    def test_malformed_json_is_repaired_locally_without_another_model_call(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            ['{"event_type":"finish","message":"answer","thinking":"",}']
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("question"))
+
+        self.assertIsInstance(events[-1], Completed)
+        self.assertEqual(1, len(llm.requests))
+        self.assertEqual("answer", events[-1].message.content)
+
+    def test_extra_model_fields_are_ignored_without_format_repair(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            [
+                json.dumps(
+                    {
+                        "id": "untrusted",
+                        "role": "user",
+                        "timestamp": "wrong",
+                        "tool_call_id": "untrusted-call",
+                        "plan_status": {"current": "wrong"},
+                        "unknown": "ignored",
+                        "event_type": "finish",
+                        "message": "answer",
+                        "thinking": "summary",
+                    }
+                )
+            ]
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("question"))
+
+        self.assertIsInstance(events[-1], Completed)
+        self.assertEqual(1, len(llm.requests))
+        self.assertNotEqual("untrusted", events[-1].message.event_id)
+        self.assertEqual("answer", events[-1].message.content)
+
     def test_finish_allows_empty_thinking(self) -> None:
-        runtime, _, temporary_dir = _runtime(['{"content": "answer", "thinking": ""}'])
+        runtime, _, temporary_dir = _runtime([_finish("answer", "")])
         self.addCleanup(temporary_dir.cleanup)
 
         events = _pump(runtime, UserMessage("question"))
@@ -66,17 +109,35 @@ class RuntimeTests(unittest.TestCase):
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual("", events[-1].message.thinking)
 
-    def test_invalid_reply_after_repair_fails(self) -> None:
-        runtime, _, temporary_dir = _runtime(["broken", "still broken"])
+    def test_unrecoverable_reply_fails_after_one_model_repair(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            ['["ambiguous", "structure"]', '["still", "ambiguous"]']
+        )
         self.addCleanup(temporary_dir.cleanup)
 
         events = _pump(runtime, UserMessage("question"))
 
         self.assertEqual("invalid_model_reply", events[-1].code)
+        self.assertEqual(2, len(llm.requests))
+
+    def test_semantic_error_uses_model_repair_without_local_default(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            [
+                '{"event_type":"finish","message":"missing thinking"}',
+                _finish("repaired", "summary"),
+            ]
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("question"))
+
+        self.assertIsInstance(events[-1], Completed)
+        self.assertEqual(2, len(llm.requests))
+        self.assertEqual("repaired", events[-1].message.content)
 
     def test_unknown_tool_returns_structured_result_to_model(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "missing"}}', '{"content": "recovered", "thinking": "fixed"}'],
+            [_tool_call("missing"), _finish("recovered", "fixed")],
             definitions=(_tool("other"),),
         )
         self.addCleanup(temporary_dir.cleanup)
@@ -90,9 +151,9 @@ class RuntimeTests(unittest.TestCase):
     def test_multiple_tools_can_run_in_one_user_request(self) -> None:
         runtime, _, temporary_dir = _runtime(
             [
-                '{"content": "", "tool_call": {"name": "first"}}',
-                '{"content": "", "tool_call": {"name": "second"}}',
-                '{"content": "done", "thinking": "done"}',
+                _tool_call("first"),
+                _tool_call("second"),
+                _finish("done", "done"),
             ],
             definitions=(_tool("first"), _tool("second")),
         )
@@ -104,10 +165,14 @@ class RuntimeTests(unittest.TestCase):
         self.assertIsInstance(events[-1], Completed)
 
     def test_tool_events_expose_arguments_and_plan_projection(self) -> None:
-        runtime, _, temporary_dir = _runtime(
+        runtime, llm, temporary_dir = _runtime(
             [
-                '{"content": "", "thinking": "planning", "tool_call": {"name": "create_plan", "arguments": {"items": ["查询广州", "查询杭州"]}}}',
-                '{"content": "done", "thinking": "done"}',
+                _tool_call(
+                    "create_plan",
+                    {"items": ["查询广州", "查询杭州"]},
+                    thinking="planning",
+                ),
+                _finish("done", "done"),
             ],
             definitions=build_plan_tools(),
         )
@@ -121,14 +186,23 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("planning", started.thinking)
         self.assertIsNotNone(finished.plan)
         self.assertEqual("查询广州", finished.plan.items[0].description)
+        tool_result = json.loads(llm.requests[1].messages[-1].content)
+        self.assertEqual(
+            {
+                "current": "0|查询广州",
+                "completed": [],
+                "remaining": ["1|查询杭州"],
+            },
+            tool_result["plan_status"],
+        )
 
     def test_approval_and_rejection_close_the_matching_call(self) -> None:
         approved_runtime, _, approved_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done", "thinking": "done"}'],
+            [_tool_call("delete"), _finish("done", "done")],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
         rejected_runtime, rejected_llm, rejected_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "declined", "thinking": "declined"}'],
+            [_tool_call("delete"), _finish("declined", "declined")],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
         self.addCleanup(approved_dir.cleanup)
@@ -147,7 +221,13 @@ class RuntimeTests(unittest.TestCase):
 
     def test_selection_resumes_with_selected_value(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "provide_choices", "arguments": {"question": "pick", "choices": ["a", "b"]}}}', '{"content": "selected", "thinking": "selected"}'],
+            [
+                _tool_call(
+                    "provide_choices",
+                    {"question": "pick", "choices": ["a", "b"]},
+                ),
+                _finish("selected", "selected"),
+            ],
             definitions=build_switch_tools(),
         )
         self.addCleanup(temporary_dir.cleanup)
@@ -160,7 +240,12 @@ class RuntimeTests(unittest.TestCase):
 
     def test_handoff_preserves_call_id_and_waits_for_orchestrator(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "switch_to_subagent", "arguments": {"agent_name": "resume", "context": "resume help"}}}'],
+            [
+                _tool_call(
+                    "switch_to_subagent",
+                    {"agent_name": "resume", "context": "resume help"},
+                )
+            ],
             definitions=build_switch_tools(),
         )
         self.addCleanup(temporary_dir.cleanup)
@@ -175,7 +260,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_cancel_closes_pending_tool_before_cancelled_notice(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "delete"}}'],
+            [_tool_call("delete")],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
         self.addCleanup(temporary_dir.cleanup)
@@ -191,7 +276,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_wrong_call_id_and_new_message_do_not_mutate_pending_state(self) -> None:
         runtime, _, temporary_dir = _runtime(
-            ['{"content": "", "tool_call": {"name": "delete"}}', '{"content": "done", "thinking": "done"}'],
+            [_tool_call("delete"), _finish("done", "done")],
             definitions=(_tool("delete", confirmation=ConfirmationMode.ALWAYS),),
         )
         self.addCleanup(temporary_dir.cleanup)
@@ -214,8 +299,8 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("provider_failure", _pump(failure_runtime, UserMessage("q"))[-1].code)
         self.assertIsInstance(_pump(cancel_runtime, UserMessage("q"))[-1], Cancelled)
 
-    def test_format_repair_respects_model_call_limit(self) -> None:
-        runtime, _, temporary_dir = _runtime(["broken"], max_model_calls=1)
+    def test_model_repair_respects_model_call_limit(self) -> None:
+        runtime, _, temporary_dir = _runtime(["plain text"], max_model_calls=1)
         self.addCleanup(temporary_dir.cleanup)
 
         events = _pump(runtime, UserMessage("question"))
@@ -223,7 +308,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("max_model_calls_exceeded", events[-1].code)
 
     def test_configured_timeout_is_forwarded_to_llm(self) -> None:
-        runtime, llm, temporary_dir = _runtime(['{"content": "ok", "thinking": "ok"}'], timeout_seconds=17)
+        runtime, llm, temporary_dir = _runtime([_finish("ok", "ok")], timeout_seconds=17)
         self.addCleanup(temporary_dir.cleanup)
 
         _pump(runtime, UserMessage("question"))
@@ -231,7 +316,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(17, llm.requests[0].timeout_seconds)
 
     def test_agent_spec_temperature_is_forwarded_to_llm(self) -> None:
-        runtime, llm, temporary_dir = _runtime(['{"content": "ok", "thinking": "ok"}'])
+        runtime, llm, temporary_dir = _runtime([_finish("ok", "ok")])
         self.addCleanup(temporary_dir.cleanup)
 
         _pump(runtime, UserMessage("question"))
@@ -242,8 +327,8 @@ class RuntimeTests(unittest.TestCase):
         observed_session_ids: list[str] = []
         runtime, _, temporary_dir = _runtime(
             [
-                '{"content": "", "tool_call": {"name": "inspect"}}',
-                '{"content": "done", "thinking": "done"}',
+                _tool_call("inspect"),
+                _finish("done", "done"),
             ],
             definitions=(_tool("inspect", handler=lambda arguments, context: observed_session_ids.append(context.session_id) or ToolSuccess("ok")),),
         )
@@ -352,7 +437,35 @@ class _FakeLlm:
 
 def _cancel_during_completion(cancellation: CancellationSignal) -> str:
     cancellation.cancel()
-    return '{"content": "discarded", "thinking": "discarded"}'
+    return _finish("discarded", "discarded")
+
+
+def _finish(message: str, thinking: str) -> str:
+    return json.dumps(
+        {
+            "event_type": "finish",
+            "message": message,
+            "thinking": thinking,
+        },
+        ensure_ascii=False,
+    )
+
+
+def _tool_call(
+    name: str,
+    arguments: dict[str, object] | None = None,
+    *,
+    thinking: str | None = None,
+) -> str:
+    payload: dict[str, object] = {
+        "event_type": "tool_call",
+        "message": "",
+        "tool": name,
+        "event_payload": arguments or {},
+    }
+    if thinking is not None:
+        payload["thinking"] = thinking
+    return json.dumps(payload, ensure_ascii=False)
 
 
 class _Clock:

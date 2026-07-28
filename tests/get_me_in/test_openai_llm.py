@@ -27,6 +27,10 @@ class OpenAILLMAdapterTests(unittest.TestCase):
         adapter.complete(_request(), CancellationToken())
 
         self.assertEqual({"thinking": {"type": "disabled"}}, client.create_kwargs["extra_body"])
+        self.assertEqual(
+            {"type": "json_object"},
+            client.create_kwargs["response_format"],
+        )
         self.assertEqual(1, client.close_calls)
         self.assertEqual([{"role": "user", "content": "hello"}], client.create_kwargs["messages"])
 

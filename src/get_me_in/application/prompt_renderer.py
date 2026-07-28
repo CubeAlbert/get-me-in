@@ -25,7 +25,9 @@ class UnexpectedPromptVariableError(PromptTemplateError):
 
 
 class PromptRenderer:
-    """Renders sorted ``general_agent`` templates from an immutable AgentSpec."""
+    """Render deterministic templates with the output contract placed last."""
+
+    _OUTPUT_TEMPLATE = "07_output_format.md"
 
     _ALLOWED_VARIABLES = frozenset(
         {
@@ -62,6 +64,10 @@ class PromptRenderer:
             raise FileNotFoundError(
                 f"No prompt templates found in {self._general_agent_dir}"
             )
+        files = [
+            *(path for path in files if path.name != self._OUTPUT_TEMPLATE),
+            *(path for path in files if path.name == self._OUTPUT_TEMPLATE),
+        ]
         template = "\n".join(path.read_text(encoding="utf-8") for path in files)
         placeholders = set(_PLACEHOLDER_RE.findall(template))
         unexpected = placeholders - self._ALLOWED_VARIABLES

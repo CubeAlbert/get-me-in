@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。Tool 提示词语义阻断已解除；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner。决策 195～199 已恢复 Tool 完整语义、legacy XML Tool/SubAgent prompt、Main-only 子 Agent 可见性和完整 CommunicationStyle。决策 200 进一步闭合剩余 Agent prompt 元数据迁移缺失：Main／Resume 的 Name、Description、Responsibilities、PrimaryGoal、SuccessCriteria、Priorities、HardConstraints、SoftConstraints 已恢复 legacy 原始语义与列表格式，并将过时的 `switch_agent` 适配为当前 `switch_to_subagent`；Resume 额外保留“不得编造/夸大经历”和“不得调度其他子 Agent”两项 v2 强化硬约束。相关 32 项回归、完整 237 项自动化测试、`compileall` 与 `git diff --check` 已通过；真实 composition 输出 `AGENT_METADATA_SMOKE_OK main_chars=13159 resume_chars=20806 agents=2 tools=25`。当前 production Catalog 仍有且仅有 Main／Resume，完整 Job Search 按 R0～R8 冻结范围未装配；prompt 修复不恢复旧全局 Registry，也不改变 v2 capability、审批、handler、ToolOutcome 或 handoff 协议。剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行；未经用户审查不得进入 R8-D。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、观察期文档和欢迎 banner。决策 195～200 已恢复 Tool／SubAgent XML、完整 CommunicationStyle 和 Main／Resume Agent 元数据。决策 201 收敛模型输出协议并由 Runtime 生成可信内部字段；决策 202 将多余顶层字段改为允许列表投影；决策 203 恢复 provider `json_object` 约束。决策 204 在既有单次模型修复前增加 v2 本地 `json_repair`：标准解析失败时先修复常见语法瑕疵，修复结果仍须为 JSON object 并通过完整业务校验；成功则不增加模型调用。本地修复失败或语义校验失败（包括纯文本、非对象结构、finish 缺少 string thinking）时，Runtime 注入 canonical OutputFormat 并允许模型自修一次，第二次仍失败才返回 `invalid_model_reply`。相关 61 项定向测试与完整 244 项自动化测试、`compileall`、`git diff --check` 均已通过。当前 production Catalog 仍有且仅有 Main／Resume，完整 Job Search 按 R0～R8 冻结范围未装配；剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行，未经用户审查不得进入 R8-D。
 
 **下一步：** 从根入口完成剩余 CLI／交互、Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
@@ -39,6 +39,10 @@
 198. **恢复 SubAgent XML prompt 并限定路由可见性** — Main 以 `<SubAgent name>`、`Name`、`Description`、`Responsibilities`、`HardConstraints` 的固定顺序看见可路由子 Agent；非 Route Agent 不注入列表。JobSearchAgent 仍是冻结的 legacy 测试壳，本次不扩展 production Catalog。
 199. **恢复 Main／Resume 完整 CommunicationStyle** — v2 首次迁移缩写了 Tone／Verbosity／ExplanationStyle，并遗漏全部 StyleRules／StyleAvoids；现按 legacy 原始定义逐项恢复到 immutable AgentStyle，由 PromptRenderer 继续统一注入五个既有区块。
 200. **恢复 Main／Resume 剩余 Agent prompt 元数据** — Role、Mission、Constraints 的动态字段按 legacy 原始语义与列表格式恢复；Resume 在 legacy 基线上追加两项 v2 强化硬约束，静态模板和所有运行时边界不变。
+201. **收敛模型输出协议并由 Runtime 填充内部事件字段** — 模型只需输出最小业务字段，OutputFormat 固定为 system prompt 最后一节并明确区分 InputFormat；解析器移除双协议兼容并验证业务字段与条件组合。Runtime 生成事件／调用链 UUID、role、timestamp 与 plan_status，历史工具调用使用 `id=event_id`、`tool_call_id=call_id`，record 级 Plan 快照向后兼容持久化。
+202. **多余模型字段采用允许列表投影而非格式修复** — 决策 201 中“内部／未知字段触发 repair”的部分被替代；Parser 忽略未消费的顶层字段，Runtime 始终重建可信内部字段。必需业务字段、类型与 finish/tool_call 条件仍严格验证。
+203. **恢复 v2 provider JSON mode** — OpenAILLMAdapter 对所有 completion 显式发送 `response_format={"type":"json_object"}`，恢复 legacy provider 约束；AgentRuntime 与 MemoryExtractor 的输出均为 JSON 对象，Web Search 独立 adapter 不变，一次格式 repair 继续作为异常兜底。
+204. **在单次模型修复前增加本地 JSON repair** — ModelReplyParser 在 `json.loads` 语法失败后调用 `json_repair.loads`，但修复结果仍必须是 JSON object 并通过严格业务校验；纯文本、JSON string／array、缺少 finish thinking 或其他语义错误不得本地归一化。本地修复失败或语义校验失败时沿用决策 172/203 的一次模型 repair，第二次仍失败才返回 typed failure。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 

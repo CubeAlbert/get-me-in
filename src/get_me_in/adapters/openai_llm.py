@@ -49,6 +49,7 @@ class OpenAILLMAdapter(LLMPort):
                     for message in request.messages
                 ],
                 "timeout": request.timeout_seconds,
+                "response_format": {"type": "json_object"},
             }
             if request.temperature is not None:
                 create_kwargs["temperature"] = request.temperature

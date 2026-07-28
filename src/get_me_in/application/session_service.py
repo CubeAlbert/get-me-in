@@ -173,6 +173,7 @@ class SessionService:
                     output={"code": "cancelled", "message": "Interrupted before snapshot"},
                     timestamp=self._clock.now(),
                     turn_id=state.turn_id,
+                    plan=state.plan,
                 ))
             agents[key] = replace(
                 state,
