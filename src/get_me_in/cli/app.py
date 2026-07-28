@@ -8,6 +8,7 @@ from src.get_me_in.application.events import (
     Completed,
     Failed,
     HandoffRequested,
+    Paused,
     Progress,
     RuntimeEvent,
     SelectionRequested,
@@ -110,7 +111,7 @@ class CliApp:
                 )
                 event = self._worker.run(command)
                 continue
-            if isinstance(event, (Completed, Failed, Cancelled)):
+            if isinstance(event, (Completed, Failed, Paused, Cancelled)):
                 self._snapshot_after_terminal_event()
                 return
             raise TypeError(f"Unsupported RuntimeEvent: {type(event).__name__}")

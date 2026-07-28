@@ -98,7 +98,7 @@ class Orchestrator:
         runtime = self._runtimes[frame.source]
         transition = runtime.advance(
             session.agents[frame.source],
-            FailHandoff(frame.call_id, code, message),
+            FailHandoff(frame.call_id, code, message, terminal=isinstance(event, Failed)),
             session_id=session.session_id,
         )
         session = self._replace_agent(session, frame.source, transition.state)

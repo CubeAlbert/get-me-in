@@ -19,7 +19,7 @@ from src.get_me_in.cli.commands import (
 )
 from src.get_me_in.cli.input import InputController
 from src.get_me_in.cli.renderer import Renderer
-from src.get_me_in.application.events import Completed, Failed, ToolFinished, ToolStarted
+from src.get_me_in.application.events import Completed, Failed, Paused, ToolFinished, ToolStarted
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
@@ -204,10 +204,12 @@ class RendererTests(unittest.TestCase):
 
         self.assertIsNone(renderer.render_event(Completed(message)))
         self.assertIsNone(renderer.render_event(Failed("bad", "problem")))
+        self.assertIsNone(renderer.render_event(Paused("invalid_model_reply", "paused")))
 
         text = output.getvalue()
         self.assertIn("done", text)
         self.assertIn("bad: problem", text)
+        self.assertIn("当前 Agent 已暂停", text)
 
     def test_renders_redacted_arguments_result_preview_and_plan_projection(self) -> None:
         output = StringIO()

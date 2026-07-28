@@ -154,6 +154,7 @@ class SessionService:
             RuntimePhase.WAITING_FOR_APPROVAL,
             RuntimePhase.WAITING_FOR_SELECTION,
             RuntimePhase.WAITING_FOR_HANDOFF,
+            RuntimePhase.WAITING_FOR_USER,
             RuntimePhase.COMPLETED,
             RuntimePhase.CANCELLED,
             RuntimePhase.FAILED,

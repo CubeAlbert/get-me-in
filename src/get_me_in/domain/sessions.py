@@ -19,6 +19,7 @@ class RuntimePhase(StrEnum):
     WAITING_FOR_APPROVAL = "waiting_for_approval"
     WAITING_FOR_SELECTION = "waiting_for_selection"
     WAITING_FOR_HANDOFF = "waiting_for_handoff"
+    WAITING_FOR_USER = "waiting_for_user"
     CANCELLED_NOTICE = "cancelled_notice"
     COMPLETED = "completed"
     CANCELLED = "cancelled"

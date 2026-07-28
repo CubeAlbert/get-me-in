@@ -26,6 +26,7 @@ from src.get_me_in.application.events import (
     Completed,
     Failed,
     HandoffRequested,
+    Paused,
     Progress,
     RuntimeEvent,
     SelectionRequested,
@@ -164,6 +165,7 @@ class AgentRuntime:
             RuntimePhase.COMPLETED,
             RuntimePhase.CANCELLED,
             RuntimePhase.FAILED,
+            RuntimePhase.WAITING_FOR_USER,
         }:
             return Failed("run_in_progress", "Finish or cancel the active run before sending a new message")
         if not command.text.strip():
@@ -273,17 +275,17 @@ class AgentRuntime:
         except ModelReplyParseError as error:
             logger.warning(
                 "Invalid model reply: agent=%s turn=%s repair_attempted=%s error=%s "
-                "chars=%d preview=%r",
+                "chars=%d raw_reply=%r",
                 self._spec.key.value,
                 self._state.turn_id,
                 self._state.repair_attempted,
                 error,
                 len(result.content),
-                result.content[:500],
+                result.content,
             )
             if self._state.repair_attempted:
-                self._state = replace(self._state, phase=RuntimePhase.FAILED)
-                return Failed(
+                self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_USER)
+                return Paused(
                     "invalid_model_reply",
                     "Model response remained invalid after one repair attempt",
                 )
@@ -508,10 +510,14 @@ class AgentRuntime:
         if failure is not None:
             return failure
         assert self._state.pending_tool is not None
-        return self._finish_tool(
+        result = self._finish_tool(
             self._state.pending_tool,
             {"code": command.code, "message": command.message},
         )
+        if not command.terminal:
+            return result
+        self._state = replace(self._state, phase=RuntimePhase.FAILED)
+        return Failed(command.code, command.message)
 
     def _validate_pending(self, call_id: str, phase: RuntimePhase) -> Failed | None:
         if self._state.phase is not phase:

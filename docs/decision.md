@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 216 — 模型回复解析失败暂停当前 SubAgent，由用户继续](#决策-216--模型回复解析失败暂停当前-subagent-由用户继续)
 - [决策 215 — 模型调用上限默认调整为 100 且 Main／Resume 计数独立](#决策-215--模型调用上限默认调整为-100-且-mainresume-计数独立)
 - [决策 214 — 工具调用未知参数沿用 v1 静默忽略语义](#决策-214--工具调用未知参数沿用-v1-静默忽略语义)
 - [决策 213 — system prompt 顺序只由模板文件名决定](#决策-213--system-prompt-顺序只由模板文件名决定)
@@ -5005,3 +5006,36 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - `git diff --check` 通过。
 - 新增 Settings 默认值断言；Main→Resume→Main 回归确认 Main 使用 2 次模型调用、Resume 使用 1 次且两个状态对象独立。
+
+---
+
+### 决策 216 —— 模型回复解析失败暂停当前 SubAgent，由用户继续
+
+**背景：** R8-O 真实 Resume 对话中，模型第一次回复未满足 `finish.thinking` 契约，Runtime 注入一次 repair 后，第二次回复仍然无法解析。此前 Runtime 返回 `Failed("invalid_model_reply", ...)`，Orchestrator 将所有活动 SubAgent 的 `Failed` 都包装为 `subagent_failed` 并闭合 handoff，导致解析错误被误判为 SubAgent 业务失败。用户明确要求解析失败停在断点，由用户输入继续当前会话。
+
+**决定：**
+
+- 最终一次模型 repair 仍失败时，Runtime 返回独立的 `Paused(code="invalid_model_reply", ...)` 事件，并将当前 Agent 状态置为 `RuntimePhase.WAITING_FOR_USER`；解析失败不再使用 `Failed`。
+- Orchestrator 对 `Paused` 不执行 `FailHandoff`，保留当前 active SubAgent、原 handoff frame、Main 的等待状态和双方会话历史；CLI 将该事件视为当前回合终点并重新读取用户输入。
+- `UserMessage` 在 `WAITING_FOR_USER` 阶段合法，下一条用户消息继续发送给原 active SubAgent，保留当前 Session/handoff 上下文并重新开始该 Agent 的模型 run。
+- provider failure、timeout、取消和其他运行／业务失败仍使用 `Failed`；活动 handoff 下这些失败才闭合原始 call 并返回 Main。
+- `WAITING_FOR_USER` 纳入 session snapshot codec 与 restore safe phase；Renderer 明确提示当前 Agent 已暂停以及下一条用户消息的继续语义。
+- `invalid_model_reply` 的完整原始模型回复继续以 warning 写入 `data/logs/app.log`，不再截断为 preview。
+
+**理由：**
+
+- 模型输出不符合协议是当前回合的可恢复格式问题，不足以证明 SubAgent 业务执行失败；保留 handoff 才能让用户补充消息后继续原任务。
+- 通过显式 `Paused` 与 `WAITING_FOR_USER` 区分暂停和失败，避免 Orchestrator 依赖错误码特判，也避免把恢复路径混入 fatal failure closure。
+- 保留一次 repair 机制，但把第二次失败后的控制权交还用户，既不自动重试模型，也不丢弃当前 Agent 上下文。
+
+**曾考虑的替代方案：**
+
+- 继续把 `invalid_model_reply` 当作 `Failed` 并回 Main —— 会把格式问题错误升级为 SubAgent 失败，拒绝。
+- 解析失败后自动再次调用当前 SubAgent —— 会绕过用户控制并可能消耗模型调用预算，拒绝。
+- 只在 Orchestrator 对 `Failed.code` 做 `invalid_model_reply` 特判 —— 状态仍会显示为 failed，持久化语义不准确，未采用。
+
+**验证：**
+
+- Runtime、Orchestrator、CLI、Renderer、Session codec 相关 68 项测试通过。
+- production bootstrap 相关 20 项测试通过；`git diff --check` 通过。
+- 真实 CLI／完整 R8-O smoke 尚未完成，仍需用户后续观察。

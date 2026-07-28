@@ -8,13 +8,14 @@ import unittest
 
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.application.commands import Approve, Cancel, CancelSelection, Continue, Reject, SubmitSelection, UserMessage
+from src.get_me_in.application.commands import Approve, Cancel, CancelSelection, Continue, FailHandoff, Reject, SubmitSelection, UserMessage
 from src.get_me_in.application.events import (
     ApprovalRequested,
     Cancelled,
     Completed,
     Failed,
     HandoffRequested,
+    Paused,
     Progress,
     SelectionRequested,
     ToolFinished,
@@ -125,6 +126,7 @@ class RuntimeTests(unittest.TestCase):
 
         events = _pump(runtime, UserMessage("question"))
 
+        self.assertIsInstance(events[-1], Paused)
         self.assertEqual("invalid_model_reply", events[-1].code)
         self.assertEqual(2, len(llm.requests))
 
@@ -317,6 +319,47 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(requested.call_id, handoff.call_id)
         self.assertEqual(AgentKey.RESUME, handoff.target)
         self.assertEqual("run_in_progress", runtime.handle(UserMessage("new")).code)
+
+    def test_terminal_handoff_failure_allows_the_next_user_message(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [
+                _tool_call(
+                    "switch_to_subagent",
+                    {"agent_name": "resume", "context": "resume help"},
+                )
+            ],
+            definitions=build_switch_tools(),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        approval = _pump(runtime, UserMessage("question"))[-1]
+        requested = runtime.handle(Approve(approval.call_id))
+        failed = runtime.handle(
+            FailHandoff(
+                requested.call_id,
+                "subagent_failed",
+                "Model response remained invalid after one repair attempt",
+                terminal=True,
+            )
+        )
+
+        self.assertIsInstance(failed, Failed)
+        self.assertEqual("subagent_failed", failed.code)
+        self.assertIsInstance(runtime.handle(UserMessage("new question")), Progress)
+
+    def test_invalid_model_reply_logs_the_complete_raw_message(self) -> None:
+        first_raw = "first invalid response " + ("A" * 700)
+        second_raw = "second invalid response " + ("B" * 700)
+        runtime, _, temporary_dir = _runtime([first_raw, second_raw])
+        self.addCleanup(temporary_dir.cleanup)
+
+        with self.assertLogs("src.get_me_in.application.runtime", level="WARNING") as captured:
+            events = _pump(runtime, UserMessage("question"))
+
+        self.assertEqual("invalid_model_reply", events[-1].code)
+        log_text = "\n".join(captured.output)
+        self.assertIn(repr(first_raw), log_text)
+        self.assertIn(repr(second_raw), log_text)
 
     def test_cancel_closes_pending_tool_before_cancelled_notice(self) -> None:
         runtime, _, temporary_dir = _runtime(

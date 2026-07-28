@@ -67,5 +67,11 @@ class Failed(RuntimeEvent):
 
 
 @dataclass(frozen=True)
+class Paused(RuntimeEvent):
+    code: str
+    message: str
+
+
+@dataclass(frozen=True)
 class Cancelled(RuntimeEvent):
     reason: str

@@ -15,6 +15,7 @@ from src.get_me_in.application.events import (
     Completed,
     Failed,
     HandoffRequested,
+    Paused,
     Progress,
     RuntimeEvent,
     SelectionRequested,
@@ -67,6 +68,9 @@ class Renderer:
             self._console.print(Markdown(event.message.content))
         elif isinstance(event, Failed):
             self.render_error(f"{event.code}: {event.message}")
+        elif isinstance(event, Paused):
+            self.render_notice(f"{event.code}: {event.message}")
+            self.render_notice("当前 Agent 已暂停；请直接输入下一条消息继续当前会话。")
         elif isinstance(event, Cancelled):
             self.render_notice(f"已取消：{event.reason}")
 

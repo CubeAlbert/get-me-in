@@ -60,6 +60,7 @@ class FailHandoff(RuntimeCommand):
     call_id: str
     code: str
     message: str
+    terminal: bool = False
 
 
 @dataclass(frozen=True)
