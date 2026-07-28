@@ -101,7 +101,7 @@ class JsonArtifactRepository:
     def _artifact(raw: dict) -> Artifact:
         if not isinstance(raw, dict) or type(raw.get("schema_version")) is not int or raw["schema_version"] != 1:
             raise ValueError("Unsupported nested artifact schema")
-        return Artifact(1, raw["artifact_id"], raw["session_id"], AgentKey(raw["agent_key"]), ArtifactKind(raw["kind"]), raw["path"], raw["version"], raw["content_hash"], datetime.fromisoformat(raw["created_at"]), raw.get("template_name"))
+        return Artifact(1, raw["artifact_id"], raw["session_id"], AgentKey(raw["agent_key"]), ArtifactKind(raw["kind"]), raw["path"], raw["version"], raw["content_hash"], datetime.fromisoformat(raw["created_at"]), raw.get("template_name"), raw.get("page_count"))
 
     @staticmethod
     def _attempt(raw: dict) -> ArtifactBuildAttempt:
@@ -150,6 +150,14 @@ class JsonArtifactRepository:
                 or any(artifact.kind is not ArtifactKind.PDF for artifact in operation.artifacts)
             ):
                 raise ArtifactRepositoryError("Committed PDF build has invalid results")
+            if operation.kind is ArtifactOperationKind.MERGE_PDFS and (
+                len(operation.artifacts) != 1
+                or operation.artifacts[0].kind is not ArtifactKind.PDF
+                or operation.artifacts[0].path != operation.path
+                or operation.artifacts[0].page_count is None
+                or operation.build_attempts
+            ):
+                raise ArtifactRepositoryError("Committed PDF merge has invalid results")
         if any(
             not isinstance(artifact, Artifact)
             or type(artifact.schema_version) is not int
@@ -165,6 +173,8 @@ class JsonArtifactRepository:
             or not isinstance(artifact.created_at, datetime)
             or artifact.template_name is not None
             and not _non_empty_string(artifact.template_name)
+            or artifact.page_count is not None
+            and (type(artifact.page_count) is not int or artifact.page_count < 0)
             for artifact in operation.artifacts
         ):
             raise ArtifactRepositoryError("Artifact result does not match its operation")
@@ -173,6 +183,10 @@ class JsonArtifactRepository:
             for artifact in operation.artifacts
         ):
             raise ArtifactRepositoryError("Template copy contains an invalid artifact kind")
+        if any(artifact.page_count is not None for artifact in operation.artifacts) and (
+            operation.kind is not ArtifactOperationKind.MERGE_PDFS
+        ):
+            raise ArtifactRepositoryError("Only PDF merge artifacts can contain a page count")
         if any(
             not isinstance(attempt, ArtifactBuildAttempt)
             or type(attempt.schema_version) is not int

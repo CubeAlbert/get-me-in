@@ -11,7 +11,7 @@ from src.get_me_in.application.artifact_service import ArtifactPartialFailure, A
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.artifacts import ArtifactOperation, ArtifactOperationKind, ArtifactOperationStatus
 from src.get_me_in.ports.process import ProcessResult
-from src.get_me_in.ports.resume_artifacts import TemplateCopyResult
+from src.get_me_in.ports.resume_artifacts import PdfMergeResult, TemplateCopyResult
 
 
 class ArtifactServiceTests(unittest.TestCase):
@@ -104,21 +104,66 @@ class ArtifactServiceTests(unittest.TestCase):
         self.assertEqual((None, False, True), (attempts["cancelled.tex"].exit_code, attempts["cancelled.tex"].timed_out, attempts["cancelled.tex"].cancelled))
         self.assertEqual((), tuple(item for item in self.repository.list_artifacts() if item.kind.value == "pdf"))
 
+    def test_merge_records_pdf_metadata_and_replays_without_rewriting(self) -> None:
+        self.workspace.files[Path("first.pdf")] = "first"
+        self.workspace.files[Path("second.pdf")] = "second"
+
+        first = self.service.merge_pdfs(
+            Path("first.pdf"),
+            Path("second.pdf"),
+            Path("combined.pdf"),
+            workspace=self.workspace,
+            session_id="s",
+            agent_key=AgentKey.RESUME,
+        )
+        replay = self.service.merge_pdfs(
+            Path("first.pdf"),
+            Path("second.pdf"),
+            Path("combined.pdf"),
+            workspace=self.workspace,
+            session_id="s",
+            agent_key=AgentKey.RESUME,
+        )
+
+        artifact = self.repository.list_artifacts("combined.pdf")[0]
+        self.assertEqual(first, replay)
+        self.assertEqual(3, artifact.page_count)
+        self.assertEqual(1, self.backend.merge_calls)
+
+    def test_merge_hash_failure_after_write_is_a_partial_failure(self) -> None:
+        self.workspace.files[Path("first.pdf")] = "first"
+        self.workspace.files[Path("second.pdf")] = "second"
+        self.workspace.hash_error = OSError("hash unavailable")
+        self.workspace.hash_error_path = Path("combined.pdf")
+
+        with self.assertRaises(ArtifactPartialFailure) as raised:
+            self.service.merge_pdfs(
+                Path("first.pdf"),
+                Path("second.pdf"),
+                Path("combined.pdf"),
+                workspace=self.workspace,
+                session_id="s",
+                agent_key=AgentKey.RESUME,
+            )
+
+        self.assertEqual((Path("combined.pdf"),), raised.exception.changed_paths)
+        self.assertIn(Path("combined.pdf"), self.workspace.files)
+
 
 class _Workspace:
-    def __init__(self): self.files, self.hash_error = {}, None
+    def __init__(self): self.files, self.hash_error, self.hash_error_path = {}, None, None
     def exists(self, path): return path in self.files
     def read(self, path): return type("Snapshot", (), {"content": self.files[path], "revision": "revision:" + self.files[path]})()
     def write(self, path, content): self.files[path] = content
     def resolve(self, path): return Path("C:/workspace") / path
     def content_hash(self, path):
-        if self.hash_error:
+        if self.hash_error and (self.hash_error_path is None or path == self.hash_error_path):
             raise self.hash_error
         return sha256(self.files[path].encode()).hexdigest()
 
 
 class _Backend:
-    def __init__(self, workspace): self.workspace, self.copy_calls, self.build_calls, self.build_error, self.result = workspace, 0, 0, None, ProcessResult(0, "ok", "")
+    def __init__(self, workspace): self.workspace, self.copy_calls, self.build_calls, self.merge_calls, self.build_error, self.result = workspace, 0, 0, 0, None, ProcessResult(0, "ok", "")
     def copy_template(self, template, prefix, target_dir, *, workspace):
         tex, readme = target_dir / f"{prefix}_CHN.tex", target_dir / "README.md"
         if not workspace.exists(tex):
@@ -132,6 +177,10 @@ class _Backend:
         if self.result.exit_code == 0:
             workspace.write(path.with_suffix(".pdf"), "pdf")
         return self.result
+    def merge_pdfs(self, first, second, output, *, workspace):
+        self.merge_calls += 1
+        workspace.write(output, "merged")
+        return PdfMergeResult(first, second, output, 3)
 
 
 class _Clock:

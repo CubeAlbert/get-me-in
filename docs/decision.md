@@ -8,6 +8,8 @@
 
 ## 目录
 
+- [决策 211 — uv 唯一默认镜像切换为 TUNA 并拆分依赖添加与同步](#决策-211--uv-唯一默认镜像切换为-tuna-并拆分依赖添加与同步)
+- [决策 210 — 新增 Resume-only PDF 合并工具并纳入 Artifact aggregate](#决策-210--新增-resume-only-pdf-合并工具并纳入-artifact-aggregate)
 - [决策 205 — Main 的业务能力只由当前 SubAgent 穷尽定义](#决策-205--main-的业务能力只由当前-subagent-穷尽定义)
 - [决策 204 — 在单次模型修复前增加本地 JSON repair](#决策-204--在单次模型修复前增加本地-json-repair)
 - [决策 203 — 恢复 v2 provider JSON mode](#决策-203--恢复-v2-provider-json-mode)
@@ -4823,3 +4825,66 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 将空字符串作为选择结果 —— 无法区分用户确实输入空白和取消，也没有 typed cancelled code，未采用。
 - 修改 Orchestrator 忽略所有 SubAgent `Cancelled` —— 会遗留真正取消、失败或 Esc 中断的活动 handoff，破坏原 call-id 闭合，明确拒绝。
 - 在 Runtime 的全局 `_cancel()` 中针对 `WAITING_FOR_SELECTION` 特判并继续 —— 会让真正的 Esc run cancellation 在选择阶段也无法退出 SubAgent，作用域仍然混淆，未采用。
+
+---
+
+### 决策 210 —— 新增 Resume-only PDF 合并工具并纳入 Artifact aggregate
+
+**背景：** 用户提供 legacy `merge_pdfs(first, second, output)` 实现，要求新增给 Resume Agent 使用并适配当前 v2 设计。legacy handler 直接 import `pypdf`、读取全局 `config.working_dir`、调用 `_validate_path()` 并以 `open(..., "wb")` 写文件；这会绕过 v2 的显式依赖、Workspace confinement、Artifact operation 和 typed outcome 边界。当前 production Catalog 在历史 R3/R7/R8-E 阶段固定为 25 个工具，本次是用户明确授权的新能力，不是迁移遗漏。
+
+**决定：**
+
+- 新增 Resume-only `merge_pdfs` ToolDefinition，参数为必填字符串 `first/second/output`，均是工作区相对路径且 `.pdf` 后缀可省略；按 first → second 拼接全部页面，输出 `{output, first, second, total_pages}`。
+- 工具要求 `RESUME_ARTIFACT + WORKSPACE_READ + WORKSPACE_WRITE`，采用现有 `ConfirmationMode.ALWAYS`，因此 Main capability 不可见且调用前进入当前统一审批策略。当前 ToolCatalog 验收值从历史 25 调整为 26。
+- 新增 immutable `PdfMergeResult`，并在既有 `ResumeArtifactPort`、`ResumeArtifactBackend` 和 `ArtifactService` 上增加同名窄方法；不新增文件、模块、service、capability、CLI 命令或 ToolOutcome 字段。
+- `LocalResumeArtifacts` 是唯一 import `pypdf` 和执行 PDF 二进制 I/O 的层。所有路径先经 `WorkspacePort.resolve()` 约束；两个源必须存在且不同，输出不得等于任一源。输出先写同目录临时文件，再用 `os.replace()` 原子提交，失败清理临时文件。
+- 不扩展 `WorkspacePort.read()` 的文本契约，也不增加通用 binary read/write API。ArtifactService 使用既有 `content_hash()` 获取两个源 PDF 的原始字节 hash，形成 deterministic `MERGE_PDFS` operation key。
+- 成功输出作为 PDF Artifact 保存 hash、version 和新增的可选 `page_count`；repository 强制 committed merge 只能包含一个路径匹配、带非负 page count 的 PDF Artifact且不能包含 build attempt。相同 committed operation replay 直接返回持久化结果，不重复写文件；metadata commit 失败继续使用 `ArtifactPartialFailure` 报告已变化的输出路径。
+- `pyproject.toml` 显式增加 `pypdf>=6.0.0`，项目镜像锁定 `pypdf 6.14.2`。R3/R7 的 25-tool 历史证据保留，不倒写为 26。
+- 验证结果：58 项 Resume Tool／Artifact／Catalog／bootstrap 定向测试和完整 261 项自动化测试通过；真实适配器 smoke 创建 1 页与 2 页不同尺寸 PDF，合并结果为 3 页且尺寸顺序证明 first → second。`compileall`、`git diff --check` 与 v2 import boundary 通过。
+
+**理由：**
+
+- PDF 合并是 Resume 产物能力，应复用现有 artifact transaction 与 provenance，而不是让 Tool handler 直接操作文件系统。
+- `WorkspacePort.read()` 明确是文本读取；PDF 所需二进制能力已经可由受限路径 adapter 和 `content_hash()` 满足，没有理由扩张公共 Workspace API。
+- 原子替换避免无效／损坏输入或写入异常留下半份输出；禁止输出覆盖源文件可避免 pypdf 惰性读取与目标截断造成源简历损坏。
+- 持久化 page count 让 committed replay 保持与首次调用相同的结构化输出，不需要再次解析或重写 PDF。
+
+**曾考虑的替代方案：**
+
+- 直接迁移 legacy handler —— 会重新引入全局 config、handler 文件 I/O 和未记录副作用，拒绝。
+- 给 WorkspacePort 增加通用二进制 read/write —— 扩大所有工具的文件访问面，且当前只有 Resume artifact adapter 需要，未采用。
+- 合并成功但不进入 ArtifactService —— 会使 PDF 产物缺少 operation、hash、version 和 partial-failure 语义，与 R7 已确认边界冲突。
+- committed replay 时重新执行合并或重新读取输出计算页数 —— 前者产生重复副作用，后者需要增加额外 backend 查询契约；持久化 `page_count` 更窄且确定。
+
+---
+
+### 决策 211 —— uv 唯一默认镜像切换为 TUNA 并拆分依赖添加与同步
+
+**背景：** 增加 `pypdf` 时，SJTUG 对大量 wheel 元数据返回不可用 304 或不支持 range request，普通 `uv lock` 用时 5 分 42 秒；临时使用官方 PyPI 虽在约 11 秒完成，却会把整个 lock registry 改成官方源，不符合项目镜像策略。用户确认采用清华 TUNA，并要求继续保留 Windows、Ubuntu/Linux 的跨平台解析能力；此前出现的用户级 `sdists-v9\.git: Access denied` 是独立问题，本次不修改 cache。
+
+**决定：**
+
+- `pyproject.toml` 只保留一个 `[[tool.uv.index]]`：`name = "tuna"`、`url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/"`、`default = true`。
+- 不添加 `[tool.uv].environments`，不限制为 Windows；继续生成同时覆盖 Windows 与 Ubuntu/Linux wheel 的 universal lock。
+- 不使用官方 PyPI 作为默认源，不配置多个普通 PyPI 镜像，不引入 PyTorch CPU 专用源。
+- 普通锁定／部署流程为 `uv lock` → `uv sync --locked`；不得使用 `--upgrade`。执行 `uv lock` 或 `uv add` 前先检查是否已有同类 uv 进程，禁止并发锁定，并允许解析阶段长时间无输出。
+- 后续新增依赖固定拆分为 `uv add <package> --no-sync` → `uv sync`。前者慢表示依赖解析或镜像元数据问题，后者慢表示 wheel 下载或安装问题。
+- 本次普通 `uv lock` 约 9 秒完成，`uv sync --locked` 约 2 秒完成。同步清理了临时 Jupyter 环境留下的 21 个非项目包，不改变 lock 中项目依赖。
+- lock 前后均包含 133 个 package，name/version 集合完全一致；`pypdf 6.14.2` 保留。所有 registry 与 artifact URL 已切换为 TUNA，无 `pypi.org`、`sjtug` 或 `mirror.sjtu` 残留。
+- TUNA 同步后重新通过 58 项 PDF 合并相关定向测试、完整 261 项自动化测试、`compileall`、`git diff --check` 与 v2 import boundary。
+
+**理由：**
+
+- 单一默认镜像让解析和安装来源明确，避免多个普通索引产生优先级、供应链和复现歧义。
+- 不增加 environments 过滤可继续锁定项目已支持的 Windows 与 Ubuntu/Linux 平台，而不是用本机 Windows 状态缩窄部署范围。
+- 将解析与同步拆开后，耗时可准确归因到 metadata resolver 或 wheel 下载／安装阶段，避免把两个问题混为一次 `uv add`。
+- 普通 `uv lock` 在不升级依赖的情况下完成 registry 重写，包版本集合可直接与切换前比较。
+
+**曾考虑的替代方案：**
+
+- 继续使用 SJTUG 并单纯延长等待 —— 可以完成但 metadata 行为持续造成数分钟延迟，不再采用。
+- 使用官方 PyPI —— 临时验证较快，但违反用户确认的国内默认镜像约束，且会把 lock 全量切换到 `pypi.org`，拒绝。
+- 配置 TUNA 与其他普通镜像并存 —— 增加来源优先级与复现复杂度，未采用。
+- 通过 `[tool.uv].environments` 只锁 Windows 或引入 PyTorch CPU 专源 —— 会破坏 Ubuntu/Linux universal lock 或扩张本次范围，明确拒绝。
+- 同时处理 `UV_CACHE_DIR` —— cache 权限错误与镜像是独立问题；只有 TUNA 后再次出现 Access denied 时才另立任务处理。

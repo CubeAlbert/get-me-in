@@ -18,6 +18,7 @@ class ArtifactKind(StrEnum):
 class ArtifactOperationKind(StrEnum):
     COPY_TEMPLATE = "copy_template"
     BUILD_PDF = "build_pdf"
+    MERGE_PDFS = "merge_pdfs"
 
 
 class ArtifactOperationStatus(StrEnum):
@@ -37,6 +38,7 @@ class Artifact:
     content_hash: str
     created_at: datetime
     template_name: str | None = None
+    page_count: int | None = None
 
 
 @dataclass(frozen=True)

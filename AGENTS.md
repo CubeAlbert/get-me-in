@@ -26,8 +26,11 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ```bash
 uv run python main.py          # 启动 CLI
-uv sync                        # 安装/同步依赖
-uv add <pkg> / uv remove <pkg> # 添加/移除依赖
+uv lock                        # 使用项目默认 TUNA 镜像更新 universal lock
+uv sync --locked               # 严格按现有锁文件同步环境
+uv add <pkg> --no-sync         # 只添加并解析依赖，不同步环境
+uv sync                        # 添加依赖后单独下载/安装
+uv remove <pkg>                # 移除依赖
 uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab  # 交互式调试
 ```
 
@@ -79,7 +82,7 @@ CLI 命令：
 | 基础设施 | 对话 dump (`src/utils/dumper.py`) | `dump_history(agent_name, history)` → `data/logs/<agent>_<datetime>_message.dump` |
 | Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}`；Plan 基础设施（`_plan` + 3 工具 + system_message 注入）；`dump_history()` 导出历史 |
 | Agent | MainAgent (`src/agents/main_agent.py`) | 路由 Agent：只做意图识别 + 调度子 Agent，不执行领域任务 |
-| Agent | ResumeAgent (`src/agents/resume/agent.py`) | 简历定制 Agent：workspace 工具直接操作 LaTeX 模板，`copy_template` → 填充占位符 → `build_pdf` → `workspace_open` |
+| Agent | ResumeAgent (`src/agents/resume/agent.py`) | 简历定制 Agent：workspace 工具直接操作 LaTeX 模板，`copy_template` → 填充占位符 → `build_pdf`；用户明确要求时可用 `merge_pdfs` 合并中英文 PDF，再用 `workspace_open` 预览 |
 | Agent | JobSearchAgent (`src/agents/job_search/agent.py`) | M4 测试用子 Agent |
 | 服务 | 记忆模块 (`src/memory/`) | Facade：`build_memories`/`search_memories`/`delete_memory`；观察者模式（Store → 事件 → Indexer → RAG）解耦；按 Agent 分目录，一文件一条记忆 |
 
@@ -102,8 +105,8 @@ CLI 命令：
 | `workspace_tools.py` | `workspace_read`, `workspace_list`, `workspace_grep`, `workspace_search_file`, `workspace_replace`, `workspace_write`, `workspace_delete`, `workspace_move`, `workspace_edit`, `workspace_open` | 10 |
 | `customer_file_tool.py` | `read_customer_file` | 1 |
 | `rag_tools.py` | `query_memory`, `query_reference_data` | 2 |
-| `resume_tools.py` | `copy_template`, `build_pdf` | 2 |
-| **总计** | | **25** |
+| `resume_tools.py` | `copy_template`, `build_pdf`, `merge_pdfs` | 3 |
+| **总计** | | **26** |
 
 详细设计见 `docs/design.md`。
 
@@ -113,6 +116,8 @@ CLI 命令：
 - **测试规则** — `refactor` 分支已获用户明确授权编写核心自动化测试；其他分支仍遵循“不要写测试，除非用户显式要求”
 - **同步代码**，不使用 `asyncio` 或任何异步框架
 - **使用 `uv` 管理依赖和运行** — 运行项目 Python 代码必须带 `uv run` 前缀
+- **uv 默认镜像与跨平台锁** — `pyproject.toml` 只配置清华 TUNA 为默认 PyPI 镜像；不设置 `[tool.uv].environments`，保持 Windows 与 Ubuntu/Linux 的 universal lock。新增依赖使用 `uv add <package> --no-sync`，完成后再执行 `uv sync`，以区分依赖解析与 wheel 下载／安装耗时
+- **uv 锁定禁止并发** — 执行 `uv lock` 或 `uv add` 前先确认没有其他 `uv lock`／`uv add` 进程；依赖解析可能长时间无输出，应等待其完成，不因暂时无输出提前终止
 - **`from src.config import config` 放在所有第三方 import 之前** — `config` import 触发 `load_dotenv()`，某些第三方库（`huggingface_hub`、`sentence_transformers`）在 import 时缓存 `os.environ`，必须先加载 `.env`
 - **LLM 客户端用 `get_client()` 单例** — `from src.llm import get_client`，不要直接 `LLMClient()`；双检锁线程安全
 - **提示词与代码分离** — 模板在 `data/prompts/`，`PromptLoader` 加载；Agent 调用 `get()` 自动拼接 `general_agent/`；非 Agent 模块用 `get_raw()`

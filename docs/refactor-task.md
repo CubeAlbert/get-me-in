@@ -505,6 +505,12 @@
 - ✅ 后台预热修复的 41 项 Knowledge/Adapter/Retrieval/CLI 定向测试、完整 253 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 `uv run python main.py` 在欢迎界面出现后后台等待 20 秒，终端无权重／进度输出；首次 `query_memory` 约 2 秒完成真实命中且无延迟加载输出，`/exit` 返回 0。
 - ✅ 修复 selection Ctrl+C 错误退出 SubAgent：新增 typed `CancelSelection(request_id, reason)`，只把 cancelled result 写回 `provide_choices` 并继续当前 Agent；CliApp 不再把 selection 的 `None` 映射为全局 `Cancel`。真正 Esc／运行取消仍产生 `Cancelled` 并按既有规则关闭 handoff。
 - ✅ selection 局部取消的 48 项 Runtime/CLI/Orchestrator/Session 定向测试与完整 256 项自动化测试通过，`compileall` 与 `git diff --check` 通过；真实 questionary 自定义输入 Ctrl+C 输出 `SELECTION_RESULT None`，应用回归确认该值只生成 `CancelSelection`，Resume handoff 保持活动。
+- ✅ 按用户提供的 legacy 定义新增 Resume-only `merge_pdfs`：保留 first → second 顺序与可选 `.pdf` 后缀，使用既有 capability/审批/ToolOutcome 边界；Main 不可见。
+- ✅ PDF 合并经 `ResumeArtifactPort → ArtifactService → LocalResumeArtifacts` 实现；不扩展文本型 `WorkspacePort.read()`，适配器只在 `workspace.resolve()` 约束后用 `pypdf` 读取，并通过同目录临时文件原子替换输出。拒绝相同输入及输出覆盖源文件。
+- ✅ Artifact operation 增加 `MERGE_PDFS`，输入使用两个源 PDF 的原始字节 hash，输出 Artifact 记录 hash/version/page count；COMMITTED replay 不重复写入，metadata commit 失败返回 typed partial failure。项目显式依赖 `pypdf>=6.0.0`，锁定 6.14.2。
+- ✅ `merge_pdfs` 的 58 项定向测试与完整 261 项自动化测试通过；真实三页 PDF 顺序 smoke 由不同页面尺寸验证 first → second 顺序。`compileall`、`git diff --check` 与 import boundary 复验通过。
+- ✅ 将 uv 默认 PyPI 镜像从 SJTUG 切换为唯一的清华 TUNA index，不增加 `[tool.uv].environments`、官方 PyPI、第二个普通镜像或 PyTorch 专用源；保持 Windows／Ubuntu/Linux universal lock。执行前确认无并发 `uv lock`／`uv add`，普通 `uv lock` 与 `uv sync --locked` 均完成。
+- ✅ 锁文件前后均为 133 个包且 name/version 集合完全一致；无官方 PyPI 或 SJTUG 残留。记录后续依赖工作流为 `uv add <package> --no-sync` → `uv sync`，分别诊断解析和下载／安装耗时；TUNA 同步后 58 项 PDF 定向测试、完整 261 项测试与 `compileall` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。

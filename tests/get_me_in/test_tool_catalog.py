@@ -86,9 +86,9 @@ class ProductionToolMetadataTests(unittest.TestCase):
             definition.name: definition for definition in self.definitions
         }
 
-    def test_all_25_tools_have_complete_llm_facing_guidance(self) -> None:
-        self.assertEqual(25, len(self.definitions))
-        self.assertEqual(25, len(self.by_name))
+    def test_all_26_tools_have_complete_llm_facing_guidance(self) -> None:
+        self.assertEqual(26, len(self.definitions))
+        self.assertEqual(26, len(self.by_name))
         for definition in self.definitions:
             self.assertTrue(definition.purpose.strip(), definition.name)
             self.assertTrue(definition.use_when.strip(), definition.name)

@@ -35,7 +35,7 @@
 | LLM 对话 | OpenAI 兼容消息、工具 XML、tier 参数 | 解析后的 JSON 模型回复和可选 thinking | 惰性、线程安全的客户端单例；provider thinking 配置 | provider／解析／格式错误进入 Agent 修复或失败路径；thinking 在下轮模型输入前剥离 | 迁移 adapter 行为 |
 | Web 搜索 | 自然语言查询 | 基于搜索的文本 | 使用 LLM 客户端的 web-search 方法 | provider 失败成为工具失败 | 迁移／重新定义 adapter |
 
-## 工具目录基线（25 个工具）
+## legacy 工具目录基线（25 个工具）
 
 当前工具可见性由隐式规则控制：通用工具对所有 Agent 可见，`agent=["main"]` 仅主 Agent 可见，`agent=["*"]` 表示子 Agent，resume workspace 工具仅 ResumeAgent 可见。`N` 表示从不审批，`A` 表示始终审批，`C` 表示跟随配置。
 
@@ -98,6 +98,14 @@
 | `query_reference_data` | `build_retrieval_tools` | 已迁移，临时不可用 | R6 `KnowledgeService` 适配器 |
 | `copy_template` | `build_resume_tools` | 已迁移 | R7 `ArtifactService` 记录版本 |
 | `build_pdf` | `build_resume_tools` | 已迁移 | R7 `ArtifactService` 记录产物 |
+
+### R8-O 当前工具扩展（26 个工具）
+
+> R3 的 25/25 迁移结论与 R7 的 25-tool 验收证据是历史事实，不回写。决策 210 经用户明确授权新增第 26 个工具；production `ToolCatalog` 当前以 26 为验收值。
+
+| 工具 | v2 builder | 当前状态 | 边界 |
+|---|---|---|---|
+| `merge_pdfs` | `build_resume_tools` | 已实现 | 仅 Resume 可见；按 first → second 合并工作区 PDF；需审批；`ArtifactService` 记录输出 hash、version 与 page count |
 
 ## 数据与生命周期基线
 

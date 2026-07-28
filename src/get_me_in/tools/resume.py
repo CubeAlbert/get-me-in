@@ -89,6 +89,41 @@ def build_resume_tools() -> tuple[ToolDefinition, ...]:
             ),
             handler=_build_pdf,
         ),
+        ToolDefinition(
+            name="merge_pdfs",
+            purpose="合并工作区中的两份 PDF 简历为一份，按 first → second 顺序拼接所有页面。",
+            use_when="用户同时拥有中英文简历需要合并，或明确要求合并两份 PDF 简历时",
+            do_not_use_when="PDF 文件不存在、只有一份简历、用户未明确要求合并，或输出会覆盖源 PDF 时",
+            expected_output='{"output": "resume_combined.pdf", "first": "resume_CHN.pdf", "second": "resume_EN.pdf", "total_pages": 4}',
+            schema=ToolSchema(
+                {
+                    "first": ToolParameter(
+                        str,
+                        "排在前面的简历 PDF 相对路径（.pdf 后缀可选），基于工作区根目录。例如 'resume_CHN'",
+                    ),
+                    "second": ToolParameter(
+                        str,
+                        "排在后面的简历 PDF 相对路径（.pdf 后缀可选），基于工作区根目录。例如 'resume_EN'",
+                    ),
+                    "output": ToolParameter(
+                        str,
+                        "合并后的输出 PDF 相对路径（.pdf 后缀可选），基于工作区根目录。例如 'resume_combined.pdf'",
+                    ),
+                },
+                frozenset({"first", "second", "output"}),
+            ),
+            policy=ToolPolicy(
+                frozenset(
+                    {
+                        Capability.RESUME_ARTIFACT,
+                        Capability.WORKSPACE_READ,
+                        Capability.WORKSPACE_WRITE,
+                    }
+                ),
+                ConfirmationMode.ALWAYS,
+            ),
+            handler=_merge_pdfs,
+        ),
     )
 
 
@@ -129,6 +164,47 @@ def _build_pdf(arguments: Mapping[str, object], context: ResumeToolContext) -> T
         message = result.stderr or result.stdout or "PDF build failed before producing an exit code"
         return ToolFailure("build_pdf_failed", message)
     return ToolSuccess({"stdout": result.stdout, "stderr": result.stderr, "exit_code": result.exit_code})
+
+
+def _merge_pdfs(arguments: Mapping[str, object], context: ResumeToolContext) -> ToolSuccess | ToolFailure:
+    artifacts = _artifacts(context)
+    if isinstance(artifacts, ToolFailure):
+        return artifacts
+    if context.workspace is None:
+        return ToolFailure("workspace_unavailable", "This tool requires a configured workspace")
+    first, second, output = (
+        _ensure_pdf_suffix(Path(arguments[name]))
+        for name in ("first", "second", "output")
+    )
+    try:
+        result = artifacts.merge_pdfs(
+            first,
+            second,
+            output,
+            workspace=context.workspace,
+            session_id=context.session_id,
+            agent_key=context.agent_key,
+        )
+    except ArtifactPartialFailure as error:
+        return _partial_failure(error)
+    except Exception as error:
+        return ToolFailure(
+            "merge_pdfs_failed",
+            str(error),
+            "用 workspace_search_file 查找工作区中的 PDF，并确认输入、输出路径",
+        )
+    return ToolSuccess(
+        {
+            "output": result.output.as_posix(),
+            "first": result.first.as_posix(),
+            "second": result.second.as_posix(),
+            "total_pages": result.total_pages,
+        }
+    )
+
+
+def _ensure_pdf_suffix(path: Path) -> Path:
+    return path if path.suffix.lower() == ".pdf" else path.with_name(f"{path.name}.pdf")
 
 
 def _partial_failure(error: ArtifactPartialFailure) -> ToolFailure:

@@ -562,7 +562,7 @@ Session 初始化时同时创建 Main/Resume 两份 `AgentSessionState` 与 Plan
 
 Artifact 使用全新 `data/v2/artifacts/` versioned repository，不读取旧 Session、Memory、Chroma 或 `data/temp/`。Artifact 只记录工作区产物和编译尝试，不写入 Memory；默认不向 SessionSnapshot 增加 ArtifactRef。save/restore/rewind 只恢复对话与 Agent 状态，不删除、覆盖或回滚工作区文件和 Artifact 记录。
 
-ArtifactService 是工具侧 `ResumeArtifactPort` 的正式实现，并借用低层 `ResumeArtifactBackend` 完成静态模板读取和 `pdflatex` 调用；这样 application service 不直接 import `shutil`、文件系统 adapter 或 subprocess。现有 `copy_template`／`build_pdf` 的 LLM 参数 schema 和 ToolOutcome/Runtime 闭合协议保持不变。
+ArtifactService 是工具侧 `ResumeArtifactPort` 的正式实现，并借用低层 `ResumeArtifactBackend` 完成静态模板读取、`pdflatex` 调用和 PDF 合并；这样 application service 不直接 import `shutil`、`pypdf`、文件系统 adapter 或 subprocess。`copy_template`／`build_pdf` 的 LLM 参数 schema 和 ToolOutcome/Runtime 闭合协议保持不变；决策 210 另行增加 Resume-only `merge_pdfs`。
 
 Artifact repository 使用 deterministic operation key 和两阶段记录：
 
@@ -572,6 +572,8 @@ Artifact repository 使用 deterministic operation key 和两阶段记录：
 `copy_template` 先预检模板、目标 LaTeX 与 README。`.tex` 继续拒绝覆盖不同内容；README 保留 v1 的跟随复制和可覆盖行为并产生新版本。若前次 partial operation 已写入与模板完全一致的目标文件，retry 可以依据 pending intent 补齐记录，不把它误判为普通覆盖。
 
 `build_pdf` 记录成功、非零退出、超时、取消和异常尝试。只有 `exit_code == 0` 且 workspace 中目标 PDF 确实存在时才创建可用 PDF Artifact；stdout/stderr 属于 typed build-attempt record。文件已经写入或 PDF 已生成但 metadata 未提交时，工具返回明确的 typed partial failure 和已改变路径，不得报告全部成功。
+
+`merge_pdfs(first, second, output)` 接受工作区相对路径并允许省略 `.pdf` 后缀，按 first → second 顺序拼接全部页面。低层 `LocalResumeArtifacts` 通过 `WorkspacePort.resolve()` 取得受限绝对路径，验证两个源文件存在、互不相同且输出不覆盖源文件，再以同目录临时文件和 `os.replace()` 原子提交；handler 和 ArtifactService 不直接读写二进制文件。operation key 包含两个源 PDF 的路径与原始字节 hash，输出 PDF Artifact 记录 `content_hash`、version 与 `page_count`，COMMITTED replay 不重复写文件。文件已生成但 metadata 提交失败时继续返回 `ArtifactPartialFailure` 和输出路径。
 
 Artifact schema 从 `schema_version=1` 开始。工作区产物保存 `content_hash`；静态模板来源使用 `template_name`，不得保存工作区外绝对路径。operation key 是 canonical JSON 的 SHA-256，输入固定包含 schema version、session id、AgentKey、operation kind、规范化参数、workspace-relative path 与输入 revision/hash。
 
@@ -596,6 +598,8 @@ build attempt 的 stdout/stderr 在替换 workspace 绝对根路径为 `<workspa
 | `tests/get_me_in/test_artifact_repository.py` | JSON repository contract tests | schema、atomicity、operation key、list/filter、损坏记录与幂等 close |
 
 `src/get_me_in/ports/resume_artifacts.py` 增加低层 `ResumeArtifactBackend`，并为 tool-facing `ResumeArtifactPort.copy_template()`／`build_pdf()` 增加 keyword-only `session_id` 与 `agent_key` provenance；`LocalResumeArtifacts` 改为实现 backend，继续封装静态模板、`shutil.which()` 与 ProcessRunner，不负责持久化。
+
+决策 210 是用户在 R8-O 观察期明确授权的窄扩展：在上述既有文件中增加 immutable `PdfMergeResult`、`ResumeArtifactPort.merge_pdfs()`、`ResumeArtifactBackend.merge_pdfs()`、`ArtifactService.merge_pdfs()` 与 `ArtifactOperationKind.MERGE_PDFS`，并为 `Artifact` 增加可选 `page_count`。不新增模块、CLI 命令、capability、通用二进制 Workspace API 或 Main 工具权限。
 
 允许修改的既有文件仅为：
 
@@ -672,7 +676,7 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 
 #### 6.11.4 R8-O／G8 证据要求
 
-- 自动化：完整 unittest、`compileall`、`git diff --check`、根入口 import boundary；固定验收 Catalog 为 2 个 Agent（Main／Resume）、25 个 ToolDefinition、10 个 CLI 命令（`/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、`/approval`、`/exit`）。数量与名称分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 派生，不手工维护第二份运行时注册表。
+- 自动化：完整 unittest、`compileall`、`git diff --check`、根入口 import boundary；当前固定验收 Catalog 为 2 个 Agent（Main／Resume）、26 个 ToolDefinition、10 个 CLI 命令（`/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、`/approval`、`/exit`）。数量与名称分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 派生，不手工维护第二份运行时注册表。25-tool 是 R3/R7/R8-E 的历史验收值；决策 210 后当前值为 26。
 - 真实 adapter：Chroma/embedder/reranker reload/query、Memory build/query/delete、中文／英文／双语 Resume copy/edit/build/open，且进程结束后后台 worker 与资源正常关闭。
 - 数据边界：只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`；v2 写入仅落在显式的 `data/workspace/` 与 `data/v2/` 边界。旧运行数据只保留，不自动迁移或删除。证明“未访问”必须组合使用：静态扫描 v2 源码／Settings 中的禁用路径和 legacy-only 环境变量、以 sentinel project root 构造 Settings 并断言全部运行路径、在启动／smoke 中安装拒绝访问旧目录的测试边界；目录 mtime／hash 前后对比只能证明“未改写”，不得单独作为“未读取”的证据。
 - 删除后：`main.py` 与 `src/get_me_in/` 不得 import legacy；仓库不再包含列出的 legacy production modules 或 `.ipynb_checkpoints`；文档中的 Agent、tool、command 和配置数量必须与实际 Catalog／Settings 一致。

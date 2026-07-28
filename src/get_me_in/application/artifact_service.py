@@ -7,7 +7,7 @@ from pathlib import Path
 
 from src.get_me_in.domain.artifacts import Artifact, ArtifactBuildAttempt, ArtifactKind, ArtifactOperation, ArtifactOperationKind, ArtifactOperationStatus
 from src.get_me_in.ports.process import ProcessResult
-from src.get_me_in.ports.resume_artifacts import ResumeArtifactBackend, TemplateCopyResult
+from src.get_me_in.ports.resume_artifacts import PdfMergeResult, ResumeArtifactBackend, TemplateCopyResult
 
 
 class ArtifactPartialFailure(RuntimeError):
@@ -73,6 +73,61 @@ class ArtifactService:
             raise ArtifactPartialFailure("metadata_commit_failed", changed_paths, str(error)) from error
         return result
 
+    def merge_pdfs(self, first: Path, second: Path, output: Path, *, workspace, session_id: str, agent_key) -> PdfMergeResult:
+        first_hash = workspace.content_hash(first)
+        second_hash = workspace.content_hash(second)
+        output_path = output.as_posix()
+        input_hash = self._input_hash(
+            first=first.as_posix(),
+            first_hash=first_hash,
+            second=second.as_posix(),
+            second_hash=second_hash,
+        )
+        key = ArtifactOperation.key_for(
+            session_id=session_id,
+            agent_key=agent_key,
+            kind=ArtifactOperationKind.MERGE_PDFS,
+            path=output_path,
+            input_hash=input_hash,
+        )
+        operation = self._operation(
+            key,
+            session_id,
+            agent_key,
+            ArtifactOperationKind.MERGE_PDFS,
+            output_path,
+            input_hash,
+        )
+        existing = self._repository.get_operation(key)
+        if existing is not None and existing.status is ArtifactOperationStatus.COMMITTED:
+            artifact = existing.artifacts[0]
+            return PdfMergeResult(first, second, Path(artifact.path), artifact.page_count or 0)
+        if existing is None:
+            self._repository.save_operation(operation)
+        else:
+            operation = existing
+        result = self._backend.merge_pdfs(first, second, output, workspace=workspace)
+        try:
+            artifact = self._artifact(
+                result.output,
+                session_id,
+                agent_key,
+                workspace,
+                page_count=result.total_pages,
+            )
+            self._repository.save_operation(
+                replace(
+                    operation,
+                    status=ArtifactOperationStatus.COMMITTED,
+                    artifacts=(artifact,),
+                )
+            )
+        except Exception as error:
+            raise ArtifactPartialFailure(
+                "metadata_commit_failed", (result.output,), str(error)
+            ) from error
+        return result
+
     def _bound_log(self, value: str, workspace) -> tuple[str, int, bool]:
         root = str(workspace.resolve(Path(".")))
         text = value.replace(root, "<workspace>").replace(root.replace("\\", "/"), "<workspace>")
@@ -88,12 +143,12 @@ class ArtifactService:
     def _operation(self, key, session_id, agent_key, kind, path, input_hash) -> ArtifactOperation:
         return ArtifactOperation(1, key, session_id, agent_key, kind, path, input_hash, ArtifactOperationStatus.PENDING, self._clock.now())
 
-    def _artifact(self, path: Path, session_id: str, agent_key, workspace, template: str | None = None) -> Artifact:
+    def _artifact(self, path: Path, session_id: str, agent_key, workspace, template: str | None = None, page_count: int | None = None) -> Artifact:
         kind = ArtifactKind.LATEX if path.suffix == ".tex" else ArtifactKind.PDF if path.suffix == ".pdf" else ArtifactKind.README
         template_name = None
         if kind is ArtifactKind.LATEX:
             template_name = {"chn": "CHN_Template.tex", "en": "EN_Template.tex"}.get(template)
-        return Artifact(1, self._ids.new_id(), session_id, agent_key, kind, path.as_posix(), self._repository.next_version(path.as_posix()), workspace.content_hash(path), self._clock.now(), template_name)
+        return Artifact(1, self._ids.new_id(), session_id, agent_key, kind, path.as_posix(), self._repository.next_version(path.as_posix()), workspace.content_hash(path), self._clock.now(), template_name, page_count)
 
     @staticmethod
     def _input_hash(**parameters: str) -> str:

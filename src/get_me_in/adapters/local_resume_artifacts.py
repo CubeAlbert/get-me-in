@@ -1,12 +1,16 @@
 """基于静态模板和 ProcessRunner 的简历产物适配器。"""
 
+import os
 import re
 import shutil
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+import pypdf
 
 from src.get_me_in.ports.llm import CancellationSignal
 from src.get_me_in.ports.process import ProcessResult, ProcessRunner
-from src.get_me_in.ports.resume_artifacts import TemplateCopyResult
+from src.get_me_in.ports.resume_artifacts import PdfMergeResult, TemplateCopyResult
 from src.get_me_in.ports.workspace import WorkspacePort
 
 
@@ -69,3 +73,62 @@ class LocalResumeArtifacts:
             timeout_seconds=self._build_timeout_seconds,
             cancellation=cancellation,
         )
+
+    def merge_pdfs(
+        self,
+        first: Path,
+        second: Path,
+        output: Path,
+        *,
+        workspace: WorkspacePort,
+    ) -> PdfMergeResult:
+        first, second, output = (
+            _ensure_pdf_suffix(path) for path in (first, second, output)
+        )
+        first_path = workspace.resolve(first)
+        second_path = workspace.resolve(second)
+        output_path = workspace.resolve(output)
+        for label, path in (("first", first_path), ("second", second_path)):
+            if not path.is_file():
+                raise ResumeArtifactError(f"PDF 文件不存在 ({label}): {path.name}")
+        if first_path == second_path:
+            raise ResumeArtifactError("两份源 PDF 路径相同，无法合并")
+        if output_path in {first_path, second_path}:
+            raise ResumeArtifactError("输出 PDF 不能覆盖任一源 PDF")
+
+        writer = pypdf.PdfWriter()
+        total_pages = 0
+        try:
+            for label, path in (("first", first_path), ("second", second_path)):
+                try:
+                    reader = pypdf.PdfReader(path)
+                    for page in reader.pages:
+                        writer.add_page(page)
+                        total_pages += 1
+                except Exception as error:
+                    raise ResumeArtifactError(
+                        f"读取 PDF 失败 ({label}): {path.name} — {error}"
+                    ) from error
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary_path: Path | None = None
+            try:
+                with NamedTemporaryFile(
+                    "wb", dir=output_path.parent, delete=False
+                ) as temporary:
+                    temporary_path = Path(temporary.name)
+                    writer.write(temporary)
+                os.replace(temporary_path, output_path)
+            except Exception as error:
+                if temporary_path is not None:
+                    temporary_path.unlink(missing_ok=True)
+                raise ResumeArtifactError(
+                    f"写入合并 PDF 失败: {output.name} — {error}"
+                ) from error
+        finally:
+            writer.close()
+        return PdfMergeResult(first, second, output, total_pages)
+
+
+def _ensure_pdf_suffix(path: Path) -> Path:
+    return path if path.suffix.lower() == ".pdf" else path.with_name(f"{path.name}.pdf")

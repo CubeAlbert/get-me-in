@@ -143,7 +143,7 @@ class BootstrapTests(unittest.TestCase):
 
         names = tuple(item["name"] for item in application.tool_catalog.export_descriptors())
 
-        self.assertEqual(25, len(names))
+        self.assertEqual(26, len(names))
         self.assertEqual(
             {
                 "get_current_datetime", "get_working_dir", "web_search",
@@ -152,7 +152,7 @@ class BootstrapTests(unittest.TestCase):
                 "workspace_read", "workspace_list", "workspace_grep", "workspace_search_file",
                 "workspace_replace", "workspace_write", "workspace_delete", "workspace_move",
                 "workspace_edit", "workspace_open", "read_customer_file", "query_memory",
-                "query_reference_data", "copy_template", "build_pdf",
+                "query_reference_data", "copy_template", "build_pdf", "merge_pdfs",
             },
             set(names),
         )
@@ -474,7 +474,7 @@ class BootstrapTests(unittest.TestCase):
                 "create_plan", "web_search", "read_customer_file",
                 "workspace_edit", "workspace_replace", "workspace_open",
                 "query_memory", "query_reference_data", "copy_template",
-                "build_pdf", "switch_to_mainagent",
+                "build_pdf", "merge_pdfs", "switch_to_mainagent",
             ):
                 self.assertIn(tool_name, resume_prompt)
             self.assertIn(
