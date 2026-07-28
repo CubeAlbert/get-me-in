@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。决策 206 的空 Memory collection 查询缺陷及决策 207 的 targeted reload 非目标删除缺陷均已修复并复验；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施空 Memory collection 正常零命中和两份 legacy 记忆的一次性迁移；决策 207 已修复 targeted reload 对非目标 manifest entries 的误删风险；Chroma 为 `memories=36`、`references=34` chunks。决策 208 恢复 startup reload 后台预热 embedding／reranker 与 CLI 权重输出静默。决策 209 修复 selection Ctrl+C 错误退出 SubAgent。决策 210 新增 Resume-only `merge_pdfs`，当前 production Catalog 为 26 个 Tool。决策 211 将 uv 唯一默认镜像切换为清华 TUNA，保持 Windows／Ubuntu/Linux universal lock，并固定 `uv add --no-sync` → `uv sync` 分步工作流；普通 `uv lock`、`uv sync --locked`、133 包版本一致性、无禁用 registry、58 项定向测试、完整 261 项测试、`compileall`、`git diff --check` 与 import boundary 均通过。R8-O 其余 smoke 仍待完成。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施空 Memory collection 正常零命中和两份 legacy 记忆的一次性迁移；决策 207 已修复 targeted reload 对非目标 manifest entries 的误删风险；Chroma 为 `memories=36`、`references=34` chunks。决策 208 恢复 startup reload 后台预热 embedding／reranker 与 CLI 权重输出静默。决策 209 修复 selection Ctrl+C 错误退出 SubAgent。决策 210 新增 Resume-only `merge_pdfs`，当前 production Catalog 为 26 个 Tool。决策 211 将 uv 唯一默认镜像切换为清华 TUNA，保持 Windows／Ubuntu/Linux universal lock，并固定 `uv add --no-sync` → `uv sync` 分步工作流；普通 `uv lock`、`uv sync --locked`、133 包版本一致性、无禁用 registry、58 项定向测试、完整 261 项测试、`compileall`、`git diff --check` 与 import boundary 均通过。决策 212 要求 `finish.thinking` 必须非空且不能只含空白，空摘要进入既有一次模型 repair；完整 263 项测试、`compileall` 与 `git diff --check` 已通过。R8-O 其余 smoke 仍待完成。
 
 **下一步：** 继续完成剩余 CLI／交互、Main→Resume→Main、审批拒绝、Plan、Memory delete、真实 Resume 与旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
@@ -50,6 +50,7 @@
 209. **选择交互取消不得提升为 Agent 或 handoff 取消** — `SelectionRequested` 中 Ctrl+C／EOF 使用 `CancelSelection` 闭合当前 `provide_choices`，向当前 Agent 返回 typed cancelled tool result 并继续模型循环；不得复用全局 `Cancel`。只有真正取消当前 run 时才产生 `Cancelled` 并由 Orchestrator 关闭活动 SubAgent handoff。
 210. **新增 Resume-only PDF 合并工具并纳入 Artifact aggregate** — `merge_pdfs` 按 first → second 合并两个工作区 PDF，可省略后缀且需审批；二进制 I/O 留在受限 LocalResumeArtifacts，ArtifactService 以源文件 hash 实现幂等并记录输出 hash/version/page count。Main 不可见，不增加通用二进制 Workspace API；当前 ToolCatalog 从历史 25 增至 26。
 211. **uv 唯一默认镜像切换为 TUNA 并拆分依赖添加与同步** — `pyproject.toml` 只配置清华 TUNA，不设置平台限制、官方 PyPI、第二镜像或 PyTorch 专源；继续生成 Windows／Ubuntu/Linux universal lock。新增依赖统一先 `uv add <package> --no-sync`，再 `uv sync`；锁定前先排除并发 uv 操作并耐心等待。
+212. **finish thinking 必须是非空用户可见摘要** — `finish.thinking` 必须是非空、非纯空白字符串；空值不得静默通过或由 Runtime 补齐，而是进入既有一次模型 repair。`tool_call.thinking` 继续可选。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
@@ -92,7 +93,7 @@
 169. **R6 重设一致性边界并增加强制终止门禁** — 保留 RetrievalPort，删除重复搜索 DTO 和旧 Facade/observer/daemon 形状；新增 RUN command path、immutable MemoryBuildSource、observed/indexed manifest、BackgroundWorker、ResourceStack 与 typed close report。R6/R7 不再并行；G6 后必须 checkpoint 并停在 R6-T，未经用户授权不得进入 R7/R8。当前只完成设计文档，R6 coding 未启动。
 170. **R6 清单获确认并固定新会话实施入口** — 用户确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 文件、对象、构造依赖与公开方法清单；本会话只做文档 checkpoint，不写代码。新会话 bootstrap 后从 domain/ports/manifest diff 第一切片开始，每步独立验证提交；G6 后仍强制停在 R6-T，不得进入 R7。
 171. **R6 前增加独立 `thinking` 契约修复门禁** — v2 必须保留静态 JSON 输出中的用户可见 thinking 摘要并按 `SHOW_THINKING` 展示和持久化，但 ConversationCodec 与 R6 MemoryBuildSource 必须剥离该字段；不得捕获 provider 原生 `reasoning_content`。R6 清单不变，但 coding 必须等待 G5-F 通过。
-172. **R5-F follow-up 统一格式修复的唯一契约与重试边界** — finish 必须出现 string `thinking` 但允许空字符串，tool_call 可省略或为空；格式失败注入具体解析错误与完整 canonical output format，只允许一次修复，第二次失败立即返回 `invalid_model_reply`。
+172. **R5-F follow-up 统一格式修复的唯一契约与重试边界** — finish 必须出现 string `thinking`；当时允许空字符串的部分已由决策 212 取代。tool_call 可省略或为空；格式失败注入具体解析错误与完整 canonical output format，只允许一次修复，第二次失败立即返回 `invalid_model_reply`。
 173. **v2 显式装配日志并固定环境变量所有权** — v2 日志仅配置 `src.get_me_in` 命名空间并写入 `LOG_DIR/app.log`；DEBUG 才记录完整模型原始回复。v2 只消费 typed Settings 声明的变量，旧 `AGENT_MAX_ROUNDS` 不生效，实际调用上限由 `AGENT_MAX_MODEL_CALLS` 控制。
 174. **G6 原通过结论已由决策 175 撤销** — R6 原六个切片完成并 checkpoint，但后续审查发现一致性、取消、关闭和测试退出缺口；该决定仅保留历史过程，不再代表当前门禁状态。
 175. **撤销 G6 通过结论并授权 R6-F** — BackgroundWorker typed result/cancellation、Memory delete finalize、Knowledge 串行边界与四个修复切片已获确认；全部复验前不得进入 R7/R8。

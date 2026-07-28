@@ -244,7 +244,7 @@
 
 ### 1. 输出、domain 与事件契约
 
-- ✅ 对齐 `07_output_format.md`：finish 必须包含 string `thinking` 字段但允许空字符串，tool_call 可省略或为空；missing/type error 注入“具体错误 + 完整 canonical output format”并最多修复一次。
+- ✅ 对齐当时的 `07_output_format.md`：finish 必须包含 string `thinking` 字段但允许空字符串，tool_call 可省略或为空；missing/type error 注入“具体错误 + 完整 canonical output format”并最多修复一次。finish 空字符串容错后由决策 212 收紧。
 - ✅ 为 assistant `MessageRecord` 与 `ToolCallRecord` 增加可选 thinking；user/system/tool result 不产生 thinking。
 - ✅ AgentRuntime 不再丢弃 `ModelReply.thinking`；Completed 通过 MessageRecord、ToolStarted 通过显式字段向前端投影。
 - ✅ 保持 provider-neutral 边界：不得读取或保存 OpenAI/DeepSeek 原生 `reasoning_content`。
@@ -488,6 +488,7 @@
 - ✅ v2 在既有模型修复前增加本地 JSON 语法修复：标准 `json.loads` 失败后调用 `json_repair.loads`；尾逗号、物理换行等修复结果仍须为 object 并继续完整业务校验，成功时不增加模型调用。
 - ✅ 保持严格输出契约：纯文本、JSON string／array、缺少 finish string thinking、错误业务字段类型或 finish/tool 冲突均不得归一化；本地 repair 失败或语义校验失败时，AgentRuntime 注入具体错误与 canonical OutputFormat 并只允许模型自修一次，第二次仍失败返回 `invalid_model_reply`。`repair_attempted` 继续承担运行时重试边界和 snapshot 持久化职责。
 - ✅ 本地 repair／单次模型自修边界的 61 项 Parser/Runtime/provider/bootstrap/snapshot 定向测试与完整 244 项自动化测试通过；`compileall` 与 `git diff --check` 通过。
+- ✅ R8-O 真实 Main 回复发现 `finish.thinking=""` 会合法通过且不显示摘要；决策 212 将 finish thinking 收紧为非空、非纯空白字符串，空摘要沿用既有一次模型 repair，tool_call thinking 仍可选。完整 263 项测试、`compileall` 与 `git diff --check` 通过。
 - ✅ 真实 Main 对话发现能力宣传漂移：问候声称可准备面试、推荐学习资料，但 production Catalog 当前只有 Resume SubAgent；Java 学习资料无匹配项时仍给出 Coursera／Udemy／Stack Overflow 等替代建议。
 - ✅ 用户确认 Main 工具白名单：全部 Plan 工具、`get_current_datetime`、`provide_choices`、`read_customer_file`、`query_memory`、`switch_to_subagent`；其余工具全部不可见。上述工具仅用于意图识别、上下文收集与路由，不构成用户可见业务能力。
 - ✅ 用户确认 `<SubAgents>` 是 Main 当前业务能力的唯一且穷尽来源；不得根据产品名称、工具、历史消息、模型知识或未来规划推测、宣传或执行列表外能力。无匹配 SubAgent 时只说明当前不支持，不提供替代建议；问候可按实际列表介绍能力，但不得暴露 Agent／工具／路由内部结构。

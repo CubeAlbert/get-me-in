@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 212 — finish thinking 必须是非空用户可见摘要](#决策-212--finish-thinking-必须是非空用户可见摘要)
 - [决策 211 — uv 唯一默认镜像切换为 TUNA 并拆分依赖添加与同步](#决策-211--uv-唯一默认镜像切换为-tuna-并拆分依赖添加与同步)
 - [决策 210 — 新增 Resume-only PDF 合并工具并纳入 Artifact aggregate](#决策-210--新增-resume-only-pdf-合并工具并纳入-artifact-aggregate)
 - [决策 205 — Main 的业务能力只由当前 SubAgent 穷尽定义](#决策-205--main-的业务能力只由当前-subagent-穷尽定义)
@@ -4888,3 +4889,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 配置 TUNA 与其他普通镜像并存 —— 增加来源优先级与复现复杂度，未采用。
 - 通过 `[tool.uv].environments` 只锁 Windows 或引入 PyTorch CPU 专源 —— 会破坏 Ubuntu/Linux universal lock 或扩张本次范围，明确拒绝。
 - 同时处理 `UV_CACHE_DIR` —— cache 权限错误与镜像是独立问题；只有 TUNA 后再次出现 Access denied 时才另立任务处理。
+
+---
+
+### 决策 212 —— finish thinking 必须是非空用户可见摘要
+
+**背景：** R8-O 真实 Main 对话返回了结构合法但 `thinking=""` 的 finish JSON。现有决策 172、OutputFormat、Parser 和回归测试明确允许空字符串，因此回复不会产生 warning；Renderer 又只展示 truthy thinking，最终用户看不到“思考摘要”。这与 thinking 是模型生成、供用户查看的摘要这一产品语义不一致。
+
+**决定：**
+
+- `finish.thinking` 必须是非空且不能只包含空白的字符串；`""`、空格、制表符或换行组成的值均不合法。
+- `ModelReplyParser` 对空或纯空白 finish thinking 抛出 `ModelReplyParseError`，由 AgentRuntime 注入具体错误与 canonical OutputFormat，并沿用每回合最多一次模型 repair。
+- Runtime 不自动生成、补齐或替换 thinking，避免伪造模型未提供的摘要。
+- `tool_call.thinking` 保持既有可选契约；省略、空字符串或合法字符串仍可接受。
+- 本决策仅取代决策 172 中“finish thinking 允许空字符串”的部分，其余格式修复、日志和重试边界不变。
+- Parser／Runtime／Prompt 定向回归、完整 263 项自动化测试、`compileall` 与 `git diff --check` 均通过。
+
+**理由：**
+
+- 必填但允许空值只满足结构，不满足用户可见摘要的业务语义，并会被 Renderer 自然跳过。
+- 将语义约束放在 Parser 可保证首次回复与 repair 回复使用同一规则，且不会把无效值写入会话记录。
+- 非空校验只针对 finish，不会强迫每次工具调用都生成无价值摘要。
+
+**曾考虑的替代方案：**
+
+- Renderer 为 `""` 显示空面板 —— 没有用户价值，且掩盖模型未履行输出契约。
+- Runtime 为 `""` 自动生成默认摘要 —— 不是模型真实输出，违反 thinking 数据来源边界。
+- 仅修改 prompt、不修改 Parser —— 模型仍可能输出空值并静默通过，无法形成可靠契约。

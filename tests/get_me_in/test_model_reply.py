@@ -1,5 +1,6 @@
 """Tests for the provider-independent structured reply codec."""
 
+import json
 import unittest
 
 from src.get_me_in.application.model_reply import (
@@ -52,6 +53,28 @@ class ModelReplyParserTests(unittest.TestCase):
                 '"tool": "search", "event_payload": {}}'
             )
 
+    def test_rejects_empty_or_whitespace_finish_thinking(self) -> None:
+        for thinking in ("", "   ", "\n\t"):
+            with self.subTest(thinking=repr(thinking)):
+                with self.assertRaisesRegex(ModelReplyParseError, "non-empty"):
+                    self.parser.parse(
+                        json.dumps(
+                            {
+                                "event_type": "finish",
+                                "message": "answer",
+                                "thinking": thinking,
+                            }
+                        )
+                    )
+
+    def test_allows_empty_tool_call_thinking(self) -> None:
+        reply = self.parser.parse(
+            '{"event_type": "tool_call", "message": "", "thinking": "", '
+            '"tool": "search", "event_payload": {}}'
+        )
+
+        self.assertEqual("", reply.thinking)
+
     def test_ignores_internal_and_unknown_fields_from_model_output(self) -> None:
         reply = self.parser.parse(
             '{"id": "untrusted", "role": "user", "timestamp": "wrong", '
@@ -72,7 +95,7 @@ class ModelReplyParserTests(unittest.TestCase):
     def test_repairs_common_json_syntax_errors_locally(self) -> None:
         reply = self.parser.parse(
             '{"event_type": "finish", "message": "line1\nline2", '
-            '"thinking": "",}'
+            '"thinking": "summary",}'
         )
 
         self.assertEqual("line1\nline2", reply.content)

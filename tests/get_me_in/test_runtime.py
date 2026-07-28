@@ -63,7 +63,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_malformed_json_is_repaired_locally_without_another_model_call(self) -> None:
         runtime, llm, temporary_dir = _runtime(
-            ['{"event_type":"finish","message":"answer","thinking":"",}']
+            ['{"event_type":"finish","message":"answer","thinking":"summary",}']
         )
         self.addCleanup(temporary_dir.cleanup)
 
@@ -100,14 +100,22 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotEqual("untrusted", events[-1].message.event_id)
         self.assertEqual("answer", events[-1].message.content)
 
-    def test_finish_allows_empty_thinking(self) -> None:
-        runtime, _, temporary_dir = _runtime([_finish("answer", "")])
+    def test_empty_finish_thinking_uses_one_model_repair(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            [_finish("invalid", ""), _finish("answer", "summary")]
+        )
         self.addCleanup(temporary_dir.cleanup)
 
         events = _pump(runtime, UserMessage("question"))
 
         self.assertIsInstance(events[-1], Completed)
-        self.assertEqual("", events[-1].message.thinking)
+        self.assertEqual(2, len(llm.requests))
+        self.assertEqual("answer", events[-1].message.content)
+        self.assertEqual("summary", events[-1].message.thinking)
+        self.assertIn(
+            "finish thinking must be non-empty",
+            llm.requests[1].messages[-1].content,
+        )
 
     def test_unrecoverable_reply_fails_after_one_model_repair(self) -> None:
         runtime, llm, temporary_dir = _runtime(
