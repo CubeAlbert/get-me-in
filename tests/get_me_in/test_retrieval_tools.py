@@ -61,6 +61,20 @@ class RetrievalToolTests(unittest.TestCase):
             outcome,
         )
 
+    def test_retrieval_failure_is_logged_before_being_mapped(self) -> None:
+        context = ToolContext(
+            "session",
+            AgentKey.MAIN,
+            CancellationToken(),
+            retrieval=_FailingRetrieval(),
+        )
+
+        with self.assertLogs("src.get_me_in.tools.retrieval", level="ERROR") as captured:
+            outcome = self.executor.execute("call", "query_memory", {"query": "偏好"}, context)
+
+        self.assertEqual(ToolFailure("retrieval_unavailable", "backend unavailable"), outcome)
+        self.assertIn("retrieval failed: collection=memories", captured.output[0])
+
 
 class _Retrieval:
     collection: str | None = None
@@ -75,3 +89,8 @@ class _Retrieval:
 class _EmptyRetrieval:
     def search(self, query, *, collection, category, top_k, cancellation):
         return ()
+
+
+class _FailingRetrieval:
+    def search(self, query, *, collection, category, top_k, cancellation):
+        raise RuntimeError("backend unavailable")

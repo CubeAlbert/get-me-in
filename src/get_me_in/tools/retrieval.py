@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from enum import StrEnum
+import logging
 from typing import Protocol
 
 from src.get_me_in.domain.agents import Capability
@@ -26,6 +27,10 @@ class ReferenceCategory(StrEnum):
 class RetrievalToolContext(ToolHandlerContext, Protocol):
     retrieval: RetrievalPort | None
     cancellation: object
+
+
+logger = logging.getLogger(__name__)
+_FILE_ONLY_LOG = {"_get_me_in_file_only": True}
 
 
 def build_retrieval_tools() -> tuple[ToolDefinition, ...]:
@@ -130,6 +135,19 @@ def _search(
     except InterruptedError:
         return ToolFailure("retrieval_cancelled", "Retrieval was cancelled")
     except Exception as error:
+        logger.exception(
+            "retrieval failed: collection=%s category=%s top_k=%s query_chars=%s",
+            collection,
+            category,
+            top_k,
+            len(str(arguments.get("query", ""))),
+            extra=_FILE_ONLY_LOG,
+        )
+        logger.error(
+            "Error: retrieval unavailable; collection=%s category=%s; details were written to app.log",
+            collection,
+            category,
+        )
         return ToolFailure("retrieval_unavailable", str(error))
     items = tuple(
         {"content": result.content, "metadata": {key: value for key, value in result.metadata.items() if key != "rerank_score"}}

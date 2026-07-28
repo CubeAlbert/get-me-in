@@ -5130,3 +5130,33 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - Parser 回归覆盖 finish 缺少 thinking、`null`、空字符串、空白字符串和非字符串类型。
 - Runtime 回归确认无摘要 finish 不触发 repair；全量 unittest 276 项通过，`git diff --check` 通过。
+
+---
+
+### 决策 220 —— RAG startup 提交不得持有 KnowledgeService 锁
+
+**背景：** R8-O 真实检索持续返回 `retrieval_unavailable`，日志显示 startup background job 已开始并结束，但 KnowledgeService 仍停留在 `LOADING`。检查发现 `KnowledgeService.start()` 在持有 `_lock` 时调用 `BackgroundWorker.submit()`；后台线程可能立即执行 `reload()`，非阻塞获取同一把锁失败并返回 `ReloadReport(busy=True)`。BackgroundWorker 只检查 `error/failures`，因此把该结果记录为成功，而 service 状态没有从 `LOADING` 收敛。
+
+**决定：**
+
+- `start()` 只在锁内完成 `IDLE → LOADING` 状态转换，释放锁后再提交 startup reload；提交失败时重新取得锁并将状态置为 `ERROR`。
+- 保持既有单 worker、非阻塞串行边界和 `READY/DEGRADED/ERROR` 状态语义，不新增线程、公开 API 或第二套加载状态机。
+- 为 startup reload、index prepare、embedding／reranker 模型准备、source scan、reload 完成／失败增加阶段日志；异常完整 traceback 使用 file-only 记录写入 `app.log`，前台继续只显示简短的 `retrieval_unavailable` 错误。
+- 增加 worker 立即执行 startup reload 的竞态回归，确保服务不会因提交时序永久停在 `LOADING`。
+
+**理由：**
+
+- 释放提交前的服务锁消除后台线程与启动调用之间的确定性竞态，同时保留所有 reload 操作的串行保护。
+- 阶段日志可以区分模型构造、索引准备、manifest 扫描和 mutation 的耗时或失败位置，避免把状态症状误判为检索根因。
+- 详细诊断必须可追溯，但不应把内部 stacktrace 泄漏到 CLI 前台。
+
+**曾考虑的替代方案：**
+
+- 让 startup `reload()` 在拿不到锁时等待 —— 会改变现有非阻塞串行契约并可能阻塞检索／关闭路径，未采用。
+- 只增加 `retrieval_unavailable` 日志 —— 只能记录结果症状，无法修复 `LOADING` 永久停留，未采用。
+- 增加独立 RAG watchdog 或第二个 worker —— 会扩大生命周期与并发边界，当前没有必要，未采用。
+
+**验证：**
+
+- 新增立即执行 worker 的 startup lock 回归测试；Knowledge／adapter／retrieval 定向测试 35 项通过。
+- 全量 unittest 278 项通过，`git diff --check` 通过。

@@ -1,7 +1,11 @@
 """Explicit v2 vector adapters; models and persistence are constructor-owned."""
 
+import logging
+
 from src.get_me_in.domain.knowledge import IndexChunk, IndexHit, KnowledgeSource
 from src.get_me_in.ports.llm import CancellationSignal
+
+logger = logging.getLogger(__name__)
 
 
 class SentenceTransformerEmbedder:
@@ -12,7 +16,9 @@ class SentenceTransformerEmbedder:
 
     def prepare(self, cancellation: CancellationSignal) -> None:
         _raise_if_cancelled(cancellation)
+        logger.info("embedding model prepare started: model=%s", self._model_name)
         self._ensure_model()
+        logger.info("embedding model prepare completed: model=%s", self._model_name)
         _raise_if_cancelled(cancellation)
 
     def _ensure_model(self) -> None:
@@ -33,7 +39,9 @@ class CrossEncoderReranker:
 
     def prepare(self, cancellation: CancellationSignal) -> None:
         _raise_if_cancelled(cancellation)
+        logger.info("reranker model prepare started: model=%s", self._model_name)
         self._ensure_model()
+        logger.info("reranker model prepare completed: model=%s", self._model_name)
         _raise_if_cancelled(cancellation)
 
     def _ensure_model(self) -> None:
@@ -53,8 +61,10 @@ class ChromaKnowledgeIndex:
         self._client, self._embedder, self._reranker = client, embedder, reranker
 
     def prepare(self, cancellation: CancellationSignal) -> None:
+        logger.info("chroma knowledge index prepare started")
         self._embedder.prepare(cancellation)
         self._reranker.prepare(cancellation)
+        logger.info("chroma knowledge index prepare completed")
 
     def replace_source(self, source: KnowledgeSource, chunks: tuple[IndexChunk, ...], cancellation: CancellationSignal) -> None:
         _raise_if_cancelled(cancellation)

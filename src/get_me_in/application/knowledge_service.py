@@ -1,6 +1,7 @@
 """Explicit, serial knowledge lifecycle service using injected ports."""
 
 from collections.abc import Callable
+import logging
 from threading import Lock
 
 from src.get_me_in.application.app_results import CloseIssue, CloseReport
@@ -21,6 +22,9 @@ from src.get_me_in.domain.knowledge import (
 from src.get_me_in.ports.knowledge import DocumentChunker, KnowledgeIndexPort, KnowledgeSourceRepository, ManifestRepository
 from src.get_me_in.ports.llm import CancellationSignal
 from src.get_me_in.ports.retrieval import RetrievalResult
+
+logger = logging.getLogger(__name__)
+_FILE_ONLY_LOG = {"_get_me_in_file_only": True}
 
 
 class KnowledgeService:
@@ -54,11 +58,16 @@ class KnowledgeService:
             if self._state is not KnowledgeState.IDLE:
                 return
             self._state = KnowledgeState.LOADING
-            try:
-                self._worker.submit("load-knowledge", self._run_startup_reload)
-            except Exception:
+        try:
+            receipt = self._worker.submit("load-knowledge", self._run_startup_reload)
+            logger.info(
+                "knowledge startup queued: job_id=%s",
+                getattr(receipt, "job_id", "unknown"),
+            )
+        except Exception:
+            with self._lock:
                 self._state = KnowledgeState.ERROR
-                raise
+            raise
 
     def search(
         self, query: str, *, collection: str, category: str | None, top_k: int, cancellation: CancellationSignal
@@ -69,6 +78,13 @@ class KnowledgeService:
             if cancellation.is_cancelled:
                 raise InterruptedError
             if self._state not in {KnowledgeState.READY, KnowledgeState.DEGRADED}:
+                logger.warning(
+                    "retrieval unavailable: state=%s collection=%s category=%s top_k=%s",
+                    self._state,
+                    collection,
+                    category,
+                    top_k,
+                )
                 raise RuntimeError("retrieval_unavailable")
             return tuple(RetrievalResult(hit.content, hit.metadata) for hit in self._index.search(
                 query, collection=collection, category=category, top_k=top_k, cancellation=cancellation
@@ -82,10 +98,13 @@ class KnowledgeService:
         try:
             self._ensure_open()
             starting = self._state is KnowledgeState.LOADING
+            logger.info("knowledge reload started: target=%s startup=%s", target, starting)
             self._state = KnowledgeState.LOADING
             if not starting:
                 self._reload_cancellation.reset()
+            logger.info("knowledge index prepare started: target=%s", target)
             self._index.prepare(self._reload_cancellation)
+            logger.info("knowledge index prepare completed: target=%s", target)
             manifest = self._manifests.load()
             observed_pairs = tuple(
                 (source, repository)
@@ -94,6 +113,12 @@ class KnowledgeService:
                 if target is None or target in source.source_key
             )
             observed = tuple(source for source, _ in observed_pairs)
+            logger.info(
+                "knowledge sources scanned: target=%s observed=%s manifest_entries=%s",
+                target,
+                len(observed),
+                len(manifest.entries),
+            )
             comparison_manifest = (
                 manifest
                 if target is None
@@ -143,9 +168,25 @@ class KnowledgeService:
                 if error:
                     failures.append(error)
             self._state = KnowledgeState.DEGRADED if failures else KnowledgeState.READY
-            return replace(report, failures=tuple(failures))
+            result = replace(report, failures=tuple(failures))
+            logger.info(
+                "knowledge reload completed: target=%s state=%s added=%s updated=%s deleted=%s failures=%s",
+                target,
+                self._state,
+                len(result.added),
+                len(result.updated),
+                len(result.deleted),
+                len(result.failures),
+            )
+            return result
         except Exception as error:
             self._state = KnowledgeState.ERROR
+            logger.exception(
+                "knowledge reload failed: target=%s state=%s",
+                target,
+                self._state,
+                extra=_FILE_ONLY_LOG,
+            )
             return ReloadReport(failures=(str(error),))
         finally:
             self._lock.release()
@@ -230,9 +271,16 @@ class KnowledgeService:
             raise RuntimeError("KnowledgeService is closed")
 
     def _run_startup_reload(self, cancellation: CancellationSignal) -> ReloadReport:
+        logger.info("knowledge startup reload started")
         registration = cancellation.register(self._reload_cancellation.cancel)
         try:
-            return self.reload()
+            report = self.reload()
+            logger.info(
+                "knowledge startup reload returned: state=%s failures=%s",
+                self._state,
+                len(report.failures),
+            )
+            return report
         finally:
             registration.close()
 

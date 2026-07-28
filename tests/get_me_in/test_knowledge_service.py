@@ -152,8 +152,27 @@ class KnowledgeServiceTests(unittest.TestCase):
         self.assertEqual(2, self.index.prepare_calls)
 
     def test_search_is_unavailable_before_first_successful_load(self) -> None:
-        with self.assertRaisesRegex(RuntimeError, "retrieval_unavailable"):
-            self.service.search("query", collection="references", category=None, top_k=1, cancellation=CancellationToken())
+        with self.assertLogs("src.get_me_in.application.knowledge_service", level="WARNING") as captured:
+            with self.assertRaisesRegex(RuntimeError, "retrieval_unavailable"):
+                self.service.search("query", collection="references", category=None, top_k=1, cancellation=CancellationToken())
+
+        self.assertIn("state=idle", captured.output[0])
+
+    def test_start_releases_service_lock_before_worker_can_run_startup(self) -> None:
+        worker = _ImmediateWorker()
+        service = KnowledgeService(
+            (_Sources((self.source,)),),
+            _Chunker(),
+            self.index,
+            self.manifests,
+            worker,
+        )
+
+        service.start()
+
+        self.assertEqual(KnowledgeState.READY, service.state)
+        self.assertEqual(1, self.index.prepare_calls)
+        service.close()
 
     def test_index_and_delete_are_serialized_and_report_results(self) -> None:
         document = KnowledgeDocument(self.source, "content")
@@ -349,6 +368,12 @@ class _QueuedWorker:
     def __init__(self): self.task = None
     def submit(self, task_name, task): self.task = task; return object()
     def run(self): self.task(CancellationToken())
+
+
+class _ImmediateWorker:
+    def submit(self, task_name, task):
+        task(CancellationToken())
+        return object()
 
 
 class _Manifests:
