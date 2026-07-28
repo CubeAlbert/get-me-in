@@ -34,7 +34,7 @@ def build_retrieval_tools() -> tuple[ToolDefinition, ...]:
             name="query_memory",
             purpose="语义检索用户记忆库，返回匹配的记忆条目（事实和偏好）。",
             use_when="需要查询用户之前存储的个人信息时，如技能、经历、偏好、期望等",
-            do_not_use_when="需要查询技术参考、面试题、公司信息等公共数据时 — 用 query_reference_data",
+            do_not_use_when="需要查询公共参考数据时；本工具只查询用户个人记忆",
             expected_output='{"query": "...", "total_results": N, "results": [{"content": "...", "metadata": {...}}]}',
             schema=ToolSchema(
                 {
@@ -58,7 +58,7 @@ def build_retrieval_tools() -> tuple[ToolDefinition, ...]:
                 frozenset({"query"}),
             ),
             policy=ToolPolicy(
-                frozenset({Capability.KNOWLEDGE_QUERY}),
+                frozenset({Capability.MEMORY_QUERY}),
                 ConfirmationMode.NEVER,
             ),
             handler=_query_memory,

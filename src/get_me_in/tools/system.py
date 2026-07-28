@@ -33,7 +33,7 @@ def build_system_tools(clock: Clock) -> tuple[ToolDefinition, ...]:
             do_not_use_when="",
             expected_output="YYYY-MM-DD HH:mm:ss ±HHMM 格式的带时区日期时间字符串",
             schema=ToolSchema(properties={}),
-            policy=ToolPolicy(frozenset({Capability.SYSTEM})),
+            policy=ToolPolicy(frozenset({Capability.CURRENT_DATETIME})),
             handler=lambda arguments, context: _get_current_datetime(clock, arguments, context),
         ),
         ToolDefinition(
@@ -43,7 +43,7 @@ def build_system_tools(clock: Clock) -> tuple[ToolDefinition, ...]:
             do_not_use_when="",
             expected_output="工作目录的绝对路径字符串",
             schema=ToolSchema(properties={}),
-            policy=ToolPolicy(frozenset({Capability.SYSTEM})),
+            policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
             handler=_get_working_dir,
         ),
     )

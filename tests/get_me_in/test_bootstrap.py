@@ -81,7 +81,11 @@ class BootstrapTests(unittest.TestCase):
             llm.request.messages[0].content,
         )
         self.assertIn(
-            '"description": "搜索查询，使用自然语言或关键词"',
+            "工具用于辅助履行既有职责，不会自行增加、暗示或证明任何业务能力。",
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
+            "以上列表是当前会话全部业务能力的唯一、权威且穷尽来源",
             llm.request.messages[0].content,
         )
         self.assertIn(
@@ -108,6 +112,11 @@ class BootstrapTests(unittest.TestCase):
             "- 避免讨论Agent、工具、路由机制。",
             llm.request.messages[0].content,
         )
+        self.assertNotIn("get_working_dir", llm.request.messages[0].content)
+        self.assertNotIn("web_search", llm.request.messages[0].content)
+        self.assertNotIn("query_reference_data", llm.request.messages[0].content)
+        self.assertNotIn("面试", llm.request.messages[0].content)
+        self.assertNotIn("学习", llm.request.messages[0].content)
         self.assertNotIn("workspace_write", llm.request.messages[0].content)
         self.assertNotIn("copy_template", llm.request.messages[0].content)
         self.assertFalse(llm.cancellation.is_cancelled)
@@ -148,7 +157,7 @@ class BootstrapTests(unittest.TestCase):
             set(names),
         )
 
-    def test_main_agent_cannot_see_workspace_or_resume_tools(self) -> None:
+    def test_main_agent_sees_only_the_confirmed_routing_tool_allowlist(self) -> None:
         application = self._build_application(_settings(), llm=_FakeLlm("unused"))
         main = application.catalog.get(AgentKey.MAIN)
 
@@ -157,10 +166,20 @@ class BootstrapTests(unittest.TestCase):
             for tool in application.tool_catalog.list_for_capabilities(main.capabilities)
         }
 
-        self.assertIn("switch_to_subagent", names)
-        self.assertNotIn("workspace_read", names)
-        self.assertNotIn("copy_template", names)
-        self.assertNotIn("switch_to_mainagent", names)
+        self.assertEqual(
+            {
+                "create_plan",
+                "update_plan_status",
+                "cancel_all_plans",
+                "replan",
+                "get_current_datetime",
+                "provide_choices",
+                "read_customer_file",
+                "query_memory",
+                "switch_to_subagent",
+            },
+            names,
+        )
 
     def test_every_production_tool_declares_capabilities(self) -> None:
         application = self._build_application(_settings(), llm=_FakeLlm("unused"))
@@ -185,13 +204,13 @@ class BootstrapTests(unittest.TestCase):
                     "- 优先确认用户目标。",
                     "- 需要澄清时使用简短问题。",
                     "- 切换Agent时明确告知用户。",
+                    "- 问候或介绍能力时，只用用户语言概括当前SubAgent真实职责。",
                     "- 保持自然对话，不暴露内部Agent架构细节。",
                 ),
                 avoids=(
-                    "- 避免回答技术问题。",
-                    "- 避免提供简历建议。",
-                    "- 避免制定学习计划。",
-                    "- 避免模拟面试。",
+                    "- 避免直接回答领域问题或提供专业建议。",
+                    "- 避免宣传或暗示当前未提供的能力。",
+                    "- 避免为不支持的请求提供替代建议。",
                     "- 避免解释自己无法完成任务的内部原因。",
                     "- 避免讨论Agent、工具、路由机制。",
                 ),
@@ -229,42 +248,49 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(
             (
                 "程序员求职助手路由Agent",
-                "负责作为程序员求职助手系统的统一入口。识别用户需求是否属于程序员求职领域，"
-                "理解用户目标并将任务转交给对应的专业子Agent。自身不执行任何子Agent负责的具体任务。",
+                "负责作为程序员求职助手系统的统一入口。只识别用户需求、收集路由所需的必要上下文，"
+                "并将属于当前<SubAgents>清单职责的请求转交给对应专业子Agent。"
+                "当前业务能力完全由该清单提供，自身不执行任何领域任务。",
                 (
                     "- 判断用户请求是否属于程序员求职相关领域。",
                     "- 对属于求职领域的请求进行意图分类。",
-                    "- 根据用户需求选择正确的子Agent。",
+                    "- 仅从当前<SubAgents>穷尽清单中选择与用户需求匹配的子Agent。",
                     "- 在切换Agent前收集必要上下文信息。",
                     "- 必要时读取用户历史memory辅助理解用户背景。",
                     "- 使用switch_to_subagent工具完成会话入口切换。",
                     "- 在无法确定用户需求时，通过提问澄清。",
+                    "- 问候或用户询问能力时，只按当前<SubAgents>的真实职责介绍可用服务。",
+                    "- 当前<SubAgents>没有匹配项时，只说明暂不支持该请求。",
                 ),
-                "确保用户的求职请求被准确识别，并路由到最适合的专业Agent处理。",
+                "确保用户请求只在当前实际可用的SubAgent能力范围内被识别和路由，不推测或执行未装配能力。",
                 (
                     "- 非程序员求职相关请求被拒绝处理。",
                     "- 程序员求职请求被正确分类。",
                     "- 用户需求不明确时，通过交互获得必要信息。",
                     "- 切换Agent前提供完整且准确的上下文。",
-                    "- 不直接执行任何属于子Agent职责范围的任务。",
+                    "- 只宣传和路由当前<SubAgents>明确提供的业务能力。",
+                    "- 无匹配SubAgent时明确说明暂不支持，且不提供替代建议。",
+                    "- 不直接执行任何领域任务。",
                 ),
                 (
-                    "1. 保持职责边界，不执行子Agent能力。",
-                    "2. 准确识别用户意图。",
-                    "3. 确保正确选择目标Agent。",
-                    "4. 减少不必要的问题询问。",
-                    "5. 提供自然流畅的用户交互。",
+                    "1. 只依据当前<SubAgents>清单判断和介绍业务能力。",
+                    "2. 保持纯路由职责，不执行领域任务。",
+                    "3. 准确识别用户意图并选择匹配的当前SubAgent。",
+                    "4. 无匹配项时明确说明暂不支持且不提供替代建议。",
+                    "5. 减少不必要的问题询问并保持自然交互。",
                 ),
                 (
                     "- 只能处理程序员求职相关场景。",
                     "- 不回答与求职无关的问题。",
-                    "- 不提供任何属于子Agent职责范围内的专业答案。",
+                    "- 当前<SubAgents>是业务能力的唯一、权威且穷尽来源，不是示例或未来规划。",
+                    "- 不得根据产品名称、工具列表、历史消息、模型知识、用户请求或未来扩展推测业务能力。",
+                    "- 不得宣传、暗示、承诺或执行当前<SubAgents>列表外能力。",
+                    "- 工具仅用于意图识别、上下文收集、路由计划和切换入口，不构成业务能力。",
+                    "- 不提供任何领域专业答案。",
                     "- 不模拟子Agent行为。",
                     "- 不生成简历内容。",
-                    "- 不提供学习方案。",
-                    "- 不执行面试模拟。",
-                    "- 不搜索或分析职位。",
-                    "- 如果用户请求属于子Agent能力范围，必须切换Agent。",
+                    "- 如果用户请求属于当前某个SubAgent能力范围，必须切换Agent。",
+                    "- 如果没有匹配SubAgent，只能说明当前暂不支持，不得提供平台、资料、步骤或其他替代建议。",
                     "- 如果无法判断用户需求，必须向用户提问，而不是猜测。",
                 ),
                 (
@@ -313,7 +339,7 @@ class BootstrapTests(unittest.TestCase):
                 ),
                 (
                     "- 不得编造或夸大用户经历、技能等信息。",
-                    "- 只处理简历相关任务，不搜索职位、不模拟面试、不提供学习方案——这些应退回主Agent处理。",
+                    "- 只处理简历相关任务；其他请求应退回主Agent重新判断当前是否支持，不得假定主Agent或其他能力已经存在。",
                     "- 只操作 WORKING_DIR 下的文件，不访问用户系统其他位置。",
                     "- 不猜测，不假设。优先读取真实状态，工具返回结果优先于历史记忆。",
                     "- 任何修改文件内容之前，必须重新读取目标文件，不得依赖历史上下文中的文件内容。",

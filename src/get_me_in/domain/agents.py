@@ -17,6 +17,7 @@ class Capability(StrEnum):
     """Fine-grained capabilities used by ToolCatalog visibility rules."""
 
     SYSTEM = "system"
+    CURRENT_DATETIME = "current_datetime"
     PLAN = "plan"
     INTERACTION = "interaction"
     WEB_SEARCH = "web.search"
@@ -27,6 +28,7 @@ class Capability(StrEnum):
     WORKSPACE_WRITE = "workspace.write"
     WORKSPACE_OPEN = "workspace.open"
     RESUME_ARTIFACT = "resume.artifact"
+    MEMORY_QUERY = "memory.query"
     KNOWLEDGE_QUERY = "knowledge.query"
 
 

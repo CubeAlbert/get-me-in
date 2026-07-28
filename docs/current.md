@@ -4,13 +4,13 @@
 
 **当前任务：** R8-O 强制观察：继续完成剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke
 
-**当前子任务：** 修复 Main 工具可见性与业务能力提示：只保留已确认的六类辅助／路由 capability，并将当前 `<SubAgents>` 设为唯一且穷尽的业务能力来源。
+**当前子任务：** 继续完成基础对话与剩余 CLI／交互 smoke，再验证 Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问边界。
 
-**当前阻塞：** R8-O 真实对话发现 Main 会宣传不存在的学习／面试能力，并在无匹配 SubAgent 时提供替代建议；决策 205 的 capability 隔离、提示词约束和真实 prompt／对话复验完成前不得通过 R8-O。
+**当前阻塞：** 无。决策 205 的 Main capability／提示词阻断已解除；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；最新提交 `c43727f` 完成决策 201～204。随后真实 Main 对话暴露新的能力边界漂移：问候会宣传尚未装配的面试／学习能力，无匹配 SubAgent 时仍给出学习平台建议。决策 205 已确认 Main 只可见 Plan、当前时间、选项交互、客户文件读取、记忆查询和切换 SubAgent 六类工具；这些工具仅服务于意图识别、上下文收集与路由，不构成业务能力。当前 `<SubAgents>` 是唯一且穷尽的业务能力来源；Main 不得推测、宣传或执行列表外能力，无匹配项时不得提供替代建议，问候可只按实际 SubAgent 能力介绍服务。下一步先实施 capability 拆分和 prompt 约束，再执行真实 prompt／对话复验；未经完成不得继续 R8-O 审查或进入 R8-D。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，`2c0ef06` 先行记录决策 205。决策 205 的实现已完成：Main 精确可见四个 Plan 工具、`get_current_datetime`、`provide_choices`、`read_customer_file`、`query_memory`、`switch_to_subagent`；`get_working_dir`、公共参考检索、Web Search 和全部领域工具均不可见。Tool／SubAgent／Main prompt 已明确工具不构成业务能力、当前 `<SubAgents>` 是唯一且穷尽的业务能力来源，并移除会泄漏不可见工具或暗示未来能力的交叉引用。49 项定向测试、完整 244 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 `uv run python main.py` 对话中，问候只介绍简历定制／优化，Java 学习资料请求只说明当前不支持且不提供替代建议，`/exit` 返回 0。该阻断解除；剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 仍待执行，未经用户审查不得进入 R8-D。
 
-**下一步：** 在不新增模块、class 或公开方法的前提下细分 `Capability`，收紧 Main 工具白名单，强化 Tool／SubAgent 权威提示与 Main `AgentSpec`，补齐自动化和真实 prompt／问候／无匹配请求 smoke。
+**下一步：** 从根入口完成剩余 CLI／交互、Main→Resume→Main、Knowledge／Memory、真实 Resume 和旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。

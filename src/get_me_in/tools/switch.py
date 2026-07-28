@@ -12,7 +12,7 @@ def build_switch_tools() -> tuple[ToolDefinition, ...]:
             name="switch_to_subagent",
             purpose="将用户切换至指定的专业子 Agent 处理其请求。切换后子 Agent 会接管对话，你无法再看到中间过程，仅在子 Agent 返回总结时恢复控制。",
             use_when="用户的请求属于某个子 Agent 的职责范围，需要由专业 Agent 接手处理。参考 <SubAgents> 列表选择合适的子 Agent。",
-            do_not_use_when="你自己可以处理、用户请求不属于任何子 Agent 的职责范围、或无法确定用户意图时。不确定时必须先向用户提问澄清。",
+            do_not_use_when="用户请求不属于当前任何 <SubAgents> 职责范围，或无法确定用户意图时。不确定时必须先向用户提问澄清；没有匹配项时不得猜测目标。",
             expected_output="切换至子 Agent，等待子 Agent 返回总结后恢复控制。",
             schema=ToolSchema(
                 {

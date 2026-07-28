@@ -97,9 +97,27 @@ class ProductionToolMetadataTests(unittest.TestCase):
                 self.assertTrue(parameter.description.strip(), f"{definition.name}.{name}")
 
     def test_legacy_selection_boundaries_and_defaults_are_preserved(self) -> None:
+        current_datetime = self.by_name["get_current_datetime"]
+        working_dir = self.by_name["get_working_dir"]
         memory = self.by_name["query_memory"]
         reference = self.by_name["query_reference_data"]
-        self.assertIn("query_reference_data", memory.do_not_use_when)
+        self.assertEqual(
+            frozenset({Capability.CURRENT_DATETIME}),
+            current_datetime.policy.required_capabilities,
+        )
+        self.assertEqual(
+            frozenset({Capability.WORKSPACE_READ}),
+            working_dir.policy.required_capabilities,
+        )
+        self.assertEqual(
+            frozenset({Capability.MEMORY_QUERY}),
+            memory.policy.required_capabilities,
+        )
+        self.assertEqual(
+            frozenset({Capability.KNOWLEDGE_QUERY}),
+            reference.policy.required_capabilities,
+        )
+        self.assertIn("只查询用户个人记忆", memory.do_not_use_when)
         self.assertIn("query_memory", reference.do_not_use_when)
         self.assertEqual(5, memory.schema.properties["top_k"].default)
         self.assertEqual(

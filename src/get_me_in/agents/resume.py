@@ -29,7 +29,7 @@ def build_resume_spec() -> AgentSpec:
         ),
         hard_constraints=(
             "- 不得编造或夸大用户经历、技能等信息。",
-            "- 只处理简历相关任务，不搜索职位、不模拟面试、不提供学习方案——这些应退回主Agent处理。",
+            "- 只处理简历相关任务；其他请求应退回主Agent重新判断当前是否支持，不得假定主Agent或其他能力已经存在。",
             "- 只操作 WORKING_DIR 下的文件，不访问用户系统其他位置。",
             "- 不猜测，不假设。优先读取真实状态，工具返回结果优先于历史记忆。",
             "- 任何修改文件内容之前，必须重新读取目标文件，不得依赖历史上下文中的文件内容。",
@@ -66,7 +66,7 @@ def build_resume_spec() -> AgentSpec:
         model_profile="pro",
         temperature=0.2,
         capabilities=frozenset({
-            Capability.SYSTEM,
+            Capability.CURRENT_DATETIME,
             Capability.PLAN,
             Capability.INTERACTION,
             Capability.WEB_SEARCH,
@@ -76,6 +76,7 @@ def build_resume_spec() -> AgentSpec:
             Capability.WORKSPACE_WRITE,
             Capability.WORKSPACE_OPEN,
             Capability.RESUME_ARTIFACT,
+            Capability.MEMORY_QUERY,
             Capability.KNOWLEDGE_QUERY,
         }),
         priorities=(

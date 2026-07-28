@@ -19,7 +19,7 @@ def build_customer_file_tools() -> tuple[ToolDefinition, ...]:
             name="read_customer_file",
             purpose="读取用户文件系统中的文件（txt/md/pdf/docx），返回带行号的统一结构化内容。",
             use_when="需要读取用户提供的简历、JD 或其他文档时",
-            do_not_use_when="需要读取工作区内的文件时 — 用 workspace_read",
+            do_not_use_when="需要读取当前受限工作区内的文件时；本工具只读取用户明确提供的外部绝对路径",
             expected_output='{"path": "...", "format": "pdf", "total_lines": N, "lines": [[1, "..."], ...]}',
             schema=ToolSchema(
                 {

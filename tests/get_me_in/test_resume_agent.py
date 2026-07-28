@@ -13,9 +13,10 @@ class ResumeAgentSpecTests(unittest.TestCase):
         self.assertEqual(0.2, spec.temperature)
         self.assertNotIn(Capability.ROUTE, spec.capabilities)
         self.assertTrue({
-            Capability.SYSTEM, Capability.PLAN, Capability.INTERACTION,
+            Capability.CURRENT_DATETIME, Capability.PLAN, Capability.INTERACTION,
             Capability.WEB_SEARCH, Capability.EXTERNAL_FILE_READ,
             Capability.RETURN_TO_MAIN, Capability.WORKSPACE_READ,
             Capability.WORKSPACE_WRITE, Capability.WORKSPACE_OPEN,
-            Capability.RESUME_ARTIFACT, Capability.KNOWLEDGE_QUERY,
+            Capability.RESUME_ARTIFACT, Capability.MEMORY_QUERY,
+            Capability.KNOWLEDGE_QUERY,
         } <= spec.capabilities)

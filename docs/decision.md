@@ -4694,6 +4694,8 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 为精确表达白名单，在现有 `Capability` 枚举增加 `CURRENT_DATETIME` 与 `MEMORY_QUERY`；`get_current_datetime` 使用前者，`query_memory` 使用后者。`get_working_dir` 改由已有 `WORKSPACE_READ` 控制，`query_reference_data` 继续使用 `KNOWLEDGE_QUERY`。Main 移除 `SYSTEM`、`WEB_SEARCH`、`KNOWLEDGE_QUERY`，保留 `PLAN`、`CURRENT_DATETIME`、`INTERACTION`、`EXTERNAL_FILE_READ`、`MEMORY_QUERY`、`ROUTE`。Resume 继续拥有完成其既有职责所需的 capability。
 - `04_tools.md` 增加“工具是执行辅助而非业务能力来源”的权威规则；`05_sub_agents.md` 增加穷尽列表、禁止能力推测、无匹配处理和用户可见能力介绍规则；Main `AgentSpec` 的 Role／Mission／Constraints／CommunicationStyle 同步强化相同边界。
 - 本次不新增模块、class、service、port、schema 或公开方法；只增加两个 capability 枚举成员并调整现有声明、模板与测试。R8-O 必须以真实 production composition 验证 Main 精确工具集合、Resume 不回退、Main 只见 Resume、权威规则进入最终 prompt，并以真实对话复验问候和无匹配请求。
+- 实施同时修复两个由共享 ToolDefinition 引起的名称泄漏：`query_memory` 不再在 Main prompt 中指向不可见的 `query_reference_data`，`read_customer_file` 不再指向不可见的 `workspace_read`；Resume 的非简历请求约束也不再暗示 Main 必然具备其他领域能力。
+- 验证结果：49 项 capability／Prompt／bootstrap／Tool 定向测试、完整 244 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 `uv run python main.py` 对话中，问候只介绍简历定制／优化；Java 学习资料请求只说明当前不支持且未提供替代建议；`/exit` 返回 0。决策 205 的 R8-O 阻断解除。
 
 **理由：**
 
