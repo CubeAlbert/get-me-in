@@ -7,7 +7,7 @@ from src.get_me_in.application.session_codec import SessionSnapshot, SessionSnap
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
-from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, RuntimePhase, SessionState
+from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, PendingToolCall, RuntimePhase, SessionState
 
 
 class SessionSnapshotCodecTests(unittest.TestCase):
@@ -23,6 +23,17 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         self.assertEqual("summary", record.thinking)
         self.assertEqual("plan-1", record.plan.plan_id)
         self.assertEqual("session-1", restored.session.session_id)
+        self.assertEqual("turn-1", restored.session.agents[AgentKey.MAIN].turn_id)
+
+    def test_decode_repairs_legacy_handoff_snapshot_without_agent_turn_id(self) -> None:
+        codec = SessionSnapshotCodec()
+        snapshot = _handoff_snapshot()
+        payload = codec.encode(snapshot)
+        del payload["agents"]["main"]["turn_id"]
+
+        restored = codec.decode(payload)
+
+        self.assertEqual("turn-1", restored.session.agents[AgentKey.MAIN].turn_id)
 
     def test_round_trip_preserves_tool_call_thinking_and_accepts_missing_fields(self) -> None:
         codec = SessionSnapshotCodec()
@@ -99,8 +110,33 @@ def _snapshot(*, phase: RuntimePhase = RuntimePhase.READY, tool_thinking: bool =
         agents={AgentKey.MAIN: AgentSessionState(
             phase=phase,
             history=tuple(history),
+            turn_id="turn-1",
         )},
         handoff_stack=(),
+        created_at=_now(),
+        updated_at=_now(),
+    )
+    return SessionSnapshot(session, _now())
+
+
+def _handoff_snapshot() -> SessionSnapshot:
+    history = (
+        MessageRecord("event-1", Role.USER, "delegate", _now(), "turn-1"),
+        ToolCallRecord("event-2", "call-1", "switch_to_subagent", {}, _now(), "turn-1"),
+    )
+    session = SessionState(
+        session_id="handoff-session",
+        active_agent=AgentKey.RESUME,
+        agents={
+            AgentKey.MAIN: AgentSessionState(
+                phase=RuntimePhase.WAITING_FOR_HANDOFF,
+                history=history,
+                pending_tool=PendingToolCall("call-1", "switch_to_subagent", {}),
+                turn_id="turn-1",
+            ),
+            AgentKey.RESUME: AgentSessionState(phase=RuntimePhase.WAITING_FOR_USER),
+        },
+        handoff_stack=(HandoffFrame(AgentKey.MAIN, AgentKey.RESUME, "call-1", "turn-1", "context"),),
         created_at=_now(),
         updated_at=_now(),
     )

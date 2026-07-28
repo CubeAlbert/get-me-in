@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 217 — SessionSnapshot 持久化 agent turn_id 并兼容旧 handoff 快照](#决策-217--sessionsnapshot-持久化-agent-turn_id-并兼容旧-handoff-快照)
 - [决策 216 — 模型回复解析失败暂停当前 SubAgent，由用户继续](#决策-216--模型回复解析失败暂停当前-subagent-由用户继续)
 - [决策 215 — 模型调用上限默认调整为 100 且 Main／Resume 计数独立](#决策-215--模型调用上限默认调整为-100-且-mainresume-计数独立)
 - [决策 214 — 工具调用未知参数沿用 v1 静默忽略语义](#决策-214--工具调用未知参数沿用-v1-静默忽略语义)
@@ -5039,3 +5040,33 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - Runtime、Orchestrator、CLI、Renderer、Session codec 相关 68 项测试通过。
 - production bootstrap 相关 20 项测试通过；`git diff --check` 通过。
 - 真实 CLI／完整 R8-O smoke 尚未完成，仍需用户后续观察。
+
+---
+
+### 决策 217 —— SessionSnapshot 持久化 agent turn_id 并兼容旧 handoff 快照
+
+**背景：** R8-O 真实 Resume 会话执行 `/restore` 时，合法的 handoff 快照报错 `Handoff frame must match the source turn`。检查发现 `SessionSnapshotCodec` 保存 handoff frame 的 `turn_id`，却没有保存 `AgentSessionState.turn_id`；恢复后 source agent 的 turn_id 默认为空字符串，严格一致性校验因此误判快照损坏。此前已经生成的 schema v2 快照同样缺少该字段。
+
+**决定：**
+
+- `SessionSnapshotCodec` 在每个 agent payload 中持久化并恢复 `turn_id`。
+- 对缺少 agent `turn_id` 的旧 schema v2 handoff 快照，仅在 source state 为空且 handoff frame 存在时使用 frame 的 source turn 补齐；补齐后仍执行完整 session 校验。
+- 如果快照已经包含 `turn_id` 但与 handoff frame 不一致，继续拒绝恢复，不放宽真实一致性约束。
+- 增加 agent turn_id round-trip 测试和缺字段旧 handoff 快照兼容测试。
+
+**理由：**
+
+- `turn_id` 是 handoff source 状态与 frame 的必要关联字段，必须和 pending call、phase 一样进入快照。
+- 只对可确定的历史缺字段情况做最小兼容修复，避免把真实损坏或篡改的 turn_id 静默接受。
+- `/restore` 仍只恢复稳定状态，不重放已完成的工具副作用。
+
+**曾考虑的替代方案：**
+
+- 删除 handoff frame 的 turn 校验 —— 会失去 source turn 一致性保护，拒绝。
+- 所有恢复快照都以 frame turn 覆盖 source turn —— 会掩盖包含错误字段的新快照，拒绝。
+- 提升 schema version 并强制用户删除旧存档 —— 会使现有合法 session 不可恢复，未采用。
+
+**验证：**
+
+- Session codec、SessionService、bootstrap 定向回归共 31 项测试通过。
+- `git diff --check` 通过。

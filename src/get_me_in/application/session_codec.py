@@ -1,7 +1,7 @@
 """Disk-safe codec for v2 session snapshots, separate from model conversation codec."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from src.get_me_in.domain.agents import AgentKey
@@ -65,17 +65,26 @@ class SessionSnapshotCodec:
         try:
             agents_raw = _mapping(payload["agents"], "agents")
             agents = {AgentKey(key): self._decode_agent(_mapping(value, f"agents.{key}")) for key, value in agents_raw.items()}
+            handoff_stack = tuple(
+                self._decode_frame(_mapping(item, "handoff_stack item"))
+                for item in _sequence(payload["handoff_stack"], "handoff_stack")
+            )
             session = SessionState(
                 session_id=_text(payload["session_id"], "session_id"),
                 active_agent=AgentKey(_text(payload["active_agent"], "active_agent")),
                 agents=agents,
-                handoff_stack=tuple(
-                    self._decode_frame(_mapping(item, "handoff_stack item"))
-                    for item in _sequence(payload["handoff_stack"], "handoff_stack")
-                ),
+                handoff_stack=handoff_stack,
                 created_at=_time(payload["created_at"], "created_at"),
                 updated_at=_time(payload["updated_at"], "updated_at"),
             )
+            if handoff_stack:
+                frame = handoff_stack[-1]
+                source_payload = _mapping(agents_raw[frame.source.value], f"agents.{frame.source.value}")
+                source_state = session.agents[frame.source]
+                if "turn_id" not in source_payload and not source_state.turn_id:
+                    repaired_agents = dict(session.agents)
+                    repaired_agents[frame.source] = replace(source_state, turn_id=frame.turn_id)
+                    session = replace(session, agents=repaired_agents)
             snapshot = SessionSnapshot(session, _time(payload["saved_at"], "saved_at"))
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"Invalid session snapshot: {error}") from error
@@ -128,6 +137,7 @@ class SessionSnapshotCodec:
         return {
             "phase": state.phase.value,
             "history": [self._encode_record(record) for record in state.history],
+            "turn_id": state.turn_id,
             "model_calls": state.model_calls,
             "pending_tool": None if state.pending_tool is None else {
                 "call_id": state.pending_tool.call_id,
@@ -149,6 +159,7 @@ class SessionSnapshotCodec:
         return AgentSessionState(
             phase=RuntimePhase(_text(payload["phase"], "phase")),
             history=tuple(self._decode_record(_mapping(item, "history item")) for item in _sequence(payload["history"], "history")),
+            turn_id=_string(payload.get("turn_id", ""), "turn_id"),
             model_calls=_integer(payload["model_calls"], "model_calls"),
             pending_tool=pending,
             repair_attempted=_boolean(payload["repair_attempted"], "repair_attempted"),
