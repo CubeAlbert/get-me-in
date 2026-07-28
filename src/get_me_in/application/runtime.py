@@ -464,12 +464,11 @@ class AgentRuntime:
         )
         self._state = replace(
             self._state,
-            phase=RuntimePhase.CANCELLED,
+            phase=RuntimePhase.WAITING_FOR_USER,
             history=(*self._state.history, record),
             pending_tool=None,
-            cancel_reason=reason,
         )
-        return Cancelled(reason)
+        return Paused("approval_rejected", reason)
 
     def _submit_selection(self, command: SubmitSelection) -> RuntimeEvent:
         failure = self._validate_pending(command.request_id, RuntimePhase.WAITING_FOR_SELECTION)

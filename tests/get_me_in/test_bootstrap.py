@@ -9,7 +9,7 @@ from unittest.mock import patch
 from src.get_me_in.bootstrap import build_application
 from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
 from src.get_me_in.application.app_commands import DumpSession, RestoreSession, RewindSession
-from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress, ToolFinished, ToolStarted
+from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Paused, Progress, ToolFinished, ToolStarted
 from src.get_me_in.application.settings import Settings
 from src.get_me_in.domain.agents import AgentKey, AgentStyle
 from src.get_me_in.domain.sessions import RuntimePhase
@@ -544,9 +544,53 @@ class BootstrapTests(unittest.TestCase):
         rejected = application.handle(Reject(approval.call_id, "User rejected approval"))
 
         self.assertIsInstance(approval, ApprovalRequested)
-        self.assertIsInstance(rejected, Cancelled)
+        self.assertIsInstance(rejected, Paused)
+        self.assertEqual("approval_rejected", rejected.code)
         self.assertEqual(AgentKey.MAIN, application.view().active_agent)
         self.assertEqual((), application._sessions._session.handoff_stack)
+
+    def test_rejected_subagent_approval_pauses_until_next_user_message(self) -> None:
+        main_llm = _FakeLlm(
+            _tool_call(
+                "switch_to_subagent",
+                {"agent_name": "resume"},
+                thinking="delegate",
+            )
+        )
+        resume_llm = _FakeLlm(
+            [
+                _tool_call(
+                    "workspace_write",
+                    {"path": "resume.txt", "content": "draft"},
+                ),
+                _finish("continued", "continued"),
+            ]
+        )
+        application = build_application(
+            _settings(),
+            runtime_llms={AgentKey.MAIN: main_llm, AgentKey.RESUME: resume_llm},
+        )
+        self.addCleanup(application.close)
+
+        approval = _pump(application, UserMessage("Delegate this"))[-1]
+        handoff = _pump(application, Approve(approval.call_id))[-1]
+        subagent_approval = _pump(application, Continue())[-1]
+        rejected = application.handle(Reject(subagent_approval.call_id, "User rejected approval"))
+
+        self.assertIsInstance(handoff, HandoffRequested)
+        self.assertIsInstance(subagent_approval, ApprovalRequested)
+        self.assertIsInstance(rejected, Paused)
+        self.assertEqual(AgentKey.RESUME, application.view().active_agent)
+        self.assertEqual(1, len(application._sessions._session.handoff_stack))
+        self.assertEqual(1, len(resume_llm.requests))
+
+        continued = _pump(application, UserMessage("Continue after rejection"))
+
+        self.assertIsInstance(continued[-1], Completed)
+        self.assertEqual(2, len(resume_llm.requests))
+        messages = resume_llm.requests[1].messages
+        self.assertEqual("tool_call_result", json.loads(messages[-2].content)["event_type"])
+        self.assertEqual("Continue after rejection", json.loads(messages[-1].content)["message"])
 
     def test_composition_failure_does_not_leave_background_thread(self) -> None:
         before = {id(thread) for thread in enumerate_threads()}
@@ -628,11 +672,13 @@ class _FakeLlm:
     def __init__(self, response: str | list[str]) -> None:
         self._responses = [response] if isinstance(response, str) else list(response)
         self.request: LLMRequest | None = None
+        self.requests: list[LLMRequest] = []
         self.cancellation: CancellationSignal | None = None
         self.closed = False
 
     def complete(self, request: LLMRequest, cancellation: CancellationSignal) -> LLMResult:
         self.request = request
+        self.requests.append(request)
         self.cancellation = cancellation
         response = self._responses.pop(0)
         if response.startswith("{"):

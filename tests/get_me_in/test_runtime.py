@@ -221,9 +221,18 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertIsInstance(approval, ApprovalRequested)
         self.assertIsInstance(approved[-1], Completed)
-        self.assertIsInstance(rejected[-1], Cancelled)
-        self.assertEqual("Tool call delete was rejected", rejected[-1].reason)
-        self.assertEqual(1, len(rejected_llm.requests))
+        self.assertIsInstance(rejected[-1], Paused)
+        self.assertEqual("approval_rejected", rejected[-1].code)
+        self.assertEqual("Tool call delete was rejected", rejected[-1].message)
+        continued = _pump(rejected_runtime, UserMessage("continue after rejection"))
+        self.assertIsInstance(continued[-1], Completed)
+        self.assertEqual(2, len(rejected_llm.requests))
+        previous = json.loads(rejected_llm.requests[1].messages[-2].content)
+        current = json.loads(rejected_llm.requests[1].messages[-1].content)
+        self.assertEqual("tool_call_result", previous["event_type"])
+        self.assertEqual("rejected", previous["event_payload"]["code"])
+        self.assertEqual("user_input", current["event_type"])
+        self.assertEqual("continue after rejection", current["message"])
 
     def test_selection_resumes_with_selected_value(self) -> None:
         runtime, _, temporary_dir = _runtime(

@@ -51,7 +51,7 @@ class CliAppTests(unittest.TestCase):
 
     def test_rejected_approval_returns_to_input_without_continuing_model_loop(self) -> None:
         application = _Application()
-        worker = _Worker((ApprovalRequested("call", "web search"), Cancelled("Tool call web_search was rejected")))
+        worker = _Worker((ApprovalRequested("call", "web search"), Paused("approval_rejected", "User rejected approval")))
         input_controller = _Input(("hello", "/exit"), approved=False)
         app = CliApp(
             application,

@@ -5160,3 +5160,33 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 新增立即执行 worker 的 startup lock 回归测试；Knowledge／adapter／retrieval 定向测试 35 项通过。
 - 全量 unittest 278 项通过，`git diff --check` 通过。
+
+---
+
+### 决策 221 —— 审批拒绝暂停当前 Agent，下一条用户消息再继续
+
+**背景：** R8-O 审批拒绝场景中，Runtime 将 `Reject` 返回为 `Cancelled`。当拒绝发生在活动 Resume 子 Agent 时，Orchestrator 按取消语义关闭 handoff，向 Main 写入拒绝结果并返回 `ToolFinished`；CLI 随后自动发送 `Continue()`，导致 Main 在没有下一条用户消息的情况下再次调用 LLM。v1 的行为是拒绝后结束当前 agent loop，将拒绝结果保留在历史中，等待下一条用户消息后再一起发送给当前 Agent 的 LLM。
+
+**决定：**
+
+- `Reject` 将待处理 tool call 的拒绝结果写入 `ToolResultRecord`，把当前 Agent 状态置为 `WAITING_FOR_USER`，并返回既有 `Paused("approval_rejected", reason)` 事件。
+- 审批拒绝不再使用 `Cancelled` 语义，不触发 Orchestrator 的 handoff closure，也不自动调度下一次模型调用。
+- 下一条 `UserMessage` 可从 `WAITING_FOR_USER` 开始新的模型 run；ConversationCodec 按历史顺序把拒绝的 `tool_call_result` 和新的用户消息一起编码给当前 Agent。
+- 不新增 RuntimeEvent 或公开 API；真实取消、provider failure 和其他 terminal failure 的既有 `Cancelled/Failed` handoff 语义保持不变。
+
+**理由：**
+
+- 审批拒绝表示用户结束当前工具尝试并准备提供后续指示，不等同于取消整个子 Agent 会话。
+- 保留活动 handoff 可以让用户继续当前 Resume 任务，也避免 Main 在缺少新用户意图时自行推理下一步。
+- 复用 `Paused` 和 `WAITING_FOR_USER` 可保持既有解析失败暂停、CLI 输入边界和 session snapshot 安全状态。
+
+**曾考虑的替代方案：**
+
+- 继续返回 `Cancelled`，但在 CLI 中特殊阻止 `Continue()` —— 只能修复一个前端入口，Orchestrator 仍会关闭活动 handoff，未采用。
+- 返回 `ToolFinished` 并让模型自行决定是否继续 —— 会违反 v1 的拒绝后停顿语义，未采用。
+- 新增独立 `ApprovalRejected` 事件 —— 当前 `Paused` 已能表达等待用户继续，增加事件会扩大公开协议，未采用。
+
+**验证：**
+
+- Runtime、CLI、Orchestrator 和真实 bootstrap 的审批拒绝定向回归 65 项通过；覆盖 Resume 子 Agent 拒绝后 handoff 保留、无额外 LLM 调用及下一条用户消息继续。
+- 全量 unittest 279 项通过，`git diff --check` 通过。
