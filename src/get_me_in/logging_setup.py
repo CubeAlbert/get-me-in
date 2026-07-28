@@ -11,6 +11,17 @@ _HANDLER_MARKER = "_get_me_in_v2_handler"
 _FILE_ONLY_MARKER = "_get_me_in_file_only"
 
 
+class _StderrFormatter(logging.Formatter):
+    """Keep terminal errors visible without adding ANSI to redirected output."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        message = super().format(record)
+        is_tty = getattr(sys.stderr, "isatty", lambda: False)()
+        if record.levelno >= logging.ERROR and is_tty:
+            return f"\x1b[31m{message}\x1b[0m"
+        return message
+
+
 def configure_logging(log_dir: Path, level: str) -> Path:
     """Configure rotating file and stderr handlers for v2 and return the log path."""
     normalized_level = level.strip().upper()
@@ -45,7 +56,7 @@ def configure_logging(log_dir: Path, level: str) -> Path:
     stderr_handler = logging.StreamHandler(sys.stderr)
     stderr_handler.setLevel(logging.ERROR)
     stderr_handler.addFilter(_exclude_file_only_records)
-    stderr_handler.setFormatter(logging.Formatter("%(levelname)s | %(message)s"))
+    stderr_handler.setFormatter(_StderrFormatter("%(levelname)s | %(message)s"))
     setattr(stderr_handler, _HANDLER_MARKER, True)
 
     package_logger.addHandler(file_handler)

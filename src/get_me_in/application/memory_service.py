@@ -8,6 +8,8 @@ from src.get_me_in.ports.llm import CancellationSignal
 
 logger = logging.getLogger(__name__)
 _MEMORY_JOB_PREFIX = "memory-build"
+_FILE_ONLY_LOG = {"_get_me_in_file_only": True}
+_USER_ERROR = "Error: memory build failed; details were written to app.log"
 
 
 class MemoryService:
@@ -122,5 +124,7 @@ class MemoryService:
                 source.session_id,
                 source.agent_key,
                 len(created),
+                extra=_FILE_ONLY_LOG,
             )
-            return MemoryBuildReport(source.session_id, tuple(created), error=str(error))
+            logger.error(_USER_ERROR)
+            return MemoryBuildReport(source.session_id, tuple(created), error=_USER_ERROR)

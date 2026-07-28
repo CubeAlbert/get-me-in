@@ -105,6 +105,17 @@ class MemoryExtractorTests(unittest.TestCase):
 
         self.assertEqual(0.0, llm.request.temperature)
 
+    def test_extractor_parses_category_content_array(self) -> None:
+        llm = _RecordingLlm('[{"category":"fact","content":"uses Python"},'
+                            '{"category":"preference","content":"prefers remote work"}]')
+        extractor = MemoryExtractor(llm, "extract", _Clock(), _Ids(), 1)
+        source = MemoryBuildSource("session", AgentKey.MAIN, ())
+
+        records = extractor.extract(source, CancellationToken())
+
+        self.assertEqual((MemoryCategory.FACT, MemoryCategory.PREFERENCE), tuple(record.category for record in records))
+        self.assertEqual(("uses Python", "prefers remote work"), tuple(record.content for record in records))
+
 
 class _Clock:
     def now(self): return _now()
@@ -138,9 +149,11 @@ class _Knowledge:
 
 
 class _RecordingLlm:
+    def __init__(self, content='[]'): self.content = content
+
     def complete(self, request, cancellation):
         self.request = request
-        return LLMResult("[]")
+        return LLMResult(self.content)
 
     def close(self):
         pass

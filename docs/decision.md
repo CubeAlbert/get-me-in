@@ -4974,6 +4974,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **验证：**
 
 - `git diff --check` 通过。
+
 - 已增加 `tests/get_me_in/test_tool_catalog.py` 和 `tests/get_me_in/test_runtime.py` 回归覆盖；本次 checkpoint 未重新执行完整自动化测试。
 
 ---
@@ -5070,3 +5071,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - Session codec、SessionService、bootstrap 定向回归共 31 项测试通过。
 - `git diff --check` 通过。
+
+---
+
+### 决策 218 —— MemoryExtractor 使用数组契约并隔离后台异常详情
+
+**背景：** R8-O 真实 `/build-memory` 失败时，v2 `MemoryExtractor` 按数组遍历模型结果并读取 `category/content`，但生产加载的旧记忆 prompt 要求模型返回 `facts/preferences` 对象；同时 `MemoryService` 的 `logger.exception` 通过 ERROR stderr handler 将完整 traceback 输出到前台，暴露内部实现细节。
+
+**决定：**
+
+- 将 `data/prompts/memory/builder.md` 改为适配当前 `MemoryExtractor` 的输入输出契约：输入为拼接后的对话文本，输出为只包含 `category`（`fact`／`preference`）和 `content` 的 JSON 数组。
+- Memory 构建异常继续使用 `logger.exception` 保存完整 traceback，但标记为仅文件日志；前台和后台 job result 只保留 `Error: memory build failed; details were written to app.log`，真实终端中的 ERROR 提示显示为红色。
+- 保留既有 Memory partial failure 的 typed report 语义，不改变后台构建仍立即返回 receipt 的异步边界。
+
+**理由：**
+
+- Prompt、模型 JSON mode 和 extractor parser 必须共享同一业务 schema，避免合法的 v1 对象被 v2 当作数组遍历而触发 `TypeError`。
+- 用户界面不应显示后台实现 traceback，但日志仍需保留完整证据以便诊断。
+
+**曾考虑的替代方案：**
+
+- 在 `MemoryExtractor` 中兼容旧 `facts/preferences` 对象 —— 会继续保留 prompt 与实现不一致的双契约，未采用。
+- 删除异常 traceback —— 会损失排查所需的完整日志证据，拒绝。
+
+**验证：**
+
+- Memory、logging、CLI 定向回归 17 项通过。
+- 全量 unittest 275 项通过，`git diff --check` 通过。
