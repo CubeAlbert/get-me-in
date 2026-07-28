@@ -76,11 +76,23 @@ class ToolExecutor:
                 prompt=f"Approve tool {tool_name}?",
             )
 
-        failure = self._validate_arguments(arguments, definition.schema.properties, definition.schema.required)
+        # 与 v1 保持兼容：模型可能把回复元数据（例如 thinking）混入
+        # event_payload。未知参数不属于工具业务输入，应静默丢弃；已知参数
+        # 仍然必须经过必填项和类型校验。
+        filtered_arguments = {
+            name: value
+            for name, value in arguments.items()
+            if name in definition.schema.properties
+        }
+        failure = self._validate_arguments(
+            filtered_arguments,
+            definition.schema.properties,
+            definition.schema.required,
+        )
         if failure is not None:
             return failure
         try:
-            return definition.handler(arguments, context)
+            return definition.handler(filtered_arguments, context)
         except Exception as error:
             return ToolFailure("tool_handler_error", str(error))
 
@@ -93,9 +105,6 @@ class ToolExecutor:
         missing = required - arguments.keys()
         if missing:
             return ToolFailure("missing_argument", f"Missing arguments: {', '.join(sorted(missing))}")
-        unexpected = arguments.keys() - properties.keys()
-        if unexpected:
-            return ToolFailure("unexpected_argument", f"Unexpected arguments: {', '.join(sorted(unexpected))}")
         for name, value in arguments.items():
             parameter = properties[name]
             expected_type = parameter.value_type

@@ -246,6 +246,28 @@ class RuntimeTests(unittest.TestCase):
         self.assertIsInstance(requested, SelectionRequested)
         self.assertIsInstance(completed[-1], Completed)
 
+    def test_tool_call_metadata_mixed_into_arguments_is_ignored(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [
+                _tool_call(
+                    "provide_choices",
+                    {
+                        "question": "pick",
+                        "choices": ["a", "b"],
+                        "thinking": "model summary",
+                    },
+                )
+            ],
+            definitions=build_switch_tools(),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        requested = _pump(runtime, UserMessage("question"))[-1]
+
+        self.assertIsInstance(requested, SelectionRequested)
+        self.assertEqual("pick", requested.prompt)
+        self.assertEqual(("a", "b"), requested.choices)
+
     def test_selection_cancellation_returns_tool_result_without_cancelling_agent(self) -> None:
         runtime, llm, temporary_dir = _runtime(
             [

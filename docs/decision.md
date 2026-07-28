@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 214 — 工具调用未知参数沿用 v1 静默忽略语义](#决策-214--工具调用未知参数沿用-v1-静默忽略语义)
 - [决策 213 — system prompt 顺序只由模板文件名决定](#决策-213--system-prompt-顺序只由模板文件名决定)
 - [决策 212 — finish thinking 必须是非空用户可见摘要](#决策-212--finish-thinking-必须是非空用户可见摘要)
 - [决策 211 — uv 唯一默认镜像切换为 TUNA 并拆分依赖添加与同步](#决策-211--uv-唯一默认镜像切换为-tuna-并拆分依赖添加与同步)
@@ -4944,3 +4945,34 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保留文件名并继续在代码中移动 OutputFormat —— 顺序规则隐藏在实现中，明确拒绝。
 - 只修改测试期待但保留重排 —— 不能改变真实运行行为，拒绝。
 - 将 OutputFormat 改为 `99_output_format.md` 继续保持最后 —— 用户明确要求调整 07/08，且 `09_reserved.md` 应继续承担最终保留约束，未采用。
+
+---
+
+### 决策 214 —— 工具调用未知参数沿用 v1 静默忽略语义
+
+**背景：** R8-O 真实交互中，`provide_choices` 的工具参数除了 `question` 和 `choices` 外还出现了 `thinking`，v2 `ToolExecutor` 将该字段判定为 `unexpected_argument`，导致工具没有进入选择交互。对照 v1 `BaseAgent._execute_tool()` 可知，旧实现会按 handler 签名过滤未知参数，仅对过滤后的参数执行必填校验并调用 handler；因此这是 v2 的兼容性回归。
+
+**决定：**
+
+- `ToolExecutor` 在参数校验前只保留 `ToolSchema.properties` 中声明的字段。
+- 未知字段（包括误混入 `event_payload` 的 `thinking`）静默忽略，不返回 `unexpected_argument`，也不传入工具 handler。
+- 过滤后的已知字段继续执行必填参数和类型校验；未知工具、能力限制、审批、取消及 handler 异常语义不变。
+- 顶层 `tool_call.thinking` 仍作为可选模型元数据保留；即使模型错误地将它嵌入 `event_payload`，工具边界也按 v1 兼容规则安全处理。
+- 增加 ToolExecutor 级和 Runtime 级回归，分别覆盖未知参数被过滤及 `provide_choices` 正常产生 `SelectionRequested`。
+
+**理由：**
+
+- 保持 v1 已验证的模型容错行为，避免模型把回复元数据混入工具载荷时中断用户流程。
+- 将兼容处理放在统一工具执行边界，所有工具一致生效，不需要为 `thinking` 或单个工具增加特判。
+- 仍对声明的业务参数严格校验，未知字段不会扩大 handler 的输入面。
+
+**曾考虑的替代方案：**
+
+- 只在 Parser 中特判并删除 `thinking` —— 无法覆盖其他未知字段，且不能保持 v1 的通用兼容语义，未采用。
+- 为 `provide_choices` 单独增加 `thinking` schema 字段 —— 会把模型元数据错误地伪装成业务参数，扩大工具契约，未采用。
+- 继续返回 `unexpected_argument` 并要求模型 repair —— 与 v1 行为不一致，会让可安全忽略的附加字段阻断交互，未采用。
+
+**验证：**
+
+- `git diff --check` 通过。
+- 已增加 `tests/get_me_in/test_tool_catalog.py` 和 `tests/get_me_in/test_runtime.py` 回归覆盖；本次 checkpoint 未重新执行完整自动化测试。

@@ -8,9 +8,9 @@
 
 **当前阻塞：** 无。决策 206 的空 Memory collection 查询缺陷及决策 207 的 targeted reload 非目标删除缺陷均已修复并复验；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施空 Memory collection 正常零命中和两份 legacy 记忆的一次性迁移；决策 207 已修复 targeted reload 对非目标 manifest entries 的误删风险；Chroma 为 `memories=36`、`references=34` chunks。决策 208 恢复 startup reload 后台预热 embedding／reranker 与 CLI 权重输出静默。决策 209 修复 selection Ctrl+C 错误退出 SubAgent。决策 210 新增 Resume-only `merge_pdfs`，当前 production Catalog 为 26 个 Tool。决策 211 将 uv 唯一默认镜像切换为清华 TUNA，保持 Windows／Ubuntu/Linux universal lock，并固定 `uv add --no-sync` → `uv sync` 分步工作流；普通 `uv lock`、`uv sync --locked`、133 包版本一致性、无禁用 registry、58 项定向测试、完整 261 项测试、`compileall`、`git diff --check` 与 import boundary 均通过。决策 212 要求 `finish.thinking` 必须非空且不能只含空白，空摘要进入既有一次模型 repair。决策 213 将模板重命名为 `07_input_format.md`、`08_output_format.md`，撤销 PromptRenderer 的硬编码重排，system prompt 严格按文件名顺序拼接；完整 264 项测试和 legacy OutputFormat 读取 smoke 已通过。R8-O 其余 smoke 仍待完成。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施空 Memory collection 正常零命中和两份 legacy 记忆的一次性迁移；决策 207 已修复 targeted reload 对非目标 manifest entries 的误删风险；Chroma 为 `memories=36`、`references=34` chunks。决策 208 恢复 startup reload 后台预热 embedding／reranker 与 CLI 权重输出静默。决策 209 修复 selection Ctrl+C 错误退出 SubAgent。决策 210 新增 Resume-only `merge_pdfs`，当前 production Catalog 为 26 个 Tool。决策 211 将 uv 唯一默认镜像切换为清华 TUNA，保持 Windows／Ubuntu/Linux universal lock，并固定 `uv add --no-sync` → `uv sync` 分步工作流；普通 `uv lock`、`uv sync --locked`、133 包版本一致性、无禁用 registry、58 项定向测试、完整 261 项测试、`compileall`、`git diff --check` 与 import boundary 均通过。决策 212 要求 `finish.thinking` 必须非空且不能只含空白，空摘要进入既有一次模型 repair。决策 213 将模板重命名为 `07_input_format.md`、`08_output_format.md`，撤销 PromptRenderer 的硬编码重排，system prompt 严格按文件名顺序拼接；完整 264 项测试和 legacy OutputFormat 读取 smoke 已通过。决策 214 恢复 v1 的工具未知参数静默忽略语义：`ToolExecutor` 过滤未声明参数后再做必填／类型校验，模型将 `thinking` 混入 `event_payload` 时不再导致 `unexpected_argument`。R8-O 其余 smoke 仍待完成。
 
-**下一步：** 继续完成剩余 CLI／交互、Main→Resume→Main、审批拒绝、Plan、Memory delete、真实 Resume 与旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
+**下一步：** 先复验 `provide_choices` 携带额外 `thinking` 时可正常进入选择交互，再继续完成剩余 CLI／交互、Main→Resume→Main、审批拒绝、Plan、Memory delete、真实 Resume 与旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -52,6 +52,7 @@
 211. **uv 唯一默认镜像切换为 TUNA 并拆分依赖添加与同步** — `pyproject.toml` 只配置清华 TUNA，不设置平台限制、官方 PyPI、第二镜像或 PyTorch 专源；继续生成 Windows／Ubuntu/Linux universal lock。新增依赖统一先 `uv add <package> --no-sync`，再 `uv sync`；锁定前先排除并发 uv 操作并耐心等待。
 212. **finish thinking 必须是非空用户可见摘要** — `finish.thinking` 必须是非空、非纯空白字符串；空值不得静默通过或由 Runtime 补齐，而是进入既有一次模型 repair。`tool_call.thinking` 继续可选。
 213. **system prompt 顺序只由模板文件名决定** — PromptRenderer 仅按 `*.md` 文件名排序并拼接，不得在代码中强制移动任何模板；InputFormat／OutputFormat 分别重命名为 `07_input_format.md`／`08_output_format.md`，`09_reserved.md` 保持最后。格式修复仍从 canonical OutputFormat 文件读取。
+214. **工具调用未知参数沿用 v1 静默忽略语义** — `ToolExecutor` 先将模型传入参数投影到工具 schema 的已声明字段，再执行必填／类型校验；未知字段（包括误混入 `event_payload` 的 `thinking`）不产生 `unexpected_argument`，也不传入 handler。R8-O 的真实 smoke 仍需继续完成。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 

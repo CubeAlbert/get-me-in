@@ -157,6 +157,19 @@ class ToolExecutorTests(unittest.TestCase):
         self.assertIsInstance(outcome, ToolFailure)
         self.assertEqual("missing_argument", outcome.code)
 
+    def test_ignores_unknown_arguments_like_v1(self) -> None:
+        executor = ToolExecutor(ToolCatalog((_tool("echo"),)))
+
+        outcome = executor.execute(
+            "call",
+            "echo",
+            {"text": "x", "thinking": "model summary"},
+            self.context,
+        )
+
+        self.assertIsInstance(outcome, ToolSuccess)
+        self.assertEqual({"echo": "x"}, outcome.output)
+
     def test_requires_explicit_approval(self) -> None:
         executor = ToolExecutor(ToolCatalog((_tool("delete", confirmation=ConfirmationMode.ALWAYS),)))
 
