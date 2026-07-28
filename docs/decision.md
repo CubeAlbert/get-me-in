@@ -4765,3 +4765,32 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 为 `memories`／`references` collection 写特殊分支 —— target 当前是通用 source-key substring，不应硬编码 collection 名称，未采用。
 - 修改每个 repository 并信任其过滤结果 —— 仍无法阻止未来 adapter 返回非目标 source 后污染 diff；service 必须守住最终作用域。
 - 取消 `/ragreload [target]` 参数 —— 会缩减既有 CLI 能力且不是修复根因，未采用。
+
+---
+
+### 决策 208 —— RAG 启动后台预热全部查询模型且不泄漏权重输出
+
+**背景：** 用户复核决策 19 的旧版体验后指出，RAG 应在服务启动时后台自动加载，模型权重加载信息不得泄漏到 CLI。当前 v2 `KnowledgeService.start()` 确实将 startup reload 提交给 application-owned `BackgroundWorker`，但 `SentenceTransformerEmbedder` 与 `CrossEncoderReranker` 都在首次使用时才构造模型。manifest 无变化时 startup reload 不执行 embedding，因此 embedding 权重留到首次查询；reranker 在索引同步中从不使用，必然留到首次有候选结果的查询。v2 只为 encode／predict 设置 `show_progress_bar=False`，没有恢复旧 RAG 在第三方库首次 import 前设置的 Hugging Face／tqdm／transformers 静默边界。因此“后台同步索引”已经成立，但“后台预热完整查询模型且 CLI 静默”没有完整迁移。
+
+**决定：**
+
+- `KnowledgeIndexPort` 增加最小生命周期方法 `prepare(cancellation) -> None`。该方法只加载查询所需模型，不扫描 source、不读写 manifest 或 Chroma collection、不执行查询。
+- `ChromaKnowledgeIndex.prepare()` 按 embedding、reranker 顺序调用各自幂等 `prepare()`；模型已加载时不重复构造，并在每次可能阻塞的模型构造前后检查 cancellation。
+- `KnowledgeService.reload()` 在现有串行锁和 `LOADING` 状态内先执行 `index.prepare()`，再执行 manifest diff 与 mutation。startup background load、手动 `/ragreload` 和失败后的重试使用同一路径；即使 manifest 全部 unchanged 也必须预热模型。
+- 只有预热及 reload 均完成后才能进入 `READY/DEGRADED`。预热异常进入 `ERROR` 并返回 failure；search 继续返回 `retrieval_unavailable`，后续显式 reload 可重新执行 prepare 并恢复。
+- 生产 CLI 在 `build_application()` 前固定设置 `HF_HUB_DISABLE_PROGRESS_BARS=1`、`TQDM_DISABLE=1`、`TRANSFORMERS_VERBOSITY=error`，并将 `huggingface_hub`、`transformers`、`sentence_transformers` logger 级别限制为 ERROR。现有 encode／predict `show_progress_bar=False` 保留；不得通过跨线程 `redirect_stdout/redirect_stderr` 静默，因为它们是进程级重定向，可能吞掉并发 CLI 输出。
+- 增加回归覆盖：manifest unchanged 仍 prepare；prepare 失败保持不可查询且 reload 可重试；adapter 同时预热两套模型但不访问 collection；CLI 进程设置完整静默环境。
+- 验证结果：41 项 Knowledge/Adapter/Retrieval/CLI 定向测试与完整 253 项自动化测试通过，`compileall`、`git diff --check` 通过。真实 `uv run python main.py` 先显示欢迎界面，后台等待 20 秒期间无 Hugging Face、transformers、tqdm 或权重加载输出；随后首次 `query_memory` 约 2 秒完成真实命中且无模型延迟加载输出，`/exit` 返回 0。
+
+**理由：**
+
+- `READY` 必须代表一次真实查询所依赖的全部本地模型和索引均已就绪；只同步 manifest／Chroma 而把模型构造留给首次查询，会造成状态语义失真和不可预测延迟。
+- 将 prepare 放入 reload 的既有后台、取消、串行和失败状态边界，可避免再创建线程、全局 singleton 或第二套加载状态机。
+- 精确的库级环境与 logger 配置不会接管进程 stdout/stderr，既能恢复旧版静默体验，也不会破坏 Rich／questionary 的并发终端输出。
+
+**曾考虑的替代方案：**
+
+- 只在首次 search 内懒加载 —— 继续阻塞用户请求并可能泄漏权重输出，正是本次需要修复的问题。
+- 通过一次伪查询预热 —— 会访问 collection、执行 embedding／query／rerank 并混淆模型生命周期与业务检索，未采用。
+- 只预热 embedding，不预热 reranker —— reranker 仍会在首次有候选结果时前台加载，不能满足完整就绪语义。
+- 在后台线程使用 `redirect_stdout/redirect_stderr` —— Python 重定向影响整个进程，可能吞掉 CLI 提示或用户交互输出，明确拒绝。

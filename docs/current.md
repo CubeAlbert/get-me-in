@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。决策 206 的空 Memory collection 查询缺陷及决策 207 的 targeted reload 非目标删除缺陷均已修复并复验；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施：`ChromaKnowledgeIndex.search()` 仅把明确 collection-not-found 归一化为空结果，其他异常继续传播；adapter／Tool 回归已补齐。当前 `data/memories/resume/` 下两份 legacy Markdown 记忆已一次性迁移为 2 条 v2 JSON，原文件 hash／mtime／长度保持不变；真实入口成功建立 `memories` collection 并由 `query_memory` 命中。Smoke 发现 `/ragreload memories` 曾把 6 条 reference source 误判为删除，已先通过完整 reload 恢复，再按决策 207 将 manifest diff 与 observed sources 统一限制在 target 范围。修复后真实 targeted reload 只报告两条 memory unchanged；Chroma 为 `memories=36` chunks、`references=34` chunks，manifest 为 2 条 memory source 加 6 条 reference source，全部 `ready`。30 项定向测试、完整 249 项自动化测试、`compileall` 与 `git diff --check` 通过；R8-O 其余 smoke 仍待完成。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施：`ChromaKnowledgeIndex.search()` 仅把明确 collection-not-found 归一化为空结果，其他异常继续传播；当前两份 legacy Markdown 记忆已一次性迁移为 2 条 v2 JSON，原文件保持不变并由真实 `query_memory` 命中。决策 207 已修复 targeted reload 对非目标 manifest entries 的误删风险；Chroma 为 `memories=36`、`references=34` chunks，manifest 保留 2 条 memory 与 6 条 reference source。决策 208 进一步恢复原 RAG 启动语义：startup reload 在后台预热 embedding 与 reranker，manifest 无变化也不跳过；失败保持不可查询并可由 reload 重试。CLI 在 application 构建前关闭 Hugging Face／transformers／tqdm 进度输出。41 项定向测试、完整 253 项自动化测试、`compileall` 与 `git diff --check` 通过；真实入口先显示欢迎界面，后台等待 20 秒无权重输出，首次 Memory 查询约 2 秒完成且无延迟加载输出，`/exit` 返回 0。R8-O 其余 smoke 仍待完成。
 
 **下一步：** 继续完成剩余 CLI／交互、Main→Resume→Main、审批拒绝、Plan、Memory delete、真实 Resume 与旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
@@ -46,6 +46,7 @@
 205. **Main 的业务能力只由当前 SubAgent 穷尽定义** — Main 只保留 Plan、当前时间、选项交互、客户文件读取、记忆查询与切换 SubAgent 六类辅助／路由工具；工具不构成对外业务能力。`<SubAgents>` 是唯一且穷尽的当前业务能力来源，禁止根据产品名称、工具、历史、模型知识或未来规划推测能力。无匹配项时只说明暂不支持且不提供替代建议；问候可用用户语言介绍实际 SubAgent 能力但不暴露内部架构。
 206. **空 Memory collection 返回空结果并以显式迁移准备真实测试** — v2 Chroma 已正常加载 reference 数据；尚无 v2 Memory 时，`query_memory` 的 collection-not-found 必须解释为零命中，其他 Chroma 异常继续上抛，并补充 adapter／Tool 回归。后续真实 Memory smoke 前先把当前两份 legacy Markdown 记忆显式转换为 v2 JSON 并建立索引；不得让 production v2 直接读取 legacy 路径，不修改或删除原文件。
 207. **targeted Knowledge reload 只比较目标范围** — `/ragreload <target>` 的 observed sources 与 manifest diff 必须使用相同 target 范围，禁止把非目标 manifest entries 误判为删除；完整 reload 继续比较全部 source。真实 `/ragreload memories` 已证明只保留两条 memory unchanged 且不会删除 references。
+208. **RAG 启动后台预热全部查询模型且不泄漏权重输出** — `KnowledgeIndexPort.prepare()` 在 startup reload 的既有后台串行边界内幂等加载 embedding 与 reranker；manifest 无变化仍必须执行，预热成功后才能进入可查询状态，失败可由显式 reload 重试。生产 CLI 在模型库首次导入前关闭 Hugging Face／tqdm／transformers 进度输出并限制相关 logger，首次用户查询不得承担模型构造或显示权重加载信息。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 

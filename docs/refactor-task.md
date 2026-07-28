@@ -500,6 +500,9 @@
 - ✅ 增加 adapter 与 retrieval Tool 回归，覆盖未创建 `memories` collection 时返回零命中，以及非 collection-not-found 异常不得被吞掉。
 - ✅ 在真实 Memory smoke 前执行一次性受控迁移：把当前 `data/memories/resume/` 下两份 legacy Markdown 记忆转换为 2 条 v2 `MemoryRecord` JSON 并通过既有 KnowledgeService 建立 `memories` 索引；原文件 hash／mtime／长度不变，production v2 未增加 legacy 路径扫描或常驻兼容层。
 - ✅ 迁移后验证 v2 repository、manifest、Chroma `memories` collection 与 `query_memory` 的真实命中；smoke 另发现 targeted reload 会误删非目标 manifest entries，已恢复 reference 索引并将 diff 限制到同一 target 范围，同时回归目标范围内真实缺失仍会删除。最终真实 `/ragreload memories` 只报告两条 memory unchanged；Chroma 为 `memories=36`、`references=34` chunks，manifest 为 2 条 memory 与 6 条 reference source，全部 `ready`。30 项定向测试、完整 249 项自动化测试、`compileall` 与 `git diff --check` 通过。
+- ✅ 修复 RAG 后台加载语义：`KnowledgeIndexPort` 增加最小 `prepare(cancellation)`；startup reload 在 manifest diff 前幂等预热 embedding 与 reranker，只有模型和索引均就绪才进入 `READY/DEGRADED`。manifest 无变化仍预热，失败保持 `ERROR` 且显式 reload 可重试，首次用户查询不再承担模型构造。
+- ✅ 恢复生产 CLI 权重加载静默配置：在 build application 前固定设置 `HF_HUB_DISABLE_PROGRESS_BARS=1`、`TQDM_DISABLE=1`、`TRANSFORMERS_VERBOSITY=error`，并将 Hugging Face／transformers／sentence-transformers logger 限制为 ERROR；继续保留 encode／predict 的 `show_progress_bar=False`。
+- ✅ 后台预热修复的 41 项 Knowledge/Adapter/Retrieval/CLI 定向测试、完整 253 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 `uv run python main.py` 在欢迎界面出现后后台等待 20 秒，终端无权重／进度输出；首次 `query_memory` 约 2 秒完成真实命中且无延迟加载输出，`/exit` 返回 0。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。

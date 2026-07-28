@@ -60,6 +60,16 @@ class KnowledgeAdapterTests(unittest.TestCase):
         self.assertEqual(("found",), tuple(hit.content for hit in hits))
         self.assertTrue(client.closed)
 
+    def test_chroma_prepare_loads_embedder_and_reranker_without_querying(self) -> None:
+        embedder = _PreparingModel()
+        reranker = _PreparingModel()
+        index = ChromaKnowledgeIndex(_FailingClient(), embedder, reranker)
+
+        index.prepare(_Token())
+
+        self.assertEqual(1, embedder.prepare_calls)
+        self.assertEqual(1, reranker.prepare_calls)
+
     def test_chroma_replace_embeds_before_mutating_existing_source(self) -> None:
         collection = _Collection(old_ids=("old",))
         index = ChromaKnowledgeIndex(_Client(collection), _FailingEmbedder(), _Reranker())
@@ -120,6 +130,14 @@ class KnowledgeAdapterTests(unittest.TestCase):
 
 class _Token:
     is_cancelled = False
+
+
+class _PreparingModel:
+    def __init__(self):
+        self.prepare_calls = 0
+
+    def prepare(self, cancellation):
+        self.prepare_calls += 1
 
 
 class _Embedder:

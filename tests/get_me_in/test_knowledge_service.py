@@ -114,7 +114,42 @@ class KnowledgeServiceTests(unittest.TestCase):
         result = self.service.search("query", collection="references", category=None, top_k=1, cancellation=CancellationToken())
 
         self.assertEqual(KnowledgeState.READY, self.service.state)
+        self.assertEqual(1, self.index.prepare_calls)
         self.assertEqual(("found",), tuple(item.content for item in result))
+
+    def test_startup_prepares_index_even_when_manifest_is_unchanged(self) -> None:
+        self.manifests.value = _manifest(
+            _entry("references/a.md", "hash", indexed_hash="hash")
+        )
+
+        self.service.start()
+        self.assertTrue(self.index.prepared_event.wait(timeout=1))
+        _wait_for_state(self.service, KnowledgeState.READY)
+
+        self.assertEqual(1, self.index.prepare_calls)
+        self.assertEqual([], self.index.replaced)
+
+    def test_prepare_failure_keeps_service_unavailable_and_can_be_retried(self) -> None:
+        self.index.prepare_error = RuntimeError("model load failed")
+
+        self.service.start()
+        _wait_for_state(self.service, KnowledgeState.ERROR)
+
+        with self.assertRaisesRegex(RuntimeError, "retrieval_unavailable"):
+            self.service.search(
+                "query",
+                collection="references",
+                category=None,
+                top_k=1,
+                cancellation=CancellationToken(),
+            )
+
+        self.index.prepare_error = None
+        report = self.service.reload()
+
+        self.assertEqual((), report.failures)
+        self.assertEqual(KnowledgeState.READY, self.service.state)
+        self.assertEqual(2, self.index.prepare_calls)
 
     def test_search_is_unavailable_before_first_successful_load(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "retrieval_unavailable"):
@@ -271,7 +306,17 @@ class _Chunker:
 
 
 class _Index:
-    def __init__(self): self.replaced = []; self.replaced_event = Event()
+    def __init__(self):
+        self.replaced = []
+        self.replaced_event = Event()
+        self.prepared_event = Event()
+        self.prepare_calls = 0
+        self.prepare_error = None
+    def prepare(self, cancellation):
+        self.prepare_calls += 1
+        self.prepared_event.set()
+        if self.prepare_error is not None:
+            raise self.prepare_error
     def replace_source(self, source, chunks, cancellation): self.replaced.append(source.source_key); self.replaced_event.set()
     def delete_source(self, source_key, *, cancellation): pass
     def search(self, query, *, collection, category, top_k, cancellation): return (IndexHit("chunk", "found", {}, 1.0),)

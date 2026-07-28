@@ -459,7 +459,7 @@ R6 复审结论是保留 Knowledge/Memory 的总体方向，但重新设计命�
 
 #### 6.9.2 状态与一致性
 
-`KnowledgeState` 使用 `IDLE/LOADING/READY/DEGRADED/ERROR/CLOSING/CLOSED`。首次启动尚无可用 index 时，`IDLE/LOADING/ERROR` 查询返回明确 `retrieval_unavailable`；`READY` 可查询；部分 source 失败时进入 `DEGRADED`，保留已提交 index 可查询并在 reload report 中列出失败项。并发 reload 不排队、不重入，返回 typed busy failure；search 与 index mutation 由 KnowledgeService 串行边界保护，不直接依赖 Chroma 的隐含线程安全。
+`KnowledgeState` 使用 `IDLE/LOADING/READY/DEGRADED/ERROR/CLOSING/CLOSED`。首次启动尚无可用 index 时，`IDLE/LOADING/ERROR` 查询返回明确 `retrieval_unavailable`；`READY` 可查询；部分 source 失败时进入 `DEGRADED`，保留已提交 index 可查询并在 reload report 中列出失败项。`READY/DEGRADED` 还表示 embedding 与 reranker 权重均已由后台 startup reload 完成预热；manifest 无变化也不得跳过预热，首次用户查询不得承担模型构造。预热失败进入 `ERROR`，后续显式 reload 通过同一 `prepare → diff → mutation` 路径重试。并发 reload 不排队、不重入，返回 typed busy failure；search 与 index mutation 由 KnowledgeService 串行边界保护，不直接依赖 Chroma 的隐含线程安全。
 
 Manifest 以规范化的 `collection + project-relative source path` 作为 source key，记录 `schema_version/source_key/collection/observed_hash/indexed_hash/mtime/chunk_ids/status/pending_operation/error`。内容 hash 是变化判定依据，mtime 仅作扫描优化。写入或删除前先原子保存 `PENDING`；index 成功后保存 `READY` 或移除已删除 entry；失败保存 `ERROR`，保留上一次 `indexed_hash/chunk_ids` 以支持幂等重试。重命名通过“旧路径消失 + 同 collection 同 hash 新路径出现”报告，但实际按可重试的 delete+upsert 执行，不依赖 Chroma 原子 rename。
 
@@ -479,12 +479,12 @@ Memory repository 每条记录使用独立、versioned JSON 文件。repository 
 | `src/get_me_in/application/knowledge_service.py` | `KnowledgeService` | `__init__(sources: tuple[KnowledgeSourceRepository, ...], chunker, index, manifests, worker)`、`start() -> None`、`state`、现有 `RetrievalPort.search(...)`、`reload(target=None) -> ReloadReport`、`index_document(document) -> ReloadReport`、`delete_source(source_key) -> ReloadReport`、`request_cancel(reason) -> None`、`close() -> CloseReport`；worker 为 borrowed dependency，close 不关闭 worker |
 | `src/get_me_in/application/memory_extractor.py` | `MemoryExtractor` | `__init__(llm, prompt, clock, id_generator, timeout_seconds)`、`extract(source, cancellation) -> tuple[MemoryRecord, ...]` |
 | `src/get_me_in/application/memory_service.py` | `MemoryService` | `__init__(repository, extractor, knowledge, worker)`、`build_async(source) -> MemoryBuildReceipt`、`delete(memory_id) -> MemoryBuildReport`、`close() -> CloseReport`；KnowledgeService/worker 均为 borrowed dependency，close 只关闭自有 repository/extractor |
-| `src/get_me_in/ports/knowledge.py` | `KnowledgeSourceRepository`、`DocumentChunker`、`KnowledgeIndexPort`、`ManifestRepository` | `scan/read`、`chunk`、`replace_source/delete_source/search/close`、`load/save/close`；全部为 Protocol |
+| `src/get_me_in/ports/knowledge.py` | `KnowledgeSourceRepository`、`DocumentChunker`、`KnowledgeIndexPort`、`ManifestRepository` | `scan/read`、`chunk`、`prepare/replace_source/delete_source/search/close`、`load/save/close`；`prepare(cancellation)` 只加载查询必需模型，不读写 index；全部为 Protocol |
 | `src/get_me_in/ports/memories.py` | `MemoryRepository` | `write(record) -> KnowledgeDocument`、`get(memory_id)`、`list(agent=None)`、`delete(memory_id)`、`close()`；具体 adapter 还需实现 KnowledgeSourceRepository 供重启重建 index |
 | `src/get_me_in/adapters/local_knowledge_sources.py` | `LocalKnowledgeSourceRepository` | `__init__(reference_root)`、`scan(target=None)`、`read(source)`；只允许 reference_root 下 Markdown |
 | `src/get_me_in/adapters/markdown_chunker.py` | `MarkdownChunker` | `chunk(document) -> tuple[IndexChunk, ...]`；chunk id 对 source key、content hash 和序号确定性生成 |
 | `src/get_me_in/adapters/json_manifest_repository.py` | `JsonManifestRepository` | `__init__(path)`、`load()`、`save(manifest)`、`close()`；schema 校验与原子替换 |
-| `src/get_me_in/adapters/chroma_knowledge_index.py` | `SentenceTransformerEmbedder`、`CrossEncoderReranker`、`ChromaKnowledgeIndex` | 模型名、batch/top-k、persist path 全部构造注入；index 实现 KnowledgeIndexPort，不读取全局 config |
+| `src/get_me_in/adapters/chroma_knowledge_index.py` | `SentenceTransformerEmbedder`、`CrossEncoderReranker`、`ChromaKnowledgeIndex` | 模型名、batch/top-k、persist path 全部构造注入；`prepare()` 幂等预热 embedding 与 reranker；index 实现 KnowledgeIndexPort，不读取全局 config |
 | `src/get_me_in/adapters/json_memory_repository.py` | `JsonMemoryRepository` | `__init__(root, clock)`，同时实现 MemoryRepository 与 KnowledgeSourceRepository 的 `scan/read`；只读写全新 v2 JSON，使应用重启或 index 重建时可显式恢复 memories collection |
 | `tests/get_me_in/test_knowledge_service.py` | Knowledge service contract tests | manifest diff、busy/state、增删改名、失败重试、取消与 close |
 | `tests/get_me_in/test_memory_service.py` | Memory service contract tests | immutable source、extract/write/index、partial failure、delete retry、后台关闭 |

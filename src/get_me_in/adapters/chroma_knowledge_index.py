@@ -10,10 +10,18 @@ class SentenceTransformerEmbedder:
         self._model_name = model_name
         self._model = model
 
-    def embed(self, texts: tuple[str, ...]) -> tuple[list[float], ...]:
+    def prepare(self, cancellation: CancellationSignal) -> None:
+        _raise_if_cancelled(cancellation)
+        self._ensure_model()
+        _raise_if_cancelled(cancellation)
+
+    def _ensure_model(self) -> None:
         if self._model is None:
             from sentence_transformers import SentenceTransformer
             self._model = SentenceTransformer(self._model_name)
+
+    def embed(self, texts: tuple[str, ...]) -> tuple[list[float], ...]:
+        self._ensure_model()
         values = self._model.encode(list(texts), batch_size=self._batch_size, normalize_embeddings=True, show_progress_bar=False)
         return tuple(value.tolist() for value in values)
 
@@ -23,10 +31,18 @@ class CrossEncoderReranker:
         self._batch_size, self._top_k, self._model_name = batch_size, top_k, model_name
         self._model = model
 
-    def rerank(self, query: str, hits: tuple[IndexHit, ...]) -> tuple[IndexHit, ...]:
+    def prepare(self, cancellation: CancellationSignal) -> None:
+        _raise_if_cancelled(cancellation)
+        self._ensure_model()
+        _raise_if_cancelled(cancellation)
+
+    def _ensure_model(self) -> None:
         if self._model is None:
             from sentence_transformers import CrossEncoder
             self._model = CrossEncoder(self._model_name)
+
+    def rerank(self, query: str, hits: tuple[IndexHit, ...]) -> tuple[IndexHit, ...]:
+        self._ensure_model()
         scores = self._model.predict([(query, hit.content) for hit in hits], batch_size=self._batch_size, show_progress_bar=False)
         ranked = tuple(sorted((IndexHit(hit.chunk_id, hit.content, hit.metadata | {"rerank_score": float(score)}, float(score)) for hit, score in zip(hits, scores)), key=lambda hit: hit.score, reverse=True))
         return ranked[:self._top_k]
@@ -35,6 +51,10 @@ class CrossEncoderReranker:
 class ChromaKnowledgeIndex:
     def __init__(self, client: object, embedder: SentenceTransformerEmbedder, reranker: CrossEncoderReranker) -> None:
         self._client, self._embedder, self._reranker = client, embedder, reranker
+
+    def prepare(self, cancellation: CancellationSignal) -> None:
+        self._embedder.prepare(cancellation)
+        self._reranker.prepare(cancellation)
 
     def replace_source(self, source: KnowledgeSource, chunks: tuple[IndexChunk, ...], cancellation: CancellationSignal) -> None:
         _raise_if_cancelled(cancellation)

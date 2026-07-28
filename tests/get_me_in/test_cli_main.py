@@ -4,6 +4,7 @@ import ast
 from contextlib import redirect_stderr
 from io import StringIO
 import logging
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -48,6 +49,28 @@ class RootEntryTests(unittest.TestCase):
 
 
 class CliMainTests(unittest.TestCase):
+    def test_model_loading_progress_is_disabled_for_the_cli_process(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            cli_main._configure_quiet_model_loading()
+
+            observed = {
+                name: os.environ.get(name)
+                for name in (
+                    "HF_HUB_DISABLE_PROGRESS_BARS",
+                    "TQDM_DISABLE",
+                    "TRANSFORMERS_VERBOSITY",
+                )
+            }
+
+        self.assertEqual(
+            {
+                "HF_HUB_DISABLE_PROGRESS_BARS": "1",
+                "TQDM_DISABLE": "1",
+                "TRANSFORMERS_VERBOSITY": "error",
+            },
+            observed,
+        )
+
     def test_settings_error_returns_two(self) -> None:
         renderer = Mock()
         with (

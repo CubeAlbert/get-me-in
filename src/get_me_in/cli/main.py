@@ -19,11 +19,17 @@ from src.get_me_in.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
 _FILE_ONLY_LOG = {"_get_me_in_file_only": True}
+_MODEL_LOADING_ENV = {
+    "HF_HUB_DISABLE_PROGRESS_BARS": "1",
+    "TQDM_DISABLE": "1",
+    "TRANSFORMERS_VERBOSITY": "error",
+}
 
 
 def main() -> int:
     """Build, run, and close the v2 CLI for the production entry point."""
     _ensure_utf8()
+    _configure_quiet_model_loading()
     project_root = Path(__file__).resolve().parents[3]
     load_dotenv(project_root / ".env")
     renderer = Renderer()
@@ -104,3 +110,10 @@ def main() -> int:
 def _ensure_utf8() -> None:
     if sys.platform == "win32":
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+
+
+def _configure_quiet_model_loading() -> None:
+    """Disable third-party model download and inference progress on the CLI."""
+    os.environ.update(_MODEL_LOADING_ENV)
+    for logger_name in ("huggingface_hub", "transformers", "sentence_transformers"):
+        logging.getLogger(logger_name).setLevel(logging.ERROR)

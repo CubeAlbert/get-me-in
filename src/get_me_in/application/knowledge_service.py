@@ -85,6 +85,7 @@ class KnowledgeService:
             self._state = KnowledgeState.LOADING
             if not starting:
                 self._reload_cancellation.reset()
+            self._index.prepare(self._reload_cancellation)
             manifest = self._manifests.load()
             observed_pairs = tuple(
                 (source, repository)
