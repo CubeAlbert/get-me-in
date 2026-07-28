@@ -4709,3 +4709,32 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保留宽 capability，仅要求模型不要调用多余工具 —— 工具仍会出现在 prompt 中并被视为可用能力，运行时边界也没有收紧，未采用。
 - 无匹配项时提供通用替代建议 —— 会继续让 Main 实际执行未装配领域能力，用户明确拒绝。
 - 问候时完全不介绍能力 —— 可以降低误报，但牺牲可发现性；用户确认允许基于真实 SubAgent 主动介绍，因此未采用。
+
+---
+
+### 决策 206 —— 空 Memory collection 返回空结果并以显式迁移准备真实测试
+
+**背景：** R8-O 真实 Main 对话调用 `query_memory` 时返回 `{"code": "retrieval_unavailable", "message": "Collection  does not exist"}`。只读诊断确认 production v2 Chroma 已正常加载，`references` collection 有 34 条记录；但 `data/v2/memories/` 尚不存在，manifest 也只有 reference entries，因此没有创建 `memories` collection。当前 `ChromaKnowledgeIndex.replace_source()` 写入时使用 `get_or_create_collection()`，查询时却直接调用 `get_collection()`；合法的“尚无任何 v2 记忆”因此被误判为检索基础设施不可用。仓库同时保留 `data/memories/resume/` 下两份 legacy Markdown 记忆，但根据 R-D6／R6 边界，production v2 不读取或自动迁移旧运行数据。`AUTO_MEMORY_ON_EXIT` 当前保持默认关闭。
+
+**决定：**
+
+- `ChromaKnowledgeIndex.search()` 遇到明确的 Chroma collection-not-found 时返回空 tuple，使 `query_memory` 按正常零命中处理；不预创建空 collection，也不把合法空库状态包装为 `retrieval_unavailable`。
+- 只归一化明确的 collection-not-found。Chroma 连接、持久化、查询、embedding、rerank、取消及其他异常继续上抛，由现有 Tool 边界映射为 typed failure，不得用宽泛异常捕获掩盖真实故障。
+- 增加 adapter 与 retrieval Tool 回归：覆盖 `memories` collection 不存在时返回空结果；覆盖其他 `get_collection()`／query 异常仍可观察；保持已有 references 查询与结果字段契约不变。
+- 后续真实 Memory smoke 前，先对当前 `data/memories/resume/` 下两份 legacy Markdown 文件执行一次性、显式、可审计的测试迁移，将其内容转换为现有 schema 的 v2 `MemoryRecord` JSON，并通过既有 KnowledgeService 建立 `memories` collection／manifest entries。
+- 迁移仅是 R8-O 测试准备，不成为 production 启动逻辑或长期兼容层。原 legacy 文件不得修改或删除；v2 Settings、JsonMemoryRepository 和 KnowledgeService 不增加 legacy 路径扫描。迁移前后记录源文件 hash／mtime、输出记录数、v2 repository／manifest／collection 数量与真实 `query_memory` 命中证据。
+- 本轮只记录决策和任务状态，不实施 adapter 修复、测试或数据迁移；完成实现与验证前，该问题作为 R8-O 阻断项，仍不得进入 R8-D。
+
+**理由：**
+
+- “collection 不存在”在尚无任何记忆时等价于空集合，而不是服务故障；返回零命中符合检索接口语义，也避免模型错误地告诉用户整个记忆库不可用。
+- 将 missing collection 与其他异常精确区分，可以在改善首次使用体验的同时保留真实故障可观察性。
+- 使用显式一次性迁移能够复用当前用户已有记忆完成真实命中测试，又不破坏 v2 不读取 legacy runtime data 的架构边界。
+- 保留原文件及迁移证据，使测试数据准备可审计、可重跑，并避免把“不迁移”误解为允许删除旧数据。
+
+**曾考虑的替代方案：**
+
+- 启动时无条件创建 `references`／`memories` 空 collection —— 引入不必要的持久化副作用，且不能替代 search 对缺失 collection 的健壮语义，未采用。
+- 捕获所有 Chroma 查询异常并返回空结果 —— 会把数据库损坏、连接错误或 embedding／rerank 故障伪装成零命中，明确拒绝。
+- 让 production v2 直接扫描 `data/memories/` —— 违反旧运行数据隔离与不迁移决策，也会形成长期双格式兼容负担，明确拒绝。
+- 测试时重新手工编造记忆而不迁移现有文件 —— 无法验证当前用户真实 legacy 数据向 v2 schema／索引的准备路径，用户要求先迁移当前记忆文件，因此未采用。
