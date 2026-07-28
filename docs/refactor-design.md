@@ -253,7 +253,7 @@ PromptRenderer 接收 AgentSpec、ToolCatalog 和 AgentCatalog，统一生成 sy
 
 ### 6.2 RuntimeCommand 与 RuntimeEvent
 
-Runtime command 保持：`UserMessage`、`Continue`、`Approve`、`Reject`、`SubmitSelection`、`ToolResult`、`Cancel`；R4 增加 `CompleteHandoff(call_id, summary)` 与 `FailHandoff(call_id, code, message)`，专门闭合 `WAITING_FOR_HANDOFF`。
+Runtime command 保持：`UserMessage`、`Continue`、`Approve`、`Reject`、`SubmitSelection`、`ToolResult`、`Cancel`；R4 增加 `CompleteHandoff(call_id, summary)` 与 `FailHandoff(call_id, code, message)`，专门闭合 `WAITING_FOR_HANDOFF`。R8-O 增加 `CancelSelection(request_id, reason)`，只将 `provide_choices` 的取消作为 tool result 交回当前 Agent，不产生 Agent `Cancelled`，不得关闭活动 handoff；真正的运行取消继续使用 `Cancel`。
 
 Runtime event 保持：`Progress`、`ApprovalRequested`、`SelectionRequested`、`ToolStarted`、`ToolFinished`、`HandoffRequested`、`Completed`、`Failed`、`Cancelled`。`ToolStarted` 携带只读 arguments 映射，`ToolFinished` 可携带 Plan 投影；二者均不要求 CLI 读取 Session 或反解析工具输出字符串。
 
@@ -378,7 +378,7 @@ CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触
 - `Renderer`：Markdown、Plan、spinner、错误、命令结果和 `SessionView` context recap；工具开始时以脱敏、截断后的 arguments 摘要展示调用，工具结束时显示截断结果预览；Plan 工具结束时直接渲染只读 Plan 表格，不解析输出字符串；不决定下一条业务 command。
 - `WorkerRunner`：使用单 worker 串行执行一个 `Application.handle(RuntimeCommand)`，轮询 Esc/Ctrl+C 并只通过 `Application.request_cancel()` 跨线程取消；不得并发执行 snapshot/restore/另一条 command。
 
-事件推进由 `CliApp` 明确处理：`Progress`、`ToolStarted`、`ToolFinished`、`HandoffRequested` 转为 `Continue`；`ApprovalRequested` 转为 `Approve/Reject`；`SelectionRequested` 转为 `SubmitSelection/Cancel`；`Completed/Failed/Cancelled` 结束内层循环。会返回 RuntimeEvent 的 CLI 命令（当前为 `/exit_sub`）使用 `CommandAction.DRIVE` 将事件交回 `CliApp`，不得只在 handler 内渲染后丢弃；这样 `FailHandoff` 产生的 `ToolFinished` 仍会继续驱动源 Agent。`Reject` 是用户对该次审批的明确否决：Runtime 必须写入已拒绝的 tool result 闭合 pending call，再直接返回 `Cancelled`，不得自动 `Continue` 或把拒绝结果交回模型重试；只有实际工具执行的技术/业务失败才以 `ToolFinished` 交回模型自修复。终态后调用 `Application.snapshot()` 保留旧 CLI 自动保存能力，保存失败单独渲染，不覆盖原终态。
+事件推进由 `CliApp` 明确处理：`Progress`、`ToolStarted`、`ToolFinished`、`HandoffRequested` 转为 `Continue`；`ApprovalRequested` 转为 `Approve/Reject`；`SelectionRequested` 的有效值转为 `SubmitSelection`，选择界面或自定义输入中的 Ctrl+C／EOF 转为 `CancelSelection`；`Completed/Failed/Cancelled` 结束内层循环。`CancelSelection` 只闭合当前 interaction 并继续当前 Agent，不能复用会终止 run 的全局 `Cancel`。会返回 RuntimeEvent 的 CLI 命令（当前为 `/exit_sub`）使用 `CommandAction.DRIVE` 将事件交回 `CliApp`，不得只在 handler 内渲染后丢弃；这样 `FailHandoff` 产生的 `ToolFinished` 仍会继续驱动源 Agent。`Reject` 是用户对该次审批的明确否决：Runtime 必须写入已拒绝的 tool result 闭合 pending call，再直接返回 `Cancelled`，不得自动 `Continue` 或把拒绝结果交回模型重试；只有实际工具执行的技术/业务失败才以 `ToolFinished` 交回模型自修复。终态后调用 `Application.snapshot()` 保留旧 CLI 自动保存能力，保存失败单独渲染，不覆盖原终态。
 
 审批策略属于 CLI 偏好：`/approval` 无参数时在 `prompt` 与 `auto` 间切换，使用 `/approval prompt|auto` 可显式设置；该策略只决定 `ApprovalRequested` 是否自动发送 `Approve`，不修改 ToolDefinition 或 Runtime 状态。`/auto-approve-switch` 不向前兼容。基础 Plan 表格在每次 Plan 工具变更后显示；持续驻留的 Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
 

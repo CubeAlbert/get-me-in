@@ -9,6 +9,7 @@ from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.commands import (
     Approve,
     Cancel,
+    CancelSelection,
     CompleteHandoff,
     Continue,
     FailHandoff,
@@ -144,6 +145,8 @@ class AgentRuntime:
             return self._reject(command)
         if isinstance(command, SubmitSelection):
             return self._submit_selection(command)
+        if isinstance(command, CancelSelection):
+            return self._cancel_selection(command)
         return Failed("unsupported_command", f"Unsupported command: {type(command).__name__}")
 
     def request_cancel(self, reason: str = "Cancelled by user") -> None:
@@ -472,6 +475,19 @@ class AgentRuntime:
             return failure
         assert self._state.pending_tool is not None
         return self._finish_tool(self._state.pending_tool, {"selected": command.value})
+
+    def _cancel_selection(self, command: CancelSelection) -> RuntimeEvent:
+        failure = self._validate_pending(
+            command.request_id,
+            RuntimePhase.WAITING_FOR_SELECTION,
+        )
+        if failure is not None:
+            return failure
+        assert self._state.pending_tool is not None
+        return self._finish_tool(
+            self._state.pending_tool,
+            {"code": "cancelled", "message": command.reason},
+        )
 
     def _resume_external_tool(self, command: ToolResult) -> RuntimeEvent:
         failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_TOOL_RESULT)

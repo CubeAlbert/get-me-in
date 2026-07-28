@@ -1,6 +1,6 @@
 """The thin v2 CLI event driver."""
 
-from src.get_me_in.application.commands import Approve, Cancel, Continue, Reject, SubmitSelection, UserMessage
+from src.get_me_in.application.commands import Approve, CancelSelection, Continue, Reject, SubmitSelection, UserMessage
 from src.get_me_in.application.app_results import ApplicationResult
 from src.get_me_in.application.events import (
     ApprovalRequested,
@@ -103,7 +103,12 @@ class CliApp:
                 continue
             if isinstance(event, SelectionRequested):
                 value = self._input.select(event.prompt, event.choices, allow_custom=True)
-                event = self._worker.run(SubmitSelection(event.request_id, value)) if value is not None else self._worker.run(Cancel("Selection cancelled by user"))
+                command = (
+                    SubmitSelection(event.request_id, value)
+                    if value is not None
+                    else CancelSelection(event.request_id)
+                )
+                event = self._worker.run(command)
                 continue
             if isinstance(event, (Completed, Failed, Cancelled)):
                 self._snapshot_after_terminal_event()

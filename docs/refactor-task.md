@@ -503,6 +503,8 @@
 - ✅ 修复 RAG 后台加载语义：`KnowledgeIndexPort` 增加最小 `prepare(cancellation)`；startup reload 在 manifest diff 前幂等预热 embedding 与 reranker，只有模型和索引均就绪才进入 `READY/DEGRADED`。manifest 无变化仍预热，失败保持 `ERROR` 且显式 reload 可重试，首次用户查询不再承担模型构造。
 - ✅ 恢复生产 CLI 权重加载静默配置：在 build application 前固定设置 `HF_HUB_DISABLE_PROGRESS_BARS=1`、`TQDM_DISABLE=1`、`TRANSFORMERS_VERBOSITY=error`，并将 Hugging Face／transformers／sentence-transformers logger 限制为 ERROR；继续保留 encode／predict 的 `show_progress_bar=False`。
 - ✅ 后台预热修复的 41 项 Knowledge/Adapter/Retrieval/CLI 定向测试、完整 253 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 `uv run python main.py` 在欢迎界面出现后后台等待 20 秒，终端无权重／进度输出；首次 `query_memory` 约 2 秒完成真实命中且无延迟加载输出，`/exit` 返回 0。
+- ✅ 修复 selection Ctrl+C 错误退出 SubAgent：新增 typed `CancelSelection(request_id, reason)`，只把 cancelled result 写回 `provide_choices` 并继续当前 Agent；CliApp 不再把 selection 的 `None` 映射为全局 `Cancel`。真正 Esc／运行取消仍产生 `Cancelled` 并按既有规则关闭 handoff。
+- ✅ selection 局部取消的 48 项 Runtime/CLI/Orchestrator/Session 定向测试与完整 256 项自动化测试通过，`compileall` 与 `git diff --check` 通过；真实 questionary 自定义输入 Ctrl+C 输出 `SELECTION_RESULT None`，应用回归确认该值只生成 `CancelSelection`，Resume handoff 保持活动。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。

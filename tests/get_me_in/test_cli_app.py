@@ -2,10 +2,10 @@
 
 import unittest
 
-from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
+from src.get_me_in.application.commands import Approve, CancelSelection, Continue, Reject, UserMessage
 from src.get_me_in.application.app_commands import ReloadKnowledge
 from src.get_me_in.application.app_results import ApplicationResult, TurnFinalizationResult
-from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress, ToolFinished
+from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Progress, SelectionRequested, ToolFinished
 from src.get_me_in.cli.app import CliApp
 from src.get_me_in.cli.commands import ApprovalMode, CommandAction, CommandResult
 from src.get_me_in.domain.messages import MessageRecord, Role
@@ -65,6 +65,39 @@ class CliAppTests(unittest.TestCase):
 
         self.assertEqual(
             (UserMessage("hello"), Reject("call", "User rejected approval")),
+            worker.commands,
+        )
+        self.assertEqual(1, application.snapshots)
+
+    def test_cancelled_selection_closes_only_the_interaction_and_continues_agent(self) -> None:
+        application = _Application()
+        worker = _Worker(
+            (
+                SelectionRequested("choice-call", "pick", ("a", "b")),
+                ToolFinished(
+                    "choice-call",
+                    "provide_choices",
+                    '{"code":"cancelled","message":"Selection cancelled by user"}',
+                ),
+                Completed(_message()),
+            )
+        )
+        app = CliApp(
+            application,
+            _Commands((None, CommandResult(CommandAction.EXIT))),
+            _Input(("hello", "/exit")),
+            _Renderer(),
+            worker,
+        )
+
+        app.run()
+
+        self.assertEqual(
+            (
+                UserMessage("hello"),
+                CancelSelection("choice-call"),
+                Continue(),
+            ),
             worker.commands,
         )
         self.assertEqual(1, application.snapshots)

@@ -4794,3 +4794,32 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 通过一次伪查询预热 —— 会访问 collection、执行 embedding／query／rerank 并混淆模型生命周期与业务检索，未采用。
 - 只预热 embedding，不预热 reranker —— reranker 仍会在首次有候选结果时前台加载，不能满足完整就绪语义。
 - 在后台线程使用 `redirect_stdout/redirect_stderr` —— Python 重定向影响整个进程，可能吞掉 CLI 提示或用户交互输出，明确拒绝。
+
+---
+
+### 决策 209 —— 选择交互取消不得提升为 Agent 或 handoff 取消
+
+**背景：** R8-O 真实 Main→Resume 对话中，Resume 调用 `provide_choices`，用户进入“自定义输入”后按 Ctrl+C。`InputController.select()` 正确返回 `None`，但 `CliApp` 将该值映射为全局 `Cancel("Selection cancelled by user")`。Runtime 先把 `provide_choices` 写成 cancelled tool result，再进入 `CANCELLED_NOTICE → CANCELLED`；Orchestrator 看到活动 SubAgent 返回 `Cancelled` 后按既有规则关闭 Main→Resume frame，并把 `switch_to_subagent` 闭合为 `subagent_cancelled`。因此用户只取消一个文本框，却连同 Resume run 和 handoff 一起退出，Main 最终回答“已经取消了切换”。
+
+**决定：**
+
+- 新增 typed Runtime command `CancelSelection(request_id, reason="Selection cancelled by user")`，专门闭合 `WAITING_FOR_SELECTION`；`request_id` 必须匹配当前 pending `provide_choices` call。
+- Runtime 收到 `CancelSelection` 后通过既有 `_finish_tool()` 写入 `{"code":"cancelled","message": reason}`，产生 `ToolFinished` 并进入 `MODEL_QUEUED`；不得设置 cancellation token、不得进入 `CANCELLED_NOTICE/CANCELLED`。
+- `CliApp` 对 `SelectionRequested` 的有效字符串继续发送 `SubmitSelection`；`InputController.select()` 因选择界面或自定义文本中的 Ctrl+C／EOF 返回 `None` 时发送 `CancelSelection`，不再发送全局 `Cancel`。
+- Orchestrator 无需增加例外：局部取消产生 `ToolFinished`，自然保留当前 active SubAgent 与 handoff stack；真正的 `Cancel` 仍产生 `Cancelled` 并按既有 `FailHandoff(subagent_cancelled)` 路径安全关闭原 call id。
+- 不修改 `InputController.select() -> str | None`、`SelectionRequested`、`ToolInteraction`、SessionSnapshot schema 或 `provide_choices` ToolDefinition；不把空字符串解释为取消。
+- 增加三层回归：Runtime 验证 cancelled tool result 后继续完成；CliApp 验证 `None → CancelSelection → Continue`；Orchestrator 验证局部取消保持 Resume active 和 handoff frame，同时保留真正 `Cancel` 退出 handoff 的既有测试。
+- 验证结果：48 项 Runtime/CLI/Orchestrator/Session 定向测试与完整 256 项自动化测试通过，`compileall`、`git diff --check` 通过。真实 questionary 进入自定义输入后发送 Ctrl+C，终端输出 `Cancelled by user` 且函数返回 `SELECTION_RESULT None`；应用回归确认该 `None` 只映射为 `CancelSelection`。
+
+**理由：**
+
+- 取消一次交互和取消整个 Agent run 是不同作用域；只有后者才应触发 handoff unwind。
+- 独立 command 保留 request-id 校验、typed 状态转换和明确审计语义，也避免 Orchestrator 猜测某个 `Cancelled` 是否“其实只是 UI 取消”。
+- 复用 `_finish_tool()` 可以让当前 Agent看见用户取消并自行决定重问、换方案或主动返回 Main，同时保持 conversation call closure 完整。
+
+**曾考虑的替代方案：**
+
+- 将 `None` 作为 `SubmitSelection` 的值 —— 会把取消伪装成合法选择，且破坏 `value: str` 契约，未采用。
+- 将空字符串作为选择结果 —— 无法区分用户确实输入空白和取消，也没有 typed cancelled code，未采用。
+- 修改 Orchestrator 忽略所有 SubAgent `Cancelled` —— 会遗留真正取消、失败或 Esc 中断的活动 handoff，破坏原 call-id 闭合，明确拒绝。
+- 在 Runtime 的全局 `_cancel()` 中针对 `WAITING_FOR_SELECTION` 特判并继续 —— 会让真正的 Esc run cancellation 在选择阶段也无法退出 SubAgent，作用域仍然混淆，未采用。

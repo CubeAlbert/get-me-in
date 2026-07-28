@@ -8,7 +8,7 @@ import unittest
 
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.application.commands import Approve, Cancel, Continue, Reject, SubmitSelection, UserMessage
+from src.get_me_in.application.commands import Approve, Cancel, CancelSelection, Continue, Reject, SubmitSelection, UserMessage
 from src.get_me_in.application.events import (
     ApprovalRequested,
     Cancelled,
@@ -237,6 +237,36 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertIsInstance(requested, SelectionRequested)
         self.assertIsInstance(completed[-1], Completed)
+
+    def test_selection_cancellation_returns_tool_result_without_cancelling_agent(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            [
+                _tool_call(
+                    "provide_choices",
+                    {"question": "pick", "choices": ["a", "b"]},
+                ),
+                _finish("still active", "continued"),
+            ],
+            definitions=build_switch_tools(),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        requested = _pump(runtime, UserMessage("question"))[-1]
+        completed = _pump(
+            runtime,
+            CancelSelection(requested.request_id),
+        )
+
+        self.assertIsInstance(requested, SelectionRequested)
+        self.assertIsInstance(completed[-1], Completed)
+        tool_result = json.loads(llm.requests[1].messages[-1].content)
+        self.assertEqual(
+            {
+                "code": "cancelled",
+                "message": "Selection cancelled by user",
+            },
+            tool_result["event_payload"],
+        )
 
     def test_handoff_preserves_call_id_and_waits_for_orchestrator(self) -> None:
         runtime, _, temporary_dir = _runtime(
