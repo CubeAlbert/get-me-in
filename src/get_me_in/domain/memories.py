@@ -36,6 +36,7 @@ class MemoryBuildSource:
 class MemoryBuildReceipt:
     job_id: str
     source_session_id: str
+    source_agent_key: AgentKey
 
 
 @dataclass(frozen=True)

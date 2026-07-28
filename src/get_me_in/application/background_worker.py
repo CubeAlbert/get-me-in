@@ -1,6 +1,7 @@
 """A single application-owned non-daemon worker for background R6 jobs."""
 
 from collections.abc import Callable
+import logging
 from queue import Queue
 from threading import Lock, Thread
 
@@ -18,6 +19,7 @@ from src.get_me_in.ports.llm import CancellationSignal
 _STOP = object()
 _BackgroundTask = Callable[[CancellationSignal], object]
 _QueuedTask = tuple[str, str, _BackgroundTask, CancellationToken]
+logger = logging.getLogger(__name__)
 
 
 class BackgroundWorker:
@@ -32,7 +34,7 @@ class BackgroundWorker:
         self._shutdown_timeout_seconds = shutdown_timeout_seconds
         self._tasks: Queue[_QueuedTask | object] = Queue()
         self._lock = Lock()
-        self._next_job = 0
+        self._next_jobs: dict[str, int] = {}
         self._closed = False
         self._close_report: CloseReport | None = None
         self._results: dict[str, BackgroundJobResult] = {}
@@ -40,14 +42,24 @@ class BackgroundWorker:
         self._thread = Thread(target=self._run, name=name, daemon=False)
         self._started = False
 
-    def submit(self, task_name: str, task: _BackgroundTask) -> BackgroundJobReceipt:
+    def submit(
+        self,
+        task_name: str,
+        task: _BackgroundTask,
+        *,
+        job_prefix: str | None = None,
+    ) -> BackgroundJobReceipt:
         if not task_name:
             raise ValueError("task name must not be empty")
+        if job_prefix is not None and not job_prefix:
+            raise ValueError("job prefix must not be empty")
         with self._lock:
             if self._closed:
                 raise RuntimeError("BackgroundWorker is closed")
-            self._next_job += 1
-            receipt = BackgroundJobReceipt(f"{self._name}-{self._next_job}", task_name)
+            prefix = job_prefix or self._name
+            next_job = self._next_jobs.get(prefix, 0) + 1
+            self._next_jobs[prefix] = next_job
+            receipt = BackgroundJobReceipt(f"{prefix}-{next_job}", task_name)
             cancellation = CancellationToken()
             self._tokens[receipt.job_id] = cancellation
             self._results[receipt.job_id] = BackgroundJobResult(
@@ -57,6 +69,12 @@ class BackgroundWorker:
             if not self._started:
                 self._thread.start()
                 self._started = True
+        logger.info(
+            "background job queued: worker=%s job_id=%s task=%s",
+            self._name,
+            receipt.job_id,
+            task_name,
+        )
         return receipt
 
     def result(self, job_id: str) -> BackgroundJobResult | None:
@@ -93,6 +111,12 @@ class BackgroundWorker:
                     return
                 job_id, task_name, task, cancellation = queued
                 if cancellation.is_cancelled:
+                    logger.warning(
+                        "background job cancelled before execution: worker=%s job_id=%s task=%s",
+                        self._name,
+                        job_id,
+                        task_name,
+                    )
                     self._set_result(
                         BackgroundJobResult(
                             job_id,
@@ -102,6 +126,12 @@ class BackgroundWorker:
                         )
                     )
                     continue
+                logger.info(
+                    "background job started: worker=%s job_id=%s task=%s",
+                    self._name,
+                    job_id,
+                    task_name,
+                )
                 self._set_result(
                     BackgroundJobResult(job_id, task_name, BackgroundJobState.RUNNING)
                 )
@@ -130,6 +160,12 @@ class BackgroundWorker:
                     )
                 )
             except Exception as error:
+                logger.exception(
+                    "background job raised an exception: worker=%s job_id=%s task=%s",
+                    self._name,
+                    job_id,
+                    task_name,
+                )
                 self._set_result(
                     BackgroundJobResult(
                         job_id,
@@ -150,3 +186,12 @@ class BackgroundWorker:
                 BackgroundJobState.CANCELLED,
             }:
                 self._tokens.pop(result.job_id, None)
+                log = logger.error if result.state is BackgroundJobState.FAILED else logger.info
+                log(
+                    "background job finished: worker=%s job_id=%s task=%s state=%s error=%s",
+                    self._name,
+                    result.job_id,
+                    result.task_name,
+                    result.state,
+                    result.error or "",
+                )

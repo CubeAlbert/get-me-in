@@ -1,8 +1,13 @@
 """Background memory build orchestration without a duplicate search API."""
 
+import logging
+
 from src.get_me_in.application.app_results import CloseIssue, CloseReport
 from src.get_me_in.domain.memories import MemoryBuildReceipt, MemoryBuildReport, MemoryBuildSource
 from src.get_me_in.ports.llm import CancellationSignal
+
+logger = logging.getLogger(__name__)
+_MEMORY_JOB_PREFIX = "memory-build"
 
 
 class MemoryService:
@@ -11,9 +16,18 @@ class MemoryService:
 
     def build_async(self, source: MemoryBuildSource) -> MemoryBuildReceipt:
         receipt = self._worker.submit(
-            "build-memory", lambda cancellation: self._build(source, cancellation)
+            "build-memory",
+            lambda cancellation: self._build(source, cancellation),
+            job_prefix=_MEMORY_JOB_PREFIX,
         )
-        return MemoryBuildReceipt(receipt.job_id, source.session_id)
+        logger.info(
+            "memory build scheduled: job_id=%s session_id=%s agent=%s records=%d",
+            receipt.job_id,
+            source.session_id,
+            source.agent_key,
+            len(source.records),
+        )
+        return MemoryBuildReceipt(receipt.job_id, source.session_id, source.agent_key)
 
     def delete(self, memory_id: str) -> MemoryBuildReport:
         try:
@@ -46,6 +60,12 @@ class MemoryService:
         self, source: MemoryBuildSource, cancellation: CancellationSignal
     ) -> MemoryBuildReport:
         created: list[str] = []
+        logger.info(
+            "memory build started: session_id=%s agent=%s records=%d",
+            source.session_id,
+            source.agent_key,
+            len(source.records),
+        )
         try:
             records = self._extractor.extract(source, cancellation)
             for record in records:
@@ -55,19 +75,52 @@ class MemoryService:
                 created.append(record.memory_id)
                 report = self._knowledge.index_document(document, cancellation)
                 if report.busy:
-                    return MemoryBuildReport(
+                    failure = MemoryBuildReport(
                         source.session_id,
                         tuple(created),
                         error=f"knowledge index busy for memory {record.memory_id}",
                     )
+                    logger.error(
+                        "memory build failed: session_id=%s agent=%s error=%s",
+                        source.session_id,
+                        source.agent_key,
+                        failure.error,
+                    )
+                    return failure
                 if report.failures:
-                    return MemoryBuildReport(
+                    failure = MemoryBuildReport(
                         source.session_id,
                         tuple(created),
                         error="; ".join(report.failures),
                     )
-            return MemoryBuildReport(source.session_id, tuple(created))
+                    logger.error(
+                        "memory build failed: session_id=%s agent=%s error=%s",
+                        source.session_id,
+                        source.agent_key,
+                        failure.error,
+                    )
+                    return failure
+            report = MemoryBuildReport(source.session_id, tuple(created))
+            logger.info(
+                "memory build completed: session_id=%s agent=%s created=%d",
+                source.session_id,
+                source.agent_key,
+                len(created),
+            )
+            return report
         except InterruptedError:
+            logger.warning(
+                "memory build cancelled: session_id=%s agent=%s created=%d",
+                source.session_id,
+                source.agent_key,
+                len(created),
+            )
             raise
         except Exception as error:
+            logger.exception(
+                "memory build failed: session_id=%s agent=%s created=%d",
+                source.session_id,
+                source.agent_key,
+                len(created),
+            )
             return MemoryBuildReport(source.session_id, tuple(created), error=str(error))

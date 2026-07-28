@@ -73,6 +73,15 @@ class BackgroundWorkerTests(unittest.TestCase):
         self.assertEqual(("memory",), report.closed)
         self.assertIs(report, worker.close())
 
+    def test_job_prefix_can_identify_a_logical_task_on_shared_worker(self) -> None:
+        worker = BackgroundWorker("knowledge-memory", 1)
+        try:
+            worker.submit("load-knowledge", lambda _: None)
+            receipt = worker.submit("build-memory", lambda _: None, job_prefix="memory-build")
+            self.assertEqual("memory-build-1", receipt.job_id)
+        finally:
+            worker.close()
+
     def test_close_reports_timeout_without_losing_control(self) -> None:
         started = Event()
         release = Event()

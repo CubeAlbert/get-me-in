@@ -44,6 +44,8 @@ class MemoryServiceTests(unittest.TestCase):
             worker.close()
 
         self.assertEqual("session", receipt.source_session_id)
+        self.assertEqual(AgentKey.MAIN, receipt.source_agent_key)
+        self.assertEqual("memory-build-1", receipt.job_id)
         self.assertEqual(BackgroundJobState.SUCCEEDED, result.state)
         self.assertEqual(("id",), result.value.created_memory_ids)
         self.assertEqual(1, len(repository.records))
