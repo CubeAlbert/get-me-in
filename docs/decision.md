@@ -8,6 +8,11 @@
 
 ## 目录
 
+- [决策 205 — Main 的业务能力只由当前 SubAgent 穷尽定义](#决策-205--main-的业务能力只由当前-subagent-穷尽定义)
+- [决策 204 — 在单次模型修复前增加本地 JSON repair](#决策-204--在单次模型修复前增加本地-json-repair)
+- [决策 203 — 恢复 v2 provider JSON mode](#决策-203--恢复-v2-provider-json-mode)
+- [决策 202 — 多余模型字段采用允许列表投影而非格式修复](#决策-202--多余模型字段采用允许列表投影而非格式修复)
+- [决策 201 — 收敛模型输出协议并由 Runtime 填充内部事件字段](#决策-201--收敛模型输出协议并由-runtime-填充内部事件字段)
 - [决策 200 — 恢复 Main／Resume 剩余 Agent prompt 元数据](#决策-200--恢复-mainresume-剩余-agent-prompt-元数据)
 - [决策 199 — 恢复 Main／Resume 完整 CommunicationStyle](#决策-199--恢复-mainresume-完整-communicationstyle)
 - [决策 198 — 恢复 SubAgent XML prompt 并限定路由可见性](#决策-198--恢复-subagent-xml-prompt-并限定路由可见性)
@@ -4673,3 +4678,32 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - finish 缺少 thinking 时自动补空字符串 —— 会绕过已确认的输出契约并制造并非由模型生成的展示数据，未采用。
 - 从纯文本中推断工具名和参数 —— 可能误执行副作用，违反 typed tool boundary，明确拒绝。
 - 立即删除 repair_attempted 与升级 snapshot schema —— 会扩大本次修复并破坏旧 schema v2 快照兼容，暂不采用。
+
+---
+
+### 决策 205 —— Main 的业务能力只由当前 SubAgent 穷尽定义
+
+**背景：** R8-O 真实 Main 对话中，用户问候后模型主动声称可以“准备面试、推荐学习资料”；随后面对 Java 学习资料请求，模型虽然识别到没有匹配 SubAgent，仍推荐 Coursera、Udemy、Stack Overflow 等替代资源。当前 production Catalog 只有 Main 与 Resume，但 Main 的 Role／Mission 使用“对应的专业子Agent”等非穷尽表述，`05_sub_agents.md` 只输出列表而未声明其权威性；同时 Main 持有 `SYSTEM`、`WEB_SEARCH`、`KNOWLEDGE_QUERY` 等宽 capability，其中 `query_reference_data` 的使用说明明确包含技术知识、面试题和推荐资料。模型因此同时看到“纯路由”“未来领域名称”和可执行领域工具，无法稳定区分辅助工具与当前对外业务能力。
+
+**决定：**
+
+- Main 是纯路由入口，自身不提供任何领域业务能力。Main 面向用户可声明、路由和承诺的业务能力完全由当前 `<SubAgents>` 提供；该列表是当前会话唯一、权威且穷尽的能力来源，不是示例或未来规划。
+- Main 不得根据产品名称、工具列表、历史消息、模型已有知识、用户请求或未来扩展推测能力；不得宣传、暗示、承诺或自行执行 `<SubAgents>` 列表外能力。
+- 无匹配 SubAgent 时，Main 只说明当前不支持该请求，不提供搜索平台、学习资料、操作步骤或其他替代建议。问候或用户询问能力时可以主动介绍服务，但只能将当前 SubAgent 的真实职责转换为用户可读表述，不暴露 Agent、Tool、Capability 或路由机制。
+- Main 的工具白名单固定为：四个 Plan 工具、`get_current_datetime`、`provide_choices`、`read_customer_file`、`query_memory`、`switch_to_subagent`。这些工具只能用于意图识别、必要上下文收集、计划路由过程和执行 handoff，不构成对外业务能力，也不得用于自行完成领域任务。其余工具对 Main 全部不可见。
+- 为精确表达白名单，在现有 `Capability` 枚举增加 `CURRENT_DATETIME` 与 `MEMORY_QUERY`；`get_current_datetime` 使用前者，`query_memory` 使用后者。`get_working_dir` 改由已有 `WORKSPACE_READ` 控制，`query_reference_data` 继续使用 `KNOWLEDGE_QUERY`。Main 移除 `SYSTEM`、`WEB_SEARCH`、`KNOWLEDGE_QUERY`，保留 `PLAN`、`CURRENT_DATETIME`、`INTERACTION`、`EXTERNAL_FILE_READ`、`MEMORY_QUERY`、`ROUTE`。Resume 继续拥有完成其既有职责所需的 capability。
+- `04_tools.md` 增加“工具是执行辅助而非业务能力来源”的权威规则；`05_sub_agents.md` 增加穷尽列表、禁止能力推测、无匹配处理和用户可见能力介绍规则；Main `AgentSpec` 的 Role／Mission／Constraints／CommunicationStyle 同步强化相同边界。
+- 本次不新增模块、class、service、port、schema 或公开方法；只增加两个 capability 枚举成员并调整现有声明、模板与测试。R8-O 必须以真实 production composition 验证 Main 精确工具集合、Resume 不回退、Main 只见 Resume、权威规则进入最终 prompt，并以真实对话复验问候和无匹配请求。
+
+**理由：**
+
+- 只有运行时实际装配的 SubAgent 才能代表当前可交付业务能力；将列表设为穷尽来源，可以避免模型用常识补全尚未实现的 Learning／Interview／Job Search。
+- capability 必须与单个工具边界对齐。继续复用 `SYSTEM` 和 `KNOWLEDGE_QUERY` 会让 Main 在获得当前时间／记忆查询的同时被动获得工作目录／公共参考检索，提示词禁止无法替代运行时不可见性。
+- 将辅助工具与业务能力分开，可以保留 Main 收集路由上下文所需的最小能力，同时维持决策 72 的纯路由职责。
+
+**曾考虑的替代方案：**
+
+- 只修改问候文案 —— 无法约束后续任意请求，也不解决 Tool 与 SubAgent 的权威性冲突，未采用。
+- 保留宽 capability，仅要求模型不要调用多余工具 —— 工具仍会出现在 prompt 中并被视为可用能力，运行时边界也没有收紧，未采用。
+- 无匹配项时提供通用替代建议 —— 会继续让 Main 实际执行未装配领域能力，用户明确拒绝。
+- 问候时完全不介绍能力 —— 可以降低误报，但牺牲可发现性；用户确认允许基于真实 SubAgent 主动介绍，因此未采用。

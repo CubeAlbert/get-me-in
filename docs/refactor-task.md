@@ -488,6 +488,12 @@
 - ✅ v2 在既有模型修复前增加本地 JSON 语法修复：标准 `json.loads` 失败后调用 `json_repair.loads`；尾逗号、物理换行等修复结果仍须为 object 并继续完整业务校验，成功时不增加模型调用。
 - ✅ 保持严格输出契约：纯文本、JSON string／array、缺少 finish string thinking、错误业务字段类型或 finish/tool 冲突均不得归一化；本地 repair 失败或语义校验失败时，AgentRuntime 注入具体错误与 canonical OutputFormat 并只允许模型自修一次，第二次仍失败返回 `invalid_model_reply`。`repair_attempted` 继续承担运行时重试边界和 snapshot 持久化职责。
 - ✅ 本地 repair／单次模型自修边界的 61 项 Parser/Runtime/provider/bootstrap/snapshot 定向测试与完整 244 项自动化测试通过；`compileall` 与 `git diff --check` 通过。
+- ✅ 真实 Main 对话发现能力宣传漂移：问候声称可准备面试、推荐学习资料，但 production Catalog 当前只有 Resume SubAgent；Java 学习资料无匹配项时仍给出 Coursera／Udemy／Stack Overflow 等替代建议。
+- ✅ 用户确认 Main 工具白名单：全部 Plan 工具、`get_current_datetime`、`provide_choices`、`read_customer_file`、`query_memory`、`switch_to_subagent`；其余工具全部不可见。上述工具仅用于意图识别、上下文收集与路由，不构成用户可见业务能力。
+- ✅ 用户确认 `<SubAgents>` 是 Main 当前业务能力的唯一且穷尽来源；不得根据产品名称、工具、历史消息、模型知识或未来规划推测、宣传或执行列表外能力。无匹配 SubAgent 时只说明当前不支持，不提供替代建议；问候可按实际列表介绍能力，但不得暴露 Agent／工具／路由内部结构。
+- ⬜ 细分 capability：新增 `CURRENT_DATETIME` 与 `MEMORY_QUERY`；`get_working_dir` 改由 `WORKSPACE_READ` 控制，`query_reference_data` 继续由 `KNOWLEDGE_QUERY` 控制。Main 移除 `SYSTEM`、`WEB_SEARCH`、`KNOWLEDGE_QUERY`，仅保留决策 205 的六类 capability；Resume 保持其既有领域能力。
+- ⬜ 强化 `04_tools.md`、`05_sub_agents.md` 与 Main `AgentSpec`，明确辅助工具不等于业务能力、SubAgent 列表权威且穷尽、禁止能力推测、无匹配项不得替代回答，以及问候只能介绍当前真实能力。
+- ⬜ 增加 production composition 回归与真实 prompt／对话 smoke：锁定 Main 精确工具名集合、Resume 既有工具不回退、Main 只见 Resume、提示词权威规则可见，并覆盖问候与 Java 学习资料无匹配行为。
 - ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
