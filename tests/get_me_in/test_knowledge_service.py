@@ -135,6 +135,44 @@ class KnowledgeServiceTests(unittest.TestCase):
         self.assertEqual(ManifestStatus.READY, entry.status)
         self.assertEqual("hash", entry.indexed_hash)
 
+    def test_targeted_reload_does_not_delete_manifest_entries_outside_target(self) -> None:
+        memory_source = _source("memories/id.json", "memory-hash")
+        self.manifests.value = _manifest(
+            _entry("references/a.md", "hash", indexed_hash="hash"),
+            _entry("memories/id.json", "memory-hash", indexed_hash="memory-hash"),
+        )
+        service = KnowledgeService(
+            (_Sources((self.source,)), _Sources((memory_source,))),
+            _Chunker(),
+            self.index,
+            self.manifests,
+            self.worker,
+        )
+
+        report = service.reload("memories")
+
+        self.assertEqual((), report.deleted)
+        self.assertEqual(("memories/id.json",), report.unchanged)
+        self.assertEqual(
+            ("memories/id.json", "references/a.md"),
+            tuple(sorted(entry.source_key for entry in self.manifests.value.entries)),
+        )
+        service.close()
+
+    def test_targeted_reload_still_deletes_missing_entries_inside_target(self) -> None:
+        self.manifests.value = _manifest(
+            _entry("references/a.md", "hash", indexed_hash="hash"),
+            _entry("memories/missing.json", "memory-hash", indexed_hash="memory-hash"),
+        )
+
+        report = self.service.reload("memories")
+
+        self.assertEqual(("memories/missing.json",), report.deleted)
+        self.assertEqual(
+            ("references/a.md",),
+            tuple(entry.source_key for entry in self.manifests.value.entries),
+        )
+
     def test_request_cancel_interrupts_only_an_active_reload(self) -> None:
         blocking_index = _BlockingIndex()
         service = KnowledgeService(

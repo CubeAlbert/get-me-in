@@ -496,10 +496,10 @@
 - ✅ production composition 回归锁定 Main 精确 9 工具集合、Resume 既有工具不回退、Main 只见 Resume、提示词权威规则可见且 Main prompt 不再出现学习／面试能力暗示。49 项定向测试、完整 244 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - ✅ 真实 `uv run python main.py` 对话 smoke：问候只介绍简历定制／优化；Java 学习资料请求只说明当前不支持，没有推荐平台、资料或替代方案；`/exit` 返回退出码 0。
 - ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
-- 🔄 修复空 Memory collection 查询语义：`ChromaKnowledgeIndex.search()` 仅将明确的 collection-not-found 归一化为空结果；连接、查询、embedding、rerank 等其他异常继续上抛并由 Tool 映射为 typed `retrieval_unavailable`。
-- ⬜ 增加 adapter 与 retrieval Tool 回归，覆盖未创建 `memories` collection 时返回零命中，以及非 collection-not-found 异常不得被吞掉。
-- ⬜ 在真实 Memory smoke 前执行一次性受控迁移：把当前 `data/memories/resume/` 下两份 legacy Markdown 记忆转换为 v2 `MemoryRecord` JSON 并通过既有 KnowledgeService 建立 `memories` 索引；保留原文件，不让 production v2 直接扫描 legacy 路径，不把迁移器扩展为常驻兼容层。
-- ⬜ 迁移后验证 v2 repository、manifest、Chroma `memories` collection 与 `query_memory` 的真实命中，并记录迁移输入、输出、条数及旧文件未改写证据。
+- ✅ 修复空 Memory collection 查询语义：`ChromaKnowledgeIndex.search()` 仅将明确的 collection-not-found 归一化为空结果；连接、查询、embedding、rerank 等其他异常继续上抛并由 Tool 映射为 typed `retrieval_unavailable`。
+- ✅ 增加 adapter 与 retrieval Tool 回归，覆盖未创建 `memories` collection 时返回零命中，以及非 collection-not-found 异常不得被吞掉。
+- ✅ 在真实 Memory smoke 前执行一次性受控迁移：把当前 `data/memories/resume/` 下两份 legacy Markdown 记忆转换为 2 条 v2 `MemoryRecord` JSON 并通过既有 KnowledgeService 建立 `memories` 索引；原文件 hash／mtime／长度不变，production v2 未增加 legacy 路径扫描或常驻兼容层。
+- ✅ 迁移后验证 v2 repository、manifest、Chroma `memories` collection 与 `query_memory` 的真实命中；smoke 另发现 targeted reload 会误删非目标 manifest entries，已恢复 reference 索引并将 diff 限制到同一 target 范围，同时回归目标范围内真实缺失仍会删除。最终真实 `/ragreload memories` 只报告两条 memory unchanged；Chroma 为 `memories=36`、`references=34` chunks，manifest 为 2 条 memory 与 6 条 reference source，全部 `ready`。30 项定向测试、完整 249 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
 - ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
 - ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。

@@ -92,6 +92,31 @@ class KnowledgeAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "chroma unavailable"):
             index.delete_source("references/a.md", cancellation=_Token())
 
+    def test_chroma_search_returns_no_hits_when_collection_does_not_exist(self) -> None:
+        index = ChromaKnowledgeIndex(_MissingCollectionClient(), _FailingEmbedder(), _Reranker())
+
+        hits = index.search(
+            "query",
+            collection="memories",
+            category=None,
+            top_k=1,
+            cancellation=_Token(),
+        )
+
+        self.assertEqual((), hits)
+
+    def test_chroma_search_propagates_operational_errors(self) -> None:
+        index = ChromaKnowledgeIndex(_FailingClient(), _Embedder(), _Reranker())
+
+        with self.assertRaisesRegex(RuntimeError, "chroma unavailable"):
+            index.search(
+                "query",
+                collection="memories",
+                category=None,
+                top_k=1,
+                cancellation=_Token(),
+            )
+
 
 class _Token:
     is_cancelled = False
@@ -137,6 +162,13 @@ class _Client:
 
 class _FailingClient:
     def get_collection(self, name): raise RuntimeError("chroma unavailable")
+
+
+class _MissingCollectionClient:
+    def get_collection(self, name):
+        from chromadb.errors import NotFoundError
+
+        raise NotFoundError(f"Collection {name} does not exist")
 
 
 def _now() -> datetime:

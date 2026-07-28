@@ -90,9 +90,22 @@ class KnowledgeService:
                 (source, repository)
                 for repository in self._sources
                 for source in repository.scan(target)
+                if target is None or target in source.source_key
             )
             observed = tuple(source for source, _ in observed_pairs)
-            report = manifest.diff(observed)
+            comparison_manifest = (
+                manifest
+                if target is None
+                else IndexManifest(
+                    manifest.schema_version,
+                    tuple(
+                        entry
+                        for entry in manifest.entries
+                        if target in entry.source_key
+                    ),
+                )
+            )
+            report = comparison_manifest.diff(observed)
             repositories = {source.source_key: repository for source, repository in observed_pairs}
             failures: list[str] = []
             for source_key in (*report.deleted, *(old for old, _ in report.renamed)):

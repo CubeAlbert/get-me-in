@@ -4738,3 +4738,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 捕获所有 Chroma 查询异常并返回空结果 —— 会把数据库损坏、连接错误或 embedding／rerank 故障伪装成零命中，明确拒绝。
 - 让 production v2 直接扫描 `data/memories/` —— 违反旧运行数据隔离与不迁移决策，也会形成长期双格式兼容负担，明确拒绝。
 - 测试时重新手工编造记忆而不迁移现有文件 —— 无法验证当前用户真实 legacy 数据向 v2 schema／索引的准备路径，用户要求先迁移当前记忆文件，因此未采用。
+
+---
+
+### 决策 207 —— targeted Knowledge reload 只比较目标范围
+
+**背景：** 决策 206 的真实 Memory smoke 在两条 legacy 记忆迁移并由启动加载建立 v2 索引后执行 `/ragreload memories`。首次请求因后台启动加载仍持有串行锁而正确返回 `busy=True`；加载完成后的第二次请求却把 manifest 中 6 条 `references/*` entries 全部报告为 deleted。原因是各 source repository 使用 target 过滤 observed sources，但 `KnowledgeService.reload(target)` 仍让完整 manifest 与过滤后的 observed tuple 做 diff，于是所有非目标 entries 都被误判为删除。reference 源文件未受影响，本轮立即执行无 target 的完整 reload，已从静态文件恢复全部 reference manifest entries 与 Chroma chunks。
+
+**决定：**
+
+- `KnowledgeService.reload(target)` 在 target 非空时，同时把 observed sources 和用于 `IndexManifest.diff()` 的 manifest entries 限制为 `target in source_key`；target 为空时继续使用完整 manifest 和全部 observed sources。
+- service 边界再次过滤 repository 返回值，不依赖每个 repository 都正确实现 target；实际 mutation 仍作用于完整 manifest，以保留所有非目标 entries。
+- 不改变 `ReloadKnowledge`、`ReloadReport`、`KnowledgeSourceRepository.scan(target)`、CLI 命令或其他公开协议；target 继续采用既有 source-key substring 语义。
+- 增加跨 collection 回归：target 为 `memories` 时只报告 memory entry unchanged，并确认 reference entry 仍存在且没有进入 deleted。
+- 修复后真实 `/ragreload memories` 返回 `deleted=()`、两条 memory source 为 unchanged；只读检查确认 Chroma `memories=36` chunks、`references=34` chunks，manifest 同时保留 2 条 memory 与 6 条 reference source，全部为 `ready`。
+
+**理由：**
+
+- targeted reload 的作用域必须在“观察”和“比较”两侧一致，否则过滤本身会被解释为删除信号。
+- 在 service 再次执行 target 过滤，可以把语义固定在应用边界，避免 adapter 实现差异扩大删除范围。
+- 保留完整 manifest 作为 mutation owner，可继续复用现有 pending／ready／error 状态机，而无需增加合并 API 或新的 manifest schema。
+
+**曾考虑的替代方案：**
+
+- targeted reload 完全忽略 deleted —— 会导致目标范围内真实删除无法从索引和 manifest 收敛，未采用。
+- 为 `memories`／`references` collection 写特殊分支 —— target 当前是通用 source-key substring，不应硬编码 collection 名称，未采用。
+- 修改每个 repository 并信任其过滤结果 —— 仍无法阻止未来 adapter 返回非目标 source 后污染 diff；service 必须守住最终作用域。
+- 取消 `/ragreload [target]` 参数 —— 会缩减既有 CLI 能力且不是修复根因，未采用。

@@ -88,7 +88,13 @@ class ChromaKnowledgeIndex:
 
     def search(self, query: str, *, collection: str, category: str | None, top_k: int, cancellation: CancellationSignal) -> tuple[IndexHit, ...]:
         if cancellation.is_cancelled: raise InterruptedError
-        result = self._client.get_collection(collection).query(
+        try:
+            target = self._client.get_collection(collection)
+        except Exception as error:
+            if _is_missing_collection(error):
+                return ()
+            raise
+        result = target.query(
             query_embeddings=list(self._embedder.embed((query,))),
             n_results=top_k,
             where={"category": category} if category else None,

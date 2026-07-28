@@ -35,6 +35,32 @@ class RetrievalToolTests(unittest.TestCase):
 
         self.assertEqual(ToolFailure("invalid_top_k", "top_k must be at least 1"), outcome)
 
+    def test_memory_query_returns_success_with_no_results(self) -> None:
+        context = ToolContext(
+            "session",
+            AgentKey.MAIN,
+            CancellationToken(),
+            retrieval=_EmptyRetrieval(),
+        )
+
+        outcome = self.executor.execute(
+            "call",
+            "query_memory",
+            {"query": "尚未记录的信息"},
+            context,
+        )
+
+        self.assertEqual(
+            ToolSuccess(
+                {
+                    "query": "尚未记录的信息",
+                    "total_results": 0,
+                    "results": (),
+                }
+            ),
+            outcome,
+        )
+
 
 class _Retrieval:
     collection: str | None = None
@@ -44,3 +70,8 @@ class _Retrieval:
         self.collection = collection
         self.category = category
         return (RetrievalResult("命中", {"source": "test", "rerank_score": 0.9}),)
+
+
+class _EmptyRetrieval:
+    def search(self, query, *, collection, category, top_k, cancellation):
+        return ()

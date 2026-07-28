@@ -4,13 +4,13 @@
 
 **当前任务：** R8-O 强制观察：继续完成剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke
 
-**当前子任务：** 修复空 `memories` collection 的查询语义并补充回归；后续真实 Memory smoke 前先将当前两份 legacy Markdown 记忆迁移为 v2 数据，再继续其余 CLI／Agent／Knowledge／Resume 与旧数据拒绝访问验证。
+**当前子任务：** 继续完成剩余 CLI／交互、Main→Resume→Main、审批拒绝、Plan、Memory delete、真实 Resume 和旧数据拒绝访问 smoke。
 
-**当前阻塞：** 决策 206 的空 Memory collection 查询缺陷待实施：当前 v2 Chroma 已加载 `references` 34 条，但尚无 v2 Memory 时 `query_memory` 会把 collection-not-found 误报为 `retrieval_unavailable`。修复、回归和迁移后真实 Memory smoke 完成前不得通过 R8-O；未经用户审查不得进入 R8-D。
+**当前阻塞：** 无。决策 206 的空 Memory collection 查询缺陷及决策 207 的 targeted reload 非目标删除缺陷均已修复并复验；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，`2c0ef06` 先行记录决策 205。决策 205 的实现已完成：Main 精确可见四个 Plan 工具、`get_current_datetime`、`provide_choices`、`read_customer_file`、`query_memory`、`switch_to_subagent`；`get_working_dir`、公共参考检索、Web Search 和全部领域工具均不可见。Tool／SubAgent／Main prompt 已明确工具不构成业务能力、当前 `<SubAgents>` 是唯一且穷尽的业务能力来源，并移除会泄漏不可见工具或暗示未来能力的交叉引用。49 项定向测试、完整 244 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 `uv run python main.py` 对话中，问候只介绍简历定制／优化，Java 学习资料请求只说明当前不支持且不提供替代建议，`/exit` 返回 0。随后真实 `query_memory` 诊断确认 v2 Chroma 已正常加载 `references` 34 条，但 `data/v2/memories/` 与 `memories` collection 尚不存在；查询 adapter 直接 `get_collection("memories")`，把合法空库状态误报为不可用。决策 206 已确认修复与测试边界，并要求真实 Memory smoke 前先迁移当前 `data/memories/resume/` 下两份 legacy Markdown 记忆，原文件保持不变；本轮仅记录文档，尚未实施。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施：`ChromaKnowledgeIndex.search()` 仅把明确 collection-not-found 归一化为空结果，其他异常继续传播；adapter／Tool 回归已补齐。当前 `data/memories/resume/` 下两份 legacy Markdown 记忆已一次性迁移为 2 条 v2 JSON，原文件 hash／mtime／长度保持不变；真实入口成功建立 `memories` collection 并由 `query_memory` 命中。Smoke 发现 `/ragreload memories` 曾把 6 条 reference source 误判为删除，已先通过完整 reload 恢复，再按决策 207 将 manifest diff 与 observed sources 统一限制在 target 范围。修复后真实 targeted reload 只报告两条 memory unchanged；Chroma 为 `memories=36` chunks、`references=34` chunks，manifest 为 2 条 memory source 加 6 条 reference source，全部 `ready`。30 项定向测试、完整 249 项自动化测试、`compileall` 与 `git diff --check` 通过；R8-O 其余 smoke 仍待完成。
 
-**下一步：** 实施决策 206：让明确的 collection-not-found 返回空检索结果、保留其他 Chroma 异常、补充 adapter／Tool 回归；随后以一次性测试准备步骤迁移当前两份 legacy 记忆并完成真实 Memory smoke，再继续其余 R8-O 验证。
+**下一步：** 继续完成剩余 CLI／交互、Main→Resume→Main、审批拒绝、Plan、Memory delete、真实 Resume 与旧数据拒绝访问 smoke；随后 checkpoint 并停下等待用户审查。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -45,6 +45,7 @@
 204. **在单次模型修复前增加本地 JSON repair** — ModelReplyParser 在 `json.loads` 语法失败后调用 `json_repair.loads`，但修复结果仍必须是 JSON object 并通过严格业务校验；纯文本、JSON string／array、缺少 finish thinking 或其他语义错误不得本地归一化。本地修复失败或语义校验失败时沿用决策 172/203 的一次模型 repair，第二次仍失败才返回 typed failure。
 205. **Main 的业务能力只由当前 SubAgent 穷尽定义** — Main 只保留 Plan、当前时间、选项交互、客户文件读取、记忆查询与切换 SubAgent 六类辅助／路由工具；工具不构成对外业务能力。`<SubAgents>` 是唯一且穷尽的当前业务能力来源，禁止根据产品名称、工具、历史、模型知识或未来规划推测能力。无匹配项时只说明暂不支持且不提供替代建议；问候可用用户语言介绍实际 SubAgent 能力但不暴露内部架构。
 206. **空 Memory collection 返回空结果并以显式迁移准备真实测试** — v2 Chroma 已正常加载 reference 数据；尚无 v2 Memory 时，`query_memory` 的 collection-not-found 必须解释为零命中，其他 Chroma 异常继续上抛，并补充 adapter／Tool 回归。后续真实 Memory smoke 前先把当前两份 legacy Markdown 记忆显式转换为 v2 JSON 并建立索引；不得让 production v2 直接读取 legacy 路径，不修改或删除原文件。
+207. **targeted Knowledge reload 只比较目标范围** — `/ragreload <target>` 的 observed sources 与 manifest diff 必须使用相同 target 范围，禁止把非目标 manifest entries 误判为删除；完整 reload 继续比较全部 source。真实 `/ragreload memories` 已证明只保留两条 memory unchanged 且不会删除 references。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
