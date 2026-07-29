@@ -5,7 +5,7 @@ from src.get_me_in.application.settings import Settings, SettingsValidationError
 
 
 class SettingsTests(unittest.TestCase):
-    def test_example_configuration_documents_v2_settings_and_legacy_rollback(self) -> None:
+    def test_example_configuration_documents_current_v2_settings(self) -> None:
         example = (Path(__file__).resolve().parents[2] / ".env.example").read_text(
             encoding="utf-8"
         )
@@ -27,10 +27,13 @@ class SettingsTests(unittest.TestCase):
             "SHUTDOWN_TIMEOUT_SECONDS",
         ):
             self.assertIn(name, example)
-        self.assertIn("legacy rollback only", example)
+        self.assertNotIn("legacy rollback only", example)
         self.assertIn("AGENT_MAX_MODEL_CALLS=100", example)
         self.assertIn("SHUTDOWN_TIMEOUT_SECONDS=60", example)
-        self.assertIn("AGENT_MAX_ROUNDS", example)
+        self.assertNotIn("AGENT_MAX_ROUNDS", example)
+        self.assertIn("BI_ENCODER_MODEL", example)
+        self.assertIn("CROSS_ENCODER_MODEL", example)
+        self.assertIn("EMBED_BATCH_SIZE", example)
 
     def test_from_env_builds_typed_static_asset_paths(self) -> None:
         settings = Settings.from_env(
