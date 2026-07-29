@@ -17,7 +17,7 @@ R0 重构启动时，legacy 项目已经完成一个可运行的 CLI 多 Agent �
 
 因此本分支采用 **受控重写（controlled rewrite）**：在新的 `src/get_me_in/` 包中构建 v2，通过纵向切片逐步获得功能等价；不在原有 `BaseAgent` 和 `App` 上继续做大规模就地拆分。
 
-当前 v2 已完成 R0～R7，根 `main.py` 已在 R8-E 切换到 `src.get_me_in.cli.main.main()`，R8-O 完整 smoke 与用户审查已经通过。R8-D 已由提交 `7514af3` 删除 51 个 legacy production 文件，并由 `c13d455` checkpoint；用户已确认决策 230 的 R8-G 详细清单，但本轮只更新文档，R8-G 实施仍待单独授权。
+当前 v2 已完成 R0～R7，根 `main.py` 已在 R8-E 切换到 `src.get_me_in.cli.main.main()`，R8-O 完整 smoke 与用户审查已经通过。R8-D 已由提交 `7514af3` 删除 51 个 legacy production 文件，并由 `c13d455` checkpoint；决策 230 确认 R8-G 详细清单，决策 231 已授权本会话实施 R8-G，当前正在进行文档归一化并准备 G8。
 
 ## 2. R0 legacy 能力盘点
 
@@ -654,7 +654,7 @@ R7 固定按七个切片实施，每个切片独立验证、独立提交：
 
 ### 6.11 入口切换、观察与遗留删除（R8，R8-D 已完成）
 
-R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、Application、Session、ToolOutcome 或 port 公共协议。R8 只允许完成生产入口切换、可回退观察、遗留代码删除和最终文档归一化。R8-P、R8-E、R8-O、R8-D 及相应用户审查均已完成；决策 230 已确认 R8-G 详细清单，但当前只完成文档 checkpoint，不构成 R8-G 或 R9 实施授权。
+R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、Application、Session、ToolOutcome 或 port 公共协议。R8 只允许完成生产入口切换、可回退观察、遗留代码删除和最终文档归一化。R8-P、R8-E、R8-O、R8-D 及相应用户审查均已完成；决策 230 确认 R8-G 详细清单，决策 231 已授权本会话实施 R8-G，完成 G8 与 checkpoint 后停止，不进入 R9。
 
 #### 6.11.1 强制前置门禁
 
@@ -668,8 +668,8 @@ R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、A
 
 - `main.py`：唯一行为改动是委托 `src.get_me_in.cli.main.main()` 并以其整数返回值作为进程退出码；删除全部 legacy import、import-time tool registration 与旧 composition。
 - `src/get_me_in/cli/main.py`：修正已经过时的“未改变 legacy entry point”说明，并在 `Settings` 已加载、composition／CLI 构造或启动失败时记录完整诊断、向用户渲染简短错误并返回退出码 `1`；只捕获 `Exception`，不得吞掉 `KeyboardInterrupt`／`SystemExit`。既有 `SettingsValidationError` 继续返回 `2`，正常关闭继续返回 `0`；不增加第二套入口或公开 API。
-- `.env.example`：R8-P 先补齐 v2 `Settings.from_env()` 的实际变量名、默认值和已支持兼容别名；仅被 v1 消费的变量暂时保留在明确标注的“legacy rollback only”段，确保观察期可单独回退 R8-E。R8-D 完成后再由 R8-G 删除这些 legacy-only 示例。
-- `README.md`：R8-P 时文件为空，随后写入最小过渡说明；当前内容仍保留 R8-O 观察期与回滚期表述。R8-G 获得授权后将其改为已落地 v2 事实，保留唯一生产入口、诊断入口、当前能力、命令、配置和数据边界，不再把迁移观察期写成当前状态。
+- `.env.example`：R8-G 已删除观察期与 legacy-only 示例，保留 `Settings.from_env()` 的 v2 正式变量、默认值和仍支持的 Knowledge 兼容别名。
+- `README.md`：R8-G 已将过渡说明归一化为已落地 v2 事实，记录唯一生产入口、诊断入口、当前能力、命令、配置、数据边界和回退顺序。
 - `tests/get_me_in/test_import_boundaries.py`、`tests/get_me_in/test_settings.py`、既有 CLI/bootstrap 测试及新测试文件 `tests/get_me_in/test_cli_main.py`：覆盖根入口只依赖 v2、示例配置与 Settings 对齐、Settings 错误 `2`、composition／启动错误 `1` 且不输出 traceback、正常关闭 `0` 与资源关闭路径。新测试文件只测试既有入口函数；原则上不新增生产文件、类或公开方法。
 - `pyproject.toml` 不新增 `[project.scripts]` 或其他生产入口；R8 继续以根 `main.py` 为唯一生产入口，以 `python -m src.get_me_in.cli` 为诊断／预览入口。
 
@@ -690,7 +690,7 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 2. **R8-E 入口切换：** 切换根 `main.py`，补齐 `cli.main` 启动异常映射和入口 contract tests，形成独立 commit。该 commit 是删除前的明确回退点。
 3. **R8-O 观察门禁：** 从 `uv run python main.py` 执行完整 smoke matrix，验证启动错误无 traceback、基础对话、命令、审批／取消、Main→Resume→Main、save/restore/rewind、Knowledge/Memory、Resume copy/edit/build/open 与关闭。未通过时用 `git revert <R8-E commit>` 回退，不使用破坏性 reset；R8-P 保留的 legacy rollback 配置使旧入口仍可启动。
 4. **R8-D 遗留删除：** R8-O 经用户审查通过后，由 `7514af3` 精确删除 legacy 源码，3 个 checkpoint 目录作为本地清理证据；import/dependency、Catalog、入口和 legacy-data refusal 验证均已完成，旧运行数据未删除。
-5. **R8-G 文档与 G8：** 获得单独授权后删除 `.env.example`／README 的 legacy rollback 段，将 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`、`docs/current.md`、README 与 AGENTS.md 更新为已落地 v2 事实并完成 G8。历史 smoke/capability 内容已由决策 228 收敛到四份主文档并通过 Git 保留，不把旧 `/auto-approve-switch` 改写成当前命令。
+5. **R8-G 文档与 G8：** 决策 231 已授权实施；`.env.example`／README 的 legacy rollback 段已删除，活跃文档与 AGENTS.md 正在同步为已落地 v2 事实，随后完成 G8。历史 smoke/capability 内容已由决策 228 收敛到四份主文档并通过 Git 保留，不把旧 `/auto-approve-switch` 改写成当前命令。
 
 #### 6.11.4 R8-O／G8 证据要求
 
@@ -702,9 +702,9 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 
 #### 6.11.5 R8-G 实施边界与失败分流
 
-- **授权：** 决策 230 只确认清单；新会话必须 bootstrap、确认 `refactor` 分支和干净工作区，并取得 R8-G 单独明确授权后才可实施。
+- **授权：** 决策 230 确认清单，决策 231 已授权本会话；执行仍须以 bootstrap、`refactor` 分支、干净工作区和 8 文件白名单为边界。
 - **文件白名单：** 只允许修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`。R8-G 不修改生产代码、测试、脚本、数据、依赖或锁文件。
-- **配置与文档：** 删除仅供旧入口回退的示例变量和观察期说明，但保留 v2 正式变量及其兼容别名；README 和活跃文档以实际 Catalog、Registry、Settings 与数据目录为准。`docs/decision.md` 只追加完成决策，不改写历史。
+- **配置与文档：** 已删除仅供旧入口回退的示例变量和观察期说明，保留 v2 正式变量及其兼容别名；README 和活跃文档以实际 Catalog、Registry、Settings 与数据目录为准。`docs/decision.md` 只追加完成决策，不改写历史。
 - **G8：** 除完整自动化、静态边界和 2 Agent／26 Tool／10 command Catalog 外，还必须从根入口完成 CLI／handoff／审批／取消，真实 Chroma／Knowledge／Memory，中文／英文／双语 Resume 与 PDF merge，legacy-data 拒绝访问组合证据、写入边界和资源关闭验证。
 - **失败分流：** 若 G8 发现需要修改 `main.py`、`src/`、`tests/`、依赖、公开协议或数据迁移，立即停止并保留证据，另行提交最小修复清单；不得在 R8-G 文档／配置提交中修复。
 - **提交与停止：** staged diff 只能包含文件白名单；G8 通过后创建独立 R8-G 提交并 checkpoint，随后停止等待用户审查，不自动进入 R9。
@@ -800,4 +800,4 @@ v2 只复用以下静态项目资产：
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。R0～R7、G5-F、R6-F 与 R7-T2 均已完成；决策 189 已再次恢复 G7。R8-P、R8-E、R8-O 与 R8-D 已完成，R8-D 提交为 `7514af3`。决策 230 已确认 R8-G 清单；新会话从 `docs/task.md` R8-G 5.1 授权门禁恢复，未获单独授权前不得实施 5.2～5.6。
+R-D1～R-D6 已由用户确认。R0～R7、G5-F、R6-F 与 R7-T2 均已完成；决策 189 已再次恢复 G7。R8-P、R8-E、R8-O 与 R8-D 已完成，R8-D 提交为 `7514af3`。决策 230 已确认 R8-G 清单，决策 231 已授权本会话从 5.2 实施；完成 G8 与 checkpoint 后停止。

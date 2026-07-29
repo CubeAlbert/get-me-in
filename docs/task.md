@@ -580,10 +580,10 @@
 #### 5.3 活跃文档与 AGENTS.md 归一化
 
 - ✅ 本 checkpoint 已把 AGENTS.md 从 R8-D 删除执行说明切换为 R8-G 新会话恢复、变更白名单、G8 验证与失败分流说明；R8-D 的精确删除清单继续由 Git、任务历史与决策 226／229 保存。
-- ✅ 本 checkpoint 已将 `docs/current.md`、本任务清单、`docs/design.md` 与 `docs/plan.md` 的当前态改为“R8-D 已完成、R8-G 清单已确认但实施待授权”，并追加决策 230。
-- ⬜ R8-G 实施完成后，再把 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/current.md` 与 AGENTS.md 同步为 G8 已通过的最终 v2 事实；只更新当前态和已确认的 R8 段，不抹除历史阶段证据。
-- ⬜ `docs/decision.md` 保持 append-only：不得改写决策 225～230 的历史语义；R8-G/G8 完成时只更新目录并追加新的完成决策。
-- ⬜ 运行过渡态文本扫描，确认 README、AGENTS.md、`docs/current.md` 及 design／plan 的当前态不再声称 legacy 源码仍存在、R8-O 尚未通过、R8-D 尚待执行或只需单独回退 R8-E；历史章节若保留旧状态，必须明确标为历史。
+- ✅ 前一 checkpoint 已将 `docs/current.md`、本任务清单、`docs/design.md` 与 `docs/plan.md` 的当前态收敛到 R8-D 完成与 R8-G 待授权事实，并追加决策 230；该状态已由决策 231 更新为本会话实施中。
+- ✅ 已把 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/current.md` 与 AGENTS.md 的当前态同步为 R8-D 完成、R8-G 实施中和 G8 待验收；只更新当前态及已确认的 R8 段，未抹除历史阶段证据。
+- ✅ `docs/decision.md` 保持 append-only：未改写决策 225～230 的历史语义；本 checkpoint 只追加决策 233。
+- ✅ 已运行过渡态文本扫描；当前态不再声称 legacy 源码仍存在、R8-O 尚未通过、R8-D 尚待执行或只需单独回退 R8-E，历史章节保留时均按历史阶段理解。
 
 #### 5.4 G8 自动化、静态与 Catalog 验证
 

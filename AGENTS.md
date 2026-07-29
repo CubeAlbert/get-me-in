@@ -4,7 +4,7 @@
 
 ## 项目
 
-**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。`refactor` 分支已将生产入口切换到 `src/get_me_in/` v2；R8-D 已删除 legacy production 源码，当前停在 R8-G 文档归一化与 G8 的单独授权门禁。
+**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。`refactor` 分支已将生产入口切换到 `src/get_me_in/` v2；R8-D 已删除 legacy production 源码，当前正在实施 R8-G 文档归一化并准备 G8 验收。
 
 ## 新会话恢复顺序
 
@@ -19,13 +19,13 @@
 
 ## 当前 R8-G 清单与授权状态
 
-R8-D 已由提交 `7514af3` 精确删除 51 个 legacy production 文件，并由 `c13d455` checkpoint。用户已通过决策 230 确认 `docs/task.md` R8-G 5.1～5.6 的详细清单，但本轮只授权文档 checkpoint；R8-G 实施仍须新会话单独明确授权。
+R8-D 已由提交 `7514af3` 精确删除 51 个 legacy production 文件，并由 `c13d455` checkpoint。决策 230 确认了 `docs/task.md` R8-G 5.1～5.6 的详细清单，决策 231 已授权本会话从 5.2 开始实施；当前仍只允许修改 R8-G 白名单文件，G8 完成并 checkpoint 后必须停止等待用户审查。
 
 新会话必须：
 
-1. 先执行 `/project-bootstrap`，读取 `docs/current.md`、决策 230 和 `docs/task.md` R8-G 5.1～5.6。
+1. 先执行 `/project-bootstrap`，读取 `docs/current.md`、决策 230／231 和 `docs/task.md` R8-G 5.1～5.6。
 2. 确认分支为 `refactor`、工作区干净、`HEAD` 包含 `c13d455` 与 `7514af3`。
-3. 未取得 R8-G 单独授权前，只能审查状态，不得修改 README／`.env.example` 或执行 G8。
+3. 若新会话尚未取得 R8-G 单独授权，只能审查状态，不得修改 README／`.env.example` 或执行 G8；当前授权不扩大到 R9。
 4. R8-G/G8 完成并 checkpoint 后必须停止；不得自动进入 R9。
 
 ### R8-G 文件与行为边界
@@ -149,7 +149,7 @@ main.py
 ## 数据与配置
 
 - 静态输入只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`。
-- v2 运行数据只写 `data/workspace/` 与 `data/v2/`。
+- v2 业务运行数据只写 `data/workspace/` 与 `data/v2/`；诊断日志默认写入 `data/logs/`，由 `LOG_DIR` 控制。
 - 环境由 `src/get_me_in/cli/main.py` 加载 `.env`，再由 `Settings.from_env()` 解析；v2 代码不得 import legacy `src.config`。
 - `pyproject.toml` 只配置清华 TUNA 为默认 PyPI 镜像，不设置 `[tool.uv].environments`，保持 Windows 与 Ubuntu/Linux universal lock。
 - 新增依赖先执行 `uv add <package> --no-sync`，再单独 `uv sync`；运行 `uv lock`／`uv add` 前先确认没有并发 uv 锁定操作。
