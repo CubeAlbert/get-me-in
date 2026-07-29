@@ -5419,3 +5419,35 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 删除前确认五份文件只被文档互相引用，没有代码、测试、README 或运行配置依赖。
 - `docs/design.md` 新增历史材料收敛映射和旧入口源码基线；plan／task／current／AGENTS 已移除对辅助文件的活跃依赖。
 - 本提交不修改 `src/`、`data/`、`main.py`、测试、依赖、README 或 `.env.example`，不执行 R8-D。
+
+---
+
+### 决策 229 —— R8-D 前置生命周期修复与遗留删除完成
+
+**背景：** R8-D 删除后的默认 5 秒配置无法稳定等待 Knowledge 后台模型预热完成，根入口 `/exit` 连续 smoke 返回关闭超时；用户授权插入一个独立的前置修复提交，但要求保持 worker、ResourceStack、typed timeout 和 non-daemon 生命周期语义不变。
+
+**决定：**
+
+- 独立提交 `b74af9e` 将 `Settings` 产品默认值、`Settings.from_env()` fallback 和 `.env.example` 的 `SHUTDOWN_TIMEOUT_SECONDS` 从 5 秒调整为 60 秒，并增加默认值回归断言。
+- 未修改 `BackgroundWorker`、`ResourceStack`、关闭错误处理、typed timeout 或 non-daemon worker 语义；修复提交不包含任何 legacy 删除。
+- 默认配置连续 3 次冷启动立即 `/exit` 均返回 0，耗时约 38.603s、37.284s、36.941s；每次结束后匹配进程数为 0。
+- 删除提交 `7514af3` 仅包含精确复核的 51 个 tracked legacy 源文件；3 个 checkpoint 目录仅作本地清理证据，不进入提交。
+- R8-D 完成后只 checkpoint 并停止；不得自动进入 R8-G 或 R9。
+
+**理由：**
+
+- 60 秒是已观察到的实际模型预热与资源关闭所需产品边界，能够保留有界关闭和失败可见性，同时避免用 daemon 化或忽略关闭错误掩盖生命周期问题。
+- 修复与删除分成两个可独立回退的提交，便于区分生命周期配置变化与 legacy 源码删除。
+- 三次默认配置冷启动、完整自动化、静态边界、Catalog、production composition、legacy refusal 与旧数据指纹复核共同构成 R8-D 验收证据。
+
+**曾考虑的替代方案：**
+
+- 临时进程设置 60 秒后直接提交删除 —— 只能证明当前运行可停止，不能改变产品默认配置，未采用。
+- 修改 BackgroundWorker、ResourceStack 或 daemonize worker —— 会扩大生命周期协议范围并掩盖关闭错误，明确禁止。
+- 在删除提交中混入 README、R8-G 文档或依赖清理 —— 会破坏 R8-D 独立回退点，未采用。
+
+**验证：**
+
+- `b74af9e` 仅修改 `.env.example`、`src/get_me_in/application/settings.py` 和 `tests/get_me_in/test_settings.py`；`7514af3` 仅删除 51 个白名单文件。
+- `uv run python -m unittest discover -s tests/get_me_in -t .` 运行 283 项并通过；`compileall`、`git diff --check`、import scan、11 项依赖使用、Catalog、composition 和拒绝访问 smoke 均通过。
+- `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 的只读指纹与 mtime 和删除前一致；工作区 checkpoint 清理未进入 Git 提交。

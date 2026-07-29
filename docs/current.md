@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 —— R8-D 已获授权，文档已收敛，等待新会话执行
+**当前阶段：** R8 —— R8-D 已完成并 checkpoint，等待用户审查与后续授权
 
-**当前任务：** R8-D 遗留删除：按 `docs/task.md` 4.2～4.5 完成安全快照、精确删除、验证、独立提交与回退记录
+**当前任务：** R8-D 遗留删除：安全快照、精确删除、验证、独立提交与回退记录已完成
 
-**当前子任务：** 新会话先执行 `/project-bootstrap`，确认文档 checkpoint 后从 `docs/task.md` 的 4.2 删除前安全快照开始；本会话未执行任何 legacy 删除。
+**当前子任务：** R8-D 已完成；保持停止，不自动进入 R8-G 或 R9，等待用户审查和后续明确授权。
 
-**当前阻塞：** 无。用户已明确授权在新会话执行 R8-D；授权范围仅限 `docs/task.md` 4.2～4.5，不包含自动进入 R8-G 或 R9。
+**当前阻塞：** 无。R8-D 已独立提交并完成 checkpoint；R8-G 与 R9 仍未授权。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 与用户审查已完成，工程验证为 283 项自动化测试、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实 Memory delete 和 legacy refusal smoke 全部通过；KnowledgeService 状态竞态已由 `9da3242` 修复。用户已授权新会话执行 R8-D，但要求本会话只做文档收敛。活跃架构、计划和任务已收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`，`docs/decision.md` 继续作为唯一决策记录；五份辅助 baseline／audit／matrix／smoke 文档的有效内容也已映射到四份主文档并删除，完整历史由 Git 保留。`docs/` 当前只保留本状态入口与四份主文档。R8-D 只读盘点确认 8 个 legacy package 内 45 个文件加 6 个顶层 module，共 51 个 Git 跟踪删除目标；三个被忽略的 checkpoint 目录当前共 5 个文件；11 个直接依赖均被 v2 使用。旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 永远不在删除范围内。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复提交为 `b74af9e`：仅将 `Settings` 产品默认与 `.env.example` 的 `SHUTDOWN_TIMEOUT_SECONDS` 从 5 秒调整为 60 秒，并增加默认值回归测试；未修改 `BackgroundWorker`、`ResourceStack`、typed timeout 或 non-daemon 语义。默认配置连续 3 次冷启动 `/exit` 均退出码 0，耗时分别约 38.603s、37.284s、36.941s，每次匹配进程数为 0。R8-D 删除提交为 `7514af3`，只包含精确复核的 51 个 legacy 源文件删除；3 个 checkpoint 目录为本地清理证据，不在提交中。删除后 283 项自动化测试、`compileall`、`git diff --check`、import boundary、11 项依赖使用、2 Agent／26 Tool／10 command Catalog、production composition、根入口 smoke、4 路径 legacy refusal smoke 全部通过；旧运行数据指纹／mtime 未变化。R8-G 与 R9 未授权，完整真实 adapter／业务 smoke 留待 R8-G。
 
-**下一步：** 在新会话执行 `/project-bootstrap`，读取 `docs/current.md` 及其列出的四份活跃文档；确认工作区从本次文档 checkpoint 开始且干净，然后严格按 `docs/task.md` 4.2～4.5 完成 R8-D。R8-D 独立提交后停止，不自动进入 R8-G。
+**下一步：** 保持工作区干净并停止，等待用户审查 R8-D；未经新的明确授权，不修改 README／`.env.example` 的 rollback 段、不执行 R8-G 或 R9。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
