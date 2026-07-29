@@ -6,11 +6,11 @@
 
 **当前子任务：** `docs/task.md` R8-G 5.5：根入口、真实 adapter 与数据边界 smoke。
 
-**当前阻塞：** 无。独立测试修复已获授权并以 `ee558b4` 提交；5.4 的自动化、静态、路径和 Catalog 验证全部通过。R8-G 仍仅限白名单文件，R9 未授权。
+**当前阻塞：** R8-G 5.5 真实 Resume build smoke 暴露生产代码缺陷：Windows `SubprocessRunner` 使用默认 GBK 解码 `pdflatex` 输出，触发 `UnicodeDecodeError`，随后 `ArtifactService._bound_log()` 对 `stdout=None` 抛出 `AttributeError`。问题涉及 `src/get_me_in/`，超出 R8-G 白名单；已停止 5.5／5.6，等待独立代码修复授权。R9 未授权。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 只把 `SHUTDOWN_TIMEOUT_SECONDS` 产品默认从 5 秒调整为 60 秒并增加回归测试；删除提交 `7514af3` 只包含 51 个白名单 legacy 源文件，checkpoint `c13d455` 记录完成证据。R8-G 5.2 提交 `c644b12`、5.3 提交 `7e400bd`、独立 Settings 测试修复 `ee558b4` 已完成；5.4 验证记录 283 项 unittest 全部通过、compileall、diff check、legacy 边界扫描和实际 Catalog 取证通过，Catalog 为 2 Agent／26 ToolDefinition／10 command。`decision.md` 的 230～234 章节已重新按完整决策边界排列，历史语义未改写。R8-G 只允许修改 8 个文档／示例配置文件；若 5.5 G8 smoke 发现代码、测试、依赖或公开协议缺陷，必须停止并另提修复清单。当前 R8-D 后、R8-G 前回退顺序为 `7514af3` → `9fbeabc`；未来 R8-G 提交后须先 revert R8-G，再按上述顺序恢复，始终不得触碰旧运行数据。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 只把 `SHUTDOWN_TIMEOUT_SECONDS` 产品默认从 5 秒调整为 60 秒并增加回归测试；删除提交 `7514af3` 只包含 51 个白名单 legacy 源文件，checkpoint `c13d455` 记录完成证据。R8-G 5.2 提交 `c644b12`、5.3 提交 `7e400bd`、独立 Settings 测试修复 `ee558b4`、5.4 checkpoint `7742d85` 已完成；Knowledge／embedding／reranker 真实 smoke 与根入口 PTY `/exit` 已通过，但 5.5 Resume build smoke 暴露 Windows subprocess 输出解码缺陷。`decision.md` 的 230～234 章节已重新按完整决策边界排列，历史语义未改写。R8-G 只允许修改 8 个文档／示例配置文件；代码缺陷必须分离修复。当前 R8-D 后、R8-G 前回退顺序为 `7514af3` → `9fbeabc`；未来 R8-G 提交后须先 revert R8-G，再按上述顺序恢复，始终不得触碰旧运行数据。
 
-**下一步：** 从真实 `uv run python main.py` 开始 R8-G 5.5 smoke，依次验证入口退出码、CLI／handoff／审批／取消／restore／rewind、Knowledge／Memory、Resume Artifact、legacy-data refusal、写入边界和资源关闭。
+**下一步：** 等待用户审查独立最小代码修复清单：修复 `SubprocessRunner` 的 Windows subprocess 输出解码并保证失败时 `ProcessResult.stdout`／`stderr` 始终为字符串；修复须在 R8-G 之外独立授权、提交并重新运行 5.5。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。

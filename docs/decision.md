@@ -9,6 +9,7 @@
 ## 目录
 
 - [决策 235 — 独立修复 Settings 测试并完成 R8-G 5.4](#决策-235--独立修复-settings-测试并完成-r8-g-54)
+- [决策 236 — R8-G 5.5 被 Windows subprocess 输出解码缺陷阻塞](#决策-236--r8-g-55-被-windows-subprocess-输出解码缺陷阻塞)
 - [决策 234 — G8 被过渡配置测试断言阻塞并分离修复](#决策-234--g8-被过渡配置测试断言阻塞并分离修复)
 - [决策 233 — 完成 R8-G 5.3 活跃文档当前态归一化](#决策-233--完成-r8-g-53-活跃文档当前态归一化)
 - [决策 232 — 完成 R8-G 5.2 过渡配置与 README 归一化](#决策-232--完成-r8-g-52-过渡配置与-readme-归一化)
@@ -5562,3 +5563,17 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **验证：** Settings 定向测试 12/12 通过；完整 `uv run python -m unittest discover -s tests/get_me_in -t .` 为 283/283 通过；`uv run python -m compileall src/get_me_in main.py` 和 `git diff --check` 通过；Catalog 为 2 Agent／26 ToolDefinition／10 CLI 命令；legacy import 扫描仅在测试 forbidden-module 清单命中，生产路径无命中。
 
 **替代方案：** 修改 R8-G 文档以继续满足旧测试——会保留错误过渡事实，拒绝；把测试修复混入 R8-G——破坏独立回退边界，拒绝；重写历史决策正文——破坏审计证据，拒绝。
+
+---
+
+### 决策 236 —— R8-G 5.5 被 Windows subprocess 输出解码缺陷阻塞
+
+**背景：** R8-G 5.4 已完成；真实 Knowledge／embedding／reranker smoke 返回 `R6_SMOKE_OK`，根入口 PTY 欢迎与 `/exit` 也通过。真实中文／英文 Resume copy、edit、replace、build、merge、Artifact metadata/replay smoke 在 Windows `pdflatex` 输出阶段失败。
+
+**决定：** 立即停止 R8-G 5.5 后续 smoke 与 5.6，不修改 `src/`、测试或其他非白名单文件。独立最小修复清单为：修复 `src/get_me_in/adapters/subprocess_runner.py` 的 Windows subprocess 输出捕获／解码，保证 `ProcessResult.stdout` 与 `stderr` 在解码异常或失败路径仍为字符串；随后重新验证 `ArtifactService._bound_log()`、中文／英文／双语 Resume build、PDF merge、Artifact metadata 与幂等 replay。
+
+**理由：** 当前 `SubprocessRunner` 使用 `subprocess.Popen(..., text=True)` 依赖 Windows 默认 GBK，真实 `pdflatex` 输出触发 `UnicodeDecodeError`；读取线程异常后结果字段为 `None`，`ArtifactService._bound_log()` 无法安全处理。这是生产 adapter／service 边界缺陷，超出 R8-G 8 文件白名单，不能通过文档、测试或跳过真实 smoke 掩盖。
+
+**验证证据：** 真实 smoke 捕获 `UnicodeDecodeError: 'gbk' codec can't decode byte 0x82 in position 524`，随后 `AttributeError: 'NoneType' object has no attribute 'replace'`，定位到 `src/get_me_in/application/artifact_service.py:61`；本次临时 `r8g-resume-*` 目录已清理，未修改 legacy 数据目录。
+
+**待用户决定：** 是否授权独立修改 `src/get_me_in/adapters/subprocess_runner.py` 及必要的最小针对性测试，并以独立提交完成后重新进入 R8-G 5.5。未获授权前不修改代码、不继续 R8-G。

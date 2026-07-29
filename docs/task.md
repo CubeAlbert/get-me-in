@@ -594,7 +594,7 @@
 
 #### 5.5 G8 根入口、真实 adapter 与数据边界 smoke
 
-- ⬜ 从真实 `uv run python main.py` 验证 Settings 错误退出码 `2`、启动／composition 错误退出码 `1` 且终端无 traceback、正常 `/exit` 返回 `0`、欢迎与基础对话、全部 10 个 CLI 命令、审批／拒绝、Esc／选择取消、Main→Resume→Main、save／restore／rewind 和资源关闭。
+- 🛑 阻塞：真实 Knowledge／embedding／reranker smoke 与根入口 PTY 欢迎／`/exit` 已通过；Resume build smoke 在 `src/get_me_in/adapters/subprocess_runner.py` 使用默认 GBK 解码 `pdflatex` 输出时触发 `UnicodeDecodeError`，随后 `src/get_me_in/application/artifact_service.py:61` 对 `stdout=None` 抛出 `AttributeError`。该代码修复超出 R8-G 白名单，已停止本组与 5.6。
 - ⬜ 完成真实 Chroma／embedder／reranker prepare、reload、query，以及 Memory build／query／delete；确认后台 worker 串行边界、错误状态、显式 close 和进程退出均正常。
 - ⬜ 完成中文、英文、双语 Resume 的 copy／read／edit／replace／build／open，并复验 `merge_pdfs` 的 first→second 页面顺序、审批、幂等 replay、Artifact metadata 与 PDF 输出。
 - ⬜ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 继续使用静态 forbidden-path／legacy-env 扫描、Settings sentinel 和拒绝访问 smoke 证明 production v2 未读取；删除前后只读指纹／mtime 仅用于证明未改写。不得迁移、覆盖、删除或为验证而打开旧用户文件内容。
