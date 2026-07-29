@@ -17,7 +17,7 @@ R0 重构启动时，legacy 项目已经完成一个可运行的 CLI 多 Agent �
 
 因此本分支采用 **受控重写（controlled rewrite）**：在新的 `src/get_me_in/` 包中构建 v2，通过纵向切片逐步获得功能等价；不在原有 `BaseAgent` 和 `App` 上继续做大规模就地拆分。
 
-当前 v2 已完成 R0～R7，根 `main.py` 已在 R8-E 切换到 `src.get_me_in.cli.main.main()`，R8-O 完整 smoke 与用户审查已经通过。R8-D 已由提交 `7514af3` 删除 51 个 legacy production 文件，并由 `c13d455` checkpoint；决策 230 确认 R8-G 详细清单，决策 231 已授权本会话实施 R8-G，当前正在进行文档归一化并准备 G8。
+当前 v2 已完成 R0～R8。根 `main.py` 已在 R8-E 切换到 `src.get_me_in.cli.main.main()`，R8-O 完整 smoke 与用户审查已经通过；R8-D 由提交 `7514af3` 删除 51 个 legacy production 文件，并由 `c13d455` checkpoint；R8-G 文档归一化与完整 G8 已完成，最终用户审查由决策 240 收口。当前停在 R9 独立授权门禁前，不检查、设计或实施 R9。
 
 ## 2. R0 legacy 能力盘点
 

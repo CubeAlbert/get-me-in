@@ -6,7 +6,7 @@
 
 ## 1. 总体策略
 
-本次采用受控重写，不在旧 `BaseAgent`、`App` 和全局 Registry 上继续叠加功能。v2 已在 `src/get_me_in/` 中独立构建，根入口已完成切换并通过 R8-O；R8-D 已由 `7514af3` 删除 legacy production 源码并完成 checkpoint，决策 231 已授权本会话实施 R8-G，当前正在进行文档归一化。
+本次采用受控重写，不在旧 `BaseAgent`、`App` 和全局 Registry 上继续叠加功能。v2 已在 `src/get_me_in/` 中独立构建，根入口已完成切换并通过 R8-O；R8-D 已由 `7514af3` 删除 legacy production 源码并完成 checkpoint，R8-G 文档归一化与完整 G8 已完成并通过最终用户审查。当前停在 R9 独立授权门禁前。
 
 执行原则：
 
@@ -268,7 +268,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 - R8-E 将根 `main.py` 委托给 v2 CLI，并补齐 composition／启动异常的用户可读错误和退出码 `1`；形成独立可回退 commit，不同时删除 legacy。
 - R8-O 从根入口执行完整自动化与真实 smoke，验证入口退出码、CLI、Knowledge/Memory、Resume、handoff、审批／取消、restore/rewind 和资源关闭；用户审查通过前不进入删除。
 - R8-D 已按精确清单由 `7514af3` 删除 51 个 legacy production 文件，并以 literal path 清理 3 个本地 `.ipynb_checkpoints`；`src/__init__.py`、完整 `src/get_me_in/` 和全部旧用户运行数据均保留。
-- R8-G 已删除过渡期 legacy rollback 配置说明，正在更新 README、AGENTS.md 及五份活跃文档为已落地事实，并将在随后完成完整 G8。设计／计划／任务文件名已由决策 227 提前收敛；辅助 baseline／audit／matrix／smoke 文档已由决策 228 收敛并删除，完整历史由 Git 保留。
+- R8-G 已删除过渡期 legacy rollback 配置说明，README、AGENTS.md 及五份活跃文档已归一化为 v2 落地事实，完整 G8 与最终用户审查均已通过。设计／计划／任务文件名已由决策 227 提前收敛；辅助 baseline／audit／matrix／smoke 文档已由决策 228 收敛并删除，完整历史由 Git 保留。
 
 **验收门禁 G8：**
 
@@ -281,7 +281,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **依赖：** G6、G7。
 
-**实施顺序：** R7-T2/G7 → R8-P → R8-E → R8-O（强制停止／用户审查）→ R8-D → R8-G/G8。R8-P、R8-E、R8-O、R8-D 已完成；决策 230 已确认 `docs/task.md` R8-G 5.1～5.6 的详细清单，决策 231 已授权本会话实施。若 G8 发现代码／测试／依赖／协议缺陷，停止并分离修复。R8-G/G8 完成后不得自动进入 R9。
+**实施顺序：** R7-T2/G7 → R8-P → R8-E → R8-O（强制停止／用户审查）→ R8-D → R8-G/G8。R8-P、R8-E、R8-O、R8-D、R8-G 与 G8 均已完成；G8 发现的代码／测试缺陷已按既定边界停止、独立授权、修复并提交。决策 240 完成最终审查，当前停在 R9 独立授权门禁前。
 
 ### R9 —— 新功能恢复
 

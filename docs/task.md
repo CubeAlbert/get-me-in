@@ -558,7 +558,7 @@
 - ✅ 提交后确认工作区干净、R8-D 提交可单独 revert，随后才进入 R8-G；R8-G 完成前仍保留 `.env.example`／README 的 `legacy rollback only` 说明。
 - ✅ 记录并复核紧急回退顺序：R8-D 前只需 `git revert 9fbeabc`；R8-D 后先 revert R8-D 恢复 legacy 源码，再 revert `9fbeabc` 恢复旧入口。恢复源码后才允许重新启用 legacy-only 配置，任何回退都禁止触碰旧运行数据。
 
-### 5. R8-G —— 文档归一化与 G8（已获授权，实施中）
+### 5. R8-G —— 文档归一化与 G8（已完成并通过最终审查）
 
 #### 5.1 清单确认与实施门禁
 
@@ -580,8 +580,8 @@
 #### 5.3 活跃文档与 AGENTS.md 归一化
 
 - ✅ 本 checkpoint 已把 AGENTS.md 从 R8-D 删除执行说明切换为 R8-G 新会话恢复、变更白名单、G8 验证与失败分流说明；R8-D 的精确删除清单继续由 Git、任务历史与决策 226／229 保存。
-- ✅ 前一 checkpoint 已将 `docs/current.md`、本任务清单、`docs/design.md` 与 `docs/plan.md` 的当前态收敛到 R8-D 完成与 R8-G 待授权事实，并追加决策 230；该状态已由决策 231 更新为本会话实施中。
-- ✅ 已把 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/current.md` 与 AGENTS.md 的当前态同步为 R8-D 完成、R8-G 实施中和 G8 待验收；只更新当前态及已确认的 R8 段，未抹除历史阶段证据。
+- ✅ 前一 checkpoint 已将 `docs/current.md`、本任务清单、`docs/design.md` 与 `docs/plan.md` 的当前态收敛到 R8-D 完成与 R8-G 待授权事实，并追加决策 230；该状态在实施期由决策 231 更新为 R8-G 实施中，现已由决策 240 收口为 R8 完成。
+- ✅ R8-G 5.3 checkpoint 当时把 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/current.md` 与 AGENTS.md 同步为 R8-G 实施中和 G8 待验收；最终审查已将这些活跃入口统一为 R8 完成并停在 R9 授权门禁前，历史阶段证据未被抹除。
 - ✅ `docs/decision.md` 保持 append-only：未改写决策 225～230 的历史语义；本 checkpoint 只追加决策 233。
 - ✅ 已运行过渡态文本扫描；当前态不再声称 legacy 源码仍存在、R8-O 尚未通过、R8-D 尚待执行或只需单独回退 R8-E，历史章节保留时均按历史阶段理解。
 
@@ -607,6 +607,7 @@
 - ✅ 完成 G8 全量证据汇总并建立独立 checkpoint 链：5.2 `c644b12`、5.3 `7e400bd`、5.4 `7742d85`、5.5 `8bd8759`；代码缺陷修复 `6a092b5` 单独提交，R8-G 文档／配置变更未扩大生产边界。
 - ✅ 记录两种紧急回退：当前 R8-D 后、R8-G 前按 `git revert 7514af3` → `git revert 9fbeabc`；R8-G 提交后按逆提交顺序先 revert R8-G 文档提交，再 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置，任何回退都不得触碰旧运行数据。
 - ✅ G8 与 checkpoint 已完成；当前停止等待用户审查，不自动进入 R9。
+- ✅ 最终用户审查确认 R8 工程任务与 G8 证据完成，并授权修正活跃文档状态漂移；AGENTS.md、design、plan、task、current 已统一为 R8 完成，决策 240 记录收口，当前停在 R9 独立授权门禁前。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 

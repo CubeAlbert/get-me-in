@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 —— R8-D 已完成并通过用户审查；R8-G 文档归一化与 G8 已完成，等待用户审查
+**当前阶段：** R8 已完成并通过最终用户审查；当前停在 R9 独立授权门禁前
 
-**当前任务：** R8-G 文档归一化与 G8：详细执行清单、变更白名单、证据矩阵和停止门禁已完成
+**当前任务：** 无活动实施任务；R8-P／R8-E／R8-O／R8-D／R8-G 与 G8 均已完成
 
-**当前子任务：** R8-G 5.6 已完成：最终 G8 staged allowlist、回退与停止门禁已复核。
+**当前子任务：** R8 最终审查收口已完成：活跃文档当前态一致，最终白名单与停止门禁已复核。
 
-**当前阻塞：** 无。此前真实 Resume build smoke 暴露的 Windows subprocess 输出解码缺陷已按独立授权修复并提交 `6a092b5`；针对性测试、完整 unittest、compileall、diff check，以及中文／英文 Resume build、PDF merge、Artifact metadata 与幂等 replay smoke 均已通过。R8-G 5.5／5.6 与 G8 已完成；R9 未授权。
+**当前阻塞：** 无。R8 的代码、文档、自动化、Catalog、真实 adapter／业务 smoke、数据边界与回退证据均已闭环；R9 未授权。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 只把 `SHUTDOWN_TIMEOUT_SECONDS` 产品默认从 5 秒调整为 60 秒并增加回归测试；删除提交 `7514af3` 只包含 51 个白名单 legacy 源文件，checkpoint `c13d455` 记录完成证据。R8-G 5.2 提交 `c644b12`、5.3 提交 `7e400bd`、独立 Settings 测试修复 `ee558b4`、5.4 checkpoint `7742d85`、5.5 checkpoint `8bd8759` 与 5.6 checkpoint `10b38e8` 已完成；独立 SubprocessRunner 修复提交 `6a092b5` 已完成，Knowledge／Memory／embedding／reranker 真实 smoke、根入口命令矩阵、中文／英文 Resume build、PDF merge 与 replay 已通过。`decision.md` 的 230～239 章节已按完整决策边界排列，历史语义未改写。R8-G 文档提交仍只允许 8 个文档／示例配置文件；代码缺陷已按独立提交分离。当前 R8-D 后、R8-G 前回退顺序为 `7514af3` → `9fbeabc`；未来 R8-G 提交后须先 revert R8-G，再按上述顺序恢复，始终不得触碰旧运行数据。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 最终修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 与删除提交 `7514af3` 保持分离，checkpoint `c13d455` 记录完成证据。R8-G 5.2 `c644b12`、5.3 `7e400bd`、5.4 `7742d85`、5.5 `8bd8759` 与 5.6 `10b38e8` 已完成；Settings 测试修复 `ee558b4` 与 SubprocessRunner 修复 `6a092b5` 均独立提交。决策 239 记录完整 G8，决策 240 记录最终审查与活跃文档收口。R8-G 文档提交后的回退顺序为先逆序 revert R8-G 文档 checkpoint，再 revert `7514af3`，最后 revert `9fbeabc`；任何回退始终不得触碰旧运行数据。
 
-**下一步：** 等待用户审查 R8-G/G8 checkpoint；不得自动进入 R9。
+**下一步：** 停在 R9 独立授权门禁前，等待用户后续指示；不得自动检查、设计或实施 R9。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -65,6 +65,8 @@
 228. **辅助文档完成收敛并删除** — capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与 v2 static asset boundary 的有效内容已映射到 design／plan／task／decision；五份辅助文件删除，完整历史由 Git 保留。`docs/current.md` 作为新会话入口继续保留，`docs/` 仅剩 current 与四份主文档。
 229. **R8-D 前置生命周期修复与遗留删除完成** — `b74af9e` 将关闭超时产品默认调整为 60 秒，`7514af3` 精确删除 51 个 legacy 源文件，`c13d455` checkpoint 记录 283 项测试、静态边界、Catalog、真实 smoke 与旧数据未改写证据；R8-D 已完成并通过本轮用户审查。
 230. **确认 R8-G 详细清单但不授权本会话实施** — R8-G 拆为实施门禁、过渡配置／README、活跃文档、自动化／Catalog、真实 adapter／数据边界、提交／回退六组；只允许 8 个文档／示例配置文件，G8 发现代码缺陷必须停止并分离修复。当前会话只做文档 checkpoint，新会话仍须取得 R8-G 单独授权，完成后不得自动进入 R9。
+231-239. **R8-G 实施、缺陷分流与 G8 完成** — R8-G 按六组清单完成；Settings 测试和 SubprocessRunner 缺陷均经独立授权与独立提交修复，完整 G8、真实 adapter／业务 smoke、数据边界与回退证据由决策 239 闭环。
+240. **R8 最终审查通过并停在 R9 门禁前** — 用户授权处理最终审查发现的活跃文档状态漂移；当前态已统一为 R8 完成，后续不得自动检查、设计或实施 R9。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 

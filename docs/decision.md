@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 240 — R8 最终审查通过并停在 R9 授权门禁前](#决策-240--r8-最终审查通过并停在-r9-授权门禁前)
 - [决策 239 — 完成 R8-G/G8 并在审查门禁停止](#决策-239--完成-r8-gg8-并在审查门禁停止)
 - [决策 238 — R8-G 5.5 真实 adapter 与数据边界 smoke 通过](#决策-238--r8-g-55-真实-adapter-与数据边界-smoke-通过)
 - [决策 237 — 独立修复 SubprocessRunner 并恢复 R8-G 5.5](#决策-237--独立修复-subprocessrunner-并恢复-r8-g-55)
@@ -5614,3 +5615,19 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **验证：** `git diff --name-status ecb11db..HEAD` 仅显示 R8-G 白名单的 8 个文档／示例配置文件，以及用户明确授权并独立提交的 `src/get_me_in/adapters/subprocess_runner.py`、`tests/get_me_in/test_settings.py` 与 `tests/get_me_in/test_subprocess_runner.py`。完整 unittest `284/284`、`compileall`、`git diff --check`、legacy import／动态 import 扫描、Catalog（2 Agent／26 ToolDefinition／10 CLI command）、真实 Knowledge／Memory／Resume／根入口与 legacy data boundary 证据均已记录；工作区干净。
 
 **决定：** R8-G/G8 完成，最终 checkpoint 为当前文档状态；按照回退顺序与停止门禁等待用户审查。不得自动进入 R9。R8-G 文档提交之后若需回退，先按逆提交顺序 revert R8-G 文档 checkpoint，再 revert `7514af3`，最后 revert `9fbeabc`；任何回退不得触碰旧运行数据。
+
+---
+
+### 决策 240 —— R8 最终审查通过并停在 R9 授权门禁前
+
+**背景：** 决策 239 已记录 R8-G/G8 完成，但最终用户审查发现 `AGENTS.md`、`docs/design.md`、`docs/plan.md` 与 `docs/task.md` 的当前态仍残留“R8-G 实施中／G8 待验收”表述，与 `docs/current.md` 的完成快照不一致。用户要求处理全部问题并停在 R9 之前。
+
+**决定：**
+
+- 接受 R8-P、R8-E、R8-O、R8-D、R8-G 与 G8 的既有完成证据，R8 最终审查通过。
+- 仅修正活跃文档当前态：统一声明 R8 已完成，并停在 R9 独立授权门禁前；不改写决策 239 及更早历史在当时的语义。
+- 本次只修改 R8-G 原白名单内的文档文件，不检查、不设计、不实现 R9，不修改生产代码、测试、依赖、配置或数据。
+
+**验证：** 完成态文本扫描通过；完整 unittest `284/284`、`compileall` 与 `git diff --check` 通过。staged diff 仅包含 `AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md` 六个原 R8-G 白名单文档文件；未包含生产代码、测试、配置、依赖、数据或生成物。由此创建独立最终 R8 文档 checkpoint，并停止等待用户后续指示。
+
+**后续门禁：** 未取得用户对 R9 的单独明确授权前，不得检查、设计或实施 R9。
