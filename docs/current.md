@@ -6,9 +6,9 @@
 
 **当前子任务：** R8-G 5.6 已完成：最终 G8 staged allowlist、回退与停止门禁已复核。
 
-**当前阻塞：** 无。此前真实 Resume build smoke 暴露的 Windows subprocess 输出解码缺陷已按独立授权修复并提交 `6a092b5`；针对性测试、完整 unittest、compileall、diff check，以及中文／英文 Resume build、PDF merge、Artifact metadata 与幂等 replay smoke 均已通过。R8-G 5.5 继续执行剩余真实 Knowledge／Memory、CLI 与数据边界矩阵；R9 未授权。
+**当前阻塞：** 无。此前真实 Resume build smoke 暴露的 Windows subprocess 输出解码缺陷已按独立授权修复并提交 `6a092b5`；针对性测试、完整 unittest、compileall、diff check，以及中文／英文 Resume build、PDF merge、Artifact metadata 与幂等 replay smoke 均已通过。R8-G 5.5／5.6 与 G8 已完成；R9 未授权。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 只把 `SHUTDOWN_TIMEOUT_SECONDS` 产品默认从 5 秒调整为 60 秒并增加回归测试；删除提交 `7514af3` 只包含 51 个白名单 legacy 源文件，checkpoint `c13d455` 记录完成证据。R8-G 5.2 提交 `c644b12`、5.3 提交 `7e400bd`、独立 Settings 测试修复 `ee558b4`、5.4 checkpoint `7742d85` 已完成；独立 SubprocessRunner 修复提交 `6a092b5` 已完成，Knowledge／Memory／embedding／reranker 真实 smoke、根入口命令矩阵、中文／英文 Resume build、PDF merge 与 replay 已通过。`decision.md` 的 230～238 章节已按完整决策边界排列，历史语义未改写。R8-G 文档提交仍只允许 8 个文档／示例配置文件；代码缺陷已按独立提交分离。当前 R8-D 后、R8-G 前回退顺序为 `7514af3` → `9fbeabc`；未来 R8-G 提交后须先 revert R8-G，再按上述顺序恢复，始终不得触碰旧运行数据。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 只把 `SHUTDOWN_TIMEOUT_SECONDS` 产品默认从 5 秒调整为 60 秒并增加回归测试；删除提交 `7514af3` 只包含 51 个白名单 legacy 源文件，checkpoint `c13d455` 记录完成证据。R8-G 5.2 提交 `c644b12`、5.3 提交 `7e400bd`、独立 Settings 测试修复 `ee558b4`、5.4 checkpoint `7742d85`、5.5 checkpoint `8bd8759` 与 5.6 checkpoint `10b38e8` 已完成；独立 SubprocessRunner 修复提交 `6a092b5` 已完成，Knowledge／Memory／embedding／reranker 真实 smoke、根入口命令矩阵、中文／英文 Resume build、PDF merge 与 replay 已通过。`decision.md` 的 230～239 章节已按完整决策边界排列，历史语义未改写。R8-G 文档提交仍只允许 8 个文档／示例配置文件；代码缺陷已按独立提交分离。当前 R8-D 后、R8-G 前回退顺序为 `7514af3` → `9fbeabc`；未来 R8-G 提交后须先 revert R8-G，再按上述顺序恢复，始终不得触碰旧运行数据。
 
 **下一步：** 等待用户审查 R8-G/G8 checkpoint；不得自动进入 R9。
 
