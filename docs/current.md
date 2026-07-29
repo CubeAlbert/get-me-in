@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 —— 已完成可回退的 R8-E 入口切换，正在执行 R8-O 强制观察
+**当前阶段：** R8 —— R8-O 强制观察及用户审查已完成，停在 R8-D 授权门禁前
 
-**当前任务：** R8-O 强制观察：继续完成剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke
+**当前任务：** R8-D 遗留删除授权门禁：等待用户明确确认后才可按既定精确清单删除 legacy production modules
 
-**当前子任务：** 继续完成剩余 CLI／交互、Main→Resume→Main、审批拒绝、Plan、Memory delete、真实 Resume 和旧数据拒绝访问 smoke。
+**当前子任务：** 保持工作区与旧运行数据不变，等待用户明确授权进入 R8-D；当前未执行任何 legacy 删除。
 
-**当前阻塞：** 无。决策 206 的空 Memory collection 查询缺陷、决策 207 的 targeted reload 非目标删除缺陷、决策 220 的 RAG startup lock 竞态、决策 221 的审批拒绝自动续跑缺陷、决策 222 的 `/exit_sub` 退出模式缺失、决策 223 的 Esc 错误闭合 SubAgent handoff 缺陷及决策 224 的选择取消自动续跑缺陷均已修复；R8-O 其余 smoke 完成后仍必须停下等待用户审查，未经通过不得进入 R8-D。
+**当前阻塞：** R8-D 尚未获得用户明确授权。R8-O 人工 smoke matrix、283 项自动化测试、`compileall`、`git diff --check`、import/Catalog、真实 Memory delete 与旧目录拒绝访问验证均已通过；KnowledgeService 状态读取竞态已由提交 `9da3242` 修复。未经后续明确授权不得删除 legacy。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已修复入口诊断、关闭可见性、欢迎 banner、Tool／SubAgent XML、完整 Agent 元数据和模型输出恢复链路；`c43727f` 完成决策 201～204，决策 205 已完成 Main capability 收敛。决策 206 已实施空 Memory collection 正常零命中和两份 legacy 记忆的一次性迁移；决策 207 已修复 targeted reload 对非目标 manifest entries 的误删风险；Chroma 为 `memories=36`、`references=34` chunks。决策 208 恢复 startup reload 后台预热 embedding／reranker 与 CLI 权重输出静默。决策 209 修复 selection Ctrl+C 错误退出 SubAgent（其自动继续模型部分已由决策 224 取代）。决策 210 新增 Resume-only `merge_pdfs`，当前 production Catalog 为 26 个 Tool。决策 211 将 uv 唯一默认镜像切换为清华 TUNA，保持 Windows／Ubuntu/Linux universal lock，并固定 `uv add --no-sync` → `uv sync` 分步工作流；普通 `uv lock`、`uv sync --locked`、133 包版本一致性、无禁用 registry、58 项定向测试、完整 261 项测试、`compileall`、`git diff --check` 与 import boundary 均通过。决策 212 对 finish thinking 的非空要求已由决策 219 推翻：finish 可省略 thinking；如果提供 `null`、空字符串或空白字符串表示没有摘要，其他非空值必须是 string。决策 213 将模板重命名为 `07_input_format.md`、`08_output_format.md`，撤销 PromptRenderer 的硬编码重排，system prompt 严格按文件名顺序拼接；完整 264 项测试和 legacy OutputFormat 读取 smoke 已通过。决策 214 恢复 v1 的工具未知参数静默忽略语义：`ToolExecutor` 过滤未声明参数后再做必填／类型校验，模型将 `thinking` 混入 `event_payload` 时不再导致 `unexpected_argument`。决策 215 将 `AGENT_MAX_MODEL_CALLS` 默认值调整为 100；Main 与 Resume 共享配置但按 AgentSessionState 独立计数。决策 217 修复 SessionSnapshot 漏存 agent `turn_id` 导致 `/restore` 的 handoff 一致性误报，并兼容旧 handoff 快照。决策 218 统一 MemoryExtractor 与记忆 prompt 为 `category/content` 数组契约；Memory 构建异常的完整 traceback 仅写入 `app.log`，前台只显示脱敏 Error 提示。决策 219 恢复 finish thinking 可选语义。决策 220 修复 KnowledgeService 启动提交与 reload 的锁竞态，并补齐 RAG startup 阶段日志；决策 221 修复审批拒绝后自动关闭 handoff 和继续调用 LLM 的问题，拒绝结果与下一条用户消息保留在当前 Agent 上下文；决策 222 为 `/exit_sub` 增加默认总结与直接退出两种模式；决策 223 修复 Esc 取消 SubAgent 时误闭合 handoff；决策 224 让 `provide_choices` 取消后回到 CLI，下一条用户消息再继续；本次定向测试 46 项通过，全量测试受既有 KnowledgeService 锁时序波动影响，单测重跑通过。R8-O 其余 smoke 仍待完成。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已完成入口、CLI／交互、Main→Resume→Main、审批／选择／Esc 暂停、Plan、save/restore/rewind、Knowledge／Memory、中文／英文／双语 Resume、PDF 合并、关闭与旧数据拒绝访问的完整人工及工程验证。用户已确认全部人工 smoke 无问题；工程侧 283 项自动化测试、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实 Memory delete 和 legacy refusal smoke 均通过。全量测试发现的 KnowledgeService `ERROR` 状态可见但锁尚未释放竞态已由提交 `9da3242` 修复并复验。R8-O 与用户审查现已完成，R8-D 尚未授权，旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 及 legacy production modules 均不得改动。
 
-**下一步：** 先用真实 CLI 复验 `provide_choices` 取消、`/exit_sub` 默认总结、`/exit_sub false` 直接退出，以及 Esc 取消后仍留在 SubAgent；同时复验审批拒绝和模型解析失败均停在 `WAITING_FOR_USER`，下一条用户消息仍进入当前 Agent；再继续完成剩余 Main→Resume→Main、Plan、Memory delete、真实 Resume 与旧数据拒绝访问 smoke，随后停下等待用户审查。
+**下一步：** 等待用户明确授权进入 R8-D；获授权后先再次复核精确 legacy 删除路径和回退边界，再按独立提交执行删除。未经授权不采取任何 R8-D 行动。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -59,6 +59,7 @@
 222. **`/exit_sub` 默认要求 SubAgent 总结，false 允许直接退出** — `/exit_sub`、`/exit_sub true` 向当前 SubAgent 注入退出总结指令，由其调用 `switch_to_mainagent(summary)`；`/exit_sub false` 直接闭合原始 handoff，结果消息为“用户主动退出”。
 223. **Esc 取消当前 SubAgent run 但保留 handoff** — SubAgent 返回 `Cancelled` 时不再自动执行 `FailHandoff`；保留 active SubAgent、handoff frame 和 Main 的等待状态，下一条用户消息继续进入原 SubAgent。`Failed` 仍按失败路径退回 Main。
 224. **provide_choices 取消后暂停当前 Agent，下一条用户消息再继续** — `CancelSelection` 仍写入 `ToolResultRecord`，但当前 Agent 进入 `WAITING_FOR_USER` 并返回 `Paused("selection_cancelled", reason)`；CLI 不再自动发送 `Continue()`，下一条用户消息与取消结果一起发送给当前 Agent。该决定取代决策 209 中“取消后进入 `MODEL_QUEUED` 并继续模型循环”的部分。
+225. **R8-O 完整通过并停在 R8-D 授权门禁前** — 用户确认完整人工 smoke matrix 无问题；工程侧 283 项自动化测试、静态检查、Catalog、真实 Memory delete 与 legacy refusal smoke 全部通过。KnowledgeService 状态读取与锁释放竞态由 `9da3242` 修复。R8-D 仍须用户后续明确授权，当前不删除任何 legacy 源码或旧运行数据。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 

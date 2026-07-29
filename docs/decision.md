@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 225 — R8-O 完整通过并停在 R8-D 授权门禁前](#决策-225--r8-o-完整通过并停在-r8-d-授权门禁前)
 - [决策 219 — finish thinking 恢复为可选摘要](#决策-219--finish-thinking-恢复为可选摘要)
 - [决策 224 — provide_choices 取消后暂停当前 Agent](#决策-224--provide_choices-取消后暂停当前-agent)
 - [决策 223 — Esc 取消当前 SubAgent run 但保留 handoff](#决策-223--esc-取消当前-subagent-run-但保留-handoff)
@@ -5279,3 +5280,36 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - Runtime、CLI、Orchestrator 定向测试 46 项通过，覆盖无额外 LLM 调用、回到 CLI、下一条用户消息继续及活动 handoff 保留。
 - 全量测试复跑时出现既有 KnowledgeService 锁释放时序波动；相关单测单独重跑通过，`git diff --check` 通过。
+
+---
+
+### 决策 225 —— R8-O 完整通过并停在 R8-D 授权门禁前
+
+**背景：** R8-O 剩余人工 smoke 已由用户逐项完成并确认无问题。工程侧重新执行完整回归时，`test_prepare_failure_keeps_service_unavailable_and_can_be_retried` 复现了状态读取竞态：`reload()` 异常路径已把 `_state` 设为 `ERROR`，但尚未释放服务锁；无锁的公开 `state` 属性可提前暴露 `ERROR`，调用方紧接着搜索会得到 `retrieval_busy` 而不是稳定的 `retrieval_unavailable`。
+
+**决定：**
+
+- `KnowledgeService.state` 使用既有服务锁同步读取，确保调用方观察到的状态与该次 reload/search 临界区完成保持一致；不新增 API，不改变 reload/search 业务协议。
+- 提交 `9da3242` 作为独立 R8-O 修复提交。
+- 用户确认的完整 CLI／交互、Main→Resume→Main、Plan、Knowledge／Memory、Resume、关闭和数据边界人工 smoke，以及工程侧完整验证，共同构成 R8-O 通过证据。
+- R8-O 用户审查完成后仍停在 R8-D 授权门禁；本决定不授权删除 legacy production modules、`.ipynb_checkpoints` 或任何旧运行数据。
+
+**理由：**
+
+- 状态属性是调用方判断服务可用性的公开观察面，不能暴露尚未完成锁内转换的中间状态。
+- 单独等待测试线程或放宽为接受 `retrieval_busy` 会掩盖真实的观察一致性缺口。
+- R8-D 是不可与观察期混合的独立删除切片，必须保留明确的用户授权与回退边界。
+
+**曾考虑的替代方案：**
+
+- 仅在测试中等待锁释放 —— 只能隐藏竞态，不能保证生产调用方观察一致状态，未采用。
+- 将 `retrieval_busy` 视为失败启动后的合法永久结果 —— 会破坏既有 `retrieval_unavailable` 契约及显式 reload 重试语义，未采用。
+- R8-O 通过后自动开始 R8-D —— 违反强制用户审查及独立授权门禁，未采用。
+
+**验证：**
+
+- KnowledgeService 定向 20 项测试通过。
+- `uv run python -m unittest discover -s tests/get_me_in -t .`：283 项测试通过。
+- `compileall`、`git diff --check`、import boundary 与实际 Catalog 验证通过；Catalog 为 2 Agent、26 ToolDefinition、10 CLI command。
+- 真实 Memory delete smoke：删除前命中 1 条，删除后 repository、manifest 与 Chroma 查询均为空。
+- legacy refusal smoke：4 个旧数据目录的常见文件访问被设置为访问即失败，隔离 v2 production composition 完成 Knowledge 启动、一轮 Runtime 与无 issue 关闭。

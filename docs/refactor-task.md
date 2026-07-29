@@ -435,7 +435,7 @@
 
 ## R8 —— 切换与清理
 
-> 决策 191 已授权并完成 R8-P，决策 192 完成 R8-E；当前正在执行 R8-O。R8-O 的用户审查仍是进入 R8-D 前不可跳过的强制门禁。
+> 决策 191 已授权并完成 R8-P，决策 192 完成 R8-E，决策 225 完成 R8-O 及用户审查。当前停在 R8-D 授权门禁前；未经用户后续明确授权不得执行遗留删除。
 
 ### 1. R8-P —— 切换准备
 
@@ -513,11 +513,11 @@
 - ✅ `merge_pdfs` 的 58 项定向测试与完整 261 项自动化测试通过；真实三页 PDF 顺序 smoke 由不同页面尺寸验证 first → second 顺序。`compileall`、`git diff --check` 与 import boundary 复验通过。
 - ✅ 将 uv 默认 PyPI 镜像从 SJTUG 切换为唯一的清华 TUNA index，不增加 `[tool.uv].environments`、官方 PyPI、第二个普通镜像或 PyTorch 专用源；保持 Windows／Ubuntu/Linux universal lock。执行前确认无并发 `uv lock`／`uv add`，普通 `uv lock` 与 `uv sync --locked` 均完成。
 - ✅ 锁文件前后均为 133 个包且 name/version 集合完全一致；无官方 PyPI 或 SJTUG 残留。记录后续依赖工作流为 `uv add <package> --no-sync` → `uv sync`，分别诊断解析和下载／安装耗时；TUNA 同步后 58 项 PDF 定向测试、完整 261 项测试与 `compileall` 通过。
-- 🔄 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；当前已验证 `/help`、`/approval`、`/exit` 与正常关闭。
-- ⬜ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke。
-- ⬜ 执行拒绝访问旧目录的启动／smoke 边界并对比目录 mtime／hash：分别证明没有读取和没有修改；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
-- 🔄 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；当前定向 46 项通过，全量复跑受既有 KnowledgeService 锁释放时序波动影响，相关单测单独重跑通过。
-- ⬜ 用户审查 R8-O；Tool 提示词语义阻断已解除，但剩余 CLI、真实 Agent／Knowledge／Memory／Resume 与旧数据拒绝访问 smoke 完成前仍不得审查或进入 R8-D。后续未通过时以 `git revert <R8-E commit>` 回退，使用 R8-P 保留的 legacy rollback 配置恢复旧入口。
+- ✅ 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；用户确认完整人工 CLI／交互 matrix 无问题。
+- ✅ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke；工程侧真实 Memory delete 验证删除前命中 1 条、删除后命中 0 条。
+- ✅ 执行拒绝访问旧目录的启动／smoke 边界并完成目录 mtime／hash 人工检查：4 个 legacy 目录设置为访问即失败后，隔离 v2 production composition 完成 Knowledge 启动和一轮 Runtime；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
+- ✅ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；全量测试发现的 KnowledgeService 状态读取／锁释放竞态由提交 `9da3242` 修复，随后 20 项定向测试与完整 283 项测试稳定通过，Catalog 为 2 Agent／26 Tool／10 command。
+- ✅ 用户审查 R8-O；用户确认完整人工 smoke matrix 无问题，工程验证全部通过。R8-O 完成，当前停在 R8-D 授权门禁前；未经用户后续明确授权不得删除 legacy。
 
 ### 4. R8-D —— 遗留删除
 
