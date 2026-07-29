@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 226 — R8-D 执行清单细化并保持授权门禁](#决策-226--r8-d-执行清单细化并保持授权门禁)
 - [决策 225 — R8-O 完整通过并停在 R8-D 授权门禁前](#决策-225--r8-o-完整通过并停在-r8-d-授权门禁前)
 - [决策 219 — finish thinking 恢复为可选摘要](#决策-219--finish-thinking-恢复为可选摘要)
 - [决策 224 — provide_choices 取消后暂停当前 Agent](#决策-224--provide_choices-取消后暂停当前-agent)
@@ -5313,3 +5314,39 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - `compileall`、`git diff --check`、import boundary 与实际 Catalog 验证通过；Catalog 为 2 Agent、26 ToolDefinition、10 CLI command。
 - 真实 Memory delete smoke：删除前命中 1 条，删除后 repository、manifest 与 Chroma 查询均为空。
 - legacy refusal smoke：4 个旧数据目录的常见文件访问被设置为访问即失败，隔离 v2 production composition 完成 Knowledge 启动、一轮 Runtime 与无 issue 关闭。
+
+---
+
+### 决策 226 —— R8-D 执行清单细化并保持授权门禁
+
+**背景：** 用户确认 R8-D 之前的任务和检查均已完成，并要求开始分析、更新 R8-D 任务列表。原清单已给出删除目录和顶层文件，但缺少执行前精确盘点、意外非跟踪内容保护、staged allowlist、删除敏感验证以及提交前后的明确停止条件，不足以直接支持一次安全、可审计的删除。
+
+**决定：**
+
+- R8-D 任务拆分为清单分析与授权、删除前安全快照、精确删除、删除后验证、提交与回退五组；本次只完成只读盘点与文档更新，不执行删除。
+- 当前 Git 跟踪删除白名单固定为 8 个 legacy package 中 45 个文件和 6 个顶层 legacy module，共 51 个文件。执行前必须重新生成清单；如目录内出现意外非跟踪内容或 symlink／reparse point，立即停止，不按目录整体删除。
+- 三个本地 `.ipynb_checkpoints` 目录继续作为独立 literal-path 清理项；当前共 5 个文件，均被 Git 忽略且未发现 reparse link。禁止使用 `git clean`、通配符或从工作区根递归搜索删除。
+- `pyproject.toml` 的 11 个直接依赖当前均有 v2 使用证据，R8-D 预计保持 `pyproject.toml`／`uv.lock` 不变；删除后必须复核，不凭 legacy 文件消失猜测性删除依赖。
+- R8-D 提交只包含 51 个 tracked legacy 源文件删除。提交前必须通过 staged allowlist、完整自动化、`compileall`、`git diff --check`、Catalog、根入口和 legacy-data refusal 验证；最终完整真实 adapter／业务 smoke 仍由 R8-G/G8 执行。
+- 本清单更新不构成 R8-D 执行授权。只有用户审查并明确授权后，才可从删除前安全快照开始；旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 始终不在删除范围内。
+
+**理由：**
+
+- 删除整个目录前先锁定 tracked、untracked、ignored 与 reparse 状态，可以防止精确源码白名单意外扩大到用户文件或链接目标。
+- staged allowlist 把“计划删除 51 个文件”转化为提交前可核验事实，避免最终文档、v2 源码、测试或数据变更混入不可逆切片。
+- 当前直接依赖全部仍有 v2 消费者；保留无变化的依赖文件比基于旧目录名称推测清理更安全，也避免无必要的锁文件重解析。
+- R8-D 与 R8-G 分层验证：前者证明删除本身没有破坏生产入口和边界，后者完成文档归一化与最终全矩阵验收。
+
+**曾考虑的替代方案：**
+
+- 直接按 8 个目录执行递归删除 —— 无法保护执行前新增的非跟踪内容或 reparse target，未采用。
+- 使用 `git clean` 一次清除所有 ignored checkpoint／cache —— 作用域会扩大到未列入 R8-D 的其他本地文件，明确拒绝。
+- legacy 删除后顺手移除看似旧版专用的依赖 —— 静态检查证明 11 个直接依赖均仍被 v2 使用，且猜测性修改会扩大 R8-D 风险，拒绝。
+- 把删除、最终文档和完整 G8 smoke 混成一个提交 —— 会破坏 R8-D 独立回退点并降低问题定位能力，未采用。
+
+**验证：**
+
+- 当前分支为 `refactor`，工作区在分析前干净，历史包含 R8-E `9fbeabc`、R8-O 修复 `9da3242` 与 checkpoint `f504427`。
+- `git ls-files` 只读盘点得到 51 个 tracked legacy 源文件；白名单内未发现额外非忽略文件。
+- 三个 checkpoint 目录当前共 5 个文件，均未被 Git 跟踪；路径属性检查未发现 reparse link。
+- 对 `src/get_me_in/` 与 `tests/get_me_in/` 的直接依赖扫描确认 11 个项目依赖均仍有使用点。

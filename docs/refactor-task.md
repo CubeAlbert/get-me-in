@@ -519,17 +519,44 @@
 - ✅ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；全量测试发现的 KnowledgeService 状态读取／锁释放竞态由提交 `9da3242` 修复，随后 20 项定向测试与完整 283 项测试稳定通过，Catalog 为 2 Agent／26 Tool／10 command。
 - ✅ 用户审查 R8-O；用户确认完整人工 smoke matrix 无问题，工程验证全部通过。R8-O 完成，当前停在 R8-D 授权门禁前；未经用户后续明确授权不得删除 legacy。
 
-### 4. R8-D —— 遗留删除
+### 4. R8-D —— 遗留删除（清单审查中，尚未授权执行）
 
-- ⬜ 删除 `src/agents/`、`src/cli/`、`src/llm/`、`src/memory/`、`src/prompts/`、`src/rag/`、`src/tools/`、`src/utils/`。
-- ⬜ 删除 `src/config.py`、`src/lifecycle.py`、`src/logger.py`、`src/message.py`、`src/request.py`、`src/response.py`。
-- ⬜ 保留 `src/__init__.py`、完整 `src/get_me_in/` 与 `tests/get_me_in/`；不删除或迁移任何旧 `data/` 运行数据。
-- ⬜ 再次精确复核并删除本地 `.ipynb_checkpoints/`、`src/.ipynb_checkpoints/`、`src/llm/.ipynb_checkpoints/`；当前三者均未被 Git 跟踪，作为本地清理证据而非提交内容，不得使用宽泛递归清理。
-- ✅ 确认临时 `scripts/v2_runtime_smoke.py` 已随 R5 正式 CLI 落地删除。
-- ⬜ 删除后再次确认 `main.py`／`src/get_me_in/` 无 legacy import，清单中的 legacy production modules 均不存在。
-- ⬜ 审计 `pyproject.toml`／`uv.lock`；只移除经 import 与真实 smoke 证明未使用的依赖，无可删项则保持不变。
-- ⬜ R8-D 独立提交，不与入口切换或最终文档提交混合。
-- ⬜ 记录删除后的紧急回退顺序：先 revert R8-D 恢复源码，再 revert R8-E 恢复入口；禁止触碰旧运行数据。
+#### 4.1 清单分析与授权门禁
+
+- ✅ 按当前 `HEAD` 复核 Git 跟踪的删除白名单：8 个 legacy production package（`src/agents/` 8 个文件、`src/cli/` 4 个、`src/llm/` 2 个、`src/memory/` 6 个、`src/prompts/` 2 个、`src/rag/` 5 个、`src/tools/` 11 个、`src/utils/` 7 个）和 6 个顶层 legacy module，共 51 个跟踪文件。
+- ✅ 复核本地 checkpoint 白名单：`.ipynb_checkpoints/`、`src/.ipynb_checkpoints/`、`src/llm/.ipynb_checkpoints/` 均被 Git 忽略，当前共包含 5 个文件；未发现 reparse link。它们只能作为单独的本地清理项处理。
+- ✅ 初查 `pyproject.toml` 的 11 个直接依赖均仍被 `src/get_me_in/` 使用，包括延迟导入的 `pdfplumber`、`python-docx`、`chromadb` 与 `sentence-transformers`；当前没有依赖删除候选，R8-D 执行后仍须复核，若证据不变则保持 `pyproject.toml`／`uv.lock` 原样。
+- ✅ 确认临时 `scripts/v2_runtime_smoke.py` 已随 R5 正式 CLI 落地删除；现存 `scripts/r6_knowledge_smoke.py` 不属于 R8-D 删除白名单。
+- ⬜ 用户审查本节更新后的完整清单并明确授权执行 R8-D；获得授权前不得删除任何 legacy 源码、checkpoint 或旧运行数据。
+
+#### 4.2 删除前安全快照
+
+- ⬜ 确认分支为 `refactor`、工作区无未提交修改，并记录 R8-D 的父提交；确认 R8-E 回退提交仍为 `9fbeabc`，R8-O 修复与 checkpoint 均已包含在当前历史中。
+- ⬜ 重新生成 51 个 Git 跟踪文件的精确清单，并检查白名单目录中的非跟踪／忽略内容、symlink／reparse point；如出现除生成型 `__pycache__`／`.pyc` 与已知 checkpoint 外的意外内容，立即停止并重新审查，不按目录整体删除。
+- ⬜ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 记录删除前只读指纹／mtime 基线，并确认本轮所有待执行命令都不以 `data/`、工作区根目录、通配符或未解析变量作为删除目标。
+- ⬜ 再次确认保留白名单：`src/__init__.py`、完整 `src/get_me_in/`、`tests/get_me_in/`、`data/reference/`、`data/prompts/`、`data/resume/template/`、`data/workspace/` 与 `data/v2/`；R8-D 不迁移、覆盖或删除任何旧 `data/` 运行数据。
+
+#### 4.3 精确删除
+
+- ⬜ 仅按精确路径删除 `src/agents/`、`src/cli/`、`src/llm/`、`src/memory/`、`src/prompts/`、`src/rag/`、`src/tools/`、`src/utils/` 中已复核的 45 个 Git 跟踪文件及目录内生成型缓存。
+- ⬜ 仅按精确路径删除 `src/config.py`、`src/lifecycle.py`、`src/logger.py`、`src/message.py`、`src/request.py`、`src/response.py`。
+- ⬜ 单独解析并核对三个 checkpoint 目录仍位于仓库内，再以 literal path 删除 `.ipynb_checkpoints/`、`src/.ipynb_checkpoints/`、`src/llm/.ipynb_checkpoints/`；禁止使用 `git clean`、宽泛递归搜索或通配符清理。
+- ⬜ 删除后逐项断言 8 个 legacy package、6 个顶层 legacy module 和 3 个 checkpoint 目录均不存在，同时断言全部保留白名单仍存在。
+- ⬜ 审查 `git diff --name-status`：除已确认的 51 个 legacy 源文件删除外不得出现其他 tracked 变更；不得出现 `data/`、`src/get_me_in/`、`tests/get_me_in/`、`main.py`、文档或配置文件改动。
+
+#### 4.4 删除后验证
+
+- ⬜ 再次扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 与生产配置，确认没有 legacy import、动态 import 字符串、旧模块路径或 import-time registration 依赖；`test_import_boundaries.py` 的 forbidden module 清单继续作为防回归规则保留。
+- ⬜ 复核 11 个直接依赖的 v2 使用证据；若仍全部使用，保持 `pyproject.toml`／`uv.lock` 不变。若出现新的未使用证据，停止 R8-D，不在删除提交中顺带猜测性移除依赖。
+- ⬜ 运行 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py` 与 `git diff --check`；任何失败先定位并恢复绿灯，不得以删除 legacy 测试或放宽契约解决。
+- ⬜ 从实际 Catalog 复核 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令，并执行根入口启动／`/exit`、production composition 及拒绝访问 4 个 legacy data 目录的删除敏感 smoke；R8-G 再执行完整真实 adapter 与业务 smoke matrix。
+- ⬜ 比较 4 个旧运行数据目录的删除前后指纹／mtime，并确认没有读取、改写、迁移或删除；“未读取”仍以静态扫描、Settings sentinel 与拒绝访问 smoke 为主证据。
+
+#### 4.5 提交与回退
+
+- ⬜ 仅暂存 51 个 legacy 源文件删除，复核 staged diff 后创建独立 R8-D 提交；checkpoint 本地清理不伪装为 Git 变更，R8-G 文档归一化不得混入该提交。
+- ⬜ 提交后确认工作区干净、R8-D 提交可单独 revert，随后才进入 R8-G；R8-G 完成前仍保留 `.env.example`／README 的 `legacy rollback only` 说明。
+- ⬜ 记录并复核紧急回退顺序：R8-D 前只需 `git revert 9fbeabc`；R8-D 后先 revert R8-D 恢复 legacy 源码，再 revert `9fbeabc` 恢复旧入口。恢复源码后才允许重新启用 legacy-only 配置，任何回退都禁止触碰旧运行数据。
 
 ### 5. R8-G —— 文档、状态与 G8
 

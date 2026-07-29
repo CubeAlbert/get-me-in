@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 —— R8-O 强制观察及用户审查已完成，停在 R8-D 授权门禁前
+**当前阶段：** R8 —— R8-D 执行清单已完成分析更新，等待用户审查与明确授权
 
-**当前任务：** R8-D 遗留删除授权门禁：等待用户明确确认后才可按既定精确清单删除 legacy production modules
+**当前任务：** R8-D 遗留删除清单审查：确认删除白名单、安全快照、删除后验证、独立提交与回退步骤
 
-**当前子任务：** 保持工作区与旧运行数据不变，等待用户明确授权进入 R8-D；当前未执行任何 legacy 删除。
+**当前子任务：** 请用户审查 `docs/refactor-task.md` 的 R8-D 4.1～4.5 清单；当前只完成只读盘点与文档更新，未执行任何 legacy 删除。
 
-**当前阻塞：** R8-D 尚未获得用户明确授权。R8-O 人工 smoke matrix、283 项自动化测试、`compileall`、`git diff --check`、import/Catalog、真实 Memory delete 与旧目录拒绝访问验证均已通过；KnowledgeService 状态读取竞态已由提交 `9da3242` 修复。未经后续明确授权不得删除 legacy。
+**当前阻塞：** R8-D 执行仍未获得用户明确授权。当前盘点确认删除白名单为 51 个 Git 跟踪的 legacy 源文件，另有 3 个被忽略的 checkpoint 目录；11 个直接依赖均仍被 v2 使用，预计无需修改依赖。未经后续明确授权不得删除 legacy。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 已完成入口、CLI／交互、Main→Resume→Main、审批／选择／Esc 暂停、Plan、save/restore/rewind、Knowledge／Memory、中文／英文／双语 Resume、PDF 合并、关闭与旧数据拒绝访问的完整人工及工程验证。用户已确认全部人工 smoke 无问题；工程侧 283 项自动化测试、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实 Memory delete 和 legacy refusal smoke 均通过。全量测试发现的 KnowledgeService `ERROR` 状态可见但锁尚未释放竞态已由提交 `9da3242` 修复并复验。R8-O 与用户审查现已完成，R8-D 尚未授权，旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 及 legacy production modules 均不得改动。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 与用户审查已完成，工程验证为 283 项自动化测试、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实 Memory delete 和 legacy refusal smoke 全部通过；KnowledgeService 状态竞态已由 `9da3242` 修复。R8-D 清单现已细化为分析／授权、删除前安全快照、精确删除、删除后验证、独立提交与回退五组任务。只读盘点确认 8 个 legacy package 内 45 个文件加 6 个顶层 module，共 51 个 Git 跟踪删除目标；三个被忽略的 checkpoint 目录当前共 5 个文件；11 个直接依赖均被 v2 使用。当前仍未授权或执行删除，旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 及所有 legacy production modules 均不得改动。
 
-**下一步：** 等待用户明确授权进入 R8-D；获授权后先再次复核精确 legacy 删除路径和回退边界，再按独立提交执行删除。未经授权不采取任何 R8-D 行动。
+**下一步：** 用户审查并确认 `docs/refactor-task.md` 的 R8-D 4.1～4.5 清单；只有收到明确执行授权后，才从 4.2 删除前安全快照开始，按清单完成独立 R8-D 提交。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -60,6 +60,7 @@
 223. **Esc 取消当前 SubAgent run 但保留 handoff** — SubAgent 返回 `Cancelled` 时不再自动执行 `FailHandoff`；保留 active SubAgent、handoff frame 和 Main 的等待状态，下一条用户消息继续进入原 SubAgent。`Failed` 仍按失败路径退回 Main。
 224. **provide_choices 取消后暂停当前 Agent，下一条用户消息再继续** — `CancelSelection` 仍写入 `ToolResultRecord`，但当前 Agent 进入 `WAITING_FOR_USER` 并返回 `Paused("selection_cancelled", reason)`；CLI 不再自动发送 `Continue()`，下一条用户消息与取消结果一起发送给当前 Agent。该决定取代决策 209 中“取消后进入 `MODEL_QUEUED` 并继续模型循环”的部分。
 225. **R8-O 完整通过并停在 R8-D 授权门禁前** — 用户确认完整人工 smoke matrix 无问题；工程侧 283 项自动化测试、静态检查、Catalog、真实 Memory delete 与 legacy refusal smoke 全部通过。KnowledgeService 状态读取与锁释放竞态由 `9da3242` 修复。R8-D 仍须用户后续明确授权，当前不删除任何 legacy 源码或旧运行数据。
+226. **R8-D 执行清单细化并保持授权门禁** — 当前盘点确认 51 个 Git 跟踪 legacy 源文件、3 个本地 checkpoint 目录与 11 个仍被 v2 使用的直接依赖；执行拆分为删除前快照、精确 literal-path 删除、删除后验证、独立提交和逆序回退，禁止宽泛清理及任何旧运行数据访问。清单更新不构成删除授权。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
