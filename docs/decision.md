@@ -8,6 +8,8 @@
 
 ## 目录
 
+- [决策 230 — 确认 R8-G 详细清单但不授权本会话实施](#决策-230--确认-r8-g-详细清单但不授权本会话实施)
+- [决策 229 — R8-D 前置生命周期修复与遗留删除完成](#决策-229--r8-d-前置生命周期修复与遗留删除完成)
 - [决策 228 — 辅助文档完成收敛并删除](#决策-228--辅助文档完成收敛并删除)
 - [决策 227 — 授权新会话执行 R8-D 并收敛活跃文档](#决策-227--授权新会话执行-r8-d-并收敛活跃文档)
 - [决策 226 — R8-D 执行清单细化并保持授权门禁](#决策-226--r8-d-执行清单细化并保持授权门禁)
@@ -5451,3 +5453,39 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - `b74af9e` 仅修改 `.env.example`、`src/get_me_in/application/settings.py` 和 `tests/get_me_in/test_settings.py`；`7514af3` 仅删除 51 个白名单文件。
 - `uv run python -m unittest discover -s tests/get_me_in -t .` 运行 283 项并通过；`compileall`、`git diff --check`、import scan、11 项依赖使用、Catalog、composition 和拒绝访问 smoke 均通过。
 - `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 的只读指纹与 mtime 和删除前一致；工作区 checkpoint 清理未进入 Git 提交。
+
+---
+
+### 决策 230 —— 确认 R8-G 详细清单但不授权本会话实施
+
+**背景：** R8-D 已由 `7514af3` 精确删除 51 个 legacy 源文件并由 `c13d455` checkpoint。用户要求先审查完成情况，再判断 R8-G 清单是否需要调整。审查确认 R8-D 提交范围、保留路径和工作区状态正确，本轮独立复验 283 项 unittest、`compileall`、`git diff --check` 与生产 legacy import／动态 import 扫描均通过；同时发现原 R8-G 四条待办过于粗，未明确文件白名单、真实 smoke 明细、失败分流、decision append-only 规则和 R8-G 提交后的完整回退顺序。
+
+**决定：**
+
+- 用户接受细化建议；本会话只更新文档和 AGENTS.md，不修改代码，不删除 README／`.env.example` 的过渡段，不执行真实 adapter／业务 smoke，也不创建 R8-G 实施提交。
+- R8-G 清单拆为六组：5.1 清单确认与实施门禁、5.2 过渡配置与 README、5.3 活跃文档与 AGENTS.md、5.4 自动化／静态／Catalog、5.5 根入口／真实 adapter／数据边界、5.6 提交／回退／停止门禁。
+- R8-G 获得单独授权后只允许修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`。不得修改生产代码、测试、脚本、数据、依赖或锁文件。
+- 若 G8 发现代码、测试、依赖、公开协议或数据迁移缺陷，立即停止 R8-G，保留证据并另行提交最小修复清单；不得把修复混入文档／配置提交。
+- `docs/decision.md` 继续 append-only；历史决策不因最终文档归一化而改写。当前态文档必须清除“legacy 源码仍存在／R8-O 未通过／R8-D 待执行”等过渡事实，历史章节保留时须明确其历史属性。
+- G8 必须覆盖完整 unittest、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实根入口与 CLI／handoff／审批／取消、Chroma／Knowledge／Memory、中文／英文／双语 Resume 与 PDF merge、legacy-data 非访问组合证据、写入边界和资源关闭。
+- 当前 R8-D 后、R8-G 前的紧急回退为 `git revert 7514af3` 后 `git revert 9fbeabc`。未来 R8-G 提交后必须按逆提交顺序先 revert R8-G 提交，再 revert `7514af3`，最后 revert `9fbeabc`；legacy 源码恢复前不得实际启用 legacy-only 配置，任何回退不得触碰旧运行数据。
+- R8-G/G8 完成并 checkpoint 后必须停止等待用户审查，不得自动进入 R9。
+
+**理由：**
+
+- 文件白名单把最终文档归一化与产品修复分开，使 R8-G 可以独立审查、提交和回退。
+- 显式 smoke matrix 避免辅助 matrix 文档删除后只剩“完整验证”这一不可执行描述，也确保 unit tests 不被误当作真实 adapter、CLI 生命周期或数据边界证据。
+- 将失败分流写入门禁，可防止最终文档阶段顺手修改代码、依赖或测试而破坏 R8-D／R8-G 的独立提交边界。
+- 区分 R8-G 前后的两种回退序列，才能在 legacy-only 示例被删除后仍保留完整、可审计的恢复路径。
+
+**曾考虑的替代方案：**
+
+- 直接使用原四条 R8-G 待办 —— 缺少文件范围、验证明细和失败处理，无法支持新会话安全执行，未采用。
+- 本会话顺带删除 README／`.env.example` 过渡内容并执行 G8 —— 用户明确要求本会话不修改代码且只调整清单；R8-G 实施仍需单独授权，未采用。
+- G8 发现缺陷时直接在同一提交修复 —— 会混合文档归一化与产品行为变化，破坏独立审查和回退，明确禁止。
+- 重写决策 225～229 为最终状态 —— 会破坏历史证据；采用追加决策与更新当前态文档。
+
+**验证与交接：**
+
+- 新会话必须先执行 `/project-bootstrap`，以 `docs/current.md` 路由到四份活跃文档，读取本决策和 `docs/task.md` 5.1～5.6。
+- 未取得 R8-G 单独明确授权前，只能审查清单和工作区状态，不得修改 README／`.env.example` 或执行 R8-G/G8。

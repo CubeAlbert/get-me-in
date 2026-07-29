@@ -6,7 +6,7 @@
 
 ## 1. 总体策略
 
-本次采用受控重写，不在旧 `BaseAgent`、`App` 和全局 Registry 上继续叠加功能。v2 已在 `src/get_me_in/` 中独立构建，根入口已完成切换并通过 R8-O；旧实现现在只为 R8-D 删除和紧急回退暂时保留。
+本次采用受控重写，不在旧 `BaseAgent`、`App` 和全局 Registry 上继续叠加功能。v2 已在 `src/get_me_in/` 中独立构建，根入口已完成切换并通过 R8-O；R8-D 已由 `7514af3` 删除 legacy production 源码并完成 checkpoint，当前停在 R8-G 单独授权门禁。
 
 执行原则：
 
@@ -267,8 +267,8 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 - R8-P 先校验静态资产、Settings／`.env.example`、capability、命令、Agent/tool 数量、v2→legacy import 和 legacy data 非访问边界；`.env.example` 与 README 保留清晰标记的 legacy rollback 段，不在切换前破坏旧入口回退条件。
 - R8-E 将根 `main.py` 委托给 v2 CLI，并补齐 composition／启动异常的用户可读错误和退出码 `1`；形成独立可回退 commit，不同时删除 legacy。
 - R8-O 从根入口执行完整自动化与真实 smoke，验证入口退出码、CLI、Knowledge/Memory、Resume、handoff、审批／取消、restore/rewind 和资源关闭；用户审查通过前不进入删除。
-- R8-D 按已确认精确清单删除 legacy production modules 与 `.ipynb_checkpoints`，保留 `src/__init__.py`、完整 `src/get_me_in/` 和全部旧用户运行数据。
-- R8-G 删除过渡期 legacy rollback 配置说明，更新 README、AGENTS.md 及当前四份项目文档为已落地事实。设计／计划／任务文件名已由决策 227 提前收敛；辅助 baseline／audit／matrix／smoke 文档已由决策 228 收敛并删除，完整历史由 Git 保留。
+- R8-D 已按精确清单由 `7514af3` 删除 51 个 legacy production 文件，并以 literal path 清理 3 个本地 `.ipynb_checkpoints`；`src/__init__.py`、完整 `src/get_me_in/` 和全部旧用户运行数据均保留。
+- R8-G 获得单独授权后删除过渡期 legacy rollback 配置说明，更新 README、AGENTS.md 及五份活跃文档为已落地事实，并完成完整 G8。设计／计划／任务文件名已由决策 227 提前收敛；辅助 baseline／audit／matrix／smoke 文档已由决策 228 收敛并删除，完整历史由 Git 保留。
 
 **验收门禁 G8：**
 
@@ -277,11 +277,11 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 - 仓库中不再存在 v2 对旧架构的 import，也不再存在清单中的 legacy production modules 或 `.ipynb_checkpoints`。
 - `data/reference/`、`data/prompts/`、`data/resume/template/` 作为静态输入可用；旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 未被读取、改写、迁移或删除。“未读取”由静态扫描、sentinel Settings 路径断言和拒绝访问边界证明；mtime／hash 只证明未改写。
 - `.env.example` 与 `Settings.from_env()` 一致；实际 Catalog 固定为 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令，文档名称和数量与 `AgentCatalog`、`ToolCatalog`、`CommandRegistry` 一致。
-- R8-D 前回退只 revert R8-E；R8-D 后紧急回退按逆序先恢复删除提交、再恢复入口提交，且始终不触碰旧运行数据。
+- 当前 R8-D 后、R8-G 前紧急回退按 `git revert 7514af3` → `git revert 9fbeabc`；未来 R8-G 提交后先 revert R8-G，再 revert `7514af3`，最后 revert `9fbeabc`，且始终不触碰旧运行数据。
 
 **依赖：** G6、G7。
 
-**实施顺序：** R7-T2/G7 → R8-P → R8-E → R8-O（强制停止／用户审查）→ R8-D → R8-G/G8。R8-P、R8-E、R8-O 已完成；用户已由决策 227 授权新会话按 `docs/task.md` 的 4.2～4.5 执行 R8-D。每个切片独立验证和提交，R8-D 完成后不得自动进入 R8-G。
+**实施顺序：** R7-T2/G7 → R8-P → R8-E → R8-O（强制停止／用户审查）→ R8-D → R8-G/G8。R8-P、R8-E、R8-O、R8-D 已完成；决策 230 已确认 `docs/task.md` R8-G 5.1～5.6 的详细清单，但本轮只做文档 checkpoint。新会话仍须取得 R8-G 单独授权；若 G8 发现代码／测试／依赖／协议缺陷，停止并分离修复。R8-G/G8 完成后不得自动进入 R9。
 
 ### R9 —— 新功能恢复
 

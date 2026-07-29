@@ -4,7 +4,7 @@
 
 ## 项目
 
-**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。`refactor` 分支已将生产入口切换到 `src/get_me_in/` v2；legacy 源码暂时只为 R8-D 删除和紧急回退保留。
+**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。`refactor` 分支已将生产入口切换到 `src/get_me_in/` v2；R8-D 已删除 legacy production 源码，当前停在 R8-G 文档归一化与 G8 的单独授权门禁。
 
 ## 新会话恢复顺序
 
@@ -17,79 +17,42 @@
 3. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 已收敛为当前 v2 事实，不再存在并行的 `docs/refactor-*.md`。
 4. 历史 baseline、audit、matrix 和 smoke 原文由 Git 保存；不要在 `docs/` 重新创建归档副本，也不得据此覆盖 `current.md` 的阶段与授权状态。
 
-## 当前 R8-D 授权
+## 当前 R8-G 清单与授权状态
 
-用户已通过决策 227 明确授权在新会话执行 R8-D。本次授权边界如下：
+R8-D 已由提交 `7514af3` 精确删除 51 个 legacy production 文件，并由 `c13d455` checkpoint。用户已通过决策 230 确认 `docs/task.md` R8-G 5.1～5.6 的详细清单，但本轮只授权文档 checkpoint；R8-G 实施仍须新会话单独明确授权。
 
-- 从 `docs/task.md` 的 **R8-D 4.2 删除前安全快照**开始，依次完成 4.2～4.5。
-- R8-D 只做 legacy 删除、删除敏感验证和独立提交；不新增业务能力，不新增 runtime class、service、port、schema 或公开方法。
-- R8-D 提交并 checkpoint 后必须停止。不得自动进入 R8-G 或 R9。
-- 如果发现需要扩大删除范围、修改公开协议、删除测试或猜测性移除依赖，立即停止并请求用户确认。
+新会话必须：
 
-### Git 跟踪删除白名单
+1. 先执行 `/project-bootstrap`，读取 `docs/current.md`、决策 230 和 `docs/task.md` R8-G 5.1～5.6。
+2. 确认分支为 `refactor`、工作区干净、`HEAD` 包含 `c13d455` 与 `7514af3`。
+3. 未取得 R8-G 单独授权前，只能审查状态，不得修改 README／`.env.example` 或执行 G8。
+4. R8-G/G8 完成并 checkpoint 后必须停止；不得自动进入 R9。
 
-仅允许删除以下 8 个 legacy package 中已复核的 45 个 Git 跟踪文件：
+### R8-G 文件与行为边界
 
-- `src/agents/`
-- `src/cli/`
-- `src/llm/`
-- `src/memory/`
-- `src/prompts/`
-- `src/rag/`
-- `src/tools/`
-- `src/utils/`
+获得授权后只允许修改以下 8 个文档／示例配置文件：
 
-仅允许删除以下 6 个顶层 legacy module：
+- `.env.example`
+- `README.md`
+- `AGENTS.md`
+- `docs/current.md`
+- `docs/design.md`
+- `docs/plan.md`
+- `docs/task.md`
+- `docs/decision.md`
 
-- `src/config.py`
-- `src/lifecycle.py`
-- `src/logger.py`
-- `src/message.py`
-- `src/request.py`
-- `src/response.py`
+R8-G 不得修改 `main.py`、`src/`、`tests/`、`scripts/`、`data/`、`pyproject.toml` 或 `uv.lock`，不得新增业务能力、runtime class、service、port、schema、公开方法或依赖。若 G8 发现必须修改上述对象，立即停止并记录失败证据，提交独立最小修复清单供用户审查；不得把修复混入 R8-G 文档／配置提交。
 
-当前 tracked 删除白名单总计 51 个文件。执行前必须用 `git ls-files` 重新生成并核对；若数量、路径或目录内容发生变化，停止并重新审查。
+文档归一化必须：
 
-### 本地 checkpoint 清理白名单
+- 删除 `.env.example` 的 R8 观察期说明和 `legacy rollback only` 段，但保留 v2 正式变量及仍受支持的兼容别名。
+- 把 README 从迁移／观察期说明改为已落地 v2 事实，记录当前入口、Main／Resume 能力、10 个 CLI 命令、配置和数据边界。
+- 更新活跃文档与本文件的当前态；历史阶段和决策只保留为明确历史，`docs/decision.md` 只追加、不改写。
+- Agent、Tool、命令和 Settings 数量／名称必须从实际 Catalog、Registry 与代码取证，不维护第二份运行时真相。
 
-以下 3 个目录被 Git 忽略，必须在确认 resolved absolute path 位于当前仓库内、且不存在意外内容或 reparse link 后，使用 literal path 单独删除：
+### G8 验证与提交
 
-- `.ipynb_checkpoints/`
-- `src/.ipynb_checkpoints/`
-- `src/llm/.ipynb_checkpoints/`
-
-禁止使用 `git clean`、通配符、工作区根目录递归删除或从搜索结果拼接删除命令。checkpoint 删除只记录为本地证据，不伪装成 Git 提交内容。
-
-### 必须保留
-
-- `src/__init__.py`
-- 完整 `src/get_me_in/`
-- 完整 `tests/get_me_in/`
-- `scripts/r6_knowledge_smoke.py`
-- `data/reference/`
-- `data/prompts/`
-- `data/resume/template/`
-- `data/workspace/`
-- `data/v2/`
-
-以下 legacy 用户运行数据永远不得读取、改写、迁移或删除：
-
-- `data/save/`
-- `data/memories/`
-- `data/chroma/`
-- `data/temp/`
-
-证明“未读取”必须组合使用静态扫描、Settings sentinel 和拒绝访问 smoke；mtime／hash 只能证明未改写。
-
-### 依赖边界
-
-`pyproject.toml` 当前 11 个直接依赖均仍被 v2 使用，包括延迟导入的 `pdfplumber`、`python-docx`、`chromadb` 和 `sentence-transformers`。R8-D 预计保持 `pyproject.toml` 与 `uv.lock` 不变。
-
-删除后必须复核使用证据；如果发现新的依赖清理候选，停止 R8-D 并单独提交审查，不得在删除提交中顺手移除。
-
-### R8-D 验证与提交
-
-删除后至少完成：
+至少完成：
 
 ```powershell
 uv run python -m unittest discover -s tests/get_me_in -t .
@@ -99,14 +62,23 @@ git diff --check
 
 还必须：
 
-- 扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 和生产配置，确认无 legacy import、动态 import 字符串或 import-time registration 依赖。
-- 从实际 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令。
-- 完成根入口启动／`/exit`、production composition 和拒绝访问 4 个 legacy data 目录的删除敏感 smoke。
-- 比较旧运行数据删除前后只读指纹／mtime，并确认保留路径完整。
-- 审查 `git diff --name-status` 与 staged diff：R8-D 提交只包含已确认的 51 个 legacy 源文件删除。
-- 创建独立 R8-D commit；不得混入 R8-G 文档、README、`.env.example` 或 v2 代码变更。
+- 扫描生产入口、v2 源码、测试和配置，确认无 legacy import、动态 import 字符串、旧模块路径或 import-time registration。
+- 从 `AgentCatalog.list_descriptors()`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令。
+- 从真实根入口验证 Settings／启动退出码、基础对话、10 个 CLI 命令、handoff、审批／拒绝、Esc／选择取消、restore／rewind 和资源关闭。
+- 验证真实 Chroma／embedder／reranker、Knowledge、Memory，以及中文／英文／双语 Resume copy／edit／build／open 和 `merge_pdfs`。
+- 使用静态扫描、Settings sentinel 与拒绝访问 smoke 证明 production v2 不读取旧数据；mtime／hash 只能证明未改写。确认写入只落在 `data/workspace/` 与 `data/v2/`。
+- 审查 `git diff --name-status` 与 staged diff，只允许上述 8 个文件；G8 通过后创建独立 R8-G 提交并 checkpoint。
 
-R8-D 前的入口回退点是 `9fbeabc`。R8-D 后紧急回退必须先 revert R8-D 提交恢复 legacy 源码，再 revert `9fbeabc` 恢复旧入口；恢复源码后才允许重新启用 legacy-only 配置。任何回退都不得触碰旧运行数据。
+### 数据与回退边界
+
+以下 legacy 用户运行数据永远不得读取、改写、迁移或删除：
+
+- `data/save/`
+- `data/memories/`
+- `data/chroma/`
+- `data/temp/`
+
+当前 R8-D 后、R8-G 前的紧急回退顺序是 `git revert 7514af3`，再 `git revert 9fbeabc`。未来 R8-G 提交后按逆提交顺序先 revert R8-G 提交，再 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置；任何回退不得触碰旧运行数据。
 
 ## 常用命令
 
@@ -192,7 +164,7 @@ main.py
 - 不得通过删除测试、放宽 typed contract 或用 mock 掩盖真实 adapter 问题来获得绿灯。
 - Agent key、capability、状态和事件使用声明式常量／枚举，不写裸字符串控制协议。
 - v2 禁止 import legacy package；`tests/get_me_in/test_import_boundaries.py` 持续维护 forbidden module 防回归。
-- 新模块、公开类或公开方法必须先确认设计和清单；R8-D 不允许创建这些对象。
+- 新模块、公开类或公开方法必须先确认设计和清单；R8-G 不允许创建或修改这些对象。
 - R0～R8 继续冻结 InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 和其他 R9 功能。
 - 保留用户已有工作树变更；删除或移动前必须解析并核对精确绝对路径。
 - 禁止 Bash/Python 脚本直接读写项目文件；使用专用读取、搜索和补丁工具。

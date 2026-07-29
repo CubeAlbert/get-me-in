@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 —— R8-D 已完成并 checkpoint，等待用户审查与后续授权
+**当前阶段：** R8 —— R8-D 已完成并通过用户审查；R8-G 清单已确认，实施待单独授权
 
-**当前任务：** R8-D 遗留删除：安全快照、精确删除、验证、独立提交与回退记录已完成
+**当前任务：** R8-G 文档归一化与 G8：详细执行清单、变更白名单、证据矩阵和停止门禁已确认
 
-**当前子任务：** R8-D 已完成；保持停止，不自动进入 R8-G 或 R9，等待用户审查和后续明确授权。
+**当前子任务：** `docs/task.md` R8-G 5.1 实施门禁：新会话 bootstrap 并取得 R8-G 单独授权后，才可从 5.2 开始。
 
-**当前阻塞：** 无。R8-D 已独立提交并完成 checkpoint；R8-G 与 R9 仍未授权。
+**当前阻塞：** 无技术阻塞。R8-G 实施尚未获得单独明确授权；R9 仍未授权。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复提交为 `b74af9e`：仅将 `Settings` 产品默认与 `.env.example` 的 `SHUTDOWN_TIMEOUT_SECONDS` 从 5 秒调整为 60 秒，并增加默认值回归测试；未修改 `BackgroundWorker`、`ResourceStack`、typed timeout 或 non-daemon 语义。默认配置连续 3 次冷启动 `/exit` 均退出码 0，耗时分别约 38.603s、37.284s、36.941s，每次匹配进程数为 0。R8-D 删除提交为 `7514af3`，只包含精确复核的 51 个 legacy 源文件删除；3 个 checkpoint 目录为本地清理证据，不在提交中。删除后 283 项自动化测试、`compileall`、`git diff --check`、import boundary、11 项依赖使用、2 Agent／26 Tool／10 command Catalog、production composition、根入口 smoke、4 路径 legacy refusal smoke 全部通过；旧运行数据指纹／mtime 未变化。R8-G 与 R9 未授权，完整真实 adapter／业务 smoke 留待 R8-G。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 只把 `SHUTDOWN_TIMEOUT_SECONDS` 产品默认从 5 秒调整为 60 秒并增加回归测试；删除提交 `7514af3` 只包含 51 个白名单 legacy 源文件，checkpoint `c13d455` 记录完成证据。用户已审查并接受 R8-D 完成结论；本轮又独立复验 283 项 unittest、`compileall`、`git diff --check` 和生产 legacy import／动态 import 扫描，均通过。用户接受决策 230 的 R8-G 5.1～5.6 详细清单，并明确本会话只更新文档、不修改代码；因此 README／`.env.example` 过渡段、完整真实 adapter／业务 smoke 和 G8 提交均未执行。R8-G 只允许修改 8 个文档／示例配置文件；若 G8 发现代码、测试、依赖或公开协议缺陷，必须停止并另提修复清单。当前 R8-D 后、R8-G 前回退顺序为 `7514af3` → `9fbeabc`；未来 R8-G 提交后须先 revert R8-G，再按上述顺序恢复，始终不得触碰旧运行数据。
 
-**下一步：** 保持工作区干净并停止，等待用户审查 R8-D；未经新的明确授权，不修改 README／`.env.example` 的 rollback 段、不执行 R8-G 或 R9。
+**下一步：** 新会话先执行 `/project-bootstrap`，读取决策 230 与 `docs/task.md` R8-G 5.1～5.6，确认工作区仍干净并取得用户对 R8-G 的单独明确授权；未授权前不得修改 README／`.env.example` 或执行 G8，不得进入 R9。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -63,6 +63,8 @@
 226. **R8-D 执行清单细化并保持授权门禁（后由决策 227 解除）** — 当前盘点确认 51 个 Git 跟踪 legacy 源文件、3 个本地 checkpoint 目录与 11 个仍被 v2 使用的直接依赖；执行拆分为删除前快照、精确 literal-path 删除、删除后验证、独立提交和逆序回退，禁止宽泛清理及任何旧运行数据访问。该次清单更新本身不构成删除授权。
 227. **授权新会话执行 R8-D 并收敛活跃文档** — 用户明确授权新会话按已确认清单执行 R8-D，同时要求本会话不删除代码，只将 v2 事实收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md` 并更新 AGENTS.md。新会话从 4.2 开始，R8-D 提交后停止，不自动进入 R8-G。
 228. **辅助文档完成收敛并删除** — capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与 v2 static asset boundary 的有效内容已映射到 design／plan／task／decision；五份辅助文件删除，完整历史由 Git 保留。`docs/current.md` 作为新会话入口继续保留，`docs/` 仅剩 current 与四份主文档。
+229. **R8-D 前置生命周期修复与遗留删除完成** — `b74af9e` 将关闭超时产品默认调整为 60 秒，`7514af3` 精确删除 51 个 legacy 源文件，`c13d455` checkpoint 记录 283 项测试、静态边界、Catalog、真实 smoke 与旧数据未改写证据；R8-D 已完成并通过本轮用户审查。
+230. **确认 R8-G 详细清单但不授权本会话实施** — R8-G 拆为实施门禁、过渡配置／README、活跃文档、自动化／Catalog、真实 adapter／数据边界、提交／回退六组；只允许 8 个文档／示例配置文件，G8 发现代码缺陷必须停止并分离修复。当前会话只做文档 checkpoint，新会话仍须取得 R8-G 单独授权，完成后不得自动进入 R9。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 

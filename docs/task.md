@@ -435,7 +435,7 @@
 
 ## R8 —— 切换与清理
 
-> 决策 191 已授权并完成 R8-P，决策 192 完成 R8-E，决策 225 完成 R8-O 及用户审查。决策 227 已授权新会话执行 R8-D；当前会话只完成文档收敛，未执行任何遗留删除。
+> 决策 191 已授权并完成 R8-P，决策 192 完成 R8-E，决策 225 完成 R8-O 及用户审查，决策 227 授权的 R8-D 已由提交 `7514af3` 完成并由 `c13d455` checkpoint。决策 230 已确认 R8-G 详细清单；当前会话只收敛文档，不实施 R8-G，不修改代码，也不自动授权进入 R9。
 
 ### 1. R8-P —— 切换准备
 
@@ -558,15 +558,54 @@
 - ✅ 提交后确认工作区干净、R8-D 提交可单独 revert，随后才进入 R8-G；R8-G 完成前仍保留 `.env.example`／README 的 `legacy rollback only` 说明。
 - ✅ 记录并复核紧急回退顺序：R8-D 前只需 `git revert 9fbeabc`；R8-D 后先 revert R8-D 恢复 legacy 源码，再 revert `9fbeabc` 恢复旧入口。恢复源码后才允许重新启用 legacy-only 配置，任何回退都禁止触碰旧运行数据。
 
-### 5. R8-G —— 文档、状态与 G8
+### 5. R8-G —— 文档归一化与 G8（清单已确认，实施待单独授权）
+
+#### 5.1 清单确认与实施门禁
 
 - ✅ 在 R8-D 前按用户要求将活跃重构内容收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`，删除并行的 `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md`；历史 v1 内容由 Git 保留。
-- ✅ 在 R8-D 前更新 AGENTS.md：只描述当前 v2 架构、四份活跃文档路由、R8-D 授权／精确删除／验证／回退边界；删除将 legacy 架构写成当前事实的旧说明。
 - ✅ 将 capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与 v2 static asset boundary 的有效内容映射到四份主文档和 Git 历史，并删除五份辅助文档；`docs/` 只保留 `current.md` 与四份主文档。
-- ⬜ 删除 `.env.example`／README 的 legacy rollback 段并更新 README；Agent、tool、command、配置和数据目录必须与实际代码一致。R8-D 后再次复核 AGENTS.md 并删除只适用于执行期的说明。
-- ⬜ R8-D 完成后再次同步 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`、`docs/current.md` 与 AGENTS.md 的最终状态。
-- ⬜ 完成删除后的完整自动化、静态、真实 adapter 与根入口 smoke matrix；确认旧数据保留说明和 R8-E 回退点完整。
-- ⬜ 完成 G8，checkpoint 后停止，等待用户审查；不得自动进入 R9。
+- ✅ 用户审查 R8-D 完成情况：提交 `7514af3` 仅删除 51 个白名单文件，`c13d455` 完成 checkpoint；本轮独立复验 283 项 unittest、`compileall`、`git diff --check` 与生产 legacy import／动态 import 扫描均通过。
+- ✅ 用户接受本节 5.1～5.6 的详细清单，并明确本会话只更新文档、不修改代码；本项只确认清单，不构成 R8-G 实施授权。
+- ⬜ 新会话先执行 `/project-bootstrap`，确认分支仍为 `refactor`、工作区干净、`HEAD` 包含 `c13d455` 与 `7514af3`，并取得用户对 R8-G 的单独明确授权后，才可从 5.2 开始。
+- ⬜ R8-G 只允许修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`；不得修改 `main.py`、`src/`、`tests/`、`scripts/`、`data/`、`pyproject.toml` 或 `uv.lock`。
+- ⬜ 若 G8 暴露生产代码、测试、依赖、公开协议或数据迁移缺陷，立即停止 R8-G，保留失败证据并提交独立修复清单供用户审查；不得把修复混入 R8-G 文档／配置提交，也不得以改测试、放宽契约或跳过真实 adapter 获得绿灯。
+
+#### 5.2 过渡配置与 README 归一化
+
+- ⬜ 删除 `.env.example` 顶部的 R8 观察期说明和 `legacy rollback only` 段；保留所有 v2 正式变量，以及 v2 仍支持的 `BI_ENCODER_MODEL`、`CROSS_ENCODER_MODEL`、`EMBED_BATCH_SIZE` 兼容别名说明。
+- ⬜ 将 `.env.example` 与实际 `Settings.from_env()` 逐项核对：变量名、必填项、默认值、类型、目录边界和兼容别名一致；不得顺手增加或删除 Settings 字段。
+- ⬜ 将 README 从“受控迁移／R8-O 观察期”改为已落地 v2 事实，至少记录唯一生产入口、诊断模块入口、Main／Resume 当前能力、10 个 CLI 命令、环境配置入口、静态输入、v2 运行目录、旧数据保留边界和紧急回退顺序。
+- ⬜ README 不把历史 `/auto-approve-switch`、25-tool baseline、JobSearchAgent 或 R9 备忘写成当前能力；当前数量必须从实际 Catalog／Registry 取证。
+
+#### 5.3 活跃文档与 AGENTS.md 归一化
+
+- ✅ 本 checkpoint 已把 AGENTS.md 从 R8-D 删除执行说明切换为 R8-G 新会话恢复、变更白名单、G8 验证与失败分流说明；R8-D 的精确删除清单继续由 Git、任务历史与决策 226／229 保存。
+- ✅ 本 checkpoint 已将 `docs/current.md`、本任务清单、`docs/design.md` 与 `docs/plan.md` 的当前态改为“R8-D 已完成、R8-G 清单已确认但实施待授权”，并追加决策 230。
+- ⬜ R8-G 实施完成后，再把 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/current.md` 与 AGENTS.md 同步为 G8 已通过的最终 v2 事实；只更新当前态和已确认的 R8 段，不抹除历史阶段证据。
+- ⬜ `docs/decision.md` 保持 append-only：不得改写决策 225～230 的历史语义；R8-G/G8 完成时只更新目录并追加新的完成决策。
+- ⬜ 运行过渡态文本扫描，确认 README、AGENTS.md、`docs/current.md` 及 design／plan 的当前态不再声称 legacy 源码仍存在、R8-O 尚未通过、R8-D 尚待执行或只需单独回退 R8-E；历史章节若保留旧状态，必须明确标为历史。
+
+#### 5.4 G8 自动化、静态与 Catalog 验证
+
+- ⬜ 运行 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py` 与 `git diff --check`；记录测试数量、退出码和任何环境性 warning。
+- ⬜ 扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 和生产配置，确认无 legacy import、动态 import 字符串、旧模块路径或 import-time registration；确认清单中的 legacy production modules 与 3 个 checkpoint 目录仍不存在，保留路径仍完整。
+- ⬜ 从实际 `AgentCatalog.list_descriptors()`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent（Main／Resume）、26 个 ToolDefinition 与 10 个 CLI 命令；文档不得维护与运行时脱离的第二份真相。
+- ⬜ 核对 `.env.example`、README、AGENTS.md 和活跃文档中的入口、配置、Agent、Tool、命令与数据目录描述均与实际代码一致。
+
+#### 5.5 G8 根入口、真实 adapter 与数据边界 smoke
+
+- ⬜ 从真实 `uv run python main.py` 验证 Settings 错误退出码 `2`、启动／composition 错误退出码 `1` 且终端无 traceback、正常 `/exit` 返回 `0`、欢迎与基础对话、全部 10 个 CLI 命令、审批／拒绝、Esc／选择取消、Main→Resume→Main、save／restore／rewind 和资源关闭。
+- ⬜ 完成真实 Chroma／embedder／reranker prepare、reload、query，以及 Memory build／query／delete；确认后台 worker 串行边界、错误状态、显式 close 和进程退出均正常。
+- ⬜ 完成中文、英文、双语 Resume 的 copy／read／edit／replace／build／open，并复验 `merge_pdfs` 的 first→second 页面顺序、审批、幂等 replay、Artifact metadata 与 PDF 输出。
+- ⬜ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 继续使用静态 forbidden-path／legacy-env 扫描、Settings sentinel 和拒绝访问 smoke 证明 production v2 未读取；删除前后只读指纹／mtime 仅用于证明未改写。不得迁移、覆盖、删除或为验证而打开旧用户文件内容。
+- ⬜ 确认 v2 只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`，运行写入只落在 `data/workspace/` 与 `data/v2/`；所有 smoke 结束后无残留 worker、模型加载进程或未关闭 adapter。
+
+#### 5.6 提交、回退与停止门禁
+
+- ⬜ 审查 `git diff --name-status` 与 staged diff；R8-G 提交只能包含 5.1 允许的 8 个文档／示例配置文件，不得包含生产代码、测试、依赖、数据或生成物。
+- ⬜ G8 全部通过后创建独立 R8-G 文档／配置提交；随后执行 `/project-checkpoint`，若 checkpoint 产生额外 diff，则单独提交 checkpoint，不把 R9 设计或实现混入。
+- ⬜ 记录两种紧急回退：当前 R8-D 后、R8-G 前按 `git revert 7514af3` → `git revert 9fbeabc`；R8-G 提交后按逆提交顺序先 revert R8-G 提交，再 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置，任何回退都不得触碰旧运行数据。
+- ⬜ 完成 G8 与 checkpoint 后停止，等待用户审查；不得自动进入 R9。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 
