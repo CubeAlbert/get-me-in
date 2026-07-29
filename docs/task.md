@@ -572,10 +572,10 @@
 
 #### 5.2 过渡配置与 README 归一化
 
-- ⬜ 删除 `.env.example` 顶部的 R8 观察期说明和 `legacy rollback only` 段；保留所有 v2 正式变量，以及 v2 仍支持的 `BI_ENCODER_MODEL`、`CROSS_ENCODER_MODEL`、`EMBED_BATCH_SIZE` 兼容别名说明。
-- ⬜ 将 `.env.example` 与实际 `Settings.from_env()` 逐项核对：变量名、必填项、默认值、类型、目录边界和兼容别名一致；不得顺手增加或删除 Settings 字段。
-- ⬜ 将 README 从“受控迁移／R8-O 观察期”改为已落地 v2 事实，至少记录唯一生产入口、诊断模块入口、Main／Resume 当前能力、10 个 CLI 命令、环境配置入口、静态输入、v2 运行目录、旧数据保留边界和紧急回退顺序。
-- ⬜ README 不把历史 `/auto-approve-switch`、25-tool baseline、JobSearchAgent 或 R9 备忘写成当前能力；当前数量必须从实际 Catalog／Registry 取证。
+- ✅ 删除 `.env.example` 顶部的 R8 观察期说明和 `legacy rollback only` 段；保留所有 v2 正式变量，以及 v2 仍支持的 `BI_ENCODER_MODEL`、`CROSS_ENCODER_MODEL`、`EMBED_BATCH_SIZE` 兼容别名说明。
+- ✅ 将 `.env.example` 与实际 `Settings.from_env()` 逐项核对：变量名、必填项、默认值、类型、目录边界和兼容别名一致；未增加或删除 Settings 字段；示例配置解析验证通过。
+- ✅ 将 README 从“受控迁移／R8-O 观察期”改为已落地 v2 事实，记录唯一生产入口、诊断模块入口、Main／Resume 当前能力、10 个 CLI 命令、环境配置入口、静态输入、v2 运行目录、旧数据保留边界和紧急回退顺序。
+- ✅ README 未把历史 `/auto-approve-switch`、25-tool baseline、JobSearchAgent 或 R9 备忘写成当前能力；Catalog／Registry 数量来源已注明为实际代码导出。
 
 #### 5.3 活跃文档与 AGENTS.md 归一化
 
