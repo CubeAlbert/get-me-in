@@ -587,7 +587,7 @@
 
 #### 5.4 G8 自动化、静态与 Catalog 验证
 
-- ⬜ 运行 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py` 与 `git diff --check`；记录测试数量、退出码和任何环境性 warning。
+- 🛑 阻塞：`uv run python -m unittest discover -s tests/get_me_in -t .` 运行 283 项，1 项失败；`tests/get_me_in/test_settings.py:30` 仍断言 `.env.example` 含 `legacy rollback only`，与 R8-G 5.2 删除要求冲突。按失败分流停止，尚未执行本组其余验证。
 - ⬜ 扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 和生产配置，确认无 legacy import、动态 import 字符串、旧模块路径或 import-time registration；确认清单中的 legacy production modules 与 3 个 checkpoint 目录仍不存在，保留路径仍完整。
 - ⬜ 从实际 `AgentCatalog.list_descriptors()`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent（Main／Resume）、26 个 ToolDefinition 与 10 个 CLI 命令；文档不得维护与运行时脱离的第二份真相。
 - ⬜ 核对 `.env.example`、README、AGENTS.md 和活跃文档中的入口、配置、Agent、Tool、命令与数据目录描述均与实际代码一致。
