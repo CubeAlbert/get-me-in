@@ -435,7 +435,7 @@
 
 ## R8 —— 切换与清理
 
-> 决策 191 已授权并完成 R8-P，决策 192 完成 R8-E，决策 225 完成 R8-O 及用户审查，决策 227 授权的 R8-D 已由提交 `7514af3` 完成并由 `c13d455` checkpoint。决策 230 已确认 R8-G 详细清单；当前会话只收敛文档，不实施 R8-G，不修改代码，也不自动授权进入 R9。
+> 决策 191 已授权并完成 R8-P，决策 192 完成 R8-E，决策 225 完成 R8-O 及用户审查，决策 227 授权的 R8-D 已由提交 `7514af3` 完成并由 `c13d455` checkpoint。决策 230 已确认 R8-G 详细清单，决策 231 已授权本会话从 5.2 开始实施；R8-G 仍不修改生产代码、测试、依赖或数据，也不自动进入 R9。
 
 ### 1. R8-P —— 切换准备
 
@@ -558,7 +558,7 @@
 - ✅ 提交后确认工作区干净、R8-D 提交可单独 revert，随后才进入 R8-G；R8-G 完成前仍保留 `.env.example`／README 的 `legacy rollback only` 说明。
 - ✅ 记录并复核紧急回退顺序：R8-D 前只需 `git revert 9fbeabc`；R8-D 后先 revert R8-D 恢复 legacy 源码，再 revert `9fbeabc` 恢复旧入口。恢复源码后才允许重新启用 legacy-only 配置，任何回退都禁止触碰旧运行数据。
 
-### 5. R8-G —— 文档归一化与 G8（清单已确认，实施待单独授权）
+### 5. R8-G —— 文档归一化与 G8（已获授权，实施中）
 
 #### 5.1 清单确认与实施门禁
 
@@ -566,9 +566,9 @@
 - ✅ 将 capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与 v2 static asset boundary 的有效内容映射到四份主文档和 Git 历史，并删除五份辅助文档；`docs/` 只保留 `current.md` 与四份主文档。
 - ✅ 用户审查 R8-D 完成情况：提交 `7514af3` 仅删除 51 个白名单文件，`c13d455` 完成 checkpoint；本轮独立复验 283 项 unittest、`compileall`、`git diff --check` 与生产 legacy import／动态 import 扫描均通过。
 - ✅ 用户接受本节 5.1～5.6 的详细清单，并明确本会话只更新文档、不修改代码；本项只确认清单，不构成 R8-G 实施授权。
-- ⬜ 新会话先执行 `/project-bootstrap`，确认分支仍为 `refactor`、工作区干净、`HEAD` 包含 `c13d455` 与 `7514af3`，并取得用户对 R8-G 的单独明确授权后，才可从 5.2 开始。
-- ⬜ R8-G 只允许修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`；不得修改 `main.py`、`src/`、`tests/`、`scripts/`、`data/`、`pyproject.toml` 或 `uv.lock`。
-- ⬜ 若 G8 暴露生产代码、测试、依赖、公开协议或数据迁移缺陷，立即停止 R8-G，保留失败证据并提交独立修复清单供用户审查；不得把修复混入 R8-G 文档／配置提交，也不得以改测试、放宽契约或跳过真实 adapter 获得绿灯。
+- ✅ 新会话已执行 `/project-bootstrap`，确认分支为 `refactor`、工作区干净、`HEAD` 包含 `c13d455` 与 `7514af3`，并取得用户对 R8-G 的单独明确授权；现从 5.2 开始。
+- ✅ R8-G 只允许修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`；不得修改 `main.py`、`src/`、`tests/`、`scripts/`、`data/`、`pyproject.toml` 或 `uv.lock`。
+- ✅ 已确认：若 G8 暴露生产代码、测试、依赖、公开协议或数据迁移缺陷，立即停止 R8-G，保留失败证据并提交独立修复清单供用户审查；不得把修复混入 R8-G 文档／配置提交，也不得以改测试、放宽契约或跳过真实 adapter 获得绿灯。
 
 #### 5.2 过渡配置与 README 归一化
 

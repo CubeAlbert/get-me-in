@@ -9,6 +9,7 @@
 ## 目录
 
 - [决策 230 — 确认 R8-G 详细清单但不授权本会话实施](#决策-230--确认-r8-g-详细清单但不授权本会话实施)
+- [决策 231 — 授权新会话实施 R8-G 并保持 G8 分流边界](#决策-231--授权新会话实施-r8-g-并保持-g8-分流边界)
 - [决策 229 — R8-D 前置生命周期修复与遗留删除完成](#决策-229--r8-d-前置生命周期修复与遗留删除完成)
 - [决策 228 — 辅助文档完成收敛并删除](#决策-228--辅助文档完成收敛并删除)
 - [决策 227 — 授权新会话执行 R8-D 并收敛活跃文档](#决策-227--授权新会话执行-r8-d-并收敛活跃文档)
@@ -5470,6 +5471,16 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - G8 必须覆盖完整 unittest、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实根入口与 CLI／handoff／审批／取消、Chroma／Knowledge／Memory、中文／英文／双语 Resume 与 PDF merge、legacy-data 非访问组合证据、写入边界和资源关闭。
 - 当前 R8-D 后、R8-G 前的紧急回退为 `git revert 7514af3` 后 `git revert 9fbeabc`。未来 R8-G 提交后必须按逆提交顺序先 revert R8-G 提交，再 revert `7514af3`，最后 revert `9fbeabc`；legacy 源码恢复前不得实际启用 legacy-only 配置，任何回退不得触碰旧运行数据。
 - R8-G/G8 完成并 checkpoint 后必须停止等待用户审查，不得自动进入 R9。
+
+### 决策 231 —— 授权新会话实施 R8-G 并保持 G8 分流边界
+
+**背景：** R8-D 已完成并通过用户审查，R8-G 5.1～5.6 清单已确认；本会话已完成 bootstrap、分支／工作区／历史核验，用户明确要求开始实施并为每个子任务建立 checkpoint。
+
+**决定：** 授权本会话从 R8-G 5.2 开始自动执行至 R8-G 完成。实施只能修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`；每个子任务独立验证并 checkpoint。若 G8 发现生产代码、测试、依赖、公开协议或数据迁移缺陷，立即停止并提交独立修复清单，不得混入 R8-G 文档／配置提交；完成 G8 与 checkpoint 后停止，不进入 R9。
+
+**理由：** 用户已补齐决策 230 要求的单独明确授权；独立子任务提交和失败分流保持 R8-D 回退点可审查，并防止文档归一化掩盖产品缺陷。
+
+**替代方案：** 继续等待授权——不再适用；将代码修复混入 R8-G——拒绝；自动进入 R9——拒绝。
 
 **理由：**
 
