@@ -50,7 +50,8 @@ class KnowledgeService:
 
     @property
     def state(self) -> KnowledgeState:
-        return self._state
+        with self._lock:
+            return self._state
 
     def start(self) -> None:
         with self._lock:
