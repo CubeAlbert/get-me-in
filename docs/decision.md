@@ -8,6 +8,8 @@
 
 ## 目录
 
+- [决策 238 — R8-G 5.5 真实 adapter 与数据边界 smoke 通过](#决策-238--r8-g-55-真实-adapter-与数据边界-smoke-通过)
+- [决策 237 — 独立修复 SubprocessRunner 并恢复 R8-G 5.5](#决策-237--独立修复-subprocessrunner-并恢复-r8-g-55)
 - [决策 236 — R8-G 5.5 被 Windows subprocess 输出解码缺陷阻塞](#决策-236--r8-g-55-被-windows-subprocess-输出解码缺陷阻塞)
 - [决策 235 — 独立修复 Settings 测试并完成 R8-G 5.4](#决策-235--独立修复-settings-测试并完成-r8-g-54)
 - [决策 234 — G8 被过渡配置测试断言阻塞并分离修复](#决策-234--g8-被过渡配置测试断言阻塞并分离修复)
@@ -5577,3 +5579,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **验证证据：** 真实 smoke 捕获 `UnicodeDecodeError: 'gbk' codec can't decode byte 0x82 in position 524`，随后 `AttributeError: 'NoneType' object has no attribute 'replace'`，定位到 `src/get_me_in/application/artifact_service.py:61`；本次临时 `r8g-resume-*` 目录已清理，未修改 legacy 数据目录。
 
 **待用户决定：** 是否授权独立修改 `src/get_me_in/adapters/subprocess_runner.py` 及必要的最小针对性测试，并以独立提交完成后重新进入 R8-G 5.5。未获授权前不修改代码、不继续 R8-G。
+
+---
+
+### 决策 237 —— 独立修复 SubprocessRunner 并恢复 R8-G 5.5
+
+**背景：** 决策 236 记录的真实 Resume smoke 阻塞来自 Windows `SubprocessRunner` 依赖默认 GBK 解码 `pdflatex` 输出，导致 `UnicodeDecodeError`，随后 `ArtifactService._bound_log()` 收到 `stdout=None`。用户已按精确范围授权独立修改 `src/get_me_in/adapters/subprocess_runner.py` 与 `tests/get_me_in/test_subprocess_runner.py`，明确不得修改 `ArtifactService` 或扩大生产边界。
+
+**决定：** 在 `Popen` 文本输出路径显式使用 UTF-8 并以 `errors="replace"` 处理非 UTF-8 字节；增加真实子进程非法输出回归测试，并为取消路径补充 `stdout`／`stderr` 字符串断言。独立修复提交为 `6a092b5`；修复完成后恢复 R8-G 5.5，继续剩余 G8 smoke，不把代码变更混入 R8-G 文档／配置提交。
+
+**理由：** 该修复只稳定化既有 `ProcessResult` 字符串契约，未修改 `ArtifactService`、公开生产边界或新增能力；`errors="replace"` 保证编译器诊断输出不会因本地代码页差异造成读取线程异常或 `None` 结果。
+
+**验证：** SubprocessRunner 针对性测试 `4/4` 通过；完整 unittest `284/284` 通过，`compileall` 与 `git diff --check` 通过。真实 Resume smoke 完成模板 copy（3 个文件）、中文／英文 build（退出码均为 0）、PDF merge（4 页）、Artifact metadata 记录与 build／merge 幂等 replay，结果为 `RESUME_SMOKE_OK`，四个输出字段均为字符串，未出现 `None`。本次独立提交只包含上述两个授权文件。
+
+**后续：** R8-G 5.5 继续执行真实 Memory、根入口／CLI 交互、legacy data refusal、v2 写入边界与资源关闭矩阵；若出现新的代码、测试、依赖、公开协议或数据边界缺陷，立即停止并另行授权。
+
+---
+
+### 决策 238 —— R8-G 5.5 真实 adapter 与数据边界 smoke 通过
+
+**背景：** 决策 237 恢复 R8-G 5.5 后，需要重新完成真实 Knowledge／Memory、Resume、根入口／命令、legacy data 与资源关闭矩阵；代码修复仍保持在独立提交 `6a092b5`，不得混入文档提交。
+
+**验证：** 真实 KnowledgeService 使用 Chroma、embedding、reranker 完成 `prepare`、reload、query、source delete 与 close，结果为 `KNOWLEDGE_RELOAD_SMOKE_OK added=1 hits=1 deleted=1 after=0 state=ready`；真实 MemoryService 使用 v2 JSON repository、实际 MemoryExtractor／后台 worker 与同一 Knowledge index 完成 build、query、delete，结果为 `MEMORY_SMOKE_OK job=memory-build-1 records=1 hits_before=1 hits_after=0`。Resume smoke 完成中英文 build、4 页 merge、Artifact metadata 与 replay。根入口 PTY 已复核欢迎、`/help`、审批切换、dump、restore、rewind 无候选、ragreload/build-memory 调度、无 handoff 的 `exit_sub` 错误处理与 `/exit`；Settings sentinel、legacy import／动态 import 静态扫描及旧目录只读 metadata 复核通过。
+
+**决定：** R8-G 5.5 的真实 adapter、根入口、数据边界与资源关闭验证项完成；进入 5.6 的 staged allowlist、最终 G8 验收与独立文档／配置提交。若最终 G8 重新发现代码、测试、依赖、公开协议或数据边界缺陷，仍按既定分流立即停止。

@@ -594,11 +594,12 @@
 
 #### 5.5 G8 根入口、真实 adapter 与数据边界 smoke
 
-- 🛑 阻塞：真实 Knowledge／embedding／reranker smoke 与根入口 PTY 欢迎／`/exit` 已通过；Resume build smoke 在 `src/get_me_in/adapters/subprocess_runner.py` 使用默认 GBK 解码 `pdflatex` 输出时触发 `UnicodeDecodeError`，随后 `src/get_me_in/application/artifact_service.py:61` 对 `stdout=None` 抛出 `AttributeError`。该代码修复超出 R8-G 白名单，已停止本组与 5.6。
-- ⬜ 完成真实 Chroma／embedder／reranker prepare、reload、query，以及 Memory build／query／delete；确认后台 worker 串行边界、错误状态、显式 close 和进程退出均正常。
-- ⬜ 完成中文、英文、双语 Resume 的 copy／read／edit／replace／build／open，并复验 `merge_pdfs` 的 first→second 页面顺序、审批、幂等 replay、Artifact metadata 与 PDF 输出。
-- ⬜ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 继续使用静态 forbidden-path／legacy-env 扫描、Settings sentinel 和拒绝访问 smoke 证明 production v2 未读取；删除前后只读指纹／mtime 仅用于证明未改写。不得迁移、覆盖、删除或为验证而打开旧用户文件内容。
-- ⬜ 确认 v2 只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`，运行写入只落在 `data/workspace/` 与 `data/v2/`；所有 smoke 结束后无残留 worker、模型加载进程或未关闭 adapter。
+- ✅ 根入口 PTY 复核欢迎界面、`/help`、`/approval auto`／切回 prompt、`/dump`、`/restore`、`/rewind` 无候选、`/ragreload`／`/build-memory` 调度、无 handoff 时的 `/exit_sub false` typed 错误与 `/exit`；进程正常退出，历史人工 smoke 已覆盖基础对话、handoff、审批拒绝、Esc／选择取消、restore／rewind 与资源关闭。
+- ✅ 真实 KnowledgeService 使用 Chroma／embedder／reranker 完成 prepare、reload、query、source delete 与 close，输出 `KNOWLEDGE_RELOAD_SMOKE_OK added=1 hits=1 deleted=1 after=0 state=ready`；真实 MemoryService 使用 v2 JSON repository、MemoryExtractor 与后台 worker 完成 build／query／delete，输出 `MEMORY_SMOKE_OK job=memory-build-1 records=1 hits_before=1 hits_after=0`。
+- ✅ 独立修复 `src/get_me_in/adapters/subprocess_runner.py` 的确定性 UTF-8 输出解码与替换策略，并在 `tests/get_me_in/test_subprocess_runner.py` 增加非法输出／`None` 回归断言；提交 `6a092b5`。针对性测试 4/4、完整 unittest 284/284、`compileall` 与 `git diff --check` 通过；此前 `UnicodeDecodeError`／`stdout=None` 阻塞已解除。
+- ✅ 已完成中文、英文、双语 Resume copy／read／edit／replace／build／open 的真实链路复验，以及 `merge_pdfs` 的 first→second 页面合并、Artifact metadata 与幂等 replay；本次实际合并 PDF 为 4 页，构建退出码均为 0，未出现 `None`。
+- ✅ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 完成静态 forbidden-path／legacy-env 扫描、`SETTINGS_SENTINEL_OK` 与既有拒绝访问 smoke／只读 metadata 证据；未迁移、覆盖、删除或打开旧用户文件内容。
+- ✅ 确认 v2 只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`，运行写入仅落在 `data/workspace/`、`data/v2/` 与诊断日志目录；本轮真实 worker、模型 adapter、Knowledge／Memory／Artifact 资源均显式 close，根入口进程正常退出。
 
 #### 5.6 提交、回退与停止门禁
 
