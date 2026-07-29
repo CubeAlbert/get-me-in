@@ -30,6 +30,8 @@ class SubprocessRunner:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         started = time.monotonic()
         while True:

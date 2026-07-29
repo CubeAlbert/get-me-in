@@ -31,6 +31,25 @@ class SubprocessRunnerTests(unittest.TestCase):
         self.assertEqual(0, result.exit_code)
         self.assertEqual("ok", result.stdout.strip())
 
+    def test_replaces_invalid_output_without_returning_none(self) -> None:
+        result = SubprocessRunner().run(
+            (
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.buffer.write(b'\\x82'); "
+                "sys.stderr.buffer.write(b'\\x82')",
+            ),
+            cwd=Path.cwd(),
+            timeout_seconds=2,
+            cancellation=CancellationToken(),
+        )
+
+        self.assertEqual(0, result.exit_code)
+        self.assertIsInstance(result.stdout, str)
+        self.assertIsInstance(result.stderr, str)
+        self.assertIn("\ufffd", result.stdout)
+        self.assertIn("\ufffd", result.stderr)
+
     def test_cancellation_terminates_an_active_process(self) -> None:
         token = CancellationToken()
         results: list[object] = []
@@ -51,3 +70,5 @@ class SubprocessRunnerTests(unittest.TestCase):
 
         self.assertFalse(worker.is_alive())
         self.assertTrue(results[0].cancelled)
+        self.assertIsInstance(results[0].stdout, str)
+        self.assertIsInstance(results[0].stderr, str)
