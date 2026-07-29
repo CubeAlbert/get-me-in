@@ -587,10 +587,10 @@
 
 #### 5.4 G8 自动化、静态与 Catalog 验证
 
-- 🛑 阻塞：`uv run python -m unittest discover -s tests/get_me_in -t .` 运行 283 项，1 项失败；`tests/get_me_in/test_settings.py:30` 仍断言 `.env.example` 含 `legacy rollback only`，与 R8-G 5.2 删除要求冲突。按失败分流停止，尚未执行本组其余验证。
-- ⬜ 扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 和生产配置，确认无 legacy import、动态 import 字符串、旧模块路径或 import-time registration；确认清单中的 legacy production modules 与 3 个 checkpoint 目录仍不存在，保留路径仍完整。
-- ⬜ 从实际 `AgentCatalog.list_descriptors()`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent（Main／Resume）、26 个 ToolDefinition 与 10 个 CLI 命令；文档不得维护与运行时脱离的第二份真相。
-- ⬜ 核对 `.env.example`、README、AGENTS.md 和活跃文档中的入口、配置、Agent、Tool、命令与数据目录描述均与实际代码一致。
+- ✅ 独立修复 `tests/get_me_in/test_settings.py` 的过渡配置断言，提交 `ee558b4`；针对性 Settings 测试 12/12 通过。随后完整 unittest 运行 283 项并通过，只有已记录的 Chroma telemetry deprecation warning 与预期错误路径日志。
+- ✅ 扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 和生产配置：生产路径无 legacy import、动态 import 字符串、旧模块路径或 import-time registration；测试中的旧模块字符串仅位于 forbidden-module 防回归清单。51 个 legacy production modules 与 3 个 checkpoint 目录不存在，静态输入和保留路径完整。
+- ✅ 从实际 `AgentCatalog.list_descriptors()`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent（Main／Resume）、26 个 ToolDefinition 与 10 个 CLI 命令；取证输出为 `CATALOG_OK 2 ['main', 'resume'] 26 10`。
+- ✅ 核对 `.env.example`、README、AGENTS.md 和活跃文档中的入口、配置、Agent、Tool、命令与数据目录描述；`compileall` 与 `git diff --check` 通过；并修正 `docs/decision.md` 230～234 的章节嵌套和目录顺序，未改写历史决策正文。
 
 #### 5.5 G8 根入口、真实 adapter 与数据边界 smoke
 

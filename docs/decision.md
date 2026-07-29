@@ -8,11 +8,12 @@
 
 ## 目录
 
-- [决策 230 — 确认 R8-G 详细清单但不授权本会话实施](#决策-230--确认-r8-g-详细清单但不授权本会话实施)
-- [决策 231 — 授权新会话实施 R8-G 并保持 G8 分流边界](#决策-231--授权新会话实施-r8-g-并保持-g8-分流边界)
-- [决策 232 — 完成 R8-G 5.2 过渡配置与 README 归一化](#决策-232--完成-r8-g-52-过渡配置与-readme-归一化)
-- [决策 233 — 完成 R8-G 5.3 活跃文档当前态归一化](#决策-233--完成-r8-g-53-活跃文档当前态归一化)
+- [决策 235 — 独立修复 Settings 测试并完成 R8-G 5.4](#决策-235--独立修复-settings-测试并完成-r8-g-54)
 - [决策 234 — G8 被过渡配置测试断言阻塞并分离修复](#决策-234--g8-被过渡配置测试断言阻塞并分离修复)
+- [决策 233 — 完成 R8-G 5.3 活跃文档当前态归一化](#决策-233--完成-r8-g-53-活跃文档当前态归一化)
+- [决策 232 — 完成 R8-G 5.2 过渡配置与 README 归一化](#决策-232--完成-r8-g-52-过渡配置与-readme-归一化)
+- [决策 231 — 授权新会话实施 R8-G 并保持 G8 分流边界](#决策-231--授权新会话实施-r8-g-并保持-g8-分流边界)
+- [决策 230 — 确认 R8-G 详细清单但不授权本会话实施](#决策-230--确认-r8-g-详细清单但不授权本会话实施)
 - [决策 229 — R8-D 前置生命周期修复与遗留删除完成](#决策-229--r8-d-前置生命周期修复与遗留删除完成)
 - [决策 228 — 辅助文档完成收敛并删除](#决策-228--辅助文档完成收敛并删除)
 - [决策 227 — 授权新会话执行 R8-D 并收敛活跃文档](#决策-227--授权新会话执行-r8-d-并收敛活跃文档)
@@ -5475,52 +5476,6 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 当前 R8-D 后、R8-G 前的紧急回退为 `git revert 7514af3` 后 `git revert 9fbeabc`。未来 R8-G 提交后必须按逆提交顺序先 revert R8-G 提交，再 revert `7514af3`，最后 revert `9fbeabc`；legacy 源码恢复前不得实际启用 legacy-only 配置，任何回退不得触碰旧运行数据。
 - R8-G/G8 完成并 checkpoint 后必须停止等待用户审查，不得自动进入 R9。
 
-### 决策 231 —— 授权新会话实施 R8-G 并保持 G8 分流边界
-
-**背景：** R8-D 已完成并通过用户审查，R8-G 5.1～5.6 清单已确认；本会话已完成 bootstrap、分支／工作区／历史核验，用户明确要求开始实施并为每个子任务建立 checkpoint。
-
-**决定：** 授权本会话从 R8-G 5.2 开始自动执行至 R8-G 完成。实施只能修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`；每个子任务独立验证并 checkpoint。若 G8 发现生产代码、测试、依赖、公开协议或数据迁移缺陷，立即停止并提交独立修复清单，不得混入 R8-G 文档／配置提交；完成 G8 与 checkpoint 后停止，不进入 R9。
-
-**理由：** 用户已补齐决策 230 要求的单独明确授权；独立子任务提交和失败分流保持 R8-D 回退点可审查，并防止文档归一化掩盖产品缺陷。
-
-**替代方案：** 继续等待授权——不再适用；将代码修复混入 R8-G——拒绝；自动进入 R9——拒绝。
-
-### 决策 232 —— 完成 R8-G 5.2 过渡配置与 README 归一化
-
-**背景：** R8-D 删除完成后，`.env.example` 和 README 仍保留 R8 观察期／legacy rollback only 过渡描述；Settings 的正式变量、默认值和兼容别名需要在不扩展配置契约的前提下重新核对。
-
-**决定：** 删除 `.env.example` 的观察期与 legacy-only 配置段，保留 v2 正式配置和三个仍支持的 Knowledge 兼容别名；README 改写为当前 v2 入口、Main／Resume 能力、10 个 CLI 命令、数据边界和回退顺序，并将 Catalog／Registry 数量指向实际代码导出。
-
-**理由：** R8-D 已完成，继续把已落地 v2 描述成观察期会误导新会话；示例配置必须准确反映 `Settings.from_env()`，但历史回退路径仍需在产品文档中保留为工程操作说明。
-
-**验证：** 使用隔离 `UV_CACHE_DIR` 运行 `.env.example` 的 `Settings.from_env()` 解析验证，结果为 `SETTINGS_EXAMPLE_OK`；`git diff --check` 通过。该临时缓存已删除，未进入 Git。
-
-**替代方案：** 保留 legacy-only 段——会继续暗示旧入口可由当前 v2 使用，未采用；增加或删除 Settings 字段——超出 R8-G 范围，未采用。
-
-### 决策 233 —— 完成 R8-G 5.3 活跃文档当前态归一化
-
-**背景：** R8-D 与 R8-G 5.2 已完成，但 AGENTS.md、design、plan 和任务文档仍残留“R8-G 待授权”或“过渡配置尚未删除”的当前态表述，容易让新会话误判执行门禁；历史章节仍需保留其当时语义。
-
-**决定：** 将 AGENTS.md 与活跃文档的当前 R8 段同步为 R8-D 已完成、R8-G 已授权实施、G8 待验收；明确诊断日志 `data/logs/` 与业务运行数据边界；保留历史阶段叙述和决策 225～230 原文，不改写历史。
-
-**理由：** `docs/current.md` 是阶段快照，其他活跃文档必须与其一致；把历史事实和当前事实分开，才能保持 bootstrap、执行和回退路径可审查。
-
-**验证：** `rg` 过渡态扫描确认当前态不再声称 R8-O 未通过、R8-D 待执行或 R8-G 未授权；本子任务只修改 R8-G 白名单中的文档文件。
-
-**替代方案：** 重写历史章节——会破坏审计证据，未采用；仅修改 `current.md` 而保留 AGENTS／design／plan 漂移——会继续误导新会话，未采用。
-
-### 决策 234 —— G8 被过渡配置测试断言阻塞并分离修复
-
-**背景：** R8-G 5.2 已删除 `.env.example` 的 `legacy rollback only` 段，随后执行 G8 第一项完整 unittest；测试套件在 `tests/get_me_in/test_settings.py:30` 仍要求该历史文本存在。
-
-**决定：** 立即停止 R8-G 5.4 后续验证与 5.5／5.6，不修改测试或生产代码。记录 283 项中 1 项失败，并将最小修复分离为独立待授权清单：更新该 Settings 示例配置断言，使其验证 legacy-only 段已删除，同时保留 v2 正式变量和兼容别名断言；修复完成后重新运行完整 G8。
-
-**理由：** R8-G 的文件白名单明确排除 `tests/`，不能把测试修复混入文档／配置提交；继续执行会掩盖验收失败，也不能证明 G8 通过。
-
-**验证证据：** `uv run python -m unittest discover -s tests/get_me_in -t .` 在隔离 `UV_CACHE_DIR` 下运行 1.687 秒，报告 `Ran 283 tests`、`FAILED (failures=1)`；失败断言为 `self.assertIn("legacy rollback only", example)`。
-
-**待用户决定：** 是否授权独立修改 `tests/get_me_in/test_settings.py` 的这一条过渡配置断言，并以独立提交完成后重新进入 R8-G 5.4。未获授权前不修改测试、不继续 R8-G。
-
 **理由：**
 
 - 文件白名单把最终文档归一化与产品修复分开，使 R8-G 可以独立审查、提交和回退。
@@ -5539,3 +5494,71 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 新会话必须先执行 `/project-bootstrap`，以 `docs/current.md` 路由到四份活跃文档，读取本决策和 `docs/task.md` 5.1～5.6。
 - 未取得 R8-G 单独明确授权前，只能审查清单和工作区状态，不得修改 README／`.env.example` 或执行 R8-G/G8。
+
+---
+
+### 决策 231 —— 授权新会话实施 R8-G 并保持 G8 分流边界
+
+**背景：** R8-D 已完成并通过用户审查，R8-G 5.1～5.6 清单已确认；本会话已完成 bootstrap、分支／工作区／历史核验，用户明确要求开始实施并为每个子任务建立 checkpoint。
+
+**决定：** 授权本会话从 R8-G 5.2 开始自动执行至 R8-G 完成。实施只能修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`；每个子任务独立验证并 checkpoint。若 G8 发现生产代码、测试、依赖、公开协议或数据迁移缺陷，立即停止并提交独立修复清单，不得混入 R8-G 文档／配置提交；完成 G8 与 checkpoint 后停止，不进入 R9。
+
+**理由：** 用户已补齐决策 230 要求的单独明确授权；独立子任务提交和失败分流保持 R8-D 回退点可审查，并防止文档归一化掩盖产品缺陷。
+
+**替代方案：** 继续等待授权——不再适用；将代码修复混入 R8-G——拒绝；自动进入 R9——拒绝。
+
+---
+
+### 决策 232 —— 完成 R8-G 5.2 过渡配置与 README 归一化
+
+**背景：** R8-D 删除完成后，`.env.example` 和 README 仍保留 R8 观察期／legacy rollback only 过渡描述；Settings 的正式变量、默认值和兼容别名需要在不扩展配置契约的前提下重新核对。
+
+**决定：** 删除 `.env.example` 的观察期与 legacy-only 配置段，保留 v2 正式配置和三个仍支持的 Knowledge 兼容别名；README 改写为当前 v2 入口、Main／Resume 能力、10 个 CLI 命令、数据边界和回退顺序，并将 Catalog／Registry 数量指向实际代码导出。
+
+**理由：** R8-D 已完成，继续把已落地 v2 描述成观察期会误导新会话；示例配置必须准确反映 `Settings.from_env()`，但历史回退路径仍需在产品文档中保留为工程操作说明。
+
+**验证：** 使用隔离 `UV_CACHE_DIR` 运行 `.env.example` 的 `Settings.from_env()` 解析验证，结果为 `SETTINGS_EXAMPLE_OK`；`git diff --check` 通过。该临时缓存已删除，未进入 Git。
+
+**替代方案：** 保留 legacy-only 段——会继续暗示旧入口可由当前 v2 使用，未采用；增加或删除 Settings 字段——超出 R8-G 范围，未采用。
+
+---
+
+### 决策 233 —— 完成 R8-G 5.3 活跃文档当前态归一化
+
+**背景：** R8-D 与 R8-G 5.2 已完成，但 AGENTS.md、design、plan 和任务文档仍残留“R8-G 待授权”或“过渡配置尚未删除”的当前态表述，容易让新会话误判执行门禁；历史章节仍需保留其当时语义。
+
+**决定：** 将 AGENTS.md 与活跃文档的当前 R8 段同步为 R8-D 已完成、R8-G 已授权实施、G8 待验收；明确诊断日志 `data/logs/` 与业务运行数据边界；保留历史阶段叙述和决策 225～230 原文，不改写历史。
+
+**理由：** `docs/current.md` 是阶段快照，其他活跃文档必须与其一致；把历史事实和当前事实分开，才能保持 bootstrap、执行和回退路径可审查。
+
+**验证：** `rg` 过渡态扫描确认当前态不再声称 R8-O 未通过、R8-D 待执行或 R8-G 未授权；本子任务只修改 R8-G 白名单中的文档文件。
+
+**替代方案：** 重写历史章节——会破坏审计证据，未采用；仅修改 `current.md` 而保留 AGENTS／design／plan 漂移——会继续误导新会话，未采用。
+
+---
+
+### 决策 234 —— G8 被过渡配置测试断言阻塞并分离修复
+
+**背景：** R8-G 5.2 已删除 `.env.example` 的 `legacy rollback only` 段，随后执行 G8 第一项完整 unittest；测试套件在 `tests/get_me_in/test_settings.py:30` 仍要求该历史文本存在。
+
+**决定：** 立即停止 R8-G 5.4 后续验证与 5.5／5.6，不修改测试或生产代码。记录 283 项中 1 项失败，并将最小修复分离为独立待授权清单：更新该 Settings 示例配置断言，使其验证 legacy-only 段已删除，同时保留 v2 正式变量和兼容别名断言；修复完成后重新运行完整 G8。
+
+**理由：** R8-G 的文件白名单明确排除 `tests/`，不能把测试修复混入文档／配置提交；继续执行会掩盖验收失败，也不能证明 G8 通过。
+
+**验证证据：** `uv run python -m unittest discover -s tests/get_me_in -t .` 在隔离 `UV_CACHE_DIR` 下运行 1.687 秒，报告 `Ran 283 tests`、`FAILED (failures=1)`；失败断言为 `self.assertIn("legacy rollback only", example)`。
+
+**待用户决定：** 是否授权独立修改 `tests/get_me_in/test_settings.py` 的这一条过渡配置断言，并以独立提交完成后重新进入 R8-G 5.4。未获授权前不修改测试、不继续 R8-G。
+
+---
+
+### 决策 235 —— 独立修复 Settings 测试并完成 R8-G 5.4
+
+**背景：** 决策 234 记录的 G8 阻塞来自现有测试仍要求已删除的 `legacy rollback only` 文本。用户随后授权按精确范围独立修复 `tests/get_me_in/test_settings.py`，并要求修复提交与 R8-G 文档提交分离。
+
+**决定：** 独立更新 Settings 示例配置测试，使其断言当前 v2 配置存在、legacy-only 段不存在且三个兼容别名仍保留；测试修复提交为 `ee558b4`。随后恢复 R8-G 5.4，完成 unittest、compileall、diff check、静态边界、路径保留和 Catalog 验证；同时修正 `docs/decision.md` 230～234 的章节嵌套，将 231～234 移到决策 230 完整正文之后，并将目录调整为最新决策优先，未改写历史决策内容。
+
+**理由：** 测试修复属于独立产品验证维护，不能混入 R8-G 白名单提交；章节边界修正是文档结构修复，不改变历史决策语义。
+
+**验证：** Settings 定向测试 12/12 通过；完整 `uv run python -m unittest discover -s tests/get_me_in -t .` 为 283/283 通过；`uv run python -m compileall src/get_me_in main.py` 和 `git diff --check` 通过；Catalog 为 2 Agent／26 ToolDefinition／10 CLI 命令；legacy import 扫描仅在测试 forbidden-module 清单命中，生产路径无命中。
+
+**替代方案：** 修改 R8-G 文档以继续满足旧测试——会保留错误过渡事实，拒绝；把测试修复混入 R8-G——破坏独立回退边界，拒绝；重写历史决策正文——破坏审计证据，拒绝。
