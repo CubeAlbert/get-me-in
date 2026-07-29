@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 227 — 授权新会话执行 R8-D 并收敛活跃文档](#决策-227--授权新会话执行-r8-d-并收敛活跃文档)
 - [决策 226 — R8-D 执行清单细化并保持授权门禁](#决策-226--r8-d-执行清单细化并保持授权门禁)
 - [决策 225 — R8-O 完整通过并停在 R8-D 授权门禁前](#决策-225--r8-o-完整通过并停在-r8-d-授权门禁前)
 - [决策 219 — finish thinking 恢复为可选摘要](#决策-219--finish-thinking-恢复为可选摘要)
@@ -3265,7 +3266,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 **决策：**
 
-- 撤销 `docs/refactor-task.md` 中 G2、G3 的完成结论，将上述缺口恢复为待修复任务；已经满足且有测试证据的细分任务保持完成。
+- 撤销 `docs/task.md` 中 G2、G3 的完成结论，将上述缺口恢复为待修复任务；已经满足且有测试证据的细分任务保持完成。
 - R4 Session Aggregate 与编排暂不启动。先提交 G2/G3 修复所需的新文件、类、公开方法与既有接口调整清单，获得用户确认后再编码。
 - 重新验收必须覆盖真实 Prompt 目录注入、provider-neutral message/call-id codec、pending call 的所有闭合路径、真实阻塞 adapter 取消、完整 capability 绑定、session-scoped revision、连续多工具回合及 Settings timeout 生效。
 - 单元测试继续保留，但 Fake LLM/Fake ProcessRunner 不能单独作为真实 adapter 取消或端到端工具发现的验收证据。
@@ -3342,7 +3343,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ### 决策 150 — G4 后强制重新 Review R5 至 R8
 
-**背景：** 对 R5～R8 进行基于 `docs/refactor-plan.md` 的快速风险扫描后，未发现需要立即推翻总体路线的问题，但这些阶段都依赖 R4 最终落地的 Application、SessionView、ApplicationCommand/RuntimeCommand、RuntimeEvent、handoff 和 cancellation 边界。当前仅有修订后的设计，尚不能用来确认 CLI worker、Knowledge 命令接入、R6/R7 并行验收和 R8 删除清单的最终形状。
+**背景：** 对 R5～R8 进行基于 `docs/plan.md` 的快速风险扫描后，未发现需要立即推翻总体路线的问题，但这些阶段都依赖 R4 最终落地的 Application、SessionView、ApplicationCommand/RuntimeCommand、RuntimeEvent、handoff 和 cancellation 边界。当前仅有修订后的设计，尚不能用来确认 CLI worker、Knowledge 命令接入、R6/R7 并行验收和 R8 删除清单的最终形状。
 
 **决策：**
 
@@ -3371,7 +3372,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **决策：**
 
 - 将 R4 和 G4 标记为完成，并在 `docs/current.md` 将当前工作切换到 R5 启动前复审门禁。
-- 不在本次 checkpoint 改写 `docs/refactor-design.md` 或 `docs/refactor-plan.md`；R5 新文件、类和公开方法清单仍须经过复审并获用户确认。
+- 不在本次 checkpoint 改写 `docs/design.md` 或 `docs/plan.md`；R5 新文件、类和公开方法清单仍须经过复审并获用户确认。
 
 **理由：**
 
@@ -3415,7 +3416,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 **决策：**
 
-- R5 新建 `src/get_me_in/cli/`，只包含 `CliApp`、`CommandRegistry`、`InputController`、`Renderer`、`WorkerRunner` 与模块入口；具体文件、对象和公开方法以 `docs/refactor-design.md#67-cli` 的清单为唯一编码边界。
+- R5 新建 `src/get_me_in/cli/`，只包含 `CliApp`、`CommandRegistry`、`InputController`、`Renderer`、`WorkerRunner` 与模块入口；具体文件、对象和公开方法以 `docs/design.md#67-cli` 的清单为唯一编码边界。
 - CliApp 负责 RuntimeEvent → RuntimeCommand 推进；HandoffRequested 只渲染并 Continue，不在 CLI 构造子 Agent context。WorkerRunner 使用单 worker 串行调用 Application，跨线程取消只调用 `Application.request_cancel()`。
 - CommandRegistry 公开 `register/replace/dispatch/help_entries/completions`；R5 注册 `/ragreload` 与 `/build-memory` unavailable spec，R6 以 replace 接入真实 handler，不修改 CliApp 主循环。
 - InputController 只维护进程内导航历史；restore 后由 `SessionView.rewind_points` 重建，不增加 CLI snapshot schema。终态由 CliApp 调用 `Application.snapshot()` 自动保存，失败单独渲染。
@@ -3443,7 +3444,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 **决策：**
 
-- 正式确认 `docs/refactor-design.md#67-cli` 的 R5 文件、对象、构造依赖和公开方法清单；新会话允许按该清单创建 `src/get_me_in/cli/` 与三个对应测试文件。
+- 正式确认 `docs/design.md#67-cli` 的 R5 文件、对象、构造依赖和公开方法清单；新会话允许按该清单创建 `src/get_me_in/cli/` 与三个对应测试文件。
 - 固定 CommandResult/CommandSpec 语义和五步实施顺序；每一步独立验证、独立提交，不跨入 R6/R7。
 - 第一实施切片是 `commands.py` 与 `test_cli_commands.py`；完成后再迁移 InputController/Renderer，不一次创建全部 R5 文件。
 - 当前会话只更新状态与设计文档，不创建 R5 代码；新会话必须先执行 project-bootstrap，以 `docs/current.md` 路由到活跃 refactor design/plan/task/decision。
@@ -3793,7 +3794,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - Application 通过 ResourceStack 管理顶层 owner；close 逆序、幂等、失败隔离并返回 timeout/error report。前台 reload、活动 Runtime 与后台 Memory 使用不同 cancellation 所有权。
 - `Application.finalize_turn()` 负责终态 snapshot 与可选 auto-memory 排队，保持 CLI 不接触 history，且 Memory 失败不覆盖原终态。
 - R6/R7 不再并行。增加 R6-T 强制终止门禁：G6 后只允许 checkpoint、提交证据并停止，未经用户后续明确授权不得进入 R7 或 R8。
-- R6 文件、对象、构造依赖与公开方法以 `docs/refactor-design.md#69-knowledge-与-memory` 为待确认清单；当前会话只更新文档，不创建或修改 R6 代码。
+- R6 文件、对象、构造依赖与公开方法以 `docs/design.md#69-knowledge-与-memory` 为待确认清单；当前会话只更新文档，不创建或修改 R6 代码。
 
 **理由：**
 
@@ -3817,7 +3818,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 **决定：**
 
-- 用户确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 清单；R6 coding 门禁已解除，但本次确认不授权在当前会话编写代码。
+- 用户确认 `docs/design.md#69-knowledge-与-memory` 的 R6 清单；R6 coding 门禁已解除，但本次确认不授权在当前会话编写代码。
 - 当前会话只更新 `docs/current.md`、活跃 refactor 文档与本决策记录，并创建独立 docs checkpoint 提交；不得创建或修改 R6 代码。
 - 后续新会话必须先执行 `/project-bootstrap`，以 `docs/current.md` 路由到活跃文档；第一切片仅创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，只实现 domain/ports/manifest diff 纯逻辑。
 - 第一切片须独立验证、独立提交，之后才按 6.9.4 的固定顺序继续 R6；清单确认不允许一次性创建其余文件，也不扩大 R6 修改范围。
@@ -3991,7 +3992,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - Artifact 使用全新 `data/v2/artifacts/` versioned repository，独立于 Memory 与 SessionSnapshot；save/restore/rewind 不删除、覆盖或回滚工作区文件和 Artifact 记录。
 - ArtifactService 是 tool-facing `ResumeArtifactPort` 的正式实现，并借用 `LocalResumeArtifacts` backend 处理静态模板和 `pdflatex`。现有工具名称、LLM 参数 schema 与 Runtime/ToolOutcome 闭合协议不变。
 - Artifact operation 使用 deterministic key 和 pending → side effect → commit；记录所有 build attempt，只有 `exit_code == 0` 且 PDF 存在时创建可用 PDF Artifact。文件成功但 metadata 提交失败时返回 typed partial failure，并允许 retry reconcile。
-- 将 R7 新文件、对象、构造依赖、公开方法、允许修改文件和六个实施切片写入 `docs/refactor-design.md#6104-r7-新文件对象与公开边界清单待确认`。该具体清单尚待用户最终确认；本 checkpoint 不授权创建 R7 文件或修改代码。
+- 将 R7 新文件、对象、构造依赖、公开方法、允许修改文件和六个实施切片写入 `docs/design.md#6104-r7-新文件对象与公开边界清单待确认`。该具体清单尚待用户最终确认；本 checkpoint 不授权创建 R7 文件或修改代码。
 - G7 通过后仍须 checkpoint 并停止；R8 的旧 `main.py` 入口切换和遗留删除继续需要后续独立授权。
 
 **理由：**
@@ -4018,7 +4019,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 **决定：**
 
-- 用户确认 `docs/refactor-design.md#6105-r7-新文件对象与公开边界清单已确认` 中的新文件、对象、构造依赖、公开方法、允许修改文件和七个实施切片；R7 的 coding 清单门禁解除。
+- 用户确认 `docs/design.md#6105-r7-新文件对象与公开边界清单已确认` 中的新文件、对象、构造依赖、公开方法、允许修改文件和七个实施切片；R7 的 coding 清单门禁解除。
 - 新增独立前置切片 R7-P0：`AgentSpec.temperature: float` 固定 Main `0.1`、Resume `0.2`；`LLMRequest.temperature: float | None = None`；MemoryExtractor 显式传入 `0.0`。OpenAI adapter 只透传非 `None` 值，并校验其为 `[0, 2]` 内的有限数。
 - Artifact 使用 `schema_version=1`；Artifact 保存 `content_hash`，模板来源只保存 `template_name`，operation key 使用 canonical JSON 的 SHA-256。
 - 每次 build attempt 的 stdout/stderr 各自最多持久化 65536 bytes。保存前将 workspace 绝对根替换为 `<workspace>/`，再按 UTF-8 安全的 head/tail 截断，默认各保留 32768 bytes；同时保存原始字节数与 truncated 标记。
@@ -4172,14 +4173,14 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 ### 决策 186 —— 撤回 G7 完成结论并记录 R7-T 审查问题
 
-**背景：** 决策 185 记录了 R7 七个代码切片、真实 Resume smoke、205 项自动化测试与 `compileall` 通过，并据此认定 G7 完成。后续 R7-T 审查在当前环境重新确认 205 项测试、`compileall` 与 `git diff --check` 通过，但发现现有测试没有覆盖四类关键缺口：PENDING build 可能把旧 PDF 误判为当前构建成功；文件副作用后的 metadata preparation 与 ToolFailure 映射没有完整保留 typed partial failure／`changed_paths`；结构合法但字段损坏的 Artifact JSON 会泄漏 `KeyError`／`ValueError` 等非 typed 异常；`refactor-task.md` 仍有直接属于 G7 的 temperature、已有简历修改、capability、审批、取消、restore／rewind 与 handoff 端到端验收项未完成。本轮没有重新执行真实 `pdflatex` smoke。
+**背景：** 决策 185 记录了 R7 七个代码切片、真实 Resume smoke、205 项自动化测试与 `compileall` 通过，并据此认定 G7 完成。后续 R7-T 审查在当前环境重新确认 205 项测试、`compileall` 与 `git diff --check` 通过，但发现现有测试没有覆盖四类关键缺口：PENDING build 可能把旧 PDF 误判为当前构建成功；文件副作用后的 metadata preparation 与 ToolFailure 映射没有完整保留 typed partial failure／`changed_paths`；结构合法但字段损坏的 Artifact JSON 会泄漏 `KeyError`／`ValueError` 等非 typed 异常；`task.md` 仍有直接属于 G7 的 temperature、已有简历修改、capability、审批、取消、restore／rewind 与 handoff 端到端验收项未完成。本轮没有重新执行真实 `pdflatex` smoke。
 
 **决定：**
 
 - 撤回决策 185 中“R7/G7 已完成”的门禁结论；R7 七个切片已经编码、205 项测试与既有 smoke 的事实记录继续保留，但不能等同于 G7 已通过。
 - 将当前状态设为“R7-T 审查修复待授权”；在四类审查问题修复、未完成 G7 端到端项补齐并重新 checkpoint 前，不得进入 R8。
-- 在 `docs/refactor-task.md` 记录旧 PDF reconcile、typed partial failure、损坏 JSON typed failure 与完整 G7 复验四组待办；本 checkpoint 只记录问题，不授权或实施任何代码修复。
-- 后续若获用户授权，必须先确认修复切片与验证范围；修复后运行针对性测试、完整自动化测试、`compileall`、`git diff --check` 与真实 Resume smoke，并同步 `current.md`、`refactor-task.md`、`decision.md` 后再决定是否恢复 G7。
+- 在 `docs/task.md` 记录旧 PDF reconcile、typed partial failure、损坏 JSON typed failure 与完整 G7 复验四组待办；本 checkpoint 只记录问题，不授权或实施任何代码修复。
+- 后续若获用户授权，必须先确认修复切片与验证范围；修复后运行针对性测试、完整自动化测试、`compileall`、`git diff --check` 与真实 Resume smoke，并同步 `current.md`、`task.md`、`decision.md` 后再决定是否恢复 G7。
 
 **理由：**
 
@@ -4234,7 +4235,7 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
   2. `ArtifactService.build_pdf()` 与 Resume tool 统一首次和重放的 backend exception／无结果状态，禁止相同 committed attempt 从 `ToolFailure` 漂移为 `ToolSuccess`。
   3. `build_application()` 对 ResourceStack 建立前后的构造失败统一逆序关闭已创建 owner，覆盖 injected LLM validation、Memory prompt 读取和 knowledge start 失败。
 - R8 候选实施顺序固定为 R8-P 准备 → R8-E 根入口切换 → R8-O 强制观察与用户审查 → R8-D 精确遗留删除 → R8-G 文档与 G8。R8-E 和 R8-D 必须是独立提交；R8-O 未通过时使用 `git revert <R8-E commit>` 回退。
-- R8 不新增 runtime class、service、port、schema 或公开方法。根入口只允许委托现有 `src.get_me_in.cli.main.main()`；遗留删除范围和保留范围以 `refactor-design.md#611-入口切换观察与遗留删除r8待确认清单` 为准。
+- R8 不新增 runtime class、service、port、schema 或公开方法。根入口只允许委托现有 `src.get_me_in.cli.main.main()`；遗留删除范围和保留范围以 `docs/design.md` 第 6.11 节为准。
 - 旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 是不迁移的历史用户数据；R8 只验证 v2 不访问，禁止自动删除。`.ipynb_checkpoints` 必须按精确路径复核后单独清理。
 - 本轮只更新审查结论和 R8 任务细节，不授权或实施 R7-T2／R8 coding。
 
@@ -5350,3 +5351,36 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - `git ls-files` 只读盘点得到 51 个 tracked legacy 源文件；白名单内未发现额外非忽略文件。
 - 三个 checkpoint 目录当前共 5 个文件，均未被 Git 跟踪；路径属性检查未发现 reparse link。
 - 对 `src/get_me_in/` 与 `tests/get_me_in/` 的直接依赖扫描确认 11 个项目依赖均仍有使用点。
+
+---
+
+### 决策 227 —— 授权新会话执行 R8-D 并收敛活跃文档
+
+**背景：** R8-D 精确删除清单已经完成分析并由提交 `0b2cda7` checkpoint。用户明确表示本会话不执行删除，将在新会话执行 R8-D；同时要求把重构期间并行维护的设计、计划和任务内容收敛到原始四份项目文档，并更新 AGENTS.md，使新会话能够恢复正确状态并直接执行已授权的 R8-D。
+
+**决定：**
+
+- 用户对 `docs/task.md` R8-D 4.1～4.5 清单的审查和执行授权已经完成；本会话只迁移文档，不删除 legacy 源码、checkpoint 或旧运行数据。
+- `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md` 的完整 v2 内容分别收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`，三份并行文档删除；历史 v1 内容只由 Git 保存。
+- `docs/current.md` 的活跃路由改为 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`；AGENTS.md 只描述当前 v2 事实、R8-D 执行边界和新会话恢复顺序，不再把 legacy 架构写成生产事实。
+- 新会话必须先执行 `/project-bootstrap`，然后从 `docs/task.md` 4.2 删除前安全快照开始，依次完成精确删除、删除后验证和独立 R8-D 提交。
+- R8-D 授权不包含 R8-G 或 R9。完成 R8-D 独立提交与 checkpoint 后必须停止，等待用户审查和后续授权。
+
+**理由：**
+
+- 单一 design／plan／task 路径消除“原始文档是 v1、refactor 文档是 v2”的双重事实源，新会话不再需要根据分支猜测应该读取哪一套。
+- `current.md` 继续承担唯一阶段快照，四份项目文档分别承担设计、计划、任务和决策；AGENTS.md 只提供稳定工作约定和当前门禁，不复制完整状态。
+- 将授权、执行起点和终止门禁写入 current/task/decision/AGENTS 四处，可以让新会话在不依赖聊天历史的情况下正确执行 R8-D，同时避免误入 R8-G。
+
+**曾考虑的替代方案：**
+
+- 保留三份 `refactor-*` 文档并只修改 AGENTS.md —— 仍保留两套事实源，无法完成用户要求的文档收敛，未采用。
+- 删除历史 v1 内容而不保留追溯 —— Git 已完整保存旧版本，没有必要继续在工作树维护重复文档。
+- 在本会话顺带执行 R8-D —— 用户明确要求只更新文档并在新会话执行，拒绝越过会话边界。
+- 把 R8-G 一并授权 —— 本次授权仅针对 R8-D；R8-G 包含最终文档、README、配置和完整 G8 验收，仍需独立执行和审查。
+
+**验证：**
+
+- 收敛后活跃文件固定为 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`，`docs/current.md` 只引用这四份文件。
+- `docs/task.md` 将 R8-D 授权项标记完成，并把新会话起点固定为 4.2；R8-D 其余执行项保持待办。
+- 本次变更仅涉及 Markdown 项目文档与 AGENTS.md，不包含任何 legacy 源码、checkpoint 或 `data/` 变更。

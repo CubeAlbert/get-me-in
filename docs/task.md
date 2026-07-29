@@ -1,351 +1,613 @@
 # 任务列表
 
-工作流遵循 **Plan → Execute → Result Validation → Replan** 循环。工作按三个层级组织：**阶段 → 任务 → 子任务**。阶段是顺序执行的 —— 完成一个阶段后再开始下一个。LLM 在创建时规划顺序，更新时必须保持该顺序。
+> 适用分支：`refactor`。架构目标见 `docs/design.md`，里程碑见 `docs/plan.md`。
 
-| 符号 | 状态 | 含义 |
+## 状态说明
+
+| 标记 | 状态 | 说明 |
 |------|------|------|
 | ⬜ | 待开始 | 尚未开始 |
-| 🔄 | 进行中 | 正在执行 |
-| ✅ | 已完成 | 已完成 |
-| ⏸️ | 阻塞 | 被阻塞 —— 在标记后注明原因 |
-| ⛔ | 终止 | 任务被终止，由新任务替代 |
-| 📌 | 暂缓 | 已记录，留待后续阶段处理 |
+| 🔄 | 进行中 | 当前正在处理；全表同时只能有一个 |
+| ✅ | 已完成 | 已实现并通过对应门禁 |
+| ⏸️ | 阻塞 | 受外部条件或用户决策阻塞 |
+| ⛔ | 终止 | 不再实施，并应注明替代任务 |
+| 📌 | 暂缓 | 仍有效，但推迟到后续阶段 |
+
+## R0 —— 基线冻结与决策门禁
 
-状态标记设置在子任务上。任务和阶段的状态由子任务推导：若任一子任务为 🔄，其所属任务即为进行中；若所有子任务均为 ✅，则任务为已完成。
+### 1. 现状研究
+
+- ✅ 读取 `docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 和相关 decision。
+- ✅ 盘点 CLI、LLM、Agent、Tool、Plan、Session、RAG、Memory、Workspace、Resume 当前能力。
+- ✅ 区分已实现、测试壳、路线图未完成、方案取消和架构受限能力。
+- ✅ 定位 BaseAgent/App 巨型对象、跨层私有访问、全局状态、导入副作用和魔法控制字段。
+- ✅ 统计当前实际工具数为 25，并记录与文档 23 的漂移。
+- ✅ 形成 `docs/design.md` 与 `docs/plan.md`；历史 v1 内容由 Git 保留。
 
-**终止规则：**
-- 当某个任务不再适用或方向需要调整时，将当前未完成的子任务标记为 ⛔
-- 在终止任务下方以 `>> 替代：[新任务名称]` 的格式追加替代任务
-- 替代任务沿用子任务列表格式，从 ⬜ 开始
-- 原终止任务保留在文档中，不做删除 —— 作为决策轨迹留存
-
----
-
-## 阶段 1 —— M1: 项目骨架 & 基础设施
-
-### 1. 项目配置 & 依赖
-
-- ✅ 完善 `pyproject.toml`：添加 `sentence_transformers`、`chromadb`、`rich`、`openai`、`python-dotenv` 等依赖
-- ✅ `uv sync` 安装所有依赖并验证
-
-### 2. 配置模块 (`src/config.py`)
-
-- ✅ 实现 `config.py`：启动时调用 `load_dotenv()`、校验 4 个必填环境变量（缺失则打印清单并 `sys.exit(1)`）、将变量挂到模块属性上
-- ✅ 其他模块统一 `from src.config import config` 获取配置，不再直接调用 `os.environ`
-
-### 3. LLM 适配层 (`src/llm/`)
-
-- ✅ 实现 `client.py`：`LLMClient` 双 tier 调用（`chat_pro()` / `chat_flash()`），从环境变量读取 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`LLM_PRO_MODEL`、`LLM_FLASH_MODEL`
-- ✅ 创建 `.env.example` 模板文件（含 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`LLM_PRO_MODEL`、`LLM_FLASH_MODEL` 四项）
-
-### 4. CLI 交互层 (`src/cli/`)
-
-- ✅ 实现 `handler.py`：抽象基类 `Handler`（`process(user_input: str) -> str`）+ `DemoHandler`（输入 1→纯文本、2→markdown、3→选项列表），仅用于测试 I/O 管线
-- ✅ 实现 `app.py`：`App` 类，依赖注入 `Handler`，对话循环 `while True: input() → handler.process() → rich`，不直接调 LLM
-- ✅ 实现 `$EDITOR` 临时文件长文本输入（用户输入特殊命令时弹出编辑器）
-- ✅ `rich` 渲染 Markdown 输出（代码块、表格、列表等）
-
-### 5. 提示词模块 (`src/prompts/`)
-
-- ✅ 实现 `loader.py`：`get(**kwargs)` 读取 `general_agent/` 下所有 `.md`（按文件名排序拼接）并替换占位符；`get_raw(name, **kwargs)` 加载 `data/prompts/<name>.md` 跳过拼接
-- ✅ 创建 `data/prompts/general_agent/` 下 9 个模板文件（`01_role.md` ~ `09_reserved.md`，经 M4 扩展）
-- ✅ 创建 `data/prompts/PLACEHOLDER.md`（14 个 per-Agent 占位符清单）
-- ⛔ 创建 `data/prompts/memory_compressor.md` —— memory_compressor.md 已删除，替代为 `data/prompts/memory/builder.md`
->> 替代：M3-6 实现 MemoryBuilder 提示词模板
-- 编排不再使用独立提示词 —— 调度子 Agent 定义为工具，通过 `{{ADDITION_TOOLS}}` 注入
-
-### 6. 入口集成
-
-- ✅ 更新 `main.py`：初始化 LLM Client → PromptLoader → CLI App，串联完整对话流程
-- ✅ 端到端验证：启动程序 → 输入一句话 → LLM 返回 → rich 渲染输出
-- 📌 `06_output_format.md` 已定义结构化 JSON 输出，`LLMHandler` 当前透传原始回复不做解析 —— JSON 解析留待 M4 主 Agent 实现
-
-## 阶段 2 —— M2: RAG 模块
-
-### 1. 参考数据目录
-
-- ✅ 创建 `data/reference/` 及 6 个子目录（`interview_questions/`、`company_info/`、`knowledge_base/`、`resume_examples/`、`recommended_materials/`、`job_descriptions/`）
-- ✅ 每种子目录下创建示例 `.md` 文件，按 `---` 分隔条目，供开发调试使用
-
-### 2. Embedder (`src/rag/embedder.py`)
-
-- ✅ 加载 bi-encoder 模型（模型名由环境变量 `BI_ENCODER_MODEL` 配置）
-- ✅ 实现 `embed(texts: list[str], batch_size: int) -> list[list[float]]`，将文本列表转为归一化向量列表，`batch_size` 默认值由环境变量 `EMBED_BATCH_SIZE` 配置
-
-### 3. Chunker (`src/rag/chunker.py`)
-
-- ✅ 定义 `Chunk` 数据类（`id: str`、`content: str`、`metadata: dict`）
-- ✅ 实现 `chunk(text: str, separator: str = "\n---\n", metadata: dict = {}) -> list[Chunk]`，按 `---` 切分文本，每个片段生成 uuid4 并附加 metadata；自动过滤仅含空白字符的片段
-
-### 4. ChromaStore (`src/rag/store.py`)
-
-- ✅ 封装 Chroma 客户端：内部持有 `Embedder`；通过 `CHROMA_PERSIST_DIR` 环境变量切换内存/持久化模式；不预建 collection，不校验 collection 名
-- ✅ 实现 `add(chunks: list[Chunk], collection: str) -> None`：内部调 `Embedder.embed()` 向量化，将原始文本存入 Chroma `documents` 字段，metadata 透传
-- ✅ 实现 `query(query_text: str, collection: str, filter: dict | None = None, top_k: int | None = None) -> list[Chunk]`：接受文本内部向量化（top_k 默认由 `RETRIEVAL_TOP_K` 配置），透传 where filter，结果还原为 Chunk 对象（含 content）
-- ✅ 实现 `remove(source_file: str, collection: str) -> None`：按 `source_file` metadata 过滤删除（供增量更新使用）
-
-### 5. Retriever (`src/rag/retriever.py`)
-
-- ⛔ 已废弃 — Store.query() 改为接受文本、内部向量化后，Retriever 职责退化为一层透传，无存在必要
-- >> 替代：直接使用 ChromaStore.query() 做检索
-
-### 6. Reranker (`src/rag/reranker.py`)
-
-- ✅ 独立加载 cross-encoder 模型（模型名由 `CROSS_ENCODER_MODEL` 配置），`__init__` 时用假数据跑一次 `predict()` 预热
-- ✅ 实现 `rerank(query: str, candidates: list[Chunk], top_k: int | None = None) -> list[Chunk]`：对 (query, candidate.content) 逐对评分（batch_size 由 `RERANK_BATCH_SIZE` 配置），分数写入 `Chunk.metadata["rerank_score"]`，按分数降序返回 top_k 条（默认值由 `RERANK_TOP_K` 配置）；异常直接抛出
-
-### 7. RagLoader (`src/rag/loader.py`)
-
-- ✅ 构造函数注入 `ChromaStore` + `Reranker`，内部创建 `Chunker`；定义 `LoaderState` 枚举（IDLE / LOADING / READY / ERROR）
-- ✅ 实现 `auto_load()`：同步 + `threading.Lock`（LOADING 时拒绝）；内存模式全量 / 持久化模式 `.last_update` 增量；异常写 `state=ERROR` + `error_msg` 不抛出；完成后写时间戳 + `state=READY`
-- ✅ 实现 `load_file(path: Path) -> None`：同步 + 同锁，`remove(source_file)` → chunk → add；异常写 state 不抛出
-- ✅ 暴露 `state: LoaderState` 和 `error: str | None` 属性
-- ✅ `src/rag/__init__.py` 模块入口：双检锁懒加载单例 + `start()` 后台初始化 + 环境变量静默进度条；公共 API：`start()` / `search()` / `load()` / `is_ready()`
-- ✅ `/ragreload` 命令：CLI 命令 `/ragreload [关键词]`，调 `load()` 完成重载；`_reload_full()` 返回文件计数；`_reload_matched()` 逐文件 try/except 防崩
-
-### 8. 端到端验证
-
-- ✅ 示例参考数据就绪（`cs_fundamentals.md` 含 19 条条目）
-- ✅ `search("快速排序")` → 经 `store.query()` 召回 → `Reranker.rerank()` 精排 → 返回结果正确（快速排序 0.973，归并排序 0.311，分数区分度良好）
-
-## 阶段 3 —— M3: 记忆模块 + RAG 收尾
-
-### 0. M2 收尾 — Chunker 抽出 + RAG 接口扩充 + 文件改造
-
-- ✅ Chunker/Chunk 从 `src/rag/chunker.py` 移至 `src/utils/chunker.py`，更新 `src/rag/` 下所有 import
-- ✅ Chunker.chunk() 新增 front-matter 解析：正则匹配 `^---` KV 块 → 注入所有 Chunk；无 front-matter 返回 []，留 TODO 桩
-- ✅ RAG `search()` 加 `filter: dict | None` 参数，透传 Chroma `where`
-- ✅ RAG 新增 `delete(where: dict, collection="memories") -> int`，空 `{}` 抛 `ValueError`
-- ✅ 现有 `data/reference/` 下所有 `.md` 文件加 front-matter（`category: <子目录名>`）
-- ✅ `RagLoader` 改为从 `src.utils.chunker` 导入 Chunker
-
-### 1. 日志模块 (`src/logger.py`)
-
-- ✅ `_setup()` 内部初始化：读 `config.LOG_LEVEL` / `config.LOG_DIR` → 创建 `RotatingFileHandler`（10MB × 5）+ `StreamHandler(stderr, ERROR+)` → 绑定 root logger
-- ✅ `get_logger(name: str) -> logging.Logger`：首次调用触发 `_setup()`，返回 `logging.getLogger(name)`
-- ✅ `src/config.py` 追加 `LOG_LEVEL`（默认 `INFO`）、`LOG_DIR`（默认 `data/logs/`）
-- ✅ 创建 `data/logs/` 目录（`.gitkeep` 占位，确保目录被 Git 追踪）
-
-### 2. 记忆数据结构 (`src/memory/schemas.py`)
-
-- ✅ `Memory` 数据类：`id: str` (uuid) + `agent: str` + `time: datetime` + `content: str` + `category: str` ("fact"/"preference") — 实现在 `src/memory/schemas.py`
-- ✅ `Message` 数据类：7 字段（id/timestamp/role/message/event_type/event_payload/thinking）— 抽出为通用基础设施 `src/message.py`
-- ✅ 事件数据类：`MemoryWrittenEvent(agent, memory, file_path)`、`MemoryDeletedEvent(agent, file_path)` — 实现在 `src/memory/schemas.py`
-- ✅ `chunk_to_memory(chunk: Chunk) -> Memory` 转换函数 — 实现在 `src/memory/schemas.py`
-
-### 3. MemoryStore 文件读写 + 事件 (`src/memory/store.py`) + 格式化工具 (`src/utils/formatters.py`)
-
-- ✅ `write_memory(agent, memory) -> str | None`：取 `memory.time` 生成时间戳文件名 → 格式化 front-matter + 正文 → 创建目录 → 写文件 → 发射 `MemoryWritten`
-- ✅ `delete_memory(agent, file_path) -> bool`：删文件 → 发射 `MemoryDeleted`
-- ✅ `on_write(callback)` / `on_delete(callback)` 事件注册 + `_emit_write` / `_emit_delete` 发射
-- ✅ 失败仅记日志，不抛异常
-- ✅ 格式化工具 `src/utils/formatters.py`（`timestamp_to_filename` + `memory_to_markdown`）从 Store 抽出
-
-### 4. MemoryIndexer (`src/memory/indexer.py`)
-
-- ✅ `__init__(store)`：注册 `on_write` / `on_delete` 回调
-- ✅ `_on_write(event)` → `rag.load_file(file_path)` 增量索引
-- ✅ `_on_delete(event)` → `rag.delete(where={"source_file": file_path})` 移除索引
-- ✅ RAG facade 新增 `load_file()` 公开函数
-
-### 5. MemoryRetriever (`src/memory/retriever.py`)
-
-- ✅ `search(query, agent=None, top_k=5) -> list[Memory]`：内部调 `rag.search(filter={"agent": agent})` → `chunk_to_memory()`
-- ✅ RAG 未就绪时 `is_ready()` 前置检查，抛出 `RuntimeError`
-- ✅ 单 Agent 检索 + 跨 Agent 全量检索 验证通过
-
-### 6. 目录 + 文件准备
-
-- ⛔ 创建 `data/memories/` 及 5 个 Agent 子目录 — `write_memory()` 自动 `mkdir(parents=True)`，`RagLoader` 目录不存在直接返回 0，无需预建
-
-### 7. MemoryBuilder + 提示词 (`src/memory/builder.py`)
-
-- ✅ 完善 `data/prompts/memory/builder.md` 系统提示词（facts/preferences 两分类，换行分隔，严格 JSON 输出）
-- ✅ `MemoryBuilder.__init__(llm: LLMClient)`：加载 `builder.md` 提示词
-- ✅ `build(conversation, agent) -> list[Memory]`：对话 → JSON 序列化 → flash LLM (`response_format=json_object`) → `json.loads()` → `\n` 拆分 → `\n\n---\n\n` 拼接 → 注入 `id`/`time`/`agent`/`category` → Memory 列表
-- ✅ 添加 `time.time()` 耗时 debug 日志
-- ✅ `timestamp_to_filename()` 加 `category` 参数避免同时间戳冲突
-
-### 8. Facade (`src/memory/__init__.py`)
-
-- ✅ `init()`：懒加载单例 Store + Indexer + Retriever（类 RAG `_ensure_init` 模式）
-- ✅ `build_memories(conversation, agent, llm, sync_mode)`：sync 模式调 builder → store.write_memory() 返回列表；async 开 daemon 线程返回 None
-- ✅ `search_memories(query, agent, top_k)`：包装 MemoryRetriever.search()
-- ✅ `delete_memory(agent, file_path)`：包装 Store.delete_memory()
-
-### 9. 端到端验证
-
-- ✅ sync 模式：对话 → 构建 → 写入 → 检索 全链路验证
-- ✅ async 模式：对话 → 构建（后台）→ 等待 → 检索验证
-- ✅ 删除：写入 → 检索确认存在 → 删除文件 → Chroma 行数 -1
-- ✅ `/ragreload` 全量重载后检索验证（metadata 持久化确认）
-- ✅ Chroma in-memory `delete(where=)` 漏删已修复：全量 `/ragreload` 用 `delete_collection` 原子删除后重建；单文件重载保留 `remove` + `add`（接受间歇性不匹配，见决策 39）
-
-## 阶段 4 —— M4: BaseAgent & 主 Agent
-
-### 1. CLI + Response 升级 (`src/cli/` + `src/response.py`)
-
-- ✅ `Response` dataclass：`type`（`finish` / `progress`）+ `message` + `thinking` + `switch_agent`/`switch_context`/`switch_tool_call_id`
-- ✅ `Handler` 协议升级：`process(Message) -> Response` + `_parse_llm_reply()` 静态方法
-- ✅ `App` 升级：`Message` 包装输入 + `Response` 解包渲染 + `thinking` 展示
-- ⛔ 删除 `LLMHandler` — LLMHandler 改为临时桩适配新协议，待 MainAgent 就绪后替换
-- ✅ `uv add questionary`
-- ✅ `config.py` 环境变量支持 bool 类型（`_VAR_SPECS` 第 4 列 `is_bool`，循环内自动转换）
-- ✅ CLI 等待动效：LLM 请求期间展示 `.`/`..`/`...` + 计时（`\r` 单行覆盖）
-
-### 2. Tool 系统 (`src/tools/registry.py`)
-
-- ✅ `Tool` dataclass：name / purpose / use_when / do_not_use_when / arguments_schema / expected_output / handler / agent + `to_xml()`
-- ✅ `@tool` 装饰器：`input_schema` 扁平化 → `inspect.signature` 自动补齐 type/required → 构建 Tool → 注册至 `ToolRegistry`
-- ✅ `ToolRegistry`：全局注册表，`get_for(agent_name)` 按 agent 过滤
-
-### 3. BaseAgent (`src/agents/base.py`)
-
-- ✅ Agent loop：解析 LLM JSON（扁平 schema）→ 调工具 → 结果包装为 `tool_call_result` Message 喂回 LLM → 循环
-- ✅ 对话历史管理：`list[Message]` → `Message.to_json()` 序列化，system prompt 独立存储不混入 history
-- ✅ 终止条件：`event_type="finish"` / `max_rounds`（`AGENT_MAX_ROUNDS` 环境变量，默认 10）
-- ✅ 工具调度：7b 未知工具（附工具列表）/ 7c PROGRESS 统一路径（审批由 `_should_confirm()` + UIBridge 在 `_execute_tool()` 内部处理）
-- ✅ `process(Request) -> Response` 接口：单步执行 + `_pending_tool`/`_pending_switch`/`_pending_reject` 三标记断点恢复，`_round_counter` 安全阀
-- ✅ `_execute_tool()` 审批门禁：`_should_confirm(tool)` → `get_bridge().confirm()` 弹窗；拒绝 → `__reject__` TOOL_CALL_RESULT + `_pending_reject` → FINISH
-- ✅ `_execute_tool()` 参数兼容：`inspect.signature` 过滤 LLM 传入的未知参数（静默忽略），缺失必填参数返回错误让 LLM 自修复
-- ✅ `write_memory()` 便利方法
-- ✅ LLM JSON 解析：`Message.from_llm_reply()` 静态方法统一反序列化，解析失败注入 `system_message` 让 LLM 自修复
-- ✅ 工具错误处理：执行失败时附带 `arguments_schema` + `expected_output` 让 LLM 自修复调用参数
-
-### 4. 主 Agent (`src/agents/main_agent.py`)
-
-- ✅ `MainAgent(BaseAgent)`：14 个占位符值实现，继承 BaseAgent 全能力，已替换 LLMHandler 作为 main.py 入口
-- ✅ 审批 gate：`_should_confirm()`（ConfirmMode）+ UIBridge `get_bridge().confirm()` 跨线程弹窗，替代原 CONFIRM ResponseType 方案
-- ✅ 模板文件重排序 — `05_communtion_style.md` → `06`，`06_output_format.md` → `07`，`07_input_format.md` → `08`，`08_reserved.md` → `09`
-- ✅ 新增 `data/prompts/general_agent/05_sub_agents.md` — XML 包裹 `<SubAgents>{{SUB_AGENTS_LIST}}</SubAgents>`
-- ✅ `data/prompts/PLACEHOLDER.md` 新增 `{{SUB_AGENTS_LIST}}` 条目
-- ✅ `docs/design.md` 目录树 + 模板表格同步更新
-- ✅ `AgentRegistry`（`src/agents/registry.py`）— 全局单例（`get_agent_registry()`），SubAgentDescriptor + register/get/list/list_agents_prompt
-- ✅ `BaseAgent` 新增 `_get_sub_agents_list()` 方法（默认 `""`），placeholders 加 `SUB_AGENTS_LIST`
-- ✅ `MainAgent._get_sub_agents_list()` 覆盖 — 调用 `get_agent_registry().list_agents_prompt()`
-- ✅ `Response` 新增 `switch_agent` / `switch_context` / `switch_tool_call_id` — FINISH + switch 表示切换
-- ✅ `switch_to_subagent` tool（`src/tools/switch_tools.py`）— `agent=["main"]`，`confirm_mode=ALWAYS`，`input_schema` 声明参数
-- ✅ `switch_to_mainagent` tool（`src/tools/switch_tools.py`）— `agent=["*"]`（非 main 可见），`confirm_mode=ALWAYS`
-- ✅ `BaseAgent._execute_tool()` 检测 `__switch__` → 返回 `None`，设 `_pending_switch`（含 tool_call_id）
-- ✅ `BaseAgent.process()` 检测 `_pending_switch` → 返回 `Response(FINISH, switch_agent=..., switch_context=..., switch_tool_call_id=...)`
-- ✅ `BaseAgent.process()` CONTINUE 分支守卫 `_pending_tool is not None`（切回时不崩）
-- ✅ 审批拒绝处理：`__reject__` sentinel → `_execute_tool()` 追加 TOOL_CALL_RESULT 关闭调用链 + `_pending_reject` → `process()` 返回 FINISH → App 回外层循环等用户输入
-- ✅ `App._get_handler(name)` + FINISH 分支 switch 检测（main→sub 保存 tool_call_id，sub→main 注入 TOOL_CALL_RESULT）
-- ✅ `/exit_sub` CLI 命令 — 子 Agent 时注入 system_message 让其整理上下文 → switch_to_mainagent
-- ✅ `BaseAgent._get_agent_key()` + MainAgent 覆盖 `MAIN_AGENT_KEY` + `ToolRegistry.get_for(agent_key=, main_key=)`
-- ✅ `ToolRegistry` `"*"` sentinel — 匹配所有非主 Agent；`main_key` 参数保持依赖方向
-- ✅ `MAIN_AGENT_KEY = "main"` 常量（`src/agents/registry.py`）— 替换 4 文件 6 处 magic string
-- ✅ `src/cli/uibridge.py` — UIBridge 跨线程通信桥（`select`/`confirm` + 模块级 `get_bridge()` 注入）+ App `_handle_bridge_request()` 自定义输入
-- ✅ `ResponseType.CONFIRM` 分支从 `App.run()` 移除；tools 统一走 PROGRESS
-- ✅ `JobSearchAgent`（`src/agents/job_search/`）— 测试用子 Agent，14 占位符 + 职位搜索分析
-- ✅ `main.py` — 注册 JobSearchAgent + 导入 switch_tools
-- ✅ `provide_choices` — 通过 UIBridge 实现，工具 handler 调用 `get_bridge().select()` 直连 CLI，选项末尾自动追加"🔧 自定义输入..."
-
-### 5. 入口集成 (`main.py` + `src/config.py`)
-
-- ✅ 组装 `MainAgent` 注入 `App`（`MainAgent(llm, prompts)` 替换 `LLMHandler`）
-- ✅ `AGENT_MAX_ROUNDS` 环境变量
-- ✅ 工具注册导入：`system_tool`（`get_current_datetime` + `get_working_dir`）+ `web_tool`（`web_search`）
-- ✅ `WORKING_DIR` 环境变量（默认 `data/temp/`）
-
-### 6. 面试问答 Agent (`src/agents/interview/`)
-
-- ⬜ `InterviewAgent(BaseAgent)`：问 → 答 → 评价 → 下一题 loop
-- ⬜ RAG search 工具：`@tool search_questions(query)` → 检索 `data/reference/interview_questions/`
-- ⬜ `return` 退回主 Agent（通过 `switch_to_mainagent` 工具，自动注入）
-
-### 7. 端到端验证
-
-- ✅ 主 Agent dispatch → JobSearchAgent 接管 → switch_to_mainagent 退回主 Agent → provide_choices 选项交互 全链路通过
-
----
-
-## 阶段 5 —— M5: 简历 Agent
-
-### 1. 通用工具实现（✅ 完成）
-
-- ✅ **通用工具设计讨论** — 详见 `docs/file-reader-design.md`
-- ✅ **`ToolCallException`** — `src/tools/exceptions.py`，`message` + `suggestion`
-- ✅ **`file_reader.py` 底层** — `read_text` / `list_directory` / `search_text` / `read_pdf` / `read_docx`
-- ✅ **沙箱校验** — `_validate_path()` 函数
-- ✅ **Agent key 常量** — `MAIN_AGENT_KEY` / `RESUME_AGENT_KEY` / `JOB_SEARCH_AGENT_KEY` / `INTERVIEW_AGENT_KEY`
-- ✅ **JobSearchAgent key 修复** — `_get_agent_key()` 返回 `JOB_SEARCH_AGENT_KEY`
-- ✅ **`workspace_read` / `workspace_list` / `workspace_grep` / `workspace_search_file`** — 4 个免审批读工具
-- ✅ **`workspace_replace` / `workspace_write` / `workspace_delete` / `workspace_move` / `workspace_edit`** — 5 个审批写工具
-- ✅ **`workspace_open`** — 系统默认工具打开文件
-- ✅ **`read_customer_file`** — 外部文件读取（txt/md/pdf/docx）
-- ✅ **`query_memory` + `query_reference_data`** — RAG 查询，`MemoryType` / `ReferenceCategory` StrEnum
-- ✅ **History dump** — `src/utils/dumper.py` + `BaseAgent.dump_history()` + `/dump` CLI 命令
-- ✅ **`copy_template`** — 复制 LaTeX 模板到工作区，`src/tools/resume_tools.py`
-- ✅ **`build_pdf`** — `pdflatex` 编译，60s timeout，`src/tools/resume_tools.py`
-- ✅ **ResumeAgent 壳** — `src/agents/resume/agent.py`，14 占位符，已注册到 main.py
-- ✅ **依赖** — `charset-normalizer` / `pdfplumber` / `python-docx`
-
-### 2. Plan 机制（✅ 完成）
-
-- ✅ **PlanItem + PlanStatus 数据模型**
-- ✅ **BaseAgent Plan 内部支持**
-- ✅ **system_message 动态注入**
-- ✅ **Plan 工具 handler**
-- ✅ **CLI plan 面板**
-- ⏸️ **Sticky plan（Phase 3）** — `questionary` 与 `rich.Live` 终端冲突
-
-### 3. 数据结构
-
-- ⛔ **Resume 数据模型** — `src/agents/resume/schemas.py` 已删除。Schema-based 填充未启用，无需维护
-- 📌 **Schema-based 填充工具** — 暂不实现，改为 LLM 用 workspace 工具直接编辑 LaTeX
-
-### 4. ResumeAgent 实现
-
-- ✅ **ResumeAgent(BaseAgent)** — 14 占位符，已注册
-- ✅ **copy_template 工具** — 复制模板到工作区
-- ✅ **build_pdf 工具** — pdflatex 编译 PDF
-- 📌 **start_resume_building 工具** — 暂不实现（LLM 直接操作 LaTeX）
-- 📌 **plan_resume_edits 工具** — 暂不实现（LLM 直接操作 LaTeX）
-- 📌 **LaTeX 动态构建** — 暂不实现
-
-### 5. 记忆集成
-
-- ✅ **通用记忆基础设施** — `AUTO_MEMORY_ON_EXIT` 配置项（默认 false）+ Agent FINISH 时自动异步写入记忆 + `/build-memory` CLI 命令手动触发 + `write_memory()` 目录名修正为 agent_key
-- ⛔ 简历版本写入记忆模块 — 不予实现。ResumeAgent 通过 `query_memory` 工具即可获取用户个人信息和偏好
-- ⛔ 从记忆检索历史简历 — 不予实现。同上，`query_memory` 已覆盖检索需求
-
-### 6. M5-Review — 工具与提示词审查
-
-- ✅ **Review workspace 工具** — workspace_replace（读后替换约束）、workspace_edit（读后编辑守卫）、workspace_delete（批量删除）、switch_tools（provide_choices 优化）
-- ✅ **Review resume 工具** — copy_template（PLACEHOLDER.txt→README.md + 双重后缀防护）、build_pdf（encoding 修复）、模板全面重构（CHN+EN 同步）
-- ✅ **Review Agent 提示词** — ResumeAgent 去除显式工具名、整合 DecisionPolicy/ExitCriteria/GeneralPrinciples
-- ✅ **Review RAG 工具** — 确认无需修改，跳过审查
-- ⛔ **Review MainAgent 提示词** — 用户不需要 review MainAgent prompt
->> 替代：无
-
-### 7. 会话状态管理（auto-save / restore / rollback）
-
-- ✅ **Auto-save on FINISH** — 每次 LLM FINISH 自动保存对话历史到 `data/save/{session_id}/`
-- ✅ **SaveManager 模块** — `src/utils/saver.py`，封装 session_id、文件路径、延迟清理、plan 持久化
-- ✅ **Message.from_dict() 往返序列化** — 支持 `dataclasses.asdict()` → JSON → Message 重建，含 `plan_status`
-- ✅ **`/restore` 命令** — 无参数时 `questionary.select` 交互选择，带 id 直接恢复；恢复 `_history` + `_plan`
-- ✅ **延迟子 Agent 清理** — sub→main 后等 main 保存成功再删 sub 存档，避免崩溃丢数据
-- ✅ **Plan 持久化** — `session.json` 按 `{agent_key}_plan` 存储，跨 save 保留所有 agent 的 plan
-- ✅ **SaveManager 抽出** — auto-save/restore 逻辑从 `app.py` 移至 `SaveManager` 类
-- ✅ **Rollback（回滚到上句话）** — `/rewind` 命令：选择历史输入 → 预填到 CLI → 确认后截断 `_history`；纯内存操作，不涉及文件存储
-- ✅ **Restore 上下文预览** — choice title 显示 preview；恢复后渲染最近 5 条消息面板
-- ✅ **plan_status 落地到 Message** — 从 system prompt 文本注入改为 per-message stamp；`_to_openai()` 不再拼接 plan JSON
-- ✅ **plan 活性过滤** — 全部 cancelled/completed 时不持久化 plan，同时清除 session.json 旧 plan
-- ✅ **Restore sub 会话 switch_tool_call_id 修复** — 从 main history 恢复最后一条 switch_to_subagent 的 id
-- ✅ **plan_status 简化 schema** — 从完整 `PlanStatusInfo` 改为 `plan_to_simple()` 字符串格式 `{current: "序号|任务", completed: [...], remaining: [...]}`；对应 prompt 当前文件名为 `07_input_format.md`
-- ✅ **TOOL_CALL_RESULT plan_status stamp** — `_execute_tool()` 返回的 result_msg 在 append 前 stamp
-- ✅ **replan 工具** — `plan_tools.py` 新增 replan（保留已完成项，替换未完成项）；`BaseAgent._replan()` 实现
-- ✅ **update_plan_status 提示强化** — `use_when` 强调任何状态变化必须先更新再继续
-
-### 8. Esc 中断 Agent 处理（✅ 基础完成，📌 即时中止暂缓）
-
-- ✅ **Cancel 标志** — `src/cli/uibridge.py`：`_cancel_event` + `_set_cancel()` / `_clear_cancel()` / `is_cancelled()`，遵循与 `_current_bridge` 相同的模块级 get/set 模式
-- ✅ **Esc 按键检测** — `src/cli/app.py`：`_check_esc_pressed()` 跨平台非阻塞检测（Windows `msvcrt.kbhit()` / Unix `select`+`tty.setraw`），spinner loop 中每 0.1s 轮询
-- ✅ **Spinner 状态保持** — 检测到 Esc 后 `is_cancelled()` 分支持续显示 "⏸️ 正在中断..."，不会被后续 spinner 刷新覆盖
-- ✅ **三个 Cancel 检查点** — `src/agents/base.py` `process()` 中：
-  - #1 while 循环开始（line 530）— `_pending_tool` 已清除，历史一致，直接返回 FINISH
-  - #2 LLM 调用返回后（line 551）— LLM 回复尚未写入 history（line 563 才 append），丢弃无副作用
-  - #3 工具执行前（line 480）— **注入合成 TOOL_CALL_RESULT**（`__cancelled__: True`），确保 history 中有 TOOL_CALL 必有 TOOL_CALL_RESULT，LLM 下次不会产生歧义
-- ✅ **Cancel 标志清理** — `_clear_cancel()` 在内层 agent loop 开始前调用，每次新用户输入从干净状态开始
-- 📌 **即时中止 LLM 调用（httpx transport close）** — 暂缓实现。按 Esc 后若 daemon 线程正阻塞在 `chat_pro()` 的 socket read 中，需等 API 返回后才能中断（10-30s）。理想方案是主线程关闭 httpx transport → socket 断开 → daemon 线程 ~50ms 内收到异常 → 返回 FINISH。但这需要 LLMClient 从底层支持 abort 作为一等公民 API，属于 LLMClient 重构范畴。详见 `docs/design.md#417-agent-中断机制`
+### 2. 用户决策
+
+- ✅ 用户确认 R-D1：在 `src/get_me_in/` 受控重写。
+- ✅ 用户确认 R-D2：v2 禁止可变全局单例和 import-time 注册。
+- ✅ 用户确认 R-D3：采用 RuntimeCommand/RuntimeEvent 强类型协议。
+- ✅ 用户确认 R-D4：Resume 保留直接编辑 LaTeX，增加 Workspace/Artifact service。
+- ✅ 用户确认 R-D5：授权核心自动化测试。
+- ✅ 用户确认 R-D6：不迁移旧运行数据，仅保留 reference/prompts/resume templates。
+- ✅ 旧 Session、Memory、Chroma、temp、Plan、handoff 和 input history 可直接废弃。
+
+### 3. 基线材料
+
+- ✅ 建立 capability parity matrix，逐项列出输入、输出、副作用和失败行为。
+- ⛔ 选取 v1 Session 样例用于 migration —— 不迁移旧会话，已由 R-D6 终止。
+- ⛔ 选取旧 Memory/Workspace 样例用于 migration —— 不迁移旧运行数据，已由 R-D6 终止。
+- ✅ 核对 `data/reference/`、`data/prompts/`、`data/resume/template/` 的 v2 输入边界。
+- ✅ 建立 CLI smoke checklist。
+- ✅ 记录旧入口可运行的基线 commit。
+- ✅ 完成 G0 审查；未通过前不创建 v2 代码文件。
+
+## R1 —— v2 骨架与 Composition Root
+
+> 开始前先向用户列出本阶段所有新文件、类和公开方法，确认后再创建。
+
+### 1. 包结构与依赖规则
+
+- ✅ 创建 `src/get_me_in/` 分层目录。
+- ✅ 定义 v2 import 规则：domain → 无外部 adapter；application → domain/ports；adapter → ports；CLI → application。
+- ✅ 增加开发期依赖检查方式，确保 v2 不 import 旧 BaseAgent/App/UIBridge/Registry。
+- ✅ 清理源码树中的 `.ipynb_checkpoints` 方案，实际删除留到 R8。
+
+### 2. Settings 与基础 ports
+
+- ✅ 设计 typed Settings 字段、解析、必填校验和错误返回。
+- ✅ 保留 `config` 在第三方模型 import 前设置 HF 环境的能力，但移除业务模块 import 时 `sys.exit()`。
+- ✅ 定义 Clock、IdGenerator、LLMPort、SessionRepository 最小协议。
+- ✅ 创建实例级 CancellationToken。
+
+### 3. 声明式 Agent 与 Prompt
+
+- ✅ 定义 AgentKey、Capability、AgentStyle、AgentSpec。
+- ✅ 定义 AgentDescriptor 与 AgentCatalog。
+- ✅ 定义 PromptRenderer，复用现有 `data/prompts/general_agent/` 模板。
+- ✅ 将 MainAgent 14 个方法转换为一个声明式 spec。
+- ✅ 明确 prompt 模板缺失变量和多余变量的错误类型。
+
+### 4. Composition Root
+
+- ✅ 设计 `build_application(settings)` 方法清单。
+- ✅ 显式创建所有 service/catalog/adapter，不使用导入副作用。
+- ✅ 确认构造两个 Application 实例不会共享 history、registry、cancel 或 session id。
+- ✅ 完成 G1 验收。
+
+## R2 —— Agent Runtime 与事件协议
+
+### 1. Domain event
+
+- ✅ 定义 provider-neutral ConversationRecord union 与 Role；不再使用 ConversationEvent/EventKind。
+- ✅ 定义 RuntimeCommand：UserMessage/Continue/Approve/Reject/Selection/Cancel/ToolResult。
+- ✅ 定义 RuntimeEvent：Progress/Approval/Selection/ToolStarted/ToolFinished/Handoff/Completed/Failed/Cancelled。
+- ✅ 删除 v2 中对 `__switch__`、`__reject__`、`__cancelled__` 的需求。
+
+### 2. Agent state machine
+
+- ✅ 定义 RuntimeState 和单一 phase 枚举，替代 `_pending_tool/_pending_switch/_pending_reject` 组合；R4 将其并入 AgentSessionState。
+- ✅ 实现 user input → LLM → finish 基本路径。
+- ✅ 实现 tool call → pause → tool result → LLM 路径。
+- ✅ 实现 output format 修复与最多一次格式提示注入。
+- ✅ 实现 unknown tool、max rounds、timeout 和 provider failure。
+- ✅ 提取 ModelReplyParser；domain Message 不直接解析 provider 字符串。
+- ✅ 保证 thinking 不写回下一轮模型输入。
+- ✅ 将当前 Agent 可见的 ToolCatalog 与 AgentCatalog 描述注入 Prompt，禁止依赖 Fake LLM 硬编码工具调用。
+- ✅ 定义 provider-neutral message codec，显式保存 tool name、arguments、call id 与结果关联；Handoff 必须携带原 tool call id。
+- ✅ 限制 WAITING_FOR_TOOL 阶段可接受的 command；Cancel、新 UserMessage、Reject 与 Handoff 均不得遗留孤立 TOOL_CALL。
+- ✅ 支持单次用户请求中的连续多工具回合，并使 max rounds 与 `Settings.llm_timeout_seconds` 可配置且真实生效。
+
+### 3. LLM adapter 与取消
+
+- ✅ 定义 LLMRequest/LLMResult/ModelProfile。
+- ✅ 实现 OpenAI sync adapter，集中 pro/flash/provider thinking 配置。
+- ✅ 设计并实现活动调用 handle 的 cancel/close/reset 生命周期。
+- ✅ 使用真实阻塞 adapter 验证调用执行中可取消，且下一次调用仍可继续；Fake LLM 仅作 unit test。
+- ✅ 禁止 Runtime 访问 OpenAI SDK 私有 transport。
+- ✅ 重新完成 G2 验收；86 项核心自动化测试通过，临时 v2 Runtime Runner 已完成人工可用性验证。
+
+## R3 —— Tool Runtime、Plan 与 Workspace
+
+### 1. Tool Catalog
+
+- ✅ 定义 ToolDefinition、ToolSchema、ToolPolicy、ToolContext、ToolOutcome。
+- ✅ 将 decorator 改为仅创建定义，不自动写全局 Registry；或改为显式 builder。
+- ✅ 为全部工具绑定明确 capability，并验证 Main Agent 不可见 workspace/resume/retrieval 等领域工具。
+- ✅ ToolCatalog 提供目录导出，使文档/诊断可看到真实工具数。
+- ✅ 统一参数过滤、必填校验、业务错误和框架错误。
+- ✅ 完整处理审批、拒绝、取消、新用户输入与 handoff 的 call closure，并增加 pending 状态转换测试。
+
+### 2. Plan
+
+- ✅ 将 Plan/PlanItem/PlanStatus 提取为 domain model。
+- ✅ 将 create/update/cancel/replan 移入 PlanService。
+- ✅ ToolContext 注入 PlanService，删除 `_plan_agent`。
+- ✅ 保证同一 plan 最多一个 IN_PROGRESS。
+- ✅ 定义 Plan snapshot/restore codec。
+
+### 3. Workspace
+
+- ✅ 定义 WorkspacePort 与 LocalWorkspace。
+- ✅ 使用 `Path.is_relative_to(root)` 做边界检查。
+- ✅ 集中编码检测、文本行模型、glob/search 和结构化错误。
+- ✅ 写入与编辑使用原子文件替换。
+- ✅ 将 read-before-edit 授权绑定到 session/tool context；纯内容 hash 不得跨 Session 复用为编辑授权。
+- ✅ 移除进程级 `_read_files`。
+- ✅ 定义批量删除部分成功的结果类型。
+- ✅ 使 ProcessRunner 在子进程执行期间支持 cancel/terminate，而不只在 `subprocess.run()` 前后检查 token。
+
+### 4. 现有工具归类
+
+- ✅ 迁移 2 个 system tools。
+- ✅ 迁移或重新定义 web_search tool。
+- ✅ 以 typed handoff/interaction 替代 3 个 switch tools 的控制逻辑。
+- ✅ 迁移 4 个 Plan tools。
+- ✅ 迁移/合并 10 个 workspace tools，保持外部功能等价。
+- ✅ 迁移 read_customer_file，明确外部路径授权边界。
+- ✅ 暂以 port adapter 迁移 2 个 RAG query tools，R6 再替换实现。
+- ✅ 迁移 copy_template/build_pdf，R7 接入 ArtifactService。
+- ✅ 输出完整的 25 工具迁移矩阵。
+- ✅ 重新完成 G3 验收；86 项核心自动化测试通过，临时 v2 Runtime Runner 已完成人工可用性验证。
+
+## R4 —— Session Aggregate 与编排
+
+### 1. Session model
+
+- ✅ 定义 `AgentSessionState`、`SessionState`、`HandoffFrame`、`SessionTurnView`、`SessionView`、`SessionPreview`；R4 不提前定义 Artifact schema。
+- ✅ 将现有 RuntimeState 的 history/phase/pending/model-call/repair 状态并入 AgentSessionState，SessionState 成为唯一规范状态源。
+- ✅ AgentRuntime 改为 `advance(state, command) -> RuntimeTransition`，不得保留第二份长期状态；Application 对外仍一次返回一个 RuntimeEvent。
+- ✅ 每个 Application 同时只管理一个活动 Session；生成真实 session id，并按 session/agent 构造 ToolContext、CancellationToken、Plan 绑定与 WorkspaceAccessState。
+- ✅ Settings 增加 `sessions_dir`，默认使用全新 `data/v2/sessions/`，不得读取旧 `data/save/`。
+- ✅ CLI input history 留在 R5 InputController，不进入 domain SessionState；R5 复审决定不增加独立持久化 schema，restore 后从 SessionView rewind_points 重建。
+- ✅ 提供公开 `view/snapshot/restore/rewind(turn_id)/list_sessions/dump` API。
+- ✅ 禁止 CLI 直接访问 `_history`、`_plan` 或 Agent 私有方法。
+
+### 2. Orchestrator
+
+- ✅ 实现 Hub-and-Spoke 路由约束。
+- ✅ Main Runtime 只注入可路由 descriptor；子 Agent Runtime 不持有完整 AgentCatalog。
+- ✅ 定义 `CompleteHandoff` 与 `FailHandoff`，使 WAITING_FOR_HANDOFF 可以按原 call id 闭合。
+- ✅ 实现带 turn_id/call_id 的 main→sub handoff frame。
+- ✅ 切换到子 Agent 时以 handoff context 启动目标 Runtime，正式 CLI 后续只需继续驱动 active agent。
+- ✅ 实现 sub→main summary、frame pop、active agent 恢复与源 tool call 原子闭合。
+- ✅ 实现 `/exit_sub` 的 application command，不向 Agent 私有 history 直接 append。
+- ✅ 处理未知 Agent、目标启动失败、嵌套切换、子 Agent 失败/取消和中断中的 handoff；所有失败路径均闭合原 call id。
+- ✅ 使用测试专用 sub Agent 完成 G4；真实 Resume AgentSpec 不提前从 R7 移入。
+
+### 3. Snapshot repository
+
+- ✅ 定义 `schema_version=2` SessionSnapshot DTO。
+- ✅ 每条 ConversationRecord 增加 turn_id；rewind 只允许用户回合边界，不截断在 tool call/result 中间。
+- ✅ 分离 provider-facing ConversationCodec、磁盘 SessionSnapshotCodec 与 JSON file repository。
+- ✅ 明确定义可恢复稳定 phase；活动 LLM/Process 归一化为 interrupted/cancelled，禁止自动重放 TOOL_READY 副作用。
+- ✅ 原子写入并报告保存失败；保存失败不得触发旧 sub 数据清理。
+- ⛔ 实现 v1 session/meta/message/plan → v2 migration —— R-D6 明确不迁移。
+- ✅ 实现 list、preview、dump。
+- ✅ Restore/Rewind 同步修正 pending action、plan 和 handoff stack，并清除 WorkspaceAccessState，编辑前重新读取。
+- ✅ Restore 在替换当前 Session 前拒绝未装配 Agent；snapshot 校验 handoff frame 与 active agent、源 pending call 和 turn id 一致。
+- ✅ 增加 Session、Orchestrator、Snapshot codec 与 JSON repository 的核心自动化测试文件，覆盖 G4 失败路径。
+- ✅ R5 前复审补齐 handoff 启动/取消/嵌套、复杂 rewind、workspace grant 清理、损坏 snapshot 与公开 rewind projection 测试。
+- ✅ 完成 G4 复验（104 项核心自动化测试通过）。
+
+## R5 —— CLI 拆分与交互迁移
+
+### 0. 启动前复审门禁
+
+- ✅ G4 完成并 checkpoint 后，基于实际 Application/Session/Command/Event/cancellation API 重新 Review R5～R8。
+- ✅ 复核 R5 CliApp、CommandRegistry、InputController、Renderer、WorkerRunner 的职责和新文件/公开方法清单，确保 CLI 不吸收业务编排。
+- ✅ 复核 R6 命令接入与资源清理、R6/R7 并行及验收依赖、R8 删除/回退/临时 Runner 清理范围。
+- ✅ 将复审结论与 R5 清单同步到 refactor design/plan/task/decision。
+- ✅ 用户已确认 `docs/design.md#67-cli` 的 R5 新文件、类与公开方法清单；允许在新会话按清单开始编码。
+
+### 1. CLI shell
+
+- ✅ 第一实施切片：创建 `commands.py` 与 `test_cli_commands.py`，固定强类型 command spec/result、解析、alias、replace 和核心 command handlers；110 项 v2 核心自动化测试通过，独立提交 `151b04a`。
+- ✅ 创建 CliApp，仅保留输入循环和 application command/event 转发；覆盖 handoff continue、审批、终态自动 snapshot 与保存失败提示。
+- ✅ 创建 CommandRegistry，命令帮助与 handler 同源。
+- ✅ 创建 InputController，管理 autocomplete/history/prefill/editor；使用 `set_completions(CompletionProvider)` 动态读取 CommandRegistry 的最新补全。
+- ✅ 创建 Renderer，管理 Markdown/Plan/spinner/error/recap。
+- ✅ 创建 WorkerRunner，使用单 worker 串行调用 Application，跨线程只调用公开 `request_cancel()`；覆盖并发拒绝、取消与关闭。
+- ✅ 创建 `cli/__init__.py`、`cli/main.py` 与 `cli/__main__.py`，提供 `python -m src.get_me_in.cli` 独立入口；保持旧 `main.py` 不变。
+
+### 2. 命令迁移
+
+- ✅ `/help`；从当前注册表按命令名排序，列出 alias 与参数说明。
+- ✅ `/edit`
+- ✅ `/dump`
+- ✅ `/restore [session_id]`；无参数时显示序号、最新用户输入预览与保存时间，通过 InputController 选择 session 并映射回 session_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application。
+- ✅ `/rewind`；无参数时显示序号与用户输入预览，通过 InputController 选择公开 rewind point，并映射回精确 turn_id；列表末尾提供“❌ 取消”，取消时直接返回 CLI 且不调用 Application；回退前保存目标文本，成功后预填到下一次 CLI 输入框，不能从回退后的投影反查目标。
+- ✅ `/ragreload [target]`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
+- ✅ `/build-memory`：R5 先注册并明确报告 R6 尚不可用，R6 再接真实 handler。
+- ✅ `/exit_sub`；`ExitSubAgent` 返回的 RuntimeEvent 通过 `CommandAction.DRIVE` 交回 CliApp，`ToolFinished` 会继续发送 `Continue` 直至终态；主 Agent 下的无效调用以可读错误返回输入框。
+- ✅ `/approval`；无参数切换 `prompt/auto`，或用参数显式设置；策略只决定 ApprovalRequested 是否自动 Approve，且不保留 `/auto-approve-switch`。
+- ✅ `/exit`
+
+### 3. Interaction 与跨平台
+
+- ✅ ApprovalRequested → questionary 选项列表“✅ 执行 / ❌ 取消” → Approve/Reject command；不得使用 `y/N` 确认框。`Reject` 写入拒绝结果闭合 call 后以 `Cancelled` 结束当前内层循环并归还输入框，实际工具失败仍交回模型；代码、自动化验证与人工 smoke 已完成。
+- ✅ SelectionRequested → 选择/自定义输入 → SubmitSelection command；代码、自动化验证与人工 smoke 已完成。
+- ✅ 删除 UIBridge 和模块级 current bridge 的 v2 依赖。
+- ✅ Windows UTF-8、Esc、Ctrl+C、EOF 和 editor-not-found 行为验证。
+- ✅ Input history 使用进程内 CLI-owned state；restore 后从 `SessionView.rewind_points` 重建，不增加独立持久化 schema；人工 smoke 已通过。
+- ✅ Completed/Failed/Cancelled 后自动 snapshot；保存失败单独渲染且不得覆盖原终态。
+- ✅ HandoffRequested 后发送 Continue，验证目标 Runtime 已由 Orchestrator 启动。
+- ✅ 工具开始显示脱敏参数摘要，工具结束显示截断结果预览；Plan 工具结束后显示只读 Plan 表格，不解析工具输出字符串。
+- ✅ 命令 handler 的预期异常由 CliApp 统一渲染，`/restore`、`/rewind`、`/exit_sub` 等无效参数或状态不会终止 CLI；补充 CommandRegistry → CliApp → Continue 的跨组件回归测试。
+- ✅ G5 通过后删除临时 `scripts/v2_runtime_smoke.py`。
+- 📌 Sticky Plan：Renderer 稳定后评估，默认不阻塞 G5。
+- ✅ 完成 G5 验收并通过审查修复复验；用户确认 V50–V56 人工 smoke 可接受，134 项核心自动化测试与 CLI 编译验证通过，DeepSeek Web Search 最小 provider smoke 已通过。
+
+## R5-F —— LLM `thinking` 契约修复
+
+### 1. 输出、domain 与事件契约
+
+- ✅ 对齐 OutputFormat（当前文件名为 `08_output_format.md`）：finish 必须包含非空 string `message`，`thinking` 可省略；省略、`null`、空字符串或空白字符串均表示没有摘要，其他非空值必须是 string。tool_call 可省略 thinking；missing/type error 注入“具体错误 + 完整 canonical output format”并最多修复一次。
+- ✅ 为 assistant `MessageRecord` 与 `ToolCallRecord` 增加可选 thinking；user/system/tool result 不产生 thinking。
+- ✅ AgentRuntime 不再丢弃 `ModelReply.thinking`；Completed 通过 MessageRecord、ToolStarted 通过显式字段向前端投影。
+- ✅ 保持 provider-neutral 边界：不得读取或保存 OpenAI/DeepSeek 原生 `reasoning_content`。
+
+### 2. 上下文、snapshot 与展示
+
+- ✅ ConversationCodec 对所有历史记录剥离 thinking，补齐多轮 finish/tool call 不回放测试。
+- ✅ SessionSnapshotCodec 对 assistant message/tool call thinking 做可选 round-trip；缺失字段兼容为 `None`，不迁移 v1 Session。
+- ✅ v2 Settings 增加 `show_thinking` 并读取 `SHOW_THINKING`；不得与只控制 provider 的 `llm_thinking_enabled` 混用。
+- ✅ Renderer 在 show_thinking=true 且摘要非空时展示“思考摘要”，覆盖 Completed 与 ToolStarted；关闭时不展示但保留记录；最终回复先显示摘要再显示 LLM message。
+
+### 3. 范围与 G5-F
+
+- ✅ 初始 G5-F 只修改既有协议、Runtime、snapshot、Settings、Renderer 与测试；真实 CLI 复验后以独立 follow-up 新增 `logging_setup.py`，恢复 v2 显式日志装配与格式失败诊断，未进入 R6 范围。
+- ✅ 运行完整核心自动化测试、CLI 编译与 SHOW_THINKING 开／关 smoke，独立提交修复证据：`da530dc`、`937c4ea`、`123281d`、`abae597`；最终 146 项核心测试通过，真实 v2 CLI 启停日志 smoke 通过。
+- ✅ 已执行 `/project-checkpoint` 保存 G5-F 及 follow-up 结论；R6 coding 现可按已确认清单启动。
+
+## R6 —— Knowledge/RAG 与 Memory
+
+> ✅ R6-F 已完成并重新通过 G6：启动、取消、索引一致性、后台失败可见性、资源关闭和测试进程退出问题均已修复。该阶段随后停在 R6-T；决策 177 已在后续会话确认 R7 总体边界。
+
+### 0. 启动确认与范围
+
+- ✅ 基于 R5 修复后的 Application/CLI/Worker/Session 边界重新审查 R6。
+- ✅ 删除重复 SearchQuery/SearchResult、v1 RagLoader Facade、MemoryService.search、observer/delayed import/daemon thread 等设计。
+- ✅ 增加 ApplicationCommand RUN path、MemoryBuildSource、ResourceStack、BackgroundWorker、versioned manifest 和 R6-T 终止门禁。
+- ✅ 记录 R6 新文件、对象、构造依赖和公开方法清单，并按该清单完成 R6 代码。
+- ✅ 用户已确认 `docs/design.md#69-knowledge-与-memory` 的 R6 清单；在完成 G5-F checkpoint 后实施并完成 R6 coding。
+
+### 1. Domain、ports 与 manifest diff
+
+- ✅ 第一切片创建 `domain/knowledge.py`、`domain/memories.py`、`ports/knowledge.py`、`ports/memories.py` 与 `test_knowledge_service.py`，实现并独立提交 domain/ports/manifest diff 纯逻辑。
+- ✅ 保留 R3 tool-facing RetrievalPort/RetrievalResult；仅增加 index 内部 IndexHit，未建立第二套公开搜索 DTO。
+- ✅ 定义 manifest schema_version、source key、observed/indexed hash、mtime、chunk ids、status、pending operation 与 error。
+- ✅ 实现纯逻辑 scan diff：新增、修改、删除、同 hash 重命名、失败后重试和幂等 no-op。
+- ✅ 固定 v2 路径：`data/v2/knowledge/manifest.json`、`data/v2/knowledge/chroma/`、`data/v2/memories/`；未读取旧 Chroma/Memory 数据。
+
+### 2. Application command 与资源生命周期
+
+- ✅ 增加 `ApplicationResult`、`CommandAction.RUN` 与 command payload；WorkerRunner 串行执行 RuntimeCommand/ApplicationCommand，CliApp 只渲染 typed result。
+- ✅ 增加 `ReloadKnowledge`、`BuildMemory`；`/ragreload` 可取消，`/build-memory` 只排队并立即返回 receipt。
+- ✅ 增加 `SessionService.memory_source()`，复制当前 Agent 的 immutable ConversationRecord 并将 assistant/tool call thinking 规范化为 `None`；CLI/后台线程不访问 SessionState/private history，MemoryExtractor 不接收展示摘要。
+- ✅ 增加单非 daemon BackgroundWorker；前台 reload 与后台 memory 使用独立 cancellation。
+- ✅ 增加 ResourceStack 与 CloseReport；只注册顶层 owner，逆序、幂等、失败隔离并报告 timeout。
+- ✅ 增加 `Application.finalize_turn()`，先 snapshot，再按 typed auto-memory setting 可选排队；Memory 失败不覆盖原终态或 snapshot。
+
+### 3. KnowledgeService 与 adapters
+
+- ✅ 以 fake source/chunker/index/manifest 完成 KnowledgeService contract：state、search、reload、index_document、delete_source、busy、cancel、close。
+- ✅ 状态使用 IDLE/LOADING/READY/DEGRADED/ERROR/CLOSING/CLOSED；首次 loading/error 明确 unavailable，degraded 保留已提交 index 查询。
+- ✅ 实现 LocalKnowledgeSourceRepository、MarkdownChunker、JsonManifestRepository；路径受限、chunk id 确定、manifest 原子写入。
+- ✅ 实现显式注入模型、batch/top-k 和 persist path 的 SentenceTransformerEmbedder/CrossEncoderReranker/ChromaKnowledgeIndex。
+- ✅ Settings/bootstrap 显式装配 v2 路径、模型参数和生命周期；adapter 不读取旧全局 config。
+- ✅ KnowledgeService 实现现有 RetrievalPort；ToolDefinition、RuntimeCommand/RuntimeEvent 与 tool closure 不变。
+
+### 4. MemoryService 与一致性
+
+- ✅ 实现 versioned JsonMemoryRepository；一条 Memory 一个新 v2 JSON 文件，不兼容读取旧 Markdown；同时实现 KnowledgeSourceRepository.scan/read，供应用重启或 index 重建时恢复 memories collection。
+- ✅ MemoryExtractor 依赖专用 LLMPort、静态 prompt、Clock/IdGenerator 与 operation cancellation，不直接创建旧客户端/loader。
+- ✅ MemoryService 显式执行 extract → write → index；只接受 fact/preference，typed parse/extraction failure 不写 repository。
+- ✅ repository 写成功而 index 失败保留 manifest observed/indexed 差异；删除使用 delete intent 并支持中断重试。
+- ✅ query_memory 继续通过 RetrievalPort 查询 memories collection；MemoryService 不重复实现 search。
+
+### 5. CLI 接入、清理与 G6
+
+- ✅ 通过 `CommandRegistry.replace()` 接入 `/ragreload [target]` 与 `/build-memory`；更新 help/completions，不修改 CliApp 的 Knowledge/Memory 业务分支。
+- ✅ 真实 KnowledgeService 与 retrieval contract tests 同一切片替换并删除 DeferredRetrievalAdapter。
+- ✅ 补齐 Application 隔离、reload 真正取消、后台 build partial failure、auto-memory、close error/timeout、无全局状态和 25 个工具契约。
+- ✅ 使用真实 Chroma/embedder/reranker/reference fixture 完成可复跑 smoke：`uv run python -m scripts.r6_knowledge_smoke` 输出 `R6_SMOKE_OK hits=1 score=0.961208`。
+- ✅ G6 重新通过：`uv run python -m unittest discover -s tests/get_me_in -t .` 正常退出，187 项测试通过；`compileall` 通过。
+
+### 6. R6-T 强制终止门禁
+
+- ✅ 已执行 checkpoint，`docs/current.md` 保存为“R6 完成、R7 未启动、等待用户审查”。
+- ✅ 已核对本阶段没有创建或修改 R7 文件、类、公开方法，没有切换旧入口，也没有执行 R8 删除。
+- ✅ 已向用户提交 R6 代码、测试、真实 adapter smoke、manifest/close 失败路径证据，并停在审查门禁。
+- ⛔ 自动进入 R7 设计或 coding —— 必须等待用户后续明确授权。
+
+### 7. R6-F 审查修复（已授权）
+
+- ✅ 切片 1：接通后台启动加载与前台 reload cancellation；分离 Runtime/reload/Memory cancellation；串行保护 search/reload/index/delete。提交：`05c4956`。
+- ✅ 切片 2：Chroma replace 先 embedding、失败回滚新 chunk 并保留旧 chunk；删除异常正确传播并保留 manifest retry 状态。提交：`73a1c79`。
+- ✅ 切片 3：增加 `BackgroundJobState`、`BackgroundJobResult`、`BackgroundWorker.result(job_id)` 与可取消 task callback；Memory build 返回 typed partial failure。提交：`79c0601`。
+- ✅ 切片 3：Memory delete 按 manifest intent → index delete → repository finalize → manifest commit 执行，任一步失败可重试。提交：`79c0601`。
+- ✅ 切片 4：worker timeout 时不关闭仍被使用的依赖；Memory/Knowledge 内部 close 失败隔离；修复 composition root 与测试 cleanup 泄漏。提交：`38708e2`。
+- ✅ 切片 4：MemoryExtractor 改用静态 prompt；完整自动化测试与 `compileall` 正常结束，真实 Chroma/model smoke 留下可复跑证据。提交：`38708e2`。
+- ✅ 重新执行 G6 并通过；再次 checkpoint、停在 R6-T，等待用户审查，不进入 R7。
+
+## R7 —— Resume 纵向切片
+
+> ✅ R7 七个已确认切片、R7-T 与 R7-T2 审查修复均已完成；决策 189 已再次恢复 G7 完成结论。当前停在 R8 独立授权门禁前。
+
+### 0. R7 启动前 Review 门禁
+
+- ✅ 复核 R6-T checkpoint、四个 R6-F 提交和干净工作区；重新运行 187 项核心自动化测试并正常退出。
+- ✅ 对照实际 v2 代码复核 R7 旧任务：当前生产 composition root 只装配 Main Runtime；Resume 工具仍使用临时 `ResumeArtifactPort`／`LocalResumeArtifacts`，尚无 Artifact schema 或 repository。
+- ✅ 用户确认 R7-P dynamic session identity、Resume capability parity 与 agent-scoped Runtime/LLM ownership、独立 Artifact repository、ArtifactService/build-attempt 语义及 typed partial-failure/retry 五项总体边界。
+- ✅ 闭合 R7-P：`Orchestrator` 在每次 Runtime transition 传入 `SessionState.session_id`，Runtime 仅在该 transition 内替换 immutable ToolContext scope；restore／rewind 清理真实 session 的 workspace grant，不引入第二份长期 Session 状态。
+- ✅ Resume 保留除 `route` 外的 v1 capability parity；Main/Resume 分别拥有 Runtime、CancellationToken、PlanService、ToolContext 和 LLM 生命周期。
+- ✅ Artifact 使用全新 `data/v2/artifacts/` 独立 repository，不写入 Memory、不加入 SessionSnapshot，也不随 rewind 回滚。
+- ✅ Artifact operation 采用 pending → side effect → commit；PENDING PDF retry 重新执行构建，不凭同名旧文件合成成功；成功且 PDF 存在才登记可用产物，metadata partial failure 可观察且可重试。
+- ✅ 用户确认活跃设计中的 R7 新文件、类、构造依赖、公开方法、允许修改文件和七个实施切片清单。
+- ✅ 恢复显式 temperature 契约：Main 为 `0.1`、Resume 为 `0.2`、MemoryExtractor 为 `0.0`；先以独立 R7-P0 切片闭合。
+- ✅ Artifact build log 使用固定上限、workspace 根路径脱敏、UTF-8 安全 head/tail 截断，并保存原始字节数和截断标记。
+
+### 1. R7-P0 —— LLM temperature 契约修复
+
+- ✅ `AgentSpec` 增加 `temperature: float`，Main 固定为 `0.1`，Resume 将在其已确认的 AgentSpec 工厂中固定为 `0.2`。
+- ✅ `LLMRequest` 增加 `temperature: float | None = None`；MemoryExtractor 请求显式使用 `0.0`。
+- ✅ OpenAI adapter 仅在 temperature 非 `None` 时透传，并拒绝非有限值或超出 `[0, 2]` 的配置。
+- ✅ 补齐 Main Agent、MemoryExtractor 与 adapter 请求测试；针对性 27 项测试通过。用户已授权自动继续，下一步进入 R7-P。
+
+### 2. R7-P —— 动态 session identity 前置修复
+
+- ✅ 让每次 Runtime 工具执行从当前 `SessionState` 获得 session id，不依赖 bootstrap 时捕获的固定字符串。
+- ✅ `restore`／`rewind` 后清除真实当前 session 的 workspace revision grant；连续恢复多个 snapshot 时不得跨 session 复用旧 read authorization。
+- ✅ 后续 ArtifactService 将从同一动态 ToolContext 获得 session id 与 `AgentKey.RESUME`，不通过全局变量、CLI 私有状态或可变 session-id 镜像获取 provenance。
+- ✅ 补齐双 snapshot 连续 restore、工具 read-before-edit scope 与 main→resume→main handoff context 回归；针对性 29 项测试通过。
+
+### 3. Resume AgentSpec 与 composition root
+
+- ✅ 创建 immutable `build_resume_spec()`，不创建只有元数据方法的 stateful ResumeAgent 类。
+- ✅ 按已确认 capability parity 装配 Resume，且不获得 `route`。
+- ✅ 保留新建、修改、JD 定制入口与真实经历、重新读取、编译诊断约束。
+- ✅ AgentCatalog、SessionState、PlanService 和 Orchestrator 同时装配 Main/Resume；Main 仅通过 descriptor 发现 Resume。
+- ✅ Main/Resume Runtime 使用各自的 CancellationToken、PlanService、ToolContext 与不同 LLM；共享 adapter 仍由 ResourceStack 唯一 owner 关闭。
+- ✅ 覆盖 capability 隔离、main→resume→main handoff 与取消 scope；完整核心测试 193 项通过。提交：待本 checkpoint 后创建。
+
+### 4. Artifact domain、repository 与 service
+
+- ✅ 定义 `schema_version=1` 的 typed Artifact、build-attempt 与 aggregate ArtifactOperation schema；Artifact 保存 `content_hash` 与 `template_name`，无开放 metadata dict。
+- ✅ repository 使用全新 `data/v2/artifacts/` 边界；路径契约为 workspace-relative，不读取或迁移旧运行数据。
+- ✅ 定义 ArtifactRepository 的原子 aggregate 持久化、列举／查询与幂等 close；JSON 语法、顶层／nested schema、字段、枚举、时间与 aggregate 不变量损坏统一返回 typed repository failure。
+- ✅ operation key 使用 canonical JSON 的 SHA-256；每条 JSON 记录为 PENDING 或携带结果的 COMMITTED，单次 replace 原子切换。
+- ✅ ArtifactService 直接满足 ResumeArtifactPort provenance 契约，并借用 LocalResumeArtifacts backend；保持 LLM 参数 schema 与 ToolOutcome 闭合协议不变。
+- ✅ `copy_template` 预检模板、目标 LaTeX、README 与重复后缀；明确 README 覆盖行为，并记录成功文件、来源模板和版本。
+- ✅ `build_pdf` 复用现有 ProcessRunner，记录每次成功、非零退出、超时、取消和异常尝试；PENDING retry 重新构建并覆盖旧 PDF，只有实际返回 exit code 0 且目标 PDF 存在时才记录可用产物。
+- ✅ build attempt 按配置上限保存 stdout/stderr，脱敏 workspace 根、UTF-8 head/tail 截断并保存原始字节数与标记。
+- ✅ 文件副作用后的 Artifact DTO 构造、`content_hash()`、`next_version()` 与 repository commit 均纳入 `ArtifactPartialFailure`；ToolFailure 通过既有 message／suggestion 保留内部 code 与 `changed_paths` 可观察语义。
+- ✅ pending operation 只在下一次同 key 调用时惰性恢复；模板复制按内容幂等，PDF 重新构建，不增加 daemon、新 CLI 或 pruning/retention policy。
+- ✅ `workspace_open` 已在 R3 通过 Frontend/OS adapter 实现，不由 domain 直接启动 GUI；R7 只做端到端复验。
+- ✅ Artifact repository 只保存产物与编译记录；user memory 继续只保存 fact/preference。不把 ArtifactRef 加入 SessionSnapshot，rewind 不删除或回滚工作区文件与 artifact 记录。
+
+### 5. 已确认实施切片
+
+- ✅ 切片 1：R7-P0 temperature contract 与请求透传测试。提交：`dca9d48`。
+- ✅ 切片 2：R7-P dynamic session identity 与跨 restore 隔离测试。提交：`2fd3d20`。
+- ✅ 切片 3：Resume AgentSpec、capability、双 Runtime composition 与 handoff contract tests。提交：`9839a83`。
+- ✅ 切片 4：Artifact domain／port／JSON repository 与 schema/atomicity tests。提交：`bb5b241`。
+- ✅ 切片 5：ArtifactService、ResumeArtifactPort 替换、copy/build/log/partial-failure tests。提交：`5893f7a`、`ce805ff`。
+- ✅ 切片 6：Settings/bootstrap/resource ownership 接入与跨组件回归。全量 202 项测试与 `compileall` 通过；提交：`96c5dc7`。
+- ✅ 切片 7：真实中文／英文／双语 Resume smoke、完整 G7 与 checkpoint。中文、英文、双语共 4 份 PDF 在隔离工作区成功生成；提交：`10941a8`。R7-T 后以 212 项测试和真实 smoke 重新验收。
+
+### 6. 端到端验证
+
+- ✅ 验证 Main、Resume 与 MemoryExtractor 的 temperature 分别为 `0.1`、`0.2`、`0.0`，且 adapter 不覆盖未指定值。
+- ✅ 中文模板新建 → 读取 README → 填充 → 编译 → 预览。
+- ✅ 英文模板新建 → 读取 README → 填充 → 编译 → 预览。
+- ✅ 双语模板复制、文件名防重复后缀和既有目标拒绝覆盖。
+- ✅ 修改已有简历与精确 edit/replace；授权清理后旧 revision 被拒绝，重新读取后可编辑并真实编译 PDF。Windows CRLF round-trip 已修复并回归。
+- ✅ 外部简历/JD 读取、Memory/Reference 检索和可选 Web Search 的 capability 与 Resume prompt 可见性符合确认清单。
+- ✅ pdflatex 缺失、非零退出、超时、取消、编译失败修复、build log 脱敏／截断与完整 metadata partial failure 均有自动化覆盖；真实 smoke 覆盖成功编译。
+- ✅ 审批拒绝、Esc cancel、save/restore/rewind、main → resume → main 闭环均通过分层与 production composition 回归。
+- ✅ 决策 189 已在 R7-T2 后再次恢复 G7 完成结论；未经用户后续确认不得进入 R8 入口切换或遗留删除。
+
+### 7. R7-T 审查修复（已完成）
+
+- ✅ 完成 R7 代码审查与当前环境复验：205 项自动化测试、`compileall`、`git diff --check` 通过；工作区干净，旧 `main.py` 未改动。本轮未重新执行真实 `pdflatex` smoke。
+- ✅ 修复 PENDING build 的旧 PDF 误判：PENDING retry 重新执行受取消／超时控制的构建，不再仅凭同名 PDF 存在合成 `exit_code=0`。提交：`c1fe9dc`。
+- ✅ 完整闭合文件副作用后的 typed partial failure：覆盖 Artifact DTO 构造、`content_hash()`、`next_version()` 与 repository commit，并让 ToolFailure 保留 changed paths 的可观察语义。提交：`7a621bd`。
+- ✅ 让 Artifact JSON 的字段缺失、类型错误、非法枚举、非法时间、nested schema 及 aggregate 不变量失败统一转换为 typed repository failure，并补齐结构损坏测试。提交：`03e2240`。
+- ✅ 补齐 production composition 的 temperature、capability/prompt、审批拒绝、handoff、snapshot/rewind/restore 回归；结合既有 workspace、CLI Esc 与 MemoryExtractor 测试闭合 G7 验收矩阵。提交：`b54157b`。
+- ✅ 真实已有简历 edit/replace smoke 发现并修复 Windows CRLF 重复转换；`LocalWorkspace.write()` 现在保持输入换行，精确 edit 后真实 PDF 编译通过。提交：`53d9330`。
+- ✅ 最终运行 212 项自动化测试、`compileall`、`git diff --check` 全部通过；真实 ArtifactService 在隔离工作区生成中文、英文、双语共 4 份 PDF，并另行完成已有英文简历 replace、授权清理后重新读取、精确 edit 与编译 smoke。
+- ✅ 同步 `current.md`、`task.md`、`decision.md` 并由决策 187 恢复 G7；继续停在 R8 独立授权门禁前。
+
+### 8. R7-T2 审查修复（已完成）
+
+- ✅ 当前环境重新运行 212 项自动化测试、`compileall` 与 `git diff --check`，均通过；工作区在审查前保持干净。
+- ✅ 最小复现确认 exception retry 不一致：首次 backend exception 被保存为 COMMITTED attempt 后抛出；第二次同 operation key 直接返回 `ProcessResult(exit_code=None)`，`tools/resume.py::_build_pdf()` 会将其包装为 `ToolSuccess`。
+- ✅ 最小复现确认 aggregate validation 不完整：`COMMITTED + BUILD_PDF + 无 build_attempt` 可通过 save/load，随后 `ArtifactService.build_pdf()` 重放泄漏非 typed `IndexError`；deterministic operation key、operation-kind result shape 与 nested 字段类型也未形成完整 invariant。
+- ✅ 静态审查确认 composition construction cleanup 不完整：`build_application()` 在 ResourceStack 注册前创建 worker／Knowledge／Artifact 等 owner，部分后续构造或 injected LLM validation 失败路径不会统一关闭已创建资源。
+- ✅ 修复切片 1：`JsonArtifactRepository` 的 save/load 共用校验已闭合字段类型、deterministic operation key 与 kind/status/result shape；所有损坏记录统一为 `ArtifactRepositoryError`。未改变 schema_version、公开 repository 方法或 operation key 算法。提交：`e963b11`。
+- ✅ 修复切片 2：`ArtifactService.build_pdf()` 首次与重放的 backend exception／非结果状态语义已统一；相同 committed attempt 稳定映射为 `build_pdf_failed`，不再漂移为 `ToolSuccess`。未增加 ToolOutcome 字段或公开方法。提交：`e0e2041`。
+- ✅ 修复切片 3：`build_application()` 使用临时 construction ownership stack 清理 ResourceStack 交接前后的失败；覆盖 runtime LLM 配置错误、Memory prompt 读取失败与 knowledge start 失败，不新增全局生命周期。提交：`6af22a3`。
+- ✅ 最终运行 216 项自动化测试、`compileall` 与 `git diff --check`；真实临时工作区完成中文／英文模板复制与两份 pdflatex 编译，exit code 均为 0，记录 5 个 artifacts 与 2 个 build attempts。
+- ✅ 同步 `current.md`、`task.md`、`decision.md` 并由决策 189 恢复 G7；继续停在 R8 独立授权门禁前。
+
+## R8 —— 切换与清理
+
+> 决策 191 已授权并完成 R8-P，决策 192 完成 R8-E，决策 225 完成 R8-O 及用户审查。决策 227 已授权新会话执行 R8-D；当前会话只完成文档收敛，未执行任何遗留删除。
+
+### 1. R8-P —— 切换准备
+
+- ✅ 确认 R7-T2 已完成且 G6、G7 均有效；切换前工作区干净，旧 `main.py` 未改动。
+- ✅ 复核实际 Catalog：2 个 Agent（Main／Resume）、25 个 ToolDefinition、10 个 CLI 命令；分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 取证，并与 capability 文档一致。
+- ✅ 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可直接作为 v2 静态输入。
+- ✅ 对旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 建立组合证据：静态扫描禁用路径／legacy-only 环境变量、sentinel project root 的 Settings 路径断言；R8-O 继续执行拒绝访问启动／smoke 边界，mtime／hash 前后证据只用于确认未改写。
+- ✅ 将 `.env.example` 补齐为 `Settings.from_env()` 的实际变量、默认值与兼容别名；v1-only 变量暂放在“legacy rollback only”段，R8-O 前不得删除。
+- ✅ 为当前空的 README 写过渡说明：同时记录旧生产根入口与 v2 预览入口、静态资产、新旧运行数据和回退边界；不提前宣称根入口已切换。
+- ✅ 运行 v2→legacy import scan、入口前完整自动化测试、`compileall` 与 `git diff --check`；R8-P 已独立提交 `d91e37c`。
+
+### 2. R8-E —— 根入口切换
+
+- ✅ `main.py` 只 import `src.get_me_in.cli.main.main` 并 `raise SystemExit(main())`；已删除 legacy composition 与 import-time registration。
+- ✅ `src/get_me_in/cli/main.py` 已修正过时说明；Settings 错误继续渲染并返回 `2`，composition／CLI 构造或启动的 `Exception` 以不受 `LOG_LEVEL` 高阈值过滤的 file-only 诊断记录完整 traceback、终端仅渲染简短错误并返回 `1`；正常关闭返回 `0`，关闭异常或 `CloseReport.issues` 对用户可见并返回 `1`。不捕获 `KeyboardInterrupt`／`SystemExit`，未新增第二入口或公开 API。
+- ✅ `test_import_boundaries.py`、`test_settings.py`、既有 CLI/bootstrap 测试与 `test_cli_main.py` 覆盖根入口只依赖 v2、示例配置一致性、Settings 错误 `2`、启动错误 `1` 且无 traceback、`LOG_LEVEL=ERROR` 文件诊断、正常关闭 `0`、关闭异常隔离与 typed close issue 可见性。
+- ✅ 未新增 `[project.scripts]` 或其他生产入口。
+- ✅ R8-E 已独立提交 `9fbeabc`；该提交是遗留删除前的明确回退点。
+
+### 3. R8-O —— 强制观察门禁
+
+- ✅ 从 `uv run python main.py` 验证缺少／非法配置时可读错误退出且无 traceback，正常 `/exit` 返回成功退出码。
+- ✅ 修复根入口切换后欢迎 banner 丢失的观察期回归：`Renderer.render_welcome()` 在首次输入前只渲染一次固定产品标识与 `/help` 提示；不扩展 `Settings` 或引入新依赖。
+- ✅ 确认 v2 `ToolDefinition`／`PromptRenderer` 只保留 `name/description/type/required`，实际生产 system prompt 已丢失旧版 `purpose/use_when/do_not_use_when/expected_output`、参数说明与默认值；该问题不是 Notebook 导出遗漏。
+- ✅ 核对 legacy Tool 基线仍在 `src/tools/`：9 个工具定义文件保留上述元数据，当前未被 v2 重构修改；逐项迁移审计若发现缺失或历史改写，再由用户提供原始定义。
+- ✅ Tool 提示词语义修复清单已确认并实施：`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，`ToolSchema` 使用强类型 `ToolParameter` 表达 description/default/items/allowed_values/nullable；PromptRenderer 恢复 legacy `<Tool>` XML 外层与固定语义顺序，`Arguments` 内由强类型 schema 生成有序 JSON；保持 v2 capability、审批、handler 与 ToolOutcome 边界。
+- ✅ 全部 25 个工具已与 9 个 legacy 定义文件一一对应并完成迁移；`workspace_edit.revision` 等 v2 已确认接口差异保留并补充准确说明，没有工具缺失，无需用户另行提供原始定义。
+- ✅ 修复 Tool prompt 字段被 `sort_keys=True` 重排为字母顺序的问题；模型固定先看到用途和使用边界，再看到参数及预期输出。恢复 XML 仅影响 LLM-facing 序列化，不恢复 legacy import-time Registry。
+- ✅ 相邻 `<Tool>` 块使用 `\n\n` 分隔，在模型可见 prompt 中保留一个空行；回归测试锁定 `</Tool>\n\n<Tool ...>` 格式。
+- ✅ 核对 production Catalog 只有 Main／Resume 是既定范围而非迁移遗漏：legacy JobSearchAgent 仅为 M4 测试壳，完整 Job Search 在 R0～R8 冻结，保留 `AgentKey.JOB_SEARCH` 与通用 handoff 测试作为未来扩展点，本次不新增 Agent。
+- ✅ SubAgent prompt 恢复 legacy XML 语义结构：`<SubAgent name>` 内固定输出 `Name`、`Description`、`Responsibilities`、`HardConstraints`，多个块以空行分隔；只有具备 Route capability 的 Agent 注入列表，修复 Resume prompt 把 Main 错列为子 Agent 的问题。
+- ✅ SubAgent 修复的 30 项 Prompt/bootstrap/Catalog/orchestration 回归、完整 235 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 production composition 输出 `SUBAGENT_XML_SMOKE_OK main_chars=11930 resume_chars=19809 agents=2 tools=25`，确认 Main 只见 Resume、Resume 不见任何 SubAgent、JobSearch 未被误装配。
+- ✅ 确认 CommunicationStyle 同样存在真实迁移缺失而非导出问题：Main／Resume 的 Tone、Verbosity、ExplanationStyle 被概括改写，StyleRules／StyleAvoids 全部为空；legacy 原始定义仍完整保留。
+- ✅ 将 Main／Resume 五类 CommunicationStyle 元数据逐项恢复到 immutable `AgentStyle`；不修改 `06_communtion_style.md`、PromptRenderer 接口或运行时协议，完整对象相等测试锁定所有规则与避免项。
+- ✅ CommunicationStyle 修复的 26 项 bootstrap/Prompt/Catalog 回归、完整 236 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `COMMUNICATION_STYLE_SMOKE_OK main_chars=12111 resume_chars=20104 agents=2 tools=25`，确认五个区块均非空且包含原始中文内容。
+- ✅ 排除 Tool、SubAgent、InputFormat、OutputFormat 后继续审计完整 system prompt：静态模板、Role／Constraints 的固定 Must、Reserved 与已修复 CommunicationStyle 均无差异；剩余差异全部来自 Main／Resume `AgentSpec` 中 Role、Mission、Constraints 动态元数据被大幅压缩和改写。
+- ✅ Main 的 Name、Description、7 条 Responsibilities、PrimaryGoal、5 条 SuccessCriteria、5 条 Priorities、10 条 HardConstraints、4 条 SoftConstraints 按 legacy 原始语义和列表前缀恢复；过时的 `switch_agent` 标识符适配为当前真实工具名 `switch_to_subagent`。
+- ✅ Resume 的 Name、Description、5 条 Responsibilities、PrimaryGoal、4 条 SuccessCriteria、5 条 Priorities、7 条 legacy HardConstraints、4 条 SoftConstraints 恢复；额外保留“不得编造/夸大经历”和“不得调度其他子 Agent”两项 v2 强化硬约束，共 9 条。
+- ✅ Agent metadata 修复的 32 项 bootstrap/Prompt/Catalog/orchestration 回归、完整 237 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `AGENT_METADATA_SMOKE_OK main_chars=13159 resume_chars=20806 agents=2 tools=25`，确认恢复内容实际进入 Main／Resume system prompt，且未重新引入旧 `switch_agent` 标识符。
+- ✅ 定位偶发 model reply warning：模型返回了 InputFormat 风格的完整历史消息 envelope，在 `event_type=finish` 时遗漏 OutputFormat 必填的字符串 `thinking`；一次格式修复虽能恢复，但增加模型调用和延迟。
+- ✅ 模型输出协议收敛为 `event_type/message/thinking/tool/event_payload` 五类业务字段；`id/role/timestamp/tool_call_id/plan_status` 明确由 Runtime 生成。解析器移除 `content + nested tool_call` 隐式兼容，按事件类型严格验证必需业务字段、类型和 finish/tool_call 条件组合。
+- ✅ 决策 201 曾将 `07_output_format.md` 显式置于完整 system prompt 最后；该硬编码重排已由决策 213 撤销，当前改由 `07_input_format.md`、`08_output_format.md` 文件名表达顺序，PromptRenderer 严格按文件名排序拼接。
+- ✅ PromptRenderer／Runtime／bootstrap 定向 47 项和完整 264 项测试通过；production 模板回归锁定九个 XML 区块与数字文件名顺序一致，legacy PromptLoader 可按新名称读取 OutputFormat。
+- ✅ 修正 conversation tool-call correlation：tool_call 历史使用 `id=event_id`、`tool_call_id=call_id`，对应 tool result 复用相同 `tool_call_id`；Runtime 生成的 record 保存当时 Plan 快照，ConversationCodec 投影 `{current, completed, remaining}`，SessionSnapshotCodec 对缺失 record plan 保持向后兼容。
+- ✅ 用户复审后将多余字段策略改为允许列表投影：`id/role/timestamp/tool_call_id/plan_status` 和任意未知顶层字段均直接忽略，Runtime 重新生成可信内部值，不为可安全丢弃的信息消耗 repair 调用；业务字段错误仍沿用一次修复边界。
+- ✅ 调整后的 62 项 Parser/Prompt/Conversation/Session/Runtime/bootstrap 定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `OUTPUT_PROJECTION_SMOKE_OK chars=12825 tools=25`，确认末尾 OutputFormat 与忽略／重建规则可见。
+- ✅ 定位工具结果后偶发纯文本回复：09:39:42 Resume call 3 完全未输出 JSON，Runtime 正确 repair 并在 call 4 恢复，但增加一次 provider 调用和约 45 秒延迟；v2 OpenAILLMAdapter 相比 legacy 丢失 `response_format={"type":"json_object"}` 是直接回归。
+- ✅ OpenAILLMAdapter 对所有 completion 恢复 provider JSON object mode；当前调用方只有要求 JSON 对象的 AgentRuntime 与 MemoryExtractor，OpenAIWebSearchAdapter 保持独立协议。保留 Prompt OutputFormat、内部 Parser 和一次 repair 三层边界。
+- ✅ provider JSON mode 的 49 项 OpenAI adapter/Runtime/Memory/bootstrap 定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 Pro 模型输出 `PROVIDER_JSON_MODE_SMOKE_OK keys=['ok']`，确认当前 provider 接受 json_object 并返回可解析对象。
+- ✅ 确认 v2 ModelReplyParser 曾只使用 `json.loads`，`json-repair` 虽仍在依赖中但仅被 legacy `src/message.py` 使用；任何 JSON 语法错误都会触发额外模型调用，属于迁移遗漏。
+- ✅ v2 在既有模型修复前增加本地 JSON 语法修复：标准 `json.loads` 失败后调用 `json_repair.loads`；尾逗号、物理换行等修复结果仍须为 object 并继续完整业务校验，成功时不增加模型调用。
+- ✅ 保持严格输出契约：纯文本、JSON string／array、缺少 finish message、错误业务字段类型或 finish/tool 冲突均不得归一化；finish thinking 可省略但若提供必须是 string。本地 repair 失败或语义校验失败时，AgentRuntime 注入具体错误与 canonical OutputFormat 并只允许模型自修一次，第二次仍失败返回 `invalid_model_reply`。`repair_attempted` 继续承担运行时重试边界和 snapshot 持久化职责。
+- ✅ 本地 repair／单次模型自修边界的 61 项 Parser/Runtime/provider/bootstrap/snapshot 定向测试与完整 244 项自动化测试通过；`compileall` 与 `git diff --check` 通过。
+- ✅ R8-O 真实 Main 回复发现 `finish.thinking=""` 会合法通过且不显示摘要；决策 212 曾将 finish thinking 收紧为非空，现由决策 219 推翻，恢复 finish thinking 可省略或为空字符串的语义，tool_call thinking 规则不变。完整自动化测试、`compileall` 与 `git diff --check` 通过。
+- ✅ 真实 Main 对话发现能力宣传漂移：问候声称可准备面试、推荐学习资料，但 production Catalog 当前只有 Resume SubAgent；Java 学习资料无匹配项时仍给出 Coursera／Udemy／Stack Overflow 等替代建议。
+- ✅ 用户确认 Main 工具白名单：全部 Plan 工具、`get_current_datetime`、`provide_choices`、`read_customer_file`、`query_memory`、`switch_to_subagent`；其余工具全部不可见。上述工具仅用于意图识别、上下文收集与路由，不构成用户可见业务能力。
+- ✅ 用户确认 `<SubAgents>` 是 Main 当前业务能力的唯一且穷尽来源；不得根据产品名称、工具、历史消息、模型知识或未来规划推测、宣传或执行列表外能力。无匹配 SubAgent 时只说明当前不支持，不提供替代建议；问候可按实际列表介绍能力，但不得暴露 Agent／工具／路由内部结构。
+- ✅ 细分 capability：新增 `CURRENT_DATETIME` 与 `MEMORY_QUERY`；`get_working_dir` 改由 `WORKSPACE_READ` 控制，`query_reference_data` 继续由 `KNOWLEDGE_QUERY` 控制。Main 移除 `SYSTEM`、`WEB_SEARCH`、`KNOWLEDGE_QUERY`，精确保留四个 Plan 工具、`get_current_datetime`、`provide_choices`、`read_customer_file`、`query_memory`、`switch_to_subagent`；Resume 保持其既有领域能力。
+- ✅ 强化 `01_role.md`、`04_tools.md`、`05_sub_agents.md` 与 Main `AgentSpec`，明确用户请求不能授权越权、辅助工具不等于业务能力、SubAgent 列表权威且穷尽、禁止能力推测、无匹配项不得替代回答，以及问候只能介绍当前真实能力。同步移除 `query_memory`／`read_customer_file` 对不可见工具的名称泄漏，修正 Resume “其他能力退回 Main 处理”的错误暗示。
+- ✅ production composition 回归锁定 Main 精确 9 工具集合、Resume 既有工具不回退、Main 只见 Resume、提示词权威规则可见且 Main prompt 不再出现学习／面试能力暗示。49 项定向测试、完整 244 项自动化测试、`compileall` 与 `git diff --check` 通过。
+- ✅ 真实 `uv run python main.py` 对话 smoke：问候只介绍简历定制／优化；Java 学习资料请求只说明当前不支持，没有推荐平台、资料或替代方案；`/exit` 返回退出码 0。
+- ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
+- ✅ 修复空 Memory collection 查询语义：`ChromaKnowledgeIndex.search()` 仅将明确的 collection-not-found 归一化为空结果；连接、查询、embedding、rerank 等其他异常继续上抛并由 Tool 映射为 typed `retrieval_unavailable`。
+- ✅ 增加 adapter 与 retrieval Tool 回归，覆盖未创建 `memories` collection 时返回零命中，以及非 collection-not-found 异常不得被吞掉。
+- ✅ 在真实 Memory smoke 前执行一次性受控迁移：把当前 `data/memories/resume/` 下两份 legacy Markdown 记忆转换为 2 条 v2 `MemoryRecord` JSON 并通过既有 KnowledgeService 建立 `memories` 索引；原文件 hash／mtime／长度不变，production v2 未增加 legacy 路径扫描或常驻兼容层。
+- ✅ 迁移后验证 v2 repository、manifest、Chroma `memories` collection 与 `query_memory` 的真实命中；smoke 另发现 targeted reload 会误删非目标 manifest entries，已恢复 reference 索引并将 diff 限制到同一 target 范围，同时回归目标范围内真实缺失仍会删除。最终真实 `/ragreload memories` 只报告两条 memory unchanged；Chroma 为 `memories=36`、`references=34` chunks，manifest 为 2 条 memory 与 6 条 reference source，全部 `ready`。30 项定向测试、完整 249 项自动化测试、`compileall` 与 `git diff --check` 通过。
+- ✅ 修复 RAG 后台加载语义：`KnowledgeIndexPort` 增加最小 `prepare(cancellation)`；startup reload 在 manifest diff 前幂等预热 embedding 与 reranker，只有模型和索引均就绪才进入 `READY/DEGRADED`。manifest 无变化仍预热，失败保持 `ERROR` 且显式 reload 可重试，首次用户查询不再承担模型构造。
+- ✅ 恢复生产 CLI 权重加载静默配置：在 build application 前固定设置 `HF_HUB_DISABLE_PROGRESS_BARS=1`、`TQDM_DISABLE=1`、`TRANSFORMERS_VERBOSITY=error`，并将 Hugging Face／transformers／sentence-transformers logger 限制为 ERROR；继续保留 encode／predict 的 `show_progress_bar=False`。
+- ✅ 后台预热修复的 41 项 Knowledge/Adapter/Retrieval/CLI 定向测试、完整 253 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 `uv run python main.py` 在欢迎界面出现后后台等待 20 秒，终端无权重／进度输出；首次 `query_memory` 约 2 秒完成真实命中且无延迟加载输出，`/exit` 返回 0。
+- ✅ 修复 selection Ctrl+C 错误退出 SubAgent：新增 typed `CancelSelection(request_id, reason)`，只把 cancelled result 写回 `provide_choices` 并继续当前 Agent；CliApp 不再把 selection 的 `None` 映射为全局 `Cancel`。Esc／运行取消产生 `Cancelled` 但保留活动 SubAgent handoff，业务失败仍按既有规则关闭 handoff。
+- ✅ selection 局部取消改为 `Paused/WAITING_FOR_USER`：取消结果写入历史并回到 CLI，下一条用户消息再继续当前 Agent；Runtime/CLI/Orchestrator 定向测试 46 项通过，`git diff --check` 通过。全量测试复跑时仅出现既有 KnowledgeService 锁释放时序波动，相关单测单独重跑通过。
+- ✅ 按用户提供的 legacy 定义新增 Resume-only `merge_pdfs`：保留 first → second 顺序与可选 `.pdf` 后缀，使用既有 capability/审批/ToolOutcome 边界；Main 不可见。
+- ✅ PDF 合并经 `ResumeArtifactPort → ArtifactService → LocalResumeArtifacts` 实现；不扩展文本型 `WorkspacePort.read()`，适配器只在 `workspace.resolve()` 约束后用 `pypdf` 读取，并通过同目录临时文件原子替换输出。拒绝相同输入及输出覆盖源文件。
+- ✅ Artifact operation 增加 `MERGE_PDFS`，输入使用两个源 PDF 的原始字节 hash，输出 Artifact 记录 hash/version/page count；COMMITTED replay 不重复写入，metadata commit 失败返回 typed partial failure。项目显式依赖 `pypdf>=6.0.0`，锁定 6.14.2。
+- ✅ `merge_pdfs` 的 58 项定向测试与完整 261 项自动化测试通过；真实三页 PDF 顺序 smoke 由不同页面尺寸验证 first → second 顺序。`compileall`、`git diff --check` 与 import boundary 复验通过。
+- ✅ 将 uv 默认 PyPI 镜像从 SJTUG 切换为唯一的清华 TUNA index，不增加 `[tool.uv].environments`、官方 PyPI、第二个普通镜像或 PyTorch 专用源；保持 Windows／Ubuntu/Linux universal lock。执行前确认无并发 `uv lock`／`uv add`，普通 `uv lock` 与 `uv sync --locked` 均完成。
+- ✅ 锁文件前后均为 133 个包且 name/version 集合完全一致；无官方 PyPI 或 SJTUG 残留。记录后续依赖工作流为 `uv add <package> --no-sync` → `uv sync`，分别诊断解析和下载／安装耗时；TUNA 同步后 58 项 PDF 定向测试、完整 261 项测试与 `compileall` 通过。
+- ✅ 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；用户确认完整人工 CLI／交互 matrix 无问题。
+- ✅ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke；工程侧真实 Memory delete 验证删除前命中 1 条、删除后命中 0 条。
+- ✅ 执行拒绝访问旧目录的启动／smoke 边界并完成目录 mtime／hash 人工检查：4 个 legacy 目录设置为访问即失败后，隔离 v2 production composition 完成 Knowledge 启动和一轮 Runtime；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
+- ✅ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；全量测试发现的 KnowledgeService 状态读取／锁释放竞态由提交 `9da3242` 修复，随后 20 项定向测试与完整 283 项测试稳定通过，Catalog 为 2 Agent／26 Tool／10 command。
+- ✅ 用户审查 R8-O；用户确认完整人工 smoke matrix 无问题，工程验证全部通过。R8-O 完成；后续决策 227 已单独授权新会话执行 R8-D。
+
+### 4. R8-D —— 遗留删除（已授权，新会话执行）
+
+#### 4.1 清单分析与授权门禁
+
+- ✅ 按当前 `HEAD` 复核 Git 跟踪的删除白名单：8 个 legacy production package（`src/agents/` 8 个文件、`src/cli/` 4 个、`src/llm/` 2 个、`src/memory/` 6 个、`src/prompts/` 2 个、`src/rag/` 5 个、`src/tools/` 11 个、`src/utils/` 7 个）和 6 个顶层 legacy module，共 51 个跟踪文件。
+- ✅ 复核本地 checkpoint 白名单：`.ipynb_checkpoints/`、`src/.ipynb_checkpoints/`、`src/llm/.ipynb_checkpoints/` 均被 Git 忽略，当前共包含 5 个文件；未发现 reparse link。它们只能作为单独的本地清理项处理。
+- ✅ 初查 `pyproject.toml` 的 11 个直接依赖均仍被 `src/get_me_in/` 使用，包括延迟导入的 `pdfplumber`、`python-docx`、`chromadb` 与 `sentence-transformers`；当前没有依赖删除候选，R8-D 执行后仍须复核，若证据不变则保持 `pyproject.toml`／`uv.lock` 原样。
+- ✅ 确认临时 `scripts/v2_runtime_smoke.py` 已随 R5 正式 CLI 落地删除；现存 `scripts/r6_knowledge_smoke.py` 不属于 R8-D 删除白名单。
+- ✅ 用户已审查本节完整清单并明确授权在新会话执行 R8-D；本次文档收敛会话不执行删除，新会话从 4.2 开始。
+
+#### 4.2 删除前安全快照
+
+- ⬜ 确认分支为 `refactor`、工作区无未提交修改，并记录 R8-D 的父提交；确认 R8-E 回退提交仍为 `9fbeabc`，R8-O 修复与 checkpoint 均已包含在当前历史中。
+- ⬜ 重新生成 51 个 Git 跟踪文件的精确清单，并检查白名单目录中的非跟踪／忽略内容、symlink／reparse point；如出现除生成型 `__pycache__`／`.pyc` 与已知 checkpoint 外的意外内容，立即停止并重新审查，不按目录整体删除。
+- ⬜ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 记录删除前只读指纹／mtime 基线，并确认本轮所有待执行命令都不以 `data/`、工作区根目录、通配符或未解析变量作为删除目标。
+- ⬜ 再次确认保留白名单：`src/__init__.py`、完整 `src/get_me_in/`、`tests/get_me_in/`、`data/reference/`、`data/prompts/`、`data/resume/template/`、`data/workspace/` 与 `data/v2/`；R8-D 不迁移、覆盖或删除任何旧 `data/` 运行数据。
+
+#### 4.3 精确删除
+
+- ⬜ 仅按精确路径删除 `src/agents/`、`src/cli/`、`src/llm/`、`src/memory/`、`src/prompts/`、`src/rag/`、`src/tools/`、`src/utils/` 中已复核的 45 个 Git 跟踪文件及目录内生成型缓存。
+- ⬜ 仅按精确路径删除 `src/config.py`、`src/lifecycle.py`、`src/logger.py`、`src/message.py`、`src/request.py`、`src/response.py`。
+- ⬜ 单独解析并核对三个 checkpoint 目录仍位于仓库内，再以 literal path 删除 `.ipynb_checkpoints/`、`src/.ipynb_checkpoints/`、`src/llm/.ipynb_checkpoints/`；禁止使用 `git clean`、宽泛递归搜索或通配符清理。
+- ⬜ 删除后逐项断言 8 个 legacy package、6 个顶层 legacy module 和 3 个 checkpoint 目录均不存在，同时断言全部保留白名单仍存在。
+- ⬜ 审查 `git diff --name-status`：除已确认的 51 个 legacy 源文件删除外不得出现其他 tracked 变更；不得出现 `data/`、`src/get_me_in/`、`tests/get_me_in/`、`main.py`、文档或配置文件改动。
+
+#### 4.4 删除后验证
+
+- ⬜ 再次扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 与生产配置，确认没有 legacy import、动态 import 字符串、旧模块路径或 import-time registration 依赖；`test_import_boundaries.py` 的 forbidden module 清单继续作为防回归规则保留。
+- ⬜ 复核 11 个直接依赖的 v2 使用证据；若仍全部使用，保持 `pyproject.toml`／`uv.lock` 不变。若出现新的未使用证据，停止 R8-D，不在删除提交中顺带猜测性移除依赖。
+- ⬜ 运行 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py` 与 `git diff --check`；任何失败先定位并恢复绿灯，不得以删除 legacy 测试或放宽契约解决。
+- ⬜ 从实际 Catalog 复核 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令，并执行根入口启动／`/exit`、production composition 及拒绝访问 4 个 legacy data 目录的删除敏感 smoke；R8-G 再执行完整真实 adapter 与业务 smoke matrix。
+- ⬜ 比较 4 个旧运行数据目录的删除前后指纹／mtime，并确认没有读取、改写、迁移或删除；“未读取”仍以静态扫描、Settings sentinel 与拒绝访问 smoke 为主证据。
+
+#### 4.5 提交与回退
+
+- ⬜ 仅暂存 51 个 legacy 源文件删除，复核 staged diff 后创建独立 R8-D 提交；checkpoint 本地清理不伪装为 Git 变更，R8-G 文档归一化不得混入该提交。
+- ⬜ 提交后确认工作区干净、R8-D 提交可单独 revert，随后才进入 R8-G；R8-G 完成前仍保留 `.env.example`／README 的 `legacy rollback only` 说明。
+- ⬜ 记录并复核紧急回退顺序：R8-D 前只需 `git revert 9fbeabc`；R8-D 后先 revert R8-D 恢复 legacy 源码，再 revert `9fbeabc` 恢复旧入口。恢复源码后才允许重新启用 legacy-only 配置，任何回退都禁止触碰旧运行数据。
+
+### 5. R8-G —— 文档、状态与 G8
+
+- ✅ 在 R8-D 前按用户要求将活跃重构内容收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`，删除并行的 `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md`；历史 v1 内容由 Git 保留。
+- ✅ 在 R8-D 前更新 AGENTS.md：只描述当前 v2 架构、四份活跃文档路由、R8-D 授权／精确删除／验证／回退边界；删除将 legacy 架构写成当前事实的旧说明。
+- ⬜ 删除 `.env.example`／README 的 legacy rollback 段；更新 `docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md` 与 README；Agent、tool、command、配置和数据目录必须与实际代码一致，旧 `/auto-approve-switch` 等内容只保留为明确历史 baseline。R8-D 后再次复核 AGENTS.md 并删除只适用于执行期的说明。
+- ⬜ R8-D 完成后再次同步 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`、`docs/current.md` 与 AGENTS.md 的最终状态。
+- ⬜ 完成删除后的完整自动化、静态、真实 adapter 与根入口 smoke matrix；确认旧数据保留说明和 R8-E 回退点完整。
+- ⬜ 完成 G8，checkpoint 后停止，等待用户审查；不得自动进入 R9。
+
+## R9 —— 重构后功能（不在当前执行范围）
+
+### 1. InterviewAgent Workflow 前置 Review
+
+- 📌 确认 Workflow 与 Hub-and-Spoke 的层次边界：Workflow 是 InterviewAgent 内部执行策略，不改变 Main 唯一调度和禁止子 Agent 直连的规则。
+- 📌 复核 Orchestrator 对具体 `AgentRuntime` 的耦合；如确有需要，先提交最小 typed executor protocol 的文件、类和公开方法清单。
+- 📌 设计 typed/versioned Interview workflow state；至少表达 workflow version、稳定 step id、当前问题、回答、评分进度、等待原因和终止原因。
+- 📌 决定 Session agent-local state 使用 tagged union 还是 typed envelope；`SessionState` 继续是唯一长期状态源，不允许 runtime 私藏 workflow 状态。
+- 📌 决定“等待下一次自由文本回答”复用 `Completed` 还是新增最小 RuntimeEvent；同步明确 finalize、snapshot 和 auto-memory 的触发时点。
+- 📌 固定 save/restore/rewind、暂停、取消、退出和 main → interview → main handoff closure；恢复不得重放已完成副作用。
+- 📌 固定原始回答、逐题评分、最终报告与 question/rubric 的 Session／Artifact／Memory／Knowledge 所有权。
+- 📌 在持久化前确认敏感数据脱敏、删除入口与 retention；不得默认把面试记录写入 Memory 或普通日志。
+- 📌 确认采用项目内“确定性 Workflow 外壳 + 节点内 LLM”；若希望引入外部 workflow engine，单独重开依赖与架构决策。
+- 📌 提交并确认 InterviewAgent 新文件、类、构造依赖、公开方法、snapshot migration 与独立实施切片；确认前不得 coding。
+
+### 2. InterviewAgent 推荐实现与验证方向
+
+- 📌 建立有界流程：准备 → 出题 → 等待回答 → 评估 → 追问或下一题 → 汇总 → 返回 Main。
+- 📌 为题数、追问数、模型调用和失败重试设置显式上限；workflow branch/loop 由纯 transition 决定。
+- 📌 复用 RuntimeCommand/RuntimeEvent、capability、ToolOutcome、CancellationToken、ResourceStack 和现有 handoff closure；只在现有协议无法表达需求时增加最小类型。
+- 📌 为副作用 node 定义 operation key 或 pending → effect → commit；snapshot 只保存可安全恢复的稳定点。
+- 📌 增加 workflow transition/property tests，覆盖分支、循环、用户输入、取消、restore/rewind 和错误恢复。
+- 📌 使用真实 LLM smoke 验证中文／英文面试、追问质量、评分、报告以及完整 main → interview → main 链路。
+
+### 3. 其他暂缓功能
+
+- 📌 CLI banner 客制化：在独立清单确认后评估 `CLI_BANNER_ENABLED`、标题、副标题与样式配置；配置文本必须按普通文本安全渲染，不得默认解释为 Rich markup，也不得把主题配置混入 Runtime/Application。
+- 📌 Job Search 产品方案与数据源。
+- 📌 LearningAgent。
+- 📌 Sticky Plan。
+- 📌 多会话并行或其他前端。
+
+每项开始前必须独立讨论设计与方法清单，不能因已列在此处而自动实施。
+
+## 重构完成定义
+
+- v2 主入口覆盖当前已实现能力，完整 smoke matrix 通过。
+- Runtime、Session、Tool、Knowledge、Memory、Workspace、CLI 边界均通过公开协议协作。
+- 无可变全局运行时单例、无 import-time 注册、无 CLI→Agent 私有字段访问。
+- 无魔法控制 dict；handoff/approval/cancel/failure 为明确类型。
+- Agent 元数据声明式，普通新 Agent 不需要复制 14 个方法。
+- Session/Memory/Artifact 持久化有 schema version 和 migration 说明。
+- 旧实现与兼容层已删除，文档与实际 Catalog 一致。
+- 用户完成成果审查并执行 `/project-checkpoint`。

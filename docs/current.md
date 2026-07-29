@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 —— R8-D 执行清单已完成分析更新，等待用户审查与明确授权
+**当前阶段：** R8 —— R8-D 已获授权，文档已收敛，等待新会话执行
 
-**当前任务：** R8-D 遗留删除清单审查：确认删除白名单、安全快照、删除后验证、独立提交与回退步骤
+**当前任务：** R8-D 遗留删除：按 `docs/task.md` 4.2～4.5 完成安全快照、精确删除、验证、独立提交与回退记录
 
-**当前子任务：** 请用户审查 `docs/refactor-task.md` 的 R8-D 4.1～4.5 清单；当前只完成只读盘点与文档更新，未执行任何 legacy 删除。
+**当前子任务：** 新会话先执行 `/project-bootstrap`，确认文档 checkpoint 后从 `docs/task.md` 的 4.2 删除前安全快照开始；本会话未执行任何 legacy 删除。
 
-**当前阻塞：** R8-D 执行仍未获得用户明确授权。当前盘点确认删除白名单为 51 个 Git 跟踪的 legacy 源文件，另有 3 个被忽略的 checkpoint 目录；11 个直接依赖均仍被 v2 使用，预计无需修改依赖。未经后续明确授权不得删除 legacy。
+**当前阻塞：** 无。用户已明确授权在新会话执行 R8-D；授权范围仅限 `docs/task.md` 4.2～4.5，不包含自动进入 R8-G 或 R9。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 与用户审查已完成，工程验证为 283 项自动化测试、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实 Memory delete 和 legacy refusal smoke 全部通过；KnowledgeService 状态竞态已由 `9da3242` 修复。R8-D 清单现已细化为分析／授权、删除前安全快照、精确删除、删除后验证、独立提交与回退五组任务。只读盘点确认 8 个 legacy package 内 45 个文件加 6 个顶层 module，共 51 个 Git 跟踪删除目标；三个被忽略的 checkpoint 目录当前共 5 个文件；11 个直接依赖均被 v2 使用。当前仍未授权或执行删除，旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 及所有 legacy production modules 均不得改动。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 与用户审查已完成，工程验证为 283 项自动化测试、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实 Memory delete 和 legacy refusal smoke 全部通过；KnowledgeService 状态竞态已由 `9da3242` 修复。用户已授权新会话执行 R8-D，但要求本会话只做文档收敛。活跃架构、计划和任务已从三份 `refactor-*` 文件收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`，`docs/decision.md` 继续作为唯一决策记录；历史 v1 文档内容由 Git 保留。R8-D 只读盘点确认 8 个 legacy package 内 45 个文件加 6 个顶层 module，共 51 个 Git 跟踪删除目标；三个被忽略的 checkpoint 目录当前共 5 个文件；11 个直接依赖均被 v2 使用。旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 永远不在删除范围内。
 
-**下一步：** 用户审查并确认 `docs/refactor-task.md` 的 R8-D 4.1～4.5 清单；只有收到明确执行授权后，才从 4.2 删除前安全快照开始，按清单完成独立 R8-D 提交。
+**下一步：** 在新会话执行 `/project-bootstrap`，读取 `docs/current.md` 及其列出的四份活跃文档；确认工作区从本次文档 checkpoint 开始且干净，然后严格按 `docs/task.md` 4.2～4.5 完成 R8-D。R8-D 独立提交后停止，不自动进入 R8-G。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
@@ -59,12 +59,13 @@
 222. **`/exit_sub` 默认要求 SubAgent 总结，false 允许直接退出** — `/exit_sub`、`/exit_sub true` 向当前 SubAgent 注入退出总结指令，由其调用 `switch_to_mainagent(summary)`；`/exit_sub false` 直接闭合原始 handoff，结果消息为“用户主动退出”。
 223. **Esc 取消当前 SubAgent run 但保留 handoff** — SubAgent 返回 `Cancelled` 时不再自动执行 `FailHandoff`；保留 active SubAgent、handoff frame 和 Main 的等待状态，下一条用户消息继续进入原 SubAgent。`Failed` 仍按失败路径退回 Main。
 224. **provide_choices 取消后暂停当前 Agent，下一条用户消息再继续** — `CancelSelection` 仍写入 `ToolResultRecord`，但当前 Agent 进入 `WAITING_FOR_USER` 并返回 `Paused("selection_cancelled", reason)`；CLI 不再自动发送 `Continue()`，下一条用户消息与取消结果一起发送给当前 Agent。该决定取代决策 209 中“取消后进入 `MODEL_QUEUED` 并继续模型循环”的部分。
-225. **R8-O 完整通过并停在 R8-D 授权门禁前** — 用户确认完整人工 smoke matrix 无问题；工程侧 283 项自动化测试、静态检查、Catalog、真实 Memory delete 与 legacy refusal smoke 全部通过。KnowledgeService 状态读取与锁释放竞态由 `9da3242` 修复。R8-D 仍须用户后续明确授权，当前不删除任何 legacy 源码或旧运行数据。
-226. **R8-D 执行清单细化并保持授权门禁** — 当前盘点确认 51 个 Git 跟踪 legacy 源文件、3 个本地 checkpoint 目录与 11 个仍被 v2 使用的直接依赖；执行拆分为删除前快照、精确 literal-path 删除、删除后验证、独立提交和逆序回退，禁止宽泛清理及任何旧运行数据访问。清单更新不构成删除授权。
+225. **R8-O 完整通过并停在 R8-D 授权门禁前（后由决策 227 解除）** — 用户确认完整人工 smoke matrix 无问题；工程侧 283 项自动化测试、静态检查、Catalog、真实 Memory delete 与 legacy refusal smoke 全部通过。KnowledgeService 状态读取与锁释放竞态由 `9da3242` 修复。当时 R8-D 仍须后续明确授权。
+226. **R8-D 执行清单细化并保持授权门禁（后由决策 227 解除）** — 当前盘点确认 51 个 Git 跟踪 legacy 源文件、3 个本地 checkpoint 目录与 11 个仍被 v2 使用的直接依赖；执行拆分为删除前快照、精确 literal-path 删除、删除后验证、独立提交和逆序回退，禁止宽泛清理及任何旧运行数据访问。该次清单更新本身不构成删除授权。
+227. **授权新会话执行 R8-D 并收敛活跃文档** — 用户明确授权新会话按已确认清单执行 R8-D，同时要求本会话不删除代码，只将 v2 事实收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md` 并更新 AGENTS.md。新会话从 4.2 开始，R8-D 提交后停止，不自动进入 R8-G。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
-**参考文档：** `docs/refactor-design.md`（活跃设计）／`docs/refactor-plan.md`（活跃计划）／`docs/refactor-task.md`（活跃任务）／`docs/decision.md`（决策记录）
+**参考文档：** `docs/design.md`（活跃设计）／`docs/plan.md`（活跃计划）／`docs/task.md`（活跃任务）／`docs/decision.md`（决策记录）
 
 **重要决策：** (编号，不记录日期 —— 发生重要决策时及时记录)
 1-136: 见 decision.md
@@ -85,7 +86,7 @@
 151. **R4/G4 已完成并进入 R5 前复审** — `SessionState` 已成为唯一状态源，Runtime 以 `advance(state, command)` 转换，Orchestrator 通过 Complete/FailHandoff 闭合原 call id；v2 snapshot 使用 schema_version=2、turn_id rewind 与安全 phase 规范化。98 项核心自动化测试通过；不更新设计/计划，先执行强制 R5～R8 复审。
 152. **R4 复审补齐 handoff 启动、失败闭合与 frontend 回合投影** — Orchestrator 切换时用 context 启动目标 Runtime，子 Agent 取消/失败通过 FailHandoff 闭合原 call id；snapshot 严格校验 frame，restore 拒绝未装配 Agent，SessionView 公开只读 rewind_points。104 项核心自动化测试通过，G4 复验完成。
 153. **R5 使用薄 CLI、单 WorkerRunner 与可替换命令注册** — CliApp 只驱动 typed command/event 并在终态自动 snapshot；WorkerRunner 单线程串行调用 Application，跨线程只 request_cancel；CommandRegistry 支持 R6 replace handler；输入历史不新增持久化 schema；提供独立模块入口，R8 等待 G6/G7 并拆分入口切换与遗留删除提交。
-154. **R5 清单获确认并固定新会话实施入口** — 用户确认 `docs/refactor-design.md#67-cli` 的文件、对象、构造依赖与公开方法；新会话可编码，第一切片仅创建 commands.py 与 test_cli_commands.py。当前会话不编码，每步独立验证提交，不跨入 R6/R7。
+154. **R5 清单获确认并固定新会话实施入口** — 用户确认 `docs/design.md#67-cli` 的文件、对象、构造依赖与公开方法；新会话可编码，第一切片仅创建 commands.py 与 test_cli_commands.py。当前会话不编码，每步独立验证提交，不跨入 R6/R7。
 155. **R5 第一切片已审查并保持交互职责后置** — `CommandRegistry`、核心 command handlers 及测试已独立提交；命令注册层可调用 Application 公开 API，但 `/edit`、`/help`、`/restore`、`/rewind` 的真实输入、渲染与无参数选择交互仍由 InputController/Renderer/CliApp 后续切片完成，不能因 handler 已登记而跳过这些任务。
 156. **InputController 通过 CompletionProvider 获取动态命令补全** — `set_completions(provider)` 注入 `Callable[[], tuple[str, ...]]`，CliApp 将传入 `CommandRegistry.completions`；每次 read 动态取值，默认空元组，InputController 不依赖或持有注册表。
 157. **`/rewind` 选择显示用户输入预览而非内部 turn_id** — CommandRegistry 使用“序号 + 清理后的用户输入预览”构建选择项，并保留 label→turn_id 映射；用户无需识别 UUID，RewindSession 仍接收精确 turn_id。
@@ -101,7 +102,7 @@
 167. **G5 已通过且 R6 暂停** — 用户确认 V50–V56 smoke 可接受；临时 `scripts/v2_runtime_smoke.py` 已删除。R6 仍须先经新文件、类与公开方法清单确认，当前按用户指示不进入该阶段。
 168. **R5 审查修复命令事件闭合与错误边界** — `/exit_sub` 通过 `CommandAction.DRIVE` 将 RuntimeEvent 交回 CliApp 继续推进；命令 handler 的预期异常统一渲染并返回输入循环。跨组件回归补齐后 134 项核心测试通过；R6 仍未开始。
 169. **R6 重设一致性边界并增加强制终止门禁** — 保留 RetrievalPort，删除重复搜索 DTO 和旧 Facade/observer/daemon 形状；新增 RUN command path、immutable MemoryBuildSource、observed/indexed manifest、BackgroundWorker、ResourceStack 与 typed close report。R6/R7 不再并行；G6 后必须 checkpoint 并停在 R6-T，未经用户授权不得进入 R7/R8。当前只完成设计文档，R6 coding 未启动。
-170. **R6 清单获确认并固定新会话实施入口** — 用户确认 `docs/refactor-design.md#69-knowledge-与-memory` 的 R6 文件、对象、构造依赖与公开方法清单；本会话只做文档 checkpoint，不写代码。新会话 bootstrap 后从 domain/ports/manifest diff 第一切片开始，每步独立验证提交；G6 后仍强制停在 R6-T，不得进入 R7。
+170. **R6 清单获确认并固定新会话实施入口** — 用户确认 `docs/design.md#69-knowledge-与-memory` 的 R6 文件、对象、构造依赖与公开方法清单；本会话只做文档 checkpoint，不写代码。新会话 bootstrap 后从 domain/ports/manifest diff 第一切片开始，每步独立验证提交；G6 后仍强制停在 R6-T，不得进入 R7。
 171. **R6 前增加独立 `thinking` 契约修复门禁** — v2 必须保留静态 JSON 输出中的用户可见 thinking 摘要并按 `SHOW_THINKING` 展示和持久化，但 ConversationCodec 与 R6 MemoryBuildSource 必须剥离该字段；不得捕获 provider 原生 `reasoning_content`。R6 清单不变，但 coding 必须等待 G5-F 通过。
 172. **R5-F follow-up 统一格式修复的唯一契约与重试边界** — finish 必须出现 string `thinking`；当时允许空字符串的部分已由决策 212 取代。tool_call 可省略或为空；格式失败注入具体解析错误与完整 canonical output format，只允许一次修复，第二次失败立即返回 `invalid_model_reply`。
 173. **v2 显式装配日志并固定环境变量所有权** — v2 日志仅配置 `src.get_me_in` 命名空间并写入 `LOG_DIR/app.log`；DEBUG 才记录完整模型原始回复。v2 只消费 typed Settings 声明的变量，旧 `AGENT_MAX_ROUNDS` 不生效，实际调用上限由 `AGENT_MAX_MODEL_CALLS` 控制。

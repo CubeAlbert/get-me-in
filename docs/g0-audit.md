@@ -12,7 +12,7 @@
 
 | 门禁要求 | 证据 | 结果 |
 |---|---|---|
-| 目标架构、迁移策略、功能冻结与验证策略已由用户确认 | `docs/refactor-design.md` 的 R-D1～R-D6；`docs/refactor-plan.md` | 通过 |
+| 目标架构、迁移策略、功能冻结与验证策略已由用户确认 | `docs/design.md` 的 R-D1～R-D6；`docs/plan.md` | 通过 |
 | 已明确哪些旧行为必须有等价实现，哪些机制可废止 | [capability-parity-matrix.md](capability-parity-matrix.md) | 通过 |
 | 25 个现有工具均有迁移处置 | capability matrix 的工具目录基线 | 通过 |
 | 静态资产复用范围和旧状态排除范围已固定 | [v2-static-asset-boundary.md](v2-static-asset-boundary.md) | 通过 |
@@ -26,7 +26,7 @@
 1. 旧 `main.py` 在 CLI 输入循环前启动 RAG 模型／索引加载；本地模型未缓存或网络受限时会延迟可交互性。R5/R6 必须将 CLI 可用性与 Knowledge 生命周期解耦，并定义 loading、error、retry 的强类型可见事件。
 2. v2 只读取 `data/reference/`、`data/prompts/`、`data/resume/template/` 三类静态资产。`data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 和旧进程内状态均禁止作为 v2 输入。
 3. v1 的全局 Registry、UIBridge、Plan Agent 全局变量、workspace read cache、import-time 注册与魔法控制字典不属于等价要求；其可观察结果须由 v2 的显式装配、service 和强类型协议表达。
-4. 本审查不修改 `docs/current.md`、`docs/refactor-task.md` 或项目状态快照；按项目约定，待你审查并明确要求 checkpoint 后再更新。
+4. 本审查不修改 `docs/current.md`、`docs/task.md` 或项目状态快照；按项目约定，待你审查并明确要求 checkpoint 后再更新。
 
 ## 进入 R1 前的强制步骤
 

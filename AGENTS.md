@@ -1,166 +1,211 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+本文件为 Codex 在本仓库工作的稳定约定。阶段状态只以 `docs/current.md` 为准，不从本文件推断里程碑。
 
-## Project
+## 项目
 
-**get-me-in** — AI 求职助手，面向程序员的多 Agent 系统。CLI 交互，Python 3.14。
+**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。`refactor` 分支已将生产入口切换到 `src/get_me_in/` v2；legacy 源码暂时只为 R8-D 删除和紧急回退保留。
 
-## Refactor Branch
+## 新会话恢复顺序
 
-`refactor` 是整个系统的受控重写分支。当前旧实现仍是行为基线，重构目标是在新的 `src/get_me_in/` 包中建立 v2，并按纵向切片逐步迁移，最终切换入口和删除遗留架构。
+1. 必须先执行 `/project-bootstrap` 并读取 `docs/current.md`。
+2. 只加载 `current.md` 明确列出的四份活跃文档：
+   - `docs/design.md`
+   - `docs/plan.md`
+   - `docs/task.md`
+   - `docs/decision.md`
+3. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 已收敛为当前 v2 事实，不再存在并行的 `docs/refactor-*.md`。
+4. 其他 baseline、audit、matrix 和 smoke 文档只在任务明确需要时读取，不得据此覆盖 `current.md` 的阶段与授权状态。
 
-- 重构目标架构以 `docs/refactor-design.md` 为准。
-- 重构里程碑与验收门禁以 `docs/refactor-plan.md` 为准。
-- 重构执行状态以 `docs/refactor-task.md` 为准。
-- `refactor` 分支的新会话必须先用 `/project-bootstrap` 读取 `docs/current.md`，再以其中显式列出的 `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md` 与 `docs/decision.md` 恢复上下文；`current.md` 是唯一阶段快照，禁止从本文件或旧版通用文档推断当前里程碑。
-- 进入新的重构里程碑编码前，必须先检查 `docs/current.md` 的确认门禁；未获用户确认的新文件、类和公开方法清单不得创建。
-- `docs/design.md`、`docs/plan.md`、`docs/task.md` 在 v2 切换完成前继续记录旧实现和历史基线，不提前改写为尚未落地的架构。
-- 用户已确认 `refactor-design.md` 中 R-D1～R-D6；R0/G0 已完成，R1 的新文件、类和公开方法清单已获用户确认。当前可按该清单创建 v2 骨架代码与核心自动化测试；后续阶段仍须在创建新模块前提交对应清单供用户确认。
-- R0～R8 期间冻结 InterviewAgent、LearningAgent、完整 Job Search 等新功能；除非用户明确改变范围，不在旧 `BaseAgent`/`App` 上继续叠加功能。
-- v2 禁止依赖可变全局运行时单例、import-time 注册、CLI 访问 Agent 私有状态和魔法控制 dict；依赖由 composition root 显式装配。
-- v2 不迁移旧 Session、Memory、Chroma、`data/temp/` 或其他运行状态；只保留 `data/reference/`、`data/prompts/`、`data/resume/template/` 三类静态资产。
-- 用户已明确授权 `refactor` 分支编写核心自动化测试，优先覆盖 domain/runtime/session/tool codec/workspace；adapter、CLI、真实 LLM、Chroma、LaTeX 使用集成测试、Notebook 或 smoke checklist。
+## 当前 R8-D 授权
 
-## Commands
+用户已通过决策 227 明确授权在新会话执行 R8-D。本次授权边界如下：
 
-```bash
-uv run python main.py          # 启动 CLI
-uv lock                        # 使用项目默认 TUNA 镜像更新 universal lock
-uv sync --locked               # 严格按现有锁文件同步环境
-uv add <pkg> --no-sync         # 只添加并解析依赖，不同步环境
-uv sync                        # 添加依赖后单独下载/安装
-uv remove <pkg>                # 移除依赖
-uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab  # 交互式调试
+- 从 `docs/task.md` 的 **R8-D 4.2 删除前安全快照**开始，依次完成 4.2～4.5。
+- R8-D 只做 legacy 删除、删除敏感验证和独立提交；不新增业务能力，不新增 runtime class、service、port、schema 或公开方法。
+- R8-D 提交并 checkpoint 后必须停止。不得自动进入 R8-G 或 R9。
+- 如果发现需要扩大删除范围、修改公开协议、删除测试或猜测性移除依赖，立即停止并请求用户确认。
+
+### Git 跟踪删除白名单
+
+仅允许删除以下 8 个 legacy package 中已复核的 45 个 Git 跟踪文件：
+
+- `src/agents/`
+- `src/cli/`
+- `src/llm/`
+- `src/memory/`
+- `src/prompts/`
+- `src/rag/`
+- `src/tools/`
+- `src/utils/`
+
+仅允许删除以下 6 个顶层 legacy module：
+
+- `src/config.py`
+- `src/lifecycle.py`
+- `src/logger.py`
+- `src/message.py`
+- `src/request.py`
+- `src/response.py`
+
+当前 tracked 删除白名单总计 51 个文件。执行前必须用 `git ls-files` 重新生成并核对；若数量、路径或目录内容发生变化，停止并重新审查。
+
+### 本地 checkpoint 清理白名单
+
+以下 3 个目录被 Git 忽略，必须在确认 resolved absolute path 位于当前仓库内、且不存在意外内容或 reparse link 后，使用 literal path 单独删除：
+
+- `.ipynb_checkpoints/`
+- `src/.ipynb_checkpoints/`
+- `src/llm/.ipynb_checkpoints/`
+
+禁止使用 `git clean`、通配符、工作区根目录递归删除或从搜索结果拼接删除命令。checkpoint 删除只记录为本地证据，不伪装成 Git 提交内容。
+
+### 必须保留
+
+- `src/__init__.py`
+- 完整 `src/get_me_in/`
+- 完整 `tests/get_me_in/`
+- `scripts/r6_knowledge_smoke.py`
+- `data/reference/`
+- `data/prompts/`
+- `data/resume/template/`
+- `data/workspace/`
+- `data/v2/`
+
+以下 legacy 用户运行数据永远不得读取、改写、迁移或删除：
+
+- `data/save/`
+- `data/memories/`
+- `data/chroma/`
+- `data/temp/`
+
+证明“未读取”必须组合使用静态扫描、Settings sentinel 和拒绝访问 smoke；mtime／hash 只能证明未改写。
+
+### 依赖边界
+
+`pyproject.toml` 当前 11 个直接依赖均仍被 v2 使用，包括延迟导入的 `pdfplumber`、`python-docx`、`chromadb` 和 `sentence-transformers`。R8-D 预计保持 `pyproject.toml` 与 `uv.lock` 不变。
+
+删除后必须复核使用证据；如果发现新的依赖清理候选，停止 R8-D 并单独提交审查，不得在删除提交中顺手移除。
+
+### R8-D 验证与提交
+
+删除后至少完成：
+
+```powershell
+uv run python -m unittest discover -s tests/get_me_in -t .
+uv run python -m compileall src/get_me_in main.py
+git diff --check
 ```
 
-CLI 命令：
-- `/edit` — 长文本输入（调 `$EDITOR`）
-- `/ragreload [关键词]` — 重载 RAG 索引
-- `/dump` — 导出当前 Agent 对话历史到 `data/logs/`
-- `/restore [session_id]` — 恢复存档会话（无参数交互选择）
-- `/exit_sub` — 子 Agent 退回主 Agent
-- `/exit` — 退出程序
+还必须：
 
-## Workflow
+- 扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 和生产配置，确认无 legacy import、动态 import 字符串或 import-time registration 依赖。
+- 从实际 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令。
+- 完成根入口启动／`/exit`、production composition 和拒绝访问 4 个 legacy data 目录的删除敏感 smoke。
+- 比较旧运行数据删除前后只读指纹／mtime，并确认保留路径完整。
+- 审查 `git diff --name-status` 与 staged diff：R8-D 提交只包含已确认的 51 个 legacy 源文件删除。
+- 创建独立 R8-D commit；不得混入 R8-G 文档、README、`.env.example` 或 v2 代码变更。
 
-本项目遵循 **Plan → Execute → Result Validation → Replan** 循环。
-工作完成后应使用 `/project-checkpoint` 更新 `docs/current.md` 和 `docs/task.md`。
-新会话开始时使用 `/project-bootstrap` 恢复上下文。
-**不要主动推进项目进度** — 完成当前任务后，主动提醒用户审查成果并保存状态（`/project-checkpoint`），由用户决定是否继续下一步。
+R8-D 前的入口回退点是 `9fbeabc`。R8-D 后紧急回退必须先 revert R8-D 提交恢复 legacy 源码，再 revert `9fbeabc` 恢复旧入口；恢复源码后才允许重新启用 legacy-only 配置。任何回退都不得触碰旧运行数据。
 
-## Architecture
+## 常用命令
 
-**Hub-and-Spoke 模式：** 主 Agent 是唯一入口和调度中心。所有 Agent 共享相同的基础能力（对话循环、意图识别、工具调用、记忆读写），主 Agent 唯一特权是持有 `AgentRegistry` 调度子 Agent。子 Agent 之间不允许直接通信，也不允许持有或调度其他 Agent。
-
-**App 双循环结构：**
-```
-外层 while input():                    ← 等用户输入
-    request = Request(USER_INPUT, text)
-    内层 while True:                   ← agent loop（阻塞用户输入）
-        response = handler.process(request)
-        FINISH   → render, break
-        PROGRESS → render, request = CONTINUE（工具 handler 内可通过 UIBridge 直连 CLI 交互）
+```powershell
+uv run python main.py
+uv run python -m unittest discover -s tests/get_me_in -t .
+uv run python -m compileall src/get_me_in main.py
+uv lock
+uv sync --locked
+uv add <package> --no-sync
+uv sync
+uv remove <package>
+uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab
 ```
 
-**模块分为两层：**
+CLI 当前有 10 个命令：
 
-| 层 | 模块 | 说明 |
-|----|------|------|
-| 基础设施 | 配置模块 (`src/config.py`) | 启动时 `load_dotenv()` + 必填校验 → `SimpleNamespace` 单例；其他模块禁止 `os.environ` |
-| 基础设施 | 日志模块 (`src/logger.py`) | `get_logger(__name__)` 懒加载；`RotatingFileHandler`（10MB×5）→ `data/logs/app.log`；stderr 输出 ERROR+ |
-| 基础设施 | Message 模块 (`src/message.py`) | 数据总线：9 字段（event_type/id/role/timestamp/message/tool/tool_call_id/event_payload/thinking）；`Role(StrEnum)`（USER/SYSTEM/ASSISTANT）+ `EventType(StrEnum)` 双枚举 |
-| 基础设施 | 提示词模块 (`src/prompts/`) | `PromptLoader.get()` 强制拼接 `general_agent/` → 替换 14 个占位符；`get_raw()` 跳过拼接 |
-| 基础设施 | LLM 模块 (`src/llm/`) | `get_client()` 双检锁单例；双 tier（`chat_pro`/`chat_flash`）；`**kwargs` 透传；`_thinking_extra_body()` 控制 provider thinking |
-| 基础设施 | RAG 模块 (`src/rag/`) | Chroma + `sentence_transformers`；`search()`/`load()`/`start()`/`is_ready()` 四个公开 API；bi-encoder 召回 → cross-encoder 重排 |
-| 基础设施 | Tool 系统 (`src/tools/`) | `@tool` 装饰器注册 → `ToolRegistry` 全局管理；`input_schema` 扁平化，type/required 自动推断；`ToolCallException` 统一异常；handler 通过 `UIBridge`（`src/cli/uibridge.py`）直连 CLI 交互 |
-| 基础设施 | UIBridge (`src/cli/uibridge.py`) | 跨线程通信桥：工具 handler（后台线程）调 `select()`/`confirm()` 阻塞等待，主线程 spinner 循环中轮询并渲染 questionary |
-| 基础设施 | Lifecycle 模块 (`src/lifecycle.py`) | `register_shutdown(hook, name)` → `shutdown()` 逆序执行 |
-| 基础设施 | CLI/App 层 (`src/cli/`) | `App`（I/O + 渲染 + 双循环）+ `Handler`（抽象协议）；`Request`/`Response` 为 App↔Agent 协议层，不进对话历史 |
-| 基础设施 | 文件读取 (`src/utils/file_reader.py`) | `read_text(path, offset, limit)` / `list_directory(path)` / `search_text(root, pattern, ...)` / `read_pdf` / `read_docx`；charset-normalizer 编码检测 |
-| 基础设施 | 状态管理 (`src/utils/saver.py`) | `SaveManager` 类：auto-save on FINISH → `data/save/{session_id}/`；`/restore` 恢复 `_history` + `_plan`；延迟 sub 清理防崩溃；`session.json` 持久化 plan 状态 |
-| 基础设施 | 对话 dump (`src/utils/dumper.py`) | `dump_history(agent_name, history)` → `data/logs/<agent>_<datetime>_message.dump` |
-| Agent | BaseAgent (`src/agents/base.py`) | 14 个抽象方法 + `process(Request) -> Response` 单步执行；`_pro_params`/`_flash_params` 默认 `response_format={"type": "json_object"}`；Plan 基础设施（`_plan` + 3 工具 + system_message 注入）；`dump_history()` 导出历史 |
-| Agent | MainAgent (`src/agents/main_agent.py`) | 路由 Agent：只做意图识别 + 调度子 Agent，不执行领域任务 |
-| Agent | ResumeAgent (`src/agents/resume/agent.py`) | 简历定制 Agent：workspace 工具直接操作 LaTeX 模板，`copy_template` → 填充占位符 → `build_pdf`；用户明确要求时可用 `merge_pdfs` 合并中英文 PDF，再用 `workspace_open` 预览 |
-| Agent | JobSearchAgent (`src/agents/job_search/agent.py`) | M4 测试用子 Agent |
-| 服务 | 记忆模块 (`src/memory/`) | Facade：`build_memories`/`search_memories`/`delete_memory`；观察者模式（Store → 事件 → Indexer → RAG）解耦；按 Agent 分目录，一文件一条记忆 |
+- `/help`
+- `/edit`
+- `/dump`
+- `/restore`
+- `/rewind`
+- `/ragreload`
+- `/build-memory`
+- `/exit_sub`
+- `/approval`
+- `/exit`
 
-**记忆模块是唯一共享通道：** 所有 Agent 通过记忆模块读写上下文，记忆按 Agent 隔离存储在 `data/memories/<agent>/` 下。跨 Agent 检索通过 `search_memories(query, agent=None)` 走 RAG 语义搜索。
+旧 `/auto-approve-switch` 仅是历史 baseline，不是当前命令。
 
-**Agent key 常量（`src/agents/registry.py`）：**
-- `MAIN_AGENT_KEY = "main"`
-- `RESUME_AGENT_KEY = "resume"`
-- `JOB_SEARCH_AGENT_KEY = "job_search"`
-- `INTERVIEW_AGENT_KEY = "interview"`
+## 当前 v2 架构
 
-**工具模块清单：**
+生产入口：
 
-| 模块 | 工具 | 数量 |
-|------|------|------|
-| `system_tool.py` | `get_current_datetime`, `get_working_dir` | 2 |
-| `web_tool.py` | `web_search` | 1 |
-| `switch_tools.py` | `switch_to_subagent`, `switch_to_mainagent`, `provide_choices` | 3 |
-| `plan_tools.py` | `create_plan`, `update_plan_status`, `cancel_all_plans`, `replan` | 4 |
-| `workspace_tools.py` | `workspace_read`, `workspace_list`, `workspace_grep`, `workspace_search_file`, `workspace_replace`, `workspace_write`, `workspace_delete`, `workspace_move`, `workspace_edit`, `workspace_open` | 10 |
-| `customer_file_tool.py` | `read_customer_file` | 1 |
-| `rag_tools.py` | `query_memory`, `query_reference_data` | 2 |
-| `resume_tools.py` | `copy_template`, `build_pdf`, `merge_pdfs` | 3 |
-| **总计** | | **26** |
+```text
+main.py
+  → src.get_me_in.cli.main.main()
+  → Settings.from_env()
+  → build_application()
+  → CliApp
+```
 
-详细设计见 `docs/design.md`。
+`src/get_me_in/` 采用显式分层：
 
-## Key Conventions
+| 层 | 主要职责 |
+|---|---|
+| `domain/` | immutable domain types、RuntimeCommand／RuntimeEvent、ToolOutcome、Session／Plan／Artifact／Knowledge 状态 |
+| `application/` | AgentRuntime、Application、Orchestrator、SessionService、PlanService、KnowledgeService、MemoryService、ArtifactService |
+| `ports/` | LLM、Workspace、Session、Knowledge、Memory、Artifact、Frontend、Clock、Subprocess 等边界 |
+| `adapters/` | OpenAI、Chroma、JSON repository、本地 Workspace／Resume artifact、文件读取和进程执行 |
+| `tools/` | 声明式 ToolDefinition 与薄 handler |
+| `cli/` | 输入、命令、渲染和 WorkerRunner；只通过 Application/RuntimeEvent 交互 |
+| `bootstrap.py` | 唯一 production composition root，显式装配并转移资源所有权 |
 
-- **新增文档必须使用中文撰写** — 允许保留必要的代码标识符、命令、路径、协议名和产品专有名词；表格标题、说明与结论均须使用中文
-- **测试规则** — `refactor` 分支已获用户明确授权编写核心自动化测试；其他分支仍遵循“不要写测试，除非用户显式要求”
-- **同步代码**，不使用 `asyncio` 或任何异步框架
-- **使用 `uv` 管理依赖和运行** — 运行项目 Python 代码必须带 `uv run` 前缀
-- **uv 默认镜像与跨平台锁** — `pyproject.toml` 只配置清华 TUNA 为默认 PyPI 镜像；不设置 `[tool.uv].environments`，保持 Windows 与 Ubuntu/Linux 的 universal lock。新增依赖使用 `uv add <package> --no-sync`，完成后再执行 `uv sync`，以区分依赖解析与 wheel 下载／安装耗时
-- **uv 锁定禁止并发** — 执行 `uv lock` 或 `uv add` 前先确认没有其他 `uv lock`／`uv add` 进程；依赖解析可能长时间无输出，应等待其完成，不因暂时无输出提前终止
-- **`from src.config import config` 放在所有第三方 import 之前** — `config` import 触发 `load_dotenv()`，某些第三方库（`huggingface_hub`、`sentence_transformers`）在 import 时缓存 `os.environ`，必须先加载 `.env`
-- **LLM 客户端用 `get_client()` 单例** — `from src.llm import get_client`，不要直接 `LLMClient()`；双检锁线程安全
-- **提示词与代码分离** — 模板在 `data/prompts/`，`PromptLoader` 加载；Agent 调用 `get()` 自动拼接 `general_agent/`；非 Agent 模块用 `get_raw()`
-- **LLM temperature 由 Agent `_pro_params` 控制** — 不在 LLMClient 层设默认值。MainAgent 0.1，ResumeAgent/JobSearchAgent 0.2，MemoryBuilder 0；调用方可通过 `**kwargs` 覆盖
-- **Agent 必须实现 14 个抽象方法** — `_get_agent_name` + 13 个占位符方法（`_get_agent_description`、`_get_responsibilities` 等），遗漏 Python 在 import 时 `TypeError`
-- **工具 handler 返回纯数据** — 返回 `str`/`dict`，由调用方（`BaseAgent._execute_tool()`）包装为 `tool_call_result` Message
-- **`Request`/`Response` 是 App↔Agent 协议层** — 不进对话历史，与 `Message` 语义分离；`RequestType` 枚举（USER_INPUT/CONTINUE/CONFIRM_APPROVED），`ResponseType` 枚举（实际使用 FINISH/PROGRESS；CONFIRM/SELECT 已废弃）
-- **工具审批由 `ConfirmMode` + UIBridge 共同控制** — `_execute_tool()` 根据 `ConfirmMode`（NEVER/ALWAYS/CONFIG）决定是否调 `get_bridge().confirm()` 弹审批窗；特殊交互（如 `provide_choices` 的 `select()`）由 handler 自行调用 UIBridge
-- **Plan 机制为通用基础设施** — `BaseAgent` 层 4 个免审批工具（`create_plan`/`update_plan_status`/`cancel_all_plans`/`replan`），`process()` 中通过 `_stamp_plan_status()` 将当前 plan 快照写入每条 `Message.plan_status`（不再拼接 system prompt）；MainAgent plan 全程存活，子 Agent plan 随 return 丢弃
-- **工具访问 Agent 实例用 context variable** — 需访问 `self` 的工具（如 plan 工具）通过模块级 `_set_*()` / `_get_*()` 函数获取当前 Agent 实例，模式与 UIBridge（`_set_bridge`/`get_bridge`）一致
-- **`EventType(StrEnum)` / `Role(StrEnum)` 双枚举** — 代码中禁止裸字符串；`EventType` 5 个值（USER_INPUT/TOOL_CALL/TOOL_CALL_RESULT/FINISH/SYSTEM_MESSAGE），`Role` 3 个值（USER/SYSTEM/ASSISTANT）
-- **Cancel 中断机制** — 按 Esc 中断 agent loop：`_cancel_event`（`src/cli/uibridge.py`）跨线程取消信号；`_check_esc_pressed()`（`src/cli/app.py`）非阻塞检测；`process()` 中 3 个检查点；工具执行前取消时注入合成 `TOOL_CALL_RESULT`（`__cancelled__`）；cancel 标志在每次新请求开始时 `_clear_cancel()`。详见 `docs/design.md#417-agent-中断机制`
-- **SYSTEM_MESSAGE role 分类** — 纠错类（output_format 注入、未知工具提示）→ `Role.SYSTEM`；正常上下文（plan 注入、退出提示）→ `Role.USER`
-- **System prompt 不在 `_history` 中** — 单独 `_system_prompt` 字符串，`_to_openai()` 时以 `{"role": "system", "content": "..."}` 注入
-- **`ToolCallException` 统一工具异常** — handler 抛 `ToolCallException(message, suggestion)`，框架层填充 `arguments_schema` + `expected_output` + `error_code`；handler 不感知 tool 定义
-- **工具错误带上下文喂回 LLM 让其自修复** — 原则：给够上下文让 LLM 有能力自修复
-- **Agent key 用常量引用** — `RESUME_AGENT_KEY` / `MAIN_AGENT_KEY` 等，不写裸字符串
-- **StrEnum 用于 filter 枚举** — `MemoryType` / `ReferenceCategory` 保证 LLM 传入值与 metadata 约定一致，修改枚举时需同步更新对应文件（参见枚举 docstring）
-- **设计/计划文件直接删除，不保留废弃内容** — Git 负责版本追溯
-- **任务终止用 ⛔ 标记** — `docs/task.md` 中废弃任务标 ⛔ 并追加替代任务
-- **暂缓任务用 📌 标记** — `docs/task.md` 中暂缓实现的任务标 📌
-- **记忆固化时带分隔符** — Agent 写入记忆按 `---` 分隔，便于 Chunker 切分入库
-- Agent 之间禁止直接调用，必须通过主 Agent 编排
-- Agent 框架自研，不使用 LangChain/CrewAI/AutoGen 等现成框架
-- LLM 对话压缩由 LLM 自身完成，不引入额外 NLP 依赖
-- **Jupyter 调试** — `uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab`，jupyter 不写入项目依赖
-- **新模块先讨论设计** — 接口、职责边界、依赖关系确认后再动手
-- **新文件先列方法清单** — 让用户确认后再创建
-- **验证交付** — `refactor` 分支以自动化测试保护纯逻辑，以 Notebook/人工 smoke 验证真实 adapter 与交互链路；其他分支的非交互模块测试后仍需提供 Notebook 代码供用户验证
-- **日志用 `get_logger(__name__)`** — 禁止 `print()`；失败记日志不抛异常（防御性编程）
-- **禁止 Bash + Python 读写文件** — 必须用 Read/Edit/Write/Glob/Grep 专用工具
-- **current.md 新增决策时同步更新 decision.md** — 编号体系保持一致
-- **HF Hub 进度条在 RAG 模块 import 前静默** — `src/rag/__init__.py` 在 import `sentence_transformers` 前设置环境变量
+核心约束：
 
-## Doc Files
+- Main 是唯一入口与路由中心；当前 production Agent 只有 Main 和 Resume。
+- 子 Agent 之间不得直接通信，也不得持有或调度其他 Agent。
+- `SessionState` 是唯一 canonical session owner；CLI 不访问 Agent 私有字段。
+- Runtime 使用 typed command/event transition；审批、选择、handoff、取消、失败和暂停不得使用魔法 dict。
+- Tool 通过显式 `ToolCatalog` 和 capability 可见性装配；禁止 import-time 注册或可变全局 runtime singleton。
+- 每个 Runtime 拥有独立 LLM、CancellationToken、PlanService 和 AgentSessionState；Application/Orchestrator 负责 handoff。
+- Workspace、Knowledge、Memory 和 Artifact 副作用只能经 application service 与 port 执行。
+- Artifact operation 使用 PENDING → side effect → COMMITTED，并保留 typed partial failure 和幂等 replay。
+- Knowledge reload 由 manifest 的 observed/indexed 状态和单 worker 串行化；真实 adapter 必须显式 close。
+- cancelled interaction 与 failure 分离：Esc 或选择取消保留活动 SubAgent/handoff，并在 `WAITING_FOR_USER` 等待下一条用户消息。
+
+## 数据与配置
+
+- 静态输入只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`。
+- v2 运行数据只写 `data/workspace/` 与 `data/v2/`。
+- 环境由 `src/get_me_in/cli/main.py` 加载 `.env`，再由 `Settings.from_env()` 解析；v2 代码不得 import legacy `src.config`。
+- `pyproject.toml` 只配置清华 TUNA 为默认 PyPI 镜像，不设置 `[tool.uv].environments`，保持 Windows 与 Ubuntu/Linux universal lock。
+- 新增依赖先执行 `uv add <package> --no-sync`，再单独 `uv sync`；运行 `uv lock`／`uv add` 前先确认没有并发 uv 锁定操作。
+
+## 工作约定
+
+- 新增文档使用中文，可保留代码标识符、命令、路径、协议名和产品专有名词。
+- 项目遵循 **Plan → Execute → Result Validation → Replan**；完成阶段后使用 `/project-checkpoint`。
+- 使用同步代码，不引入 `asyncio` 或异步框架。
+- 运行项目 Python 代码必须使用 `uv run`。
+- `refactor` 分支已授权核心自动化测试；纯 domain/application 逻辑必须有自动化保护，真实 LLM、Chroma、LaTeX 与 CLI 交互使用集成或 smoke 验证。
+- 不得通过删除测试、放宽 typed contract 或用 mock 掩盖真实 adapter 问题来获得绿灯。
+- Agent key、capability、状态和事件使用声明式常量／枚举，不写裸字符串控制协议。
+- v2 禁止 import legacy package；`tests/get_me_in/test_import_boundaries.py` 持续维护 forbidden module 防回归。
+- 新模块、公开类或公开方法必须先确认设计和清单；R8-D 不允许创建这些对象。
+- R0～R8 继续冻结 InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 和其他 R9 功能。
+- 保留用户已有工作树变更；删除或移动前必须解析并核对精确绝对路径。
+- 禁止 Bash/Python 脚本直接读写项目文件；使用专用读取、搜索和补丁工具。
+- `docs/current.md` 新增决策摘要时必须同步追加 `docs/decision.md`。
+
+## 文档
 
 | 文件 | 用途 | 加载时机 |
-|------|------|----------|
-| `docs/current.md` | 当前状态快照（阶段/任务/阻塞/下一步） | 每次会话必读 |
-| `docs/design.md` | 架构与模块设计（含 4.17 Agent 中断机制） | 涉及架构问题时 |
-| `docs/plan.md` | 里程碑与实施计划 | 需要排期时或者当前任务下所有子任务都结束 |
-| `docs/task.md` | 任务列表（阶段→任务→子任务，⬜🔄✅⏸️⛔📌） | 需要任务细节时 |
-| `docs/decision.md` | 决策记录 | 需要历史决策理由时 |
-| `docs/refactor-design.md` | `refactor` 分支现状分析、目标架构与迁移原则 | 在 `refactor` 分支涉及架构或创建 v2 模块时 |
-| `docs/refactor-plan.md` | `refactor` 分支里程碑、依赖与验收门禁 | 在 `refactor` 分支排期或进入下一阶段时 |
-| `docs/refactor-task.md` | `refactor` 分支可执行任务与状态 | 在 `refactor` 分支开始、完成或审查任务时 |
+|---|---|---|
+| `docs/current.md` | 唯一当前状态快照：阶段、任务、阻塞、下一步和活跃文档路由 | 每次新会话必读 |
+| `docs/design.md` | 当前 v2 架构、迁移边界和未来设计备忘 | 涉及架构、边界或 R8 删除范围时 |
+| `docs/plan.md` | 里程碑、依赖、验收和停止门禁 | 排期、进入阶段或检查验收时 |
+| `docs/task.md` | 唯一执行清单与状态标记 | 开始、完成或审查任务时 |
+| `docs/decision.md` | 按编号追加的历史决策与理由 | 需要追溯边界或新增重要决定时 |
+
+不要重新创建 `docs/refactor-design.md`、`docs/refactor-plan.md` 或 `docs/refactor-task.md`。
