@@ -24,10 +24,12 @@ class SettingsTests(unittest.TestCase):
             "RERANKER_MODEL",
             "PDF_BUILD_TIMEOUT_SECONDS",
             "ARTIFACT_LOG_MAX_BYTES",
+            "SHUTDOWN_TIMEOUT_SECONDS",
         ):
             self.assertIn(name, example)
         self.assertIn("legacy rollback only", example)
         self.assertIn("AGENT_MAX_MODEL_CALLS=100", example)
+        self.assertIn("SHUTDOWN_TIMEOUT_SECONDS=60", example)
         self.assertIn("AGENT_MAX_ROUNDS", example)
 
     def test_from_env_builds_typed_static_asset_paths(self) -> None:
@@ -71,6 +73,7 @@ class SettingsTests(unittest.TestCase):
         )
 
         self.assertEqual(100, settings.max_model_calls_per_run)
+        self.assertEqual(60.0, settings.shutdown_timeout_seconds)
 
     def test_from_env_validates_artifact_settings(self) -> None:
         env = {

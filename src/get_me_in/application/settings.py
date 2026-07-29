@@ -38,7 +38,7 @@ class Settings:
     embedding_batch_size: int = 32
     rerank_batch_size: int = 32
     retrieval_top_k: int = 8
-    shutdown_timeout_seconds: float = 5.0
+    shutdown_timeout_seconds: float = 60.0
     auto_memory_on_exit: bool = False
     artifacts_dir: Path = Path("data/v2/artifacts")
     pdf_build_timeout_seconds: float = 60.0
@@ -132,7 +132,7 @@ class Settings:
                 raise SettingsValidationError(f"{name} must be greater than zero")
             return value
 
-        shutdown_raw = env.get("SHUTDOWN_TIMEOUT_SECONDS", "5")
+        shutdown_raw = env.get("SHUTDOWN_TIMEOUT_SECONDS", "60")
         try:
             shutdown_timeout = float(shutdown_raw)
         except ValueError as error:
