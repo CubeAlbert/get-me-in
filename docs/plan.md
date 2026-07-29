@@ -268,7 +268,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 - R8-E 将根 `main.py` 委托给 v2 CLI，并补齐 composition／启动异常的用户可读错误和退出码 `1`；形成独立可回退 commit，不同时删除 legacy。
 - R8-O 从根入口执行完整自动化与真实 smoke，验证入口退出码、CLI、Knowledge/Memory、Resume、handoff、审批／取消、restore/rewind 和资源关闭；用户审查通过前不进入删除。
 - R8-D 按已确认精确清单删除 legacy production modules 与 `.ipynb_checkpoints`，保留 `src/__init__.py`、完整 `src/get_me_in/` 和全部旧用户运行数据。
-- R8-G 删除过渡期 legacy rollback 配置说明，更新 README、AGENTS.md、capability matrix、smoke checklist 及当前四份项目文档为已落地事实；历史 baseline 明确保留为历史，不冒充当前命令。设计／计划／任务文件名已在 R8-D 前由决策 227 提前收敛。
+- R8-G 删除过渡期 legacy rollback 配置说明，更新 README、AGENTS.md 及当前四份项目文档为已落地事实。设计／计划／任务文件名已由决策 227 提前收敛；辅助 baseline／audit／matrix／smoke 文档已由决策 228 收敛并删除，完整历史由 Git 保留。
 
 **验收门禁 G8：**
 
@@ -327,7 +327,7 @@ R6 与 R7 不再并行。R6 coding 与 G6 完成后必须先停在 R6-T；只有
 | 风险 | 控制措施 |
 |------|----------|
 | 双实现长期并存 | 每个阶段设置切换门禁；R8 是明确清理里程碑 |
-| 重写期间行为漂移 | R0 冻结 capability matrix；每阶段对照当前行为 |
+| 重写期间行为漂移 | R0 capability 基线已收敛到 `docs/design.md` 第 2 节；每阶段从实际 Catalog 和验收证据复核 |
 | 重写回归 | 核心 domain/application 使用已授权的 unit/contract tests；adapter 走 integration/smoke |
 | 误用旧运行数据 | bootstrap 只装配保留的三类静态资产；v2 数据目录与 schema 明确隔离 |
 | LLM provider 无法可靠 abort | 隐藏在 adapter；允许 request-scoped transport，不污染 Runtime |

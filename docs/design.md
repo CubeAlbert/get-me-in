@@ -66,6 +66,20 @@ R0 重构启动时，legacy 项目已经完成一个可运行的 CLI 多 Agent �
 
 当前文档列出 23 个工具，但代码实际存在 25 个 `@tool`：Plan 已从 3 个增加到 4 个，switch 模块还包含 `provide_choices`。`RequestType.CONFIRM_APPROVED`、`ResponseType.SELECT`、`ResponseType.CONFIRM` 仍在协议中，但主循环已经不再使用。这类漂移说明当前架构缺少单一事实来源，重构后工具目录、Agent 目录和协议枚举必须由同一声明生成或可直接枚举验证。
 
+### 2.4 历史基线材料收敛
+
+R0～R5 曾使用五份辅助文档冻结 legacy 行为和迁移输入。决策 228 确认其有效内容已收敛，完整原文继续由 Git 保存：
+
+| 历史材料 | 已收敛内容 | 当前事实来源 |
+|---|---|---|
+| v1 capability parity matrix | legacy 可观察能力、25 个工具迁移基线、允许废止的全局 Registry／UIBridge／魔法字段 | 本节、第 6 节、`docs/task.md` 和相关决策；当前 Catalog 必须从运行时导出 |
+| G0 audit | R-D1～R-D6、G0 通过与进入 R1 的门禁 | 第 9 节、`docs/plan.md` R0、`docs/task.md` R0 和 `docs/decision.md` |
+| legacy CLI smoke checklist | 启动、命令、审批、handoff、Session、Knowledge／Memory、Resume 的人工观察维度 | `docs/task.md` R8-O、`docs/current.md` 和决策 225 的实际完成证据 |
+| legacy entry baseline | 旧入口源码基线 `f5ee3765cc055622029d8ce34c1a8f611202c434` 与旧启动链路 | 第 6.11 节、决策 190～192；删除前入口回退点为 R8-E `9fbeabc` |
+| v2 static asset boundary | 只复用 reference／prompts／resume templates，禁止迁移旧运行数据 | 第 7.1 节、R-D6、`docs/task.md` R8-D 和 AGENTS.md |
+
+这些辅助文档中的空白 smoke 记录和阶段性措辞不是当前待办，不得覆盖 `docs/current.md`、实际 Catalog 或已完成的 R8-O 证据。
+
 ## 3. 架构问题与重复代码根因
 
 ### 3.1 巨型对象与职责聚合
@@ -676,7 +690,7 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 2. **R8-E 入口切换：** 切换根 `main.py`，补齐 `cli.main` 启动异常映射和入口 contract tests，形成独立 commit。该 commit 是删除前的明确回退点。
 3. **R8-O 观察门禁：** 从 `uv run python main.py` 执行完整 smoke matrix，验证启动错误无 traceback、基础对话、命令、审批／取消、Main→Resume→Main、save/restore/rewind、Knowledge/Memory、Resume copy/edit/build/open 与关闭。未通过时用 `git revert <R8-E commit>` 回退，不使用破坏性 reset；R8-P 保留的 legacy rollback 配置使旧入口仍可启动。
 4. **R8-D 遗留删除：** 只有 R8-O 经用户审查通过后才删除精确 legacy 源码与 checkpoint 目录；同一提交补齐 import/dependency 检查，不删除旧运行数据。
-5. **R8-G 文档与 G8：** 删除 `.env.example`／README 的 legacy rollback 段，将 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md`、README 与 AGENTS.md 更新为已落地 v2 事实；同步活跃 refactor 文档与 checkpoint，完成 G8。历史 smoke/capability 表保留为明确标记的 baseline，不把旧 `/auto-approve-switch` 改写成当前命令。
+5. **R8-G 文档与 G8：** 删除 `.env.example`／README 的 legacy rollback 段，将 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`、README 与 AGENTS.md 更新为已落地 v2 事实并完成 G8。历史 smoke/capability 内容已由决策 228 收敛到四份主文档并通过 Git 保留，不把旧 `/auto-approve-switch` 改写成当前命令。
 
 #### 6.11.4 R8-O／G8 证据要求
 

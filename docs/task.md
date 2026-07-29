@@ -562,7 +562,8 @@
 
 - ✅ 在 R8-D 前按用户要求将活跃重构内容收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`，删除并行的 `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md`；历史 v1 内容由 Git 保留。
 - ✅ 在 R8-D 前更新 AGENTS.md：只描述当前 v2 架构、四份活跃文档路由、R8-D 授权／精确删除／验证／回退边界；删除将 legacy 架构写成当前事实的旧说明。
-- ⬜ 删除 `.env.example`／README 的 legacy rollback 段；更新 `docs/capability-parity-matrix.md`、`docs/legacy-cli-smoke-checklist.md` 与 README；Agent、tool、command、配置和数据目录必须与实际代码一致，旧 `/auto-approve-switch` 等内容只保留为明确历史 baseline。R8-D 后再次复核 AGENTS.md 并删除只适用于执行期的说明。
+- ✅ 将 capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与 v2 static asset boundary 的有效内容映射到四份主文档和 Git 历史，并删除五份辅助文档；`docs/` 只保留 `current.md` 与四份主文档。
+- ⬜ 删除 `.env.example`／README 的 legacy rollback 段并更新 README；Agent、tool、command、配置和数据目录必须与实际代码一致。R8-D 后再次复核 AGENTS.md 并删除只适用于执行期的说明。
 - ⬜ R8-D 完成后再次同步 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`、`docs/current.md` 与 AGENTS.md 的最终状态。
 - ⬜ 完成删除后的完整自动化、静态、真实 adapter 与根入口 smoke matrix；确认旧数据保留说明和 R8-E 回退点完整。
 - ⬜ 完成 G8，checkpoint 后停止，等待用户审查；不得自动进入 R9。

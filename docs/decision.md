@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 228 — 辅助文档完成收敛并删除](#决策-228--辅助文档完成收敛并删除)
 - [决策 227 — 授权新会话执行 R8-D 并收敛活跃文档](#决策-227--授权新会话执行-r8-d-并收敛活跃文档)
 - [决策 226 — R8-D 执行清单细化并保持授权门禁](#决策-226--r8-d-执行清单细化并保持授权门禁)
 - [决策 225 — R8-O 完整通过并停在 R8-D 授权门禁前](#决策-225--r8-o-完整通过并停在-r8-d-授权门禁前)
@@ -5384,3 +5385,37 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 收敛后活跃文件固定为 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`，`docs/current.md` 只引用这四份文件。
 - `docs/task.md` 将 R8-D 授权项标记完成，并把新会话起点固定为 4.2；R8-D 其余执行项保持待办。
 - 本次变更仅涉及 Markdown 项目文档与 AGENTS.md，不包含任何 legacy 源码、checkpoint 或 `data/` 变更。
+
+---
+
+### 决策 228 —— 辅助文档完成收敛并删除
+
+**背景：** 决策 227 已将活跃重构内容收敛到 design／plan／task／decision，但 `docs/` 仍保留五份 R0～R5 阶段的辅助 baseline、audit、matrix 和 smoke 文档。用户要求判断这些文件是否仍有保留必要；若内容已经整合，则用独立提交删除额外文档。
+
+**决定：**
+
+- 保留 `docs/current.md`。它是 `/project-bootstrap` 的唯一状态入口，不属于四份主文档，但新会话恢复依赖它。
+- `docs/capability-parity-matrix.md` 的 legacy 能力、25-tool 基线和非等价机制已收敛到 `docs/design.md` 第 2／6 节、`docs/task.md` 与相关历史决策；当前 26-tool 事实必须从实际 Catalog 派生。
+- `docs/g0-audit.md` 的 G0 结论和 R-D1～R-D6 门禁已收敛到 `docs/plan.md` R0、`docs/task.md` R0、`docs/design.md` 第 9 节与决策记录。
+- `docs/legacy-cli-smoke-checklist.md` 的观察维度已由 `docs/task.md` R8-O、`docs/current.md` 和决策 225 的实际完成证据取代；旧清单中的空白结果与 `/auto-approve-switch` 不再是当前待办或命令事实。
+- `docs/legacy-entry-baseline.md` 的旧入口源码基线 `f5ee3765cc055622029d8ce34c1a8f611202c434` 已记录到 `docs/design.md`；当前删除前回退点继续是 R8-E `9fbeabc`。
+- `docs/v2-static-asset-boundary.md` 的三类静态输入和四类禁止旧运行数据边界已收敛到 `docs/design.md` 第 7.1 节、R-D6、`docs/task.md` R8-D 与 AGENTS.md。
+- 删除上述五份辅助文档。完整原文由 Git 历史保留；工作树中的 `docs/` 只保留 `current.md` 与 design／plan／task／decision 四份主文档。
+
+**理由：**
+
+- 五份文件均无代码或测试依赖，内容是已完成阶段的冻结材料；继续保留会制造空白 smoke、旧命令和阶段性数量与当前事实并列的歧义。
+- 将必要的 provenance 和映射写入主文档与本决策后，删除辅助副本不会损失新会话执行 R8-D 所需信息。
+- `current.md` 与四份主文档形成清晰的五文件恢复集合，符合 `/project-bootstrap` 路由，同时保留 Git 作为完整历史来源。
+
+**曾考虑的替代方案：**
+
+- 连同 `docs/current.md` 一起删除，只保留四份主文档 —— 会破坏项目约定和 `/project-bootstrap` 的状态入口，明确拒绝。
+- 保留五份文件并标为 archive —— 仍会让搜索结果混入旧命令、空白 smoke 和过期阶段状态，未采用。
+- 建立 `docs/archive/` 保存副本 —— Git 已提供完整追溯，无需在工作树维护第二份历史，未采用。
+
+**验证：**
+
+- 删除前确认五份文件只被文档互相引用，没有代码、测试、README 或运行配置依赖。
+- `docs/design.md` 新增历史材料收敛映射和旧入口源码基线；plan／task／current／AGENTS 已移除对辅助文件的活跃依赖。
+- 本提交不修改 `src/`、`data/`、`main.py`、测试、依赖、README 或 `.env.example`，不执行 R8-D。

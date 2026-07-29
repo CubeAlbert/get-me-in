@@ -15,7 +15,7 @@
    - `docs/task.md`
    - `docs/decision.md`
 3. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 已收敛为当前 v2 事实，不再存在并行的 `docs/refactor-*.md`。
-4. 其他 baseline、audit、matrix 和 smoke 文档只在任务明确需要时读取，不得据此覆盖 `current.md` 的阶段与授权状态。
+4. 历史 baseline、audit、matrix 和 smoke 原文由 Git 保存；不要在 `docs/` 重新创建归档副本，也不得据此覆盖 `current.md` 的阶段与授权状态。
 
 ## 当前 R8-D 授权
 

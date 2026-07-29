@@ -8,7 +8,7 @@
 
 **当前阻塞：** 无。用户已明确授权在新会话执行 R8-D；授权范围仅限 `docs/task.md` 4.2～4.5，不包含自动进入 R8-G 或 R9。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 与用户审查已完成，工程验证为 283 项自动化测试、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实 Memory delete 和 legacy refusal smoke 全部通过；KnowledgeService 状态竞态已由 `9da3242` 修复。用户已授权新会话执行 R8-D，但要求本会话只做文档收敛。活跃架构、计划和任务已从三份 `refactor-*` 文件收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`，`docs/decision.md` 继续作为唯一决策记录；历史 v1 文档内容由 Git 保留。R8-D 只读盘点确认 8 个 legacy package 内 45 个文件加 6 个顶层 module，共 51 个 Git 跟踪删除目标；三个被忽略的 checkpoint 目录当前共 5 个文件；11 个直接依赖均被 v2 使用。旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 永远不在删除范围内。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`。R8-O 与用户审查已完成，工程验证为 283 项自动化测试、`compileall`、`git diff --check`、import boundary、2 Agent／26 Tool／10 command Catalog、真实 Memory delete 和 legacy refusal smoke 全部通过；KnowledgeService 状态竞态已由 `9da3242` 修复。用户已授权新会话执行 R8-D，但要求本会话只做文档收敛。活跃架构、计划和任务已收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`，`docs/decision.md` 继续作为唯一决策记录；五份辅助 baseline／audit／matrix／smoke 文档的有效内容也已映射到四份主文档并删除，完整历史由 Git 保留。`docs/` 当前只保留本状态入口与四份主文档。R8-D 只读盘点确认 8 个 legacy package 内 45 个文件加 6 个顶层 module，共 51 个 Git 跟踪删除目标；三个被忽略的 checkpoint 目录当前共 5 个文件；11 个直接依赖均被 v2 使用。旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 永远不在删除范围内。
 
 **下一步：** 在新会话执行 `/project-bootstrap`，读取 `docs/current.md` 及其列出的四份活跃文档；确认工作区从本次文档 checkpoint 开始且干净，然后严格按 `docs/task.md` 4.2～4.5 完成 R8-D。R8-D 独立提交后停止，不自动进入 R8-G。
 
@@ -62,6 +62,7 @@
 225. **R8-O 完整通过并停在 R8-D 授权门禁前（后由决策 227 解除）** — 用户确认完整人工 smoke matrix 无问题；工程侧 283 项自动化测试、静态检查、Catalog、真实 Memory delete 与 legacy refusal smoke 全部通过。KnowledgeService 状态读取与锁释放竞态由 `9da3242` 修复。当时 R8-D 仍须后续明确授权。
 226. **R8-D 执行清单细化并保持授权门禁（后由决策 227 解除）** — 当前盘点确认 51 个 Git 跟踪 legacy 源文件、3 个本地 checkpoint 目录与 11 个仍被 v2 使用的直接依赖；执行拆分为删除前快照、精确 literal-path 删除、删除后验证、独立提交和逆序回退，禁止宽泛清理及任何旧运行数据访问。该次清单更新本身不构成删除授权。
 227. **授权新会话执行 R8-D 并收敛活跃文档** — 用户明确授权新会话按已确认清单执行 R8-D，同时要求本会话不删除代码，只将 v2 事实收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md` 并更新 AGENTS.md。新会话从 4.2 开始，R8-D 提交后停止，不自动进入 R8-G。
+228. **辅助文档完成收敛并删除** — capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与 v2 static asset boundary 的有效内容已映射到 design／plan／task／decision；五份辅助文件删除，完整历史由 Git 保留。`docs/current.md` 作为新会话入口继续保留，`docs/` 仅剩 current 与四份主文档。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
