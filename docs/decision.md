@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 239 — 完成 R8-G/G8 并在审查门禁停止](#决策-239--完成-r8-gg8-并在审查门禁停止)
 - [决策 238 — R8-G 5.5 真实 adapter 与数据边界 smoke 通过](#决策-238--r8-g-55-真实-adapter-与数据边界-smoke-通过)
 - [决策 237 — 独立修复 SubprocessRunner 并恢复 R8-G 5.5](#决策-237--独立修复-subprocessrunner-并恢复-r8-g-55)
 - [决策 236 — R8-G 5.5 被 Windows subprocess 输出解码缺陷阻塞](#决策-236--r8-g-55-被-windows-subprocess-输出解码缺陷阻塞)
@@ -5603,3 +5604,13 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **验证：** 真实 KnowledgeService 使用 Chroma、embedding、reranker 完成 `prepare`、reload、query、source delete 与 close，结果为 `KNOWLEDGE_RELOAD_SMOKE_OK added=1 hits=1 deleted=1 after=0 state=ready`；真实 MemoryService 使用 v2 JSON repository、实际 MemoryExtractor／后台 worker 与同一 Knowledge index 完成 build、query、delete，结果为 `MEMORY_SMOKE_OK job=memory-build-1 records=1 hits_before=1 hits_after=0`。Resume smoke 完成中英文 build、4 页 merge、Artifact metadata 与 replay。根入口 PTY 已复核欢迎、`/help`、审批切换、dump、restore、rewind 无候选、ragreload/build-memory 调度、无 handoff 的 `exit_sub` 错误处理与 `/exit`；Settings sentinel、legacy import／动态 import 静态扫描及旧目录只读 metadata 复核通过。
 
 **决定：** R8-G 5.5 的真实 adapter、根入口、数据边界与资源关闭验证项完成；进入 5.6 的 staged allowlist、最终 G8 验收与独立文档／配置提交。若最终 G8 重新发现代码、测试、依赖、公开协议或数据边界缺陷，仍按既定分流立即停止。
+
+---
+
+### 决策 239 —— 完成 R8-G/G8 并在审查门禁停止
+
+**背景：** R8-G 5.1～5.5 已按独立 checkpoint 执行，5.5 的真实 adapter／Memory／Knowledge／Resume／根入口与数据边界 smoke 已通过；5.6 需要确认最终变更边界、回退顺序和停止门禁。
+
+**验证：** `git diff --name-status ecb11db..HEAD` 仅显示 R8-G 白名单的 8 个文档／示例配置文件，以及用户明确授权并独立提交的 `src/get_me_in/adapters/subprocess_runner.py`、`tests/get_me_in/test_settings.py` 与 `tests/get_me_in/test_subprocess_runner.py`。完整 unittest `284/284`、`compileall`、`git diff --check`、legacy import／动态 import 扫描、Catalog（2 Agent／26 ToolDefinition／10 CLI command）、真实 Knowledge／Memory／Resume／根入口与 legacy data boundary 证据均已记录；工作区干净。
+
+**决定：** R8-G/G8 完成，最终 checkpoint 为当前文档状态；按照回退顺序与停止门禁等待用户审查。不得自动进入 R9。R8-G 文档提交之后若需回退，先按逆提交顺序 revert R8-G 文档 checkpoint，再 revert `7514af3`，最后 revert `9fbeabc`；任何回退不得触碰旧运行数据。

@@ -603,10 +603,10 @@
 
 #### 5.6 提交、回退与停止门禁
 
-- ⬜ 审查 `git diff --name-status` 与 staged diff；R8-G 提交只能包含 5.1 允许的 8 个文档／示例配置文件，不得包含生产代码、测试、依赖、数据或生成物。
-- ⬜ G8 全部通过后创建独立 R8-G 文档／配置提交；随后执行 `/project-checkpoint`，若 checkpoint 产生额外 diff，则单独提交 checkpoint，不把 R9 设计或实现混入。
-- ⬜ 记录两种紧急回退：当前 R8-D 后、R8-G 前按 `git revert 7514af3` → `git revert 9fbeabc`；R8-G 提交后按逆提交顺序先 revert R8-G 提交，再 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置，任何回退都不得触碰旧运行数据。
-- ⬜ 完成 G8 与 checkpoint 后停止，等待用户审查；不得自动进入 R9。
+- ✅ 复核 `git diff --name-status ecb11db..HEAD`：R8-G 文档／配置变更只涉及 8 个白名单文件；独立授权的 `6a092b5` 与 `ee558b4` 代码／测试修复保持为独立提交，未混入文档 checkpoint；最终工作区干净，`git diff --check` 通过。
+- ✅ 完成 G8 全量证据汇总并建立独立 checkpoint 链：5.2 `c644b12`、5.3 `7e400bd`、5.4 `7742d85`、5.5 `8bd8759`；代码缺陷修复 `6a092b5` 单独提交，R8-G 文档／配置变更未扩大生产边界。
+- ✅ 记录两种紧急回退：当前 R8-D 后、R8-G 前按 `git revert 7514af3` → `git revert 9fbeabc`；R8-G 提交后按逆提交顺序先 revert R8-G 文档提交，再 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置，任何回退都不得触碰旧运行数据。
+- ✅ G8 与 checkpoint 已完成；当前停止等待用户审查，不自动进入 R9。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 

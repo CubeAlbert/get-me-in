@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 —— R8-D 已完成并通过用户审查；R8-G 已获单独授权，正在实施
+**当前阶段：** R8 —— R8-D 已完成并通过用户审查；R8-G 文档归一化与 G8 已完成，等待用户审查
 
-**当前任务：** R8-G 文档归一化与 G8：详细执行清单、变更白名单、证据矩阵和停止门禁已确认
+**当前任务：** R8-G 文档归一化与 G8：详细执行清单、变更白名单、证据矩阵和停止门禁已完成
 
-**当前子任务：** `docs/task.md` R8-G 5.6：最终 G8 staged allowlist、回退与停止门禁。
+**当前子任务：** R8-G 5.6 已完成：最终 G8 staged allowlist、回退与停止门禁已复核。
 
 **当前阻塞：** 无。此前真实 Resume build smoke 暴露的 Windows subprocess 输出解码缺陷已按独立授权修复并提交 `6a092b5`；针对性测试、完整 unittest、compileall、diff check，以及中文／英文 Resume build、PDF merge、Artifact metadata 与幂等 replay smoke 均已通过。R8-G 5.5 继续执行剩余真实 Knowledge／Memory、CLI 与数据边界矩阵；R9 未授权。
 
 **会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 只把 `SHUTDOWN_TIMEOUT_SECONDS` 产品默认从 5 秒调整为 60 秒并增加回归测试；删除提交 `7514af3` 只包含 51 个白名单 legacy 源文件，checkpoint `c13d455` 记录完成证据。R8-G 5.2 提交 `c644b12`、5.3 提交 `7e400bd`、独立 Settings 测试修复 `ee558b4`、5.4 checkpoint `7742d85` 已完成；独立 SubprocessRunner 修复提交 `6a092b5` 已完成，Knowledge／Memory／embedding／reranker 真实 smoke、根入口命令矩阵、中文／英文 Resume build、PDF merge 与 replay 已通过。`decision.md` 的 230～238 章节已按完整决策边界排列，历史语义未改写。R8-G 文档提交仍只允许 8 个文档／示例配置文件；代码缺陷已按独立提交分离。当前 R8-D 后、R8-G 前回退顺序为 `7514af3` → `9fbeabc`；未来 R8-G 提交后须先 revert R8-G，再按上述顺序恢复，始终不得触碰旧运行数据。
 
-**下一步：** 执行 R8-G 5.6：复核最终 `git diff --name-status` 与 staged allowlist，完成 G8 全量证据汇总，创建独立文档／配置提交并执行 checkpoint；完成后停止等待用户审查，不进入 R9。
+**下一步：** 等待用户审查 R8-G/G8 checkpoint；不得自动进入 R9。
 
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
