@@ -639,9 +639,9 @@
 
 ### 4. 工程验证、提交与用户 smoke 门禁
 
-- ⏸️ 全量验证被白名单外的 `tests/get_me_in/test_bootstrap.py` 旧模型输出 fixture 阻塞：定向 53/53、compileall 与 diff check 通过；287 项 unittest 中 281 项通过，需用户授权后才能迁移该测试 fixture。
+- ✅ 全量验证完成：bootstrap 定向测试 21/21、完整 unittest 287/287、`compileall` 与 `git diff --check` 通过；旧 fixture 迁移独立提交为 `b7bb7e9`。
 - 📌 复核 diff 只包含计划白名单；若需要修改 ConversationCodec、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖、数据或其他生产模块，立即停止并提交最小扩展清单。
-- 📌 建立独立代码 checkpoint 后停止，不以 fake LLM 回归宣称真实模型稳定性完成。
+- ✅ 建立独立代码 checkpoint 后停止，不以 fake LLM 回归宣称真实模型稳定性完成；当前代码 checkpoint 为 `b7bb7e9`，等待用户真实 smoke。
 - 📌 用户执行真实 smoke：Main finish、Main 工具调用、Main→Resume→工具→finish；若观察到 repair，确认可在三次预算内恢复且不会提前 `invalid_model_reply`。
 - 📌 用户 smoke 通过后更新 current／task／decision 并建立文档 checkpoint；任务完成后仍停在 R9 独立授权门禁前。
 

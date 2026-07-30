@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 247 — 完成 bootstrap fixture 最小扩展与工程验证](#决策-247--完成-bootstrap-fixture-最小扩展与工程验证)
 - [决策 246 — 全量验证发现白名单外 fixture 阻塞](#决策-246--全量验证发现白名单外-fixture-阻塞)
 - [决策 245 — 完成 R8-F snapshot codec 兼容子任务](#决策-245--完成-r8-f-snapshot-codec-兼容子任务)
 - [决策 244 — 完成 R8-F Runtime repair 计数子任务](#决策-244--完成-r8-f-runtime-repair-计数子任务)
@@ -5773,3 +5774,19 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：** 修改该文件在行为上是模型协议迁移的直接必要修复，但属于已确认白名单外的测试变更，不能隐式扩大任务边界；先取得授权可保持审查与提交边界可追溯。
 
 **曾考虑的替代方案：** 放宽 Parser 继续兼容旧 flat fixture 会违反 R8-F 唯一 envelope 决策；跳过 bootstrap 测试会削弱全量验收；两者均拒绝。
+
+---
+
+### 决策 247 —— 完成 bootstrap fixture 最小扩展与工程验证
+
+**背景：** 用户授权将 `tests/get_me_in/test_bootstrap.py` 作为唯一最小扩展，仅迁移模型回复 fixture；生产代码、Parser、ConversationCodec 和历史输入断言均保持不变。
+
+**决定：**
+
+- 仅更新 `_finish()` 与 `_tool_call()`，使测试模型回复使用 `message/thinking/tool_call` envelope；保留 `tool_call_result`、`event_type` 等 ConversationCodec 输入历史断言。
+- 测试迁移独立提交为 `b7bb7e9`，未包含生产代码或其他测试文件变更。
+- bootstrap 定向测试 21/21、完整 unittest 287/287、`compileall` 与 `git diff --check` 全部通过；工程验证完成后停止等待真实模型 smoke，不宣称 fake LLM 已证明真实模型稳定性。
+
+**理由：** 该变更只更新测试输入 fixture，使既有 application 集成回归遵循已确认的新输出协议；不恢复旧输出兼容，也不放宽 Parser。
+
+**曾考虑的替代方案：** 在 Parser 中恢复旧 flat 输出兼容会违反 R8-F 唯一 envelope；修改 ConversationCodec 历史输入会扩大协议范围，均未采用。
