@@ -699,9 +699,9 @@ def _pump(application, command) -> list[object]:
 def _finish(message: str, thinking: str) -> str:
     return json.dumps(
         {
-            "event_type": "finish",
             "message": message,
             "thinking": thinking,
+            "tool_call": None,
         },
         ensure_ascii=False,
     )
@@ -714,10 +714,11 @@ def _tool_call(
     thinking: str | None = None,
 ) -> str:
     payload: dict[str, object] = {
-        "event_type": "tool_call",
         "message": "",
-        "tool": name,
-        "event_payload": arguments or {},
+        "tool_call": {
+            "name": name,
+            "arguments": arguments or {},
+        },
     }
     if thinking is not None:
         payload["thinking"] = thinking
