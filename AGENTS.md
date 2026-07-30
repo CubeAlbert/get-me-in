@@ -19,12 +19,12 @@
 
 ## R8 完成状态与 R9 授权门禁
 
-R8-D 已由提交 `7514af3` 精确删除 51 个 legacy production 文件，并由 `c13d455` checkpoint。R8-G 5.1～5.6、完整 G8 与文档 checkpoint 已完成；决策 239 记录 G8 完成证据，决策 240 记录最终用户审查通过及活跃文档状态收口。R8 已完成，R9 未授权。
+R8-D 已由提交 `7514af3` 精确删除 51 个 legacy production 文件，并由 `c13d455` checkpoint。R8-G 5.1～5.6、完整 G8 与文档 checkpoint 已完成；决策 239 记录 G8 完成证据，决策 240 记录最终用户审查通过，决策 241 与提交 `860aaae` 记录完成态文档契约收口。R8 已完成，R9 未授权。
 
 新会话必须：
 
-1. 先执行 `/project-bootstrap`，读取 `docs/current.md`、决策 239／240 和 `docs/task.md` 的 R8 完成态。
-2. 确认分支为 `refactor`、工作区干净、`HEAD` 包含 `7514af3`、`c13d455` 与最终 R8 文档 checkpoint。
+1. 先执行 `/project-bootstrap`，读取 `docs/current.md`、决策 239／240／241 和 `docs/task.md` 的 R8 完成态。
+2. 确认分支为 `refactor`、工作区干净、`HEAD` 包含 `7514af3`、`c13d455` 与完成态文档契约提交 `860aaae`。
 3. 未取得 R9 单独授权前，只能审查 R8 完成状态，不得检查、设计或实施 R9。
 4. 若后续发现 R8 回归，先记录最小问题与证据并取得对应授权；不得借修复之名进入 R9。
 
@@ -78,7 +78,7 @@ git diff --check
 - `data/chroma/`
 - `data/temp/`
 
-当前 R8-D 后、R8-G 前的紧急回退顺序是 `git revert 7514af3`，再 `git revert 9fbeabc`。未来 R8-G 提交后按逆提交顺序先 revert R8-G 提交，再 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置；任何回退不得触碰旧运行数据。
+当前 R8 完成态若需回退，先按逆提交顺序 revert `860aaae` 及其后的文档同步提交，再逆序 revert R8-G 文档 checkpoint，然后 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置；任何回退都不得读取、迁移、改写或删除旧运行数据。
 
 ## 常用命令
 
@@ -144,7 +144,8 @@ main.py
 - Workspace、Knowledge、Memory 和 Artifact 副作用只能经 application service 与 port 执行。
 - Artifact operation 使用 PENDING → side effect → COMMITTED，并保留 typed partial failure 和幂等 replay。
 - Knowledge reload 由 manifest 的 observed/indexed 状态和单 worker 串行化；真实 adapter 必须显式 close。
-- cancelled interaction 与 failure 分离：Esc 或选择取消保留活动 SubAgent/handoff，并在 `WAITING_FOR_USER` 等待下一条用户消息。
+- 可恢复暂停与 failure 分离：模型回复最终解析失败、审批拒绝或选择取消返回 `Paused`，进入 `WAITING_FOR_USER`，保留活动 SubAgent/handoff，并等待下一条用户消息。
+- run 取消与 failure 分离：Esc 返回 `Cancelled` 并进入 `CANCELLED`，活动 SubAgent/handoff 仍保留；下一条 `UserMessage` 继续发送给原 SubAgent。只有 `Failed` 才按失败路径闭合 handoff。
 
 ## 数据与配置
 
