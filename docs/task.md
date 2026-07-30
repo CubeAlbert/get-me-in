@@ -609,6 +609,42 @@
 - ✅ G8 与 checkpoint 已完成；当前停止等待用户审查，不自动进入 R9。
 - ✅ 最终用户审查确认 R8 工程任务与 G8 证据完成，并授权修正活跃文档状态漂移；AGENTS.md、design、plan、task、current 已统一为 R8 完成，决策 240 记录收口，当前停在 R9 独立授权门禁前。
 
+## R8-F —— 模型输出协议稳定性修复（R8 后续，独立于 R9）
+
+### 1. 研究、决策与新会话门禁
+
+- ✅ 对照当前 `FinishFormat`／`ToolCallFormat`、`ModelReplyParser`、Runtime repair 状态与重构前单一 schema，确认格式分支和严格条件组合扩大了模型输出错误面。
+- ✅ 最小复现确认：同一用户 turn 内首次格式 repair 成功并继续工具调用后，后续格式错误因 `repair_attempted=True` 直接进入 `Paused("invalid_model_reply")`。
+- ✅ 用户确认改为唯一 `message/thinking/tool_call` envelope，Parser 继续只返回现有 `ModelReply`，不改变 RuntimeEvent／Session 消息／工具／handoff／CLI 协议。
+- ✅ 用户要求提高每回合 repair 冗余；计划固定为每个 Agent 用户 turn 最多 3 次模型格式修复，本地 `json_repair` 不计数，第四次失败暂停，下一条 `UserMessage` 清零。
+- ✅ 用户确认必须增加自动化回归；真实模型随机性由用户在工程验证后执行最终 smoke。本会话只更新文档，不修改生产代码或测试。
+- 📌 新会话先执行 `/project-bootstrap`，确认分支为 `refactor`、工作区除本次文档 checkpoint 外干净、`HEAD` 包含决策 242 文档提交；只实施本节清单，不检查或进入 R9。
+
+### 2. 单一 OutputFormat 与 Parser
+
+- 📌 将 `data/prompts/general_agent/08_output_format.md` 收敛为一个固定 JSON envelope：`message`、可选／nullable `thinking`、nullable `tool_call`；`tool_call=null` 为 finish，object 为工具调用。
+- 📌 删除模型输出中的 `event_type`、顶层 `tool`、`event_payload` 要求；保留 Input／Output 区分、单对象／无 Markdown、物理换行转义和 Runtime 内部字段重建说明。
+- 📌 更新 `ModelReplyParser`：只解析新 envelope；finish message 必须非空；tool_call 必须含非空 name，arguments 缺失／null 归一化为 `{}`；未知顶层字段忽略；纯文本、array、JSON string、非法 tool_call 和非字符串字段继续拒绝。
+- 📌 不恢复 `event_type/message/tool/event_payload` 或 `content + nested tool_call` 的双协议兼容；原始模型回复不进入 snapshot，切换无需会话数据迁移。
+- 📌 更新 `test_model_reply.py` 与 `test_prompt_renderer.py`，覆盖唯一 schema、finish、tool call、thinking／arguments 宽容边界、非法语义组合、未知字段投影、本地 JSON repair 与旧 flat 形状拒绝。
+
+### 3. 三次 repair 预算与 snapshot 兼容
+
+- 📌 将 `AgentSessionState.repair_attempted: bool` 替换为 `format_repairs_used: int = 0`；禁止同时保留两份 domain canonical repair 状态。
+- 📌 Runtime 每安排一次模型格式 repair 将计数加一；同一 turn 的合法解析与工具执行不清零，最多允许 3 次；第四次解析失败沿用 `Paused/WAITING_FOR_USER` 并保留活动 SubAgent/handoff。
+- 📌 新 `UserMessage` 创建 turn 时把计数归零；本地 `json_repair` 不计数；`model_calls` 与默认 100 次 `AGENT_MAX_MODEL_CALLS` 契约不变。
+- 📌 `SessionSnapshotCodec` 写入 `format_repairs_used`，同时写由该值投影的 `repair_attempted` bool；恢复优先使用严格非负整数计数，缺失时把旧 bool 映射为 0／1，保持 schema_version=2 与代码回退可读。
+- 📌 更新 `test_runtime.py`：覆盖同回合三次 repair、第四次暂停、一次 repair 成功→工具→后续错误仍可第二次 repair、新 turn 清零、调用上限和 handoff 下暂停不闭合。
+- 📌 更新 `test_session_codec.py`：覆盖新计数 round-trip、旧 bool 快照兼容、双写投影、非法负数／bool-as-int／错误类型拒绝。
+
+### 4. 工程验证、提交与用户 smoke 门禁
+
+- 📌 运行 Parser／Prompt／Runtime／Snapshot 针对性测试，再运行完整 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py` 与 `git diff --check`。
+- 📌 复核 diff 只包含计划白名单；若需要修改 ConversationCodec、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖、数据或其他生产模块，立即停止并提交最小扩展清单。
+- 📌 建立独立代码 checkpoint 后停止，不以 fake LLM 回归宣称真实模型稳定性完成。
+- 📌 用户执行真实 smoke：Main finish、Main 工具调用、Main→Resume→工具→finish；若观察到 repair，确认可在三次预算内恢复且不会提前 `invalid_model_reply`。
+- 📌 用户 smoke 通过后更新 current／task／decision 并建立文档 checkpoint；任务完成后仍停在 R9 独立授权门禁前。
+
 ## R9 —— 重构后功能（不在当前执行范围）
 
 ### 1. InterviewAgent Workflow 前置 Review

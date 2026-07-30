@@ -395,6 +395,34 @@ R4 新增文件、类和公开方法清单如下，编码前仍需用户确认�
 
 “保留”不等于“回放”。`ConversationCodec` 编码下一轮 LLMRequest 时必须对所有历史记录剥离 thinking；R6 的 `SessionService.memory_source()` 同样必须复制出 thinking 为 `None` 的 provider-neutral 记录，MemoryExtractor 不得接收展示摘要。这样修复只为 R6 增加 G5-F 前置依赖和一条 MemoryBuildSource 投影约束，不改变 R6 的总体架构、已确认文件清单或第一切片。
 
+#### 6.6.2 单一模型输出 envelope 与有界格式修复（R8 后续修复，已确认）
+
+R8 完成后的真实使用发现，当前 OutputFormat 虽由同一个 Parser 处理，却向模型分别展示 `finish` 与 `tool_call` 两个完整 JSON 形状；`event_type`、`tool` 与 `event_payload` 又重复表达同一业务意图。模型偶发混淆两种条件形状时，严格组合校验会进入模型格式修复。现有 `repair_attempted: bool` 还把整个用户回合限制为一次模型修复：一次修复成功并继续工具链后，后续同回合的另一次格式错误会直接进入 `Paused`。
+
+后续独立修复采用唯一 canonical envelope：
+
+```json
+{
+  "message": "向用户展示的内容",
+  "thinking": null,
+  "tool_call": null
+}
+```
+
+`tool_call=null` 表示 finish；需要工具时，唯一同形字段改为 `{"name": "<Tool 名称>", "arguments": {...}}`。模型不再输出 `event_type`、顶层 `tool` 或 `event_payload`。`message` 始终是 string，finish 时必须非空；`thinking` 可省略、为 `null` 或 string；未知顶层字段继续按允许列表投影丢弃。`tool_call.arguments` 缺失或为 `null` 时可安全归一化为 `{}`，再由既有 `ToolExecutor` 按 Tool schema 验证必填参数和类型；Parser 不从纯文本猜测工具、不自动包装非 JSON，也不保留当前 flat `event_type` 形状作为第二套隐式协议。
+
+`ModelReplyParser` 仍只产生现有 `ModelReply(content, thinking, tool_name, tool_arguments, repair_kind)`；`AgentRuntime` 继续根据 `tool_name is None` 投影 `Completed` 或 `ToolStarted`。本修复不改变 RuntimeCommand、RuntimeEvent、MessageRecord／ToolCallRecord、ToolDefinition、ToolExecutor、Capability、审批、handoff、CLI 或 provider `json_object` 边界。
+
+模型格式修复预算从单个 bool 改为每个 Agent 用户回合的有界计数，固定最多 3 次：
+
+- 本地 `json_repair` 成功不消耗模型修复预算。
+- 每次 Parser 无法安全确定业务意图并安排一次新的模型 completion 修复时，计数加一；同回合中的合法回复和工具执行不清零。
+- 第四次不可解析回复不再调用模型，沿用当前 `Paused("invalid_model_reply", ...)`／`WAITING_FOR_USER` 语义并保留活动 handoff。
+- 下一条合法 `UserMessage` 开启新 turn 时计数归零；`AGENT_MAX_MODEL_CALLS` 继续提供每个 Agent 的 100 次总 completion 上限。
+- `AgentSessionState` 以整数 `format_repairs_used` 作为唯一 canonical 状态。`SessionSnapshotCodec` 写入新计数字段，同时保留由计数投影的旧 `repair_attempted` bool 供代码回退读取；恢复时优先读取并严格校验新字段，缺失时把旧 bool 映射为 0／1。
+
+自动化回归负责证明单一 envelope、Parser 严格／宽容边界、三次预算、第四次暂停、新 turn 清零、修复成功后继续工具链再发生格式错误，以及新旧 snapshot round-trip。真实模型输出具有随机性，不能由 fake LLM 回归证明；实现与全量工程验证通过后，必须停在用户 smoke 门禁，由用户分别验证 Main finish、Main 工具链、Main→Resume→工具→finish 以及发生 repair 时的恢复体验。本修复不进入、检查或设计 R9。
+
 ### 6.7 CLI
 
 CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触 AgentRuntime、PlanService、CancellationToken 实例、完整 SessionSnapshot 或任何私有 history。拆分职责如下：

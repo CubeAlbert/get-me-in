@@ -1,17 +1,18 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；完成态文档契约已由决策 241 收口，当前停在 R9 独立授权门禁前
+**当前阶段：** R8 已完成并通过最终用户审查；当前执行 R8 后续的 R8-F 模型输出协议稳定性修复，R9 仍未授权
 
-**当前任务：** 无活动实施任务；R8-P／R8-E／R8-O／R8-D／R8-G、G8 与后续文档一致性修复均已完成
+**当前任务：** R8-F 已完成研究、设计确认与文档计划；当前会话按用户要求不实施代码，新会话按决策 242 和 `docs/task.md` 的 R8-F 清单实施
 
-**当前子任务：** R8 后续文档一致性修复已完成：Runtime／CLI／Application 当前契约、目录、R8 完成态、历史决策优先级与旧数据边界已经统一。
+**当前子任务：** R8-F 2：把 `08_output_format.md` 与 `ModelReplyParser` 收敛为唯一 `message/thinking/tool_call` envelope；随后实施每个用户 turn 最多 3 次格式 repair 与 snapshot 向后兼容。
 
-**当前阻塞：** 无。R8 的代码、文档、自动化、Catalog、真实 adapter／业务 smoke、数据边界、回退证据与完成态文档契约均已闭环；R9 未授权。
+**当前阻塞：** 无。当前会话仅文档 checkpoint；工程实现与自动化由新会话完成，真实模型稳定性须在代码 checkpoint 后由用户执行 smoke 验收。R9 未授权。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 最终修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 与删除提交 `7514af3` 保持分离，checkpoint `c13d455` 记录完成证据。R8-G 5.2 `c644b12`、5.3 `7e400bd`、5.4 `7742d85`、5.5 `8bd8759` 与 5.6 `10b38e8` 已完成；Settings 测试修复 `ee558b4` 与 SubprocessRunner 修复 `6a092b5` 均独立提交。决策 239 记录完整 G8，决策 240 记录最终审查，决策 241 统一完成态文档中的 Runtime／CLI／Application 契约、历史决策优先级与旧数据边界。R8-G 文档提交后的回退顺序为先逆序 revert R8-G 及其后续文档 checkpoint，再 revert `7514af3`，最后 revert `9fbeabc`；任何回退始终不得读取、迁移、改写或删除旧运行数据。
+**会话交接说明：** 决策 242 已确认 R8-F：模型输出只使用 `message/thinking/tool_call` 一个 envelope，Parser 继续返回现有 ModelReply，不改变 RuntimeEvent／Session conversation record／Tool／handoff／CLI；每个 Agent 用户 turn 的模型格式 repair 从 bool 改为最多 3 次的计数，本地 JSON repair 不计数，第四次失败才 Paused，下一条 UserMessage 清零。Snapshot 对旧 `repair_attempted` 做 0／1 读取兼容并保留回退投影。生产／测试白名单、自动化、提交和用户 smoke 门禁见 `docs/task.md` 的 R8-F；超出清单必须停止。R8-P～R8-G/G8 与决策 241 的完成态事实不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 停在 R9 独立授权门禁前，等待用户后续指示；不得自动检查、设计或实施 R9。
+**下一步：** 新会话先执行 `/project-bootstrap`，确认 `refactor`、工作区干净且 HEAD 包含决策 242 文档 checkpoint，然后从 `docs/task.md` 的 R8-F 2 开始实现单一 OutputFormat／Parser；按清单完成 Runtime 三次预算、snapshot 兼容和自动化后建立独立代码 checkpoint，停止等待用户真实 smoke。不得检查、设计或实施 R9。
 
+242. **合并模型输出 envelope 并提高每回合格式修复预算** — R8-F 使用唯一 `message/thinking/tool_call` 输出形状，Parser 仍只产出现有 ModelReply；每个 Agent 用户 turn 最多 3 次模型格式 repair，snapshot 兼容旧 bool。新会话按白名单实施并完成自动化，代码 checkpoint 后由用户执行真实 smoke；本任务独立于 R9。
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
 176. **R6-F 完成并重新通过 G6** — 四个修复切片独立提交，187 项自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 通过；再次停在 R6-T，等待用户审查。

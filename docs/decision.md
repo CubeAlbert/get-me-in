@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 242 — 合并模型输出 envelope 并提高每回合格式修复预算](#决策-242--合并模型输出-envelope-并提高每回合格式修复预算)
 - [决策 241 — 修正文档契约冲突并统一 R8 后权威语义](#决策-241--修正文档契约冲突并统一-r8-后权威语义)
 - [决策 240 — R8 最终审查通过并停在 R9 授权门禁前](#决策-240--r8-最终审查通过并停在-r9-授权门禁前)
 - [决策 239 — 完成 R8-G/G8 并在审查门禁停止](#决策-239--完成-r8-gg8-并在审查门禁停止)
@@ -5668,3 +5669,40 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 本次只修改 `docs/design.md`、`docs/decision.md` 和 `docs/current.md`，不修改生产代码、测试、Plan、Task、配置、依赖或数据。
 - 使用当前 `src/get_me_in/` 代码复核 Paused／WAITING_FOR_USER、Cancelled handoff 保留、Application command/result 和 CloseReport 契约；执行完成态／旧路径／旧语义文本扫描、`git diff --check` 与最终 diff 审查。
 - 验证完成后仍停在 R9 独立授权门禁前；本决策不构成 R9 的检查、设计或实施授权。
+
+---
+
+### 决策 242 —— 合并模型输出 envelope 并提高每回合格式修复预算
+
+**背景：** R8 已完成且 R9 未授权。用户在真实使用中继续观察到模型偶发无法稳定选择当前 `FinishFormat`／`ToolCallFormat`，模型格式修复也容易最终进入 `invalid_model_reply`。只读研究确认：当前 Prompt 分别展示两个完整 JSON 形状，`event_type`、`tool` 与 `event_payload` 重复表达业务意图；重构前 Prompt 使用单一 schema。最小 Runtime 复现还证明，当前 `repair_attempted: bool` 对整个用户 turn 只允许一次模型修复：首次 repair 成功并继续工具链后，同 turn 的后续格式错误会直接暂停。
+
+**决定：**
+
+- 将模型输出收敛为唯一 canonical envelope：顶层只保留 `message`、可选／nullable `thinking` 和 nullable `tool_call`。`tool_call=null` 表示 finish；object 形状固定为 `{"name": "<Tool 名称>", "arguments": {...}}` 并表示工具调用。模型不再输出 `event_type`、顶层 `tool` 或 `event_payload`。
+- `ModelReplyParser` 只解析上述 envelope 并继续返回现有 `ModelReply(content, thinking, tool_name, tool_arguments, repair_kind)`；Runtime 仍以 `tool_name is None` 投影 `Completed`／`ToolStarted`。不修改 RuntimeCommand、RuntimeEvent、Session conversation record、ToolDefinition、ToolExecutor、Capability、审批、handoff、CLI 或 provider `json_object`。
+- Parser 继续忽略未知顶层字段；thinking 缺失／`null` 表示无摘要；工具 arguments 缺失／`null` 归一化为 `{}`，随后仍由 ToolExecutor 做必填和类型校验。纯文本、非 object JSON、空 finish message、空 tool name、非法 tool_call 类型及无法安全判断业务意图的组合继续拒绝；不保留旧 flat 形状作为第二套隐式兼容协议。
+- 把 `AgentSessionState.repair_attempted: bool` 替换为唯一 canonical 非负整数 `format_repairs_used`。每个 Agent 用户 turn 最多允许 3 次模型格式修复；本地 `json_repair` 不计数，合法解析和工具执行不清零，第四次解析失败沿用 `Paused("invalid_model_reply", ...)`／`WAITING_FOR_USER` 并保留活动 handoff，下一条 `UserMessage` 开启新 turn 时归零。`AGENT_MAX_MODEL_CALLS=100` 的总 completion 上限不变。
+- Session snapshot 保持 schema_version=2：新 codec 写入 `format_repairs_used`，同时保留由计数投影的旧 `repair_attempted` bool 以支持代码回退读取；恢复优先读取并严格校验新计数，字段缺失时把旧 bool 映射为 0／1。不得读取、迁移、改写或删除 legacy 运行数据。
+- 自动化与真实 smoke 分层：实施者必须编写 Parser／Prompt／Runtime／Snapshot 回归并完成完整 unittest、`compileall`、`git diff --check`；fake LLM 回归不能证明真实模型稳定性。工程验证和独立代码 checkpoint 后停止，由用户执行 Main finish、Main 工具调用、Main→Resume→工具→finish 的真实 smoke；用户 smoke 通过后才完成文档 checkpoint。
+- 当前会话只更新 `docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`，不修改生产代码或测试。新会话 `/project-bootstrap` 后按 R8-F 已确认清单实施；本决定不检查、设计或授权 R9。
+
+**理由：**
+
+- 单一 nullable `tool_call` 同时承载完成和工具意图，只保留一个判别点，消除 `event_type/tool/event_payload` 之间可互相冲突的重复表达。
+- Parser 对无害省略做确定性归一化、对副作用意图保持严格校验，可以降低无意义 repair，又不猜测或误执行工具。
+- 每回合一次 repair 对长工具链冗余不足；有界 3 次允许同 turn 的多个独立格式偏差恢复，同时避免无限模型循环，并继续受 100 次总调用上限保护。
+- 自动化适合证明确定性状态机契约；真实模型输出具有随机性，最终稳定性必须由真实 provider smoke 验收，两者不能互相替代。
+
+**已确认文件清单：**
+
+- 生产：`data/prompts/general_agent/08_output_format.md`、`src/get_me_in/application/model_reply.py`、`src/get_me_in/application/runtime.py`、`src/get_me_in/domain/sessions.py`、`src/get_me_in/application/session_codec.py`。
+- 测试：`tests/get_me_in/test_model_reply.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_session_codec.py`、`tests/get_me_in/test_prompt_renderer.py`。
+- checkpoint：五份活跃文档。若实现必须修改 ConversationCodec、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖、数据或其他生产模块，立即停止并提交新的最小清单。
+
+**曾考虑的替代方案：**
+
+- 保留 `event_type` 并只把两个示例改回单一 JSON Schema —— 仍让模型同时协调 event type 与工具字段，未完全消除重复意图。
+- 恢复旧 flat schema 的宽松双协议兼容 —— 会重新制造 Prompt 与 Parser 的第二套真相，拒绝。
+- 每个非法 completion 都无限获得一次 repair —— 缺少 turn 级上限，可能在长工具链中持续消耗调用，未采用。
+- 继续维持每回合一次 repair —— 最小复现已证明一次成功 repair 后的后续独立格式错误无法恢复，用户明确要求提高冗余。
+- 只做人工 smoke、不写自动化 —— 无法稳定证明预算、暂停、handoff 与 snapshot 兼容，拒绝。

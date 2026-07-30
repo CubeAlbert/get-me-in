@@ -283,6 +283,29 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **实施顺序：** R7-T2/G7 → R8-P → R8-E → R8-O（强制停止／用户审查）→ R8-D → R8-G/G8。R8-P、R8-E、R8-O、R8-D、R8-G 与 G8 均已完成；G8 发现的代码／测试缺陷已按既定边界停止、独立授权、修复并提交。决策 240 完成最终审查，当前停在 R9 独立授权门禁前。
 
+### R8-F —— 模型输出协议稳定性修复（R8 后续，独立于 R9）
+
+**目标：** 把模型面对的 `finish`／`tool_call` 两个条件格式收敛为一个固定 envelope，并把整个用户回合一次的模型格式修复预算提高为有界 3 次；不改变 RuntimeEvent、Session 消息记录、工具执行、handoff、CLI 或 provider 边界。
+
+**产出：**
+
+- `08_output_format.md` 只声明 `message/thinking/tool_call` 一个 canonical JSON object；`tool_call=null` 表示 finish，object 表示工具调用，不再要求模型协调 `event_type/tool/event_payload`。
+- `ModelReplyParser` 只接受新 envelope 并继续返回现有 `ModelReply`；未知顶层字段忽略，缺失／null thinking 归一化为无摘要，缺失／null arguments 归一化为 `{}` 后交给 ToolExecutor 做既有业务校验。
+- `AgentSessionState.repair_attempted` 替换为 canonical 整数 `format_repairs_used`；每个用户 turn 最多安排 3 次模型格式修复，本地 JSON repair 不计数，第四次失败进入当前 `Paused/WAITING_FOR_USER`，下一条 UserMessage 清零。
+- `SessionSnapshotCodec` 对旧 `repair_attempted` 快照保持 0／1 读取兼容，并在新快照中保留 bool 投影以支持代码回退；不提升 schema version、不读取或迁移 legacy 运行数据。
+- Parser／Runtime／Prompt／Snapshot 自动化回归覆盖单一 envelope、三次预算、第四次暂停、工具链中多次格式错误、新 turn 清零和新旧 snapshot；完整 unittest、`compileall`、`git diff --check` 通过。
+
+**范围：** 生产修改限于 `data/prompts/general_agent/08_output_format.md`、`src/get_me_in/application/model_reply.py`、`src/get_me_in/application/runtime.py`、`src/get_me_in/domain/sessions.py`、`src/get_me_in/application/session_codec.py`；测试修改限于对应的 `test_model_reply.py`、`test_runtime.py`、`test_session_codec.py`、`test_prompt_renderer.py`。checkpoint 可同步五份活跃文档。若实施发现必须修改 ConversationCodec、provider adapter、Settings、RuntimeEvent、ToolDefinition／ToolExecutor、CLI、其他生产模块、依赖或数据，立即停止并提交新的最小清单，不得自行扩大范围。
+
+**验收门禁：**
+
+- 工程自动化由实施者完成，证明确定性协议与状态机行为；不得以人工 smoke 替代回归测试。
+- 自动化与 diff 审查通过后停止，由用户执行真实模型 smoke，至少覆盖 Main finish、Main 工具调用、Main→Resume→工具→finish，以及可观察到 repair 时能在三次预算内恢复。
+- 用户 smoke 通过后才完成本修复 checkpoint；smoke 若暴露 provider 内容为空、输出仍混淆或 repair 连续失败，保留完整 DEBUG 证据并重新研究，不放宽副作用安全边界。
+- 本任务不构成 R9 授权；完成后仍回到 R9 独立授权门禁前。
+
+**实施顺序：** 新会话 `/project-bootstrap` → 确认 `refactor`／干净工作区／决策 242 → Prompt 与 Parser 单一 envelope → Runtime 三次预算与 snapshot 兼容 → 针对性及完整自动化 → 独立代码 checkpoint → 用户真实 smoke → 文档 checkpoint。当前会话只制定并保存计划，不修改代码或测试。
+
 ### R9 —— 新功能恢复
 
 **目标：** 在稳定架构上重新启动产品功能开发。
