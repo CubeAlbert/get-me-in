@@ -38,39 +38,40 @@ class ModelReplyParser:
         if not isinstance(payload, dict):
             raise ModelReplyParseError("Model response must be a JSON object")
 
-        event_type = payload.get("event_type")
-        if event_type not in {"finish", "tool_call"}:
-            raise ModelReplyParseError("event_type must be finish or tool_call")
+        removed_fields = {"event_type", "tool", "event_payload", "content"}
+        if removed_fields.intersection(payload):
+            raise ModelReplyParseError(
+                "Model response must use only the message/thinking/tool_call envelope"
+            )
 
         content = payload.get("message")
         if not isinstance(content, str):
             raise ModelReplyParseError("message must be a string")
 
-        if event_type == "finish":
+        tool_call = payload.get("tool_call")
+        thinking = payload.get("thinking")
+        if thinking is not None and not isinstance(thinking, str):
+            raise ModelReplyParseError("thinking must be a string")
+
+        if tool_call is None:
             if not content.strip():
                 raise ModelReplyParseError("finish message must be non-empty")
-            thinking = payload.get("thinking")
-            if thinking is not None and not isinstance(thinking, str):
-                raise ModelReplyParseError("thinking must be a string")
-            if payload.get("tool") is not None:
-                raise ModelReplyParseError("finish tool must be null or omitted")
-            if payload.get("event_payload") is not None:
-                raise ModelReplyParseError("finish event_payload must be null or omitted")
             return ModelReply(
                 content=content,
                 thinking=thinking,
                 repair_kind=repair_kind,
             )
 
-        thinking = payload.get("thinking")
-        if "thinking" in payload and not isinstance(thinking, str):
-            raise ModelReplyParseError("thinking must be a string")
-        name = payload.get("tool")
-        arguments = payload.get("event_payload")
+        if not isinstance(tool_call, dict):
+            raise ModelReplyParseError("tool_call must be an object or null")
+        name = tool_call.get("name")
         if not isinstance(name, str) or not name.strip():
-            raise ModelReplyParseError("tool_call requires a non-empty tool")
+            raise ModelReplyParseError("tool_call requires a non-empty name")
+        arguments = tool_call.get("arguments")
+        if arguments is None:
+            arguments = {}
         if not isinstance(arguments, dict):
-            raise ModelReplyParseError("tool_call event_payload must be an object")
+            raise ModelReplyParseError("tool_call arguments must be an object")
         return ModelReply(
             content=content,
             thinking=thinking,

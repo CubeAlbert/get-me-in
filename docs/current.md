@@ -2,17 +2,18 @@
 
 **当前阶段：** R8 已完成并通过最终用户审查；当前执行 R8 后续的 R8-F 模型输出协议稳定性修复，R9 仍未授权
 
-**当前任务：** R8-F 已完成研究、设计确认与文档计划；当前会话按用户要求不实施代码，新会话按决策 242 和 `docs/task.md` 的 R8-F 清单实施
+**当前任务：** R8-F 进入代码实施，已完成 OutputFormat／Parser 子任务，继续按决策 242 和 `docs/task.md` 的 R8-F 清单推进
 
-**当前子任务：** R8-F 2：把 `08_output_format.md` 与 `ModelReplyParser` 收敛为唯一 `message/thinking/tool_call` envelope；随后实施每个用户 turn 最多 3 次格式 repair 与 snapshot 向后兼容。
+**当前子任务：** R8-F 3：将 `AgentSessionState.repair_attempted` 替换为每个用户 turn 最多 3 次的 `format_repairs_used`，并更新 Runtime 回归。
 
-**当前阻塞：** 无。当前会话仅文档 checkpoint；工程实现与自动化由新会话完成，真实模型稳定性须在代码 checkpoint 后由用户执行 smoke 验收。R9 未授权。
+**当前阻塞：** 无。OutputFormat／Parser 定向测试已通过；真实模型稳定性须在全部代码 checkpoint 后由用户执行 smoke 验收。R9 未授权。
 
 **会话交接说明：** 决策 242 已确认 R8-F：模型输出只使用 `message/thinking/tool_call` 一个 envelope，Parser 继续返回现有 ModelReply，不改变 RuntimeEvent／Session conversation record／Tool／handoff／CLI；每个 Agent 用户 turn 的模型格式 repair 从 bool 改为最多 3 次的计数，本地 JSON repair 不计数，第四次失败才 Paused，下一条 UserMessage 清零。Snapshot 对旧 `repair_attempted` 做 0／1 读取兼容并保留回退投影。生产／测试白名单、自动化、提交和用户 smoke 门禁见 `docs/task.md` 的 R8-F；超出清单必须停止。R8-P～R8-G/G8 与决策 241 的完成态事实不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 新会话先执行 `/project-bootstrap`，确认 `refactor`、工作区干净且 HEAD 包含决策 242 文档 checkpoint，然后从 `docs/task.md` 的 R8-F 2 开始实现单一 OutputFormat／Parser；按清单完成 Runtime 三次预算、snapshot 兼容和自动化后建立独立代码 checkpoint，停止等待用户真实 smoke。不得检查、设计或实施 R9。
+**下一步：** 实现 Runtime 三次 repair 预算：每次模型格式 repair 递增计数，同回合合法工具链不清零，第四次失败暂停，新 `UserMessage` 清零；完成定向测试后再进入 snapshot 兼容。不得检查、设计或实施 R9。
 
 242. **合并模型输出 envelope 并提高每回合格式修复预算** — R8-F 使用唯一 `message/thinking/tool_call` 输出形状，Parser 仍只产出现有 ModelReply；每个 Agent 用户 turn 最多 3 次模型格式 repair，snapshot 兼容旧 bool。新会话按白名单实施并完成自动化，代码 checkpoint 后由用户执行真实 smoke；本任务独立于 R9。
+243. **完成 R8-F OutputFormat／Parser 子任务** — `08_output_format.md` 与 `ModelReplyParser` 已收敛为 `message/thinking/tool_call` envelope；旧 flat 字段被拒绝，未知顶层字段忽略，工具 arguments 缺失／null 归一化为空对象；19 项 Parser／Prompt 定向测试通过，下一步为 Runtime repair 计数。
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
 176. **R6-F 完成并重新通过 G6** — 四个修复切片独立提交，187 项自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 通过；再次停在 R6-T，等待用户审查。

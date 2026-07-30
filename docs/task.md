@@ -618,15 +618,15 @@
 - ✅ 用户确认改为唯一 `message/thinking/tool_call` envelope，Parser 继续只返回现有 `ModelReply`，不改变 RuntimeEvent／Session 消息／工具／handoff／CLI 协议。
 - ✅ 用户要求提高每回合 repair 冗余；计划固定为每个 Agent 用户 turn 最多 3 次模型格式修复，本地 `json_repair` 不计数，第四次失败暂停，下一条 `UserMessage` 清零。
 - ✅ 用户确认必须增加自动化回归；真实模型随机性由用户在工程验证后执行最终 smoke。本会话只更新文档，不修改生产代码或测试。
-- 📌 新会话先执行 `/project-bootstrap`，确认分支为 `refactor`、工作区除本次文档 checkpoint 外干净、`HEAD` 包含决策 242 文档提交；只实施本节清单，不检查或进入 R9。
+- ✅ 新会话已执行 `/project-bootstrap`，确认分支为 `refactor`、工作区干净、`HEAD` 包含决策 242 文档提交；只实施本节清单，不检查或进入 R9。
 
 ### 2. 单一 OutputFormat 与 Parser
 
-- 📌 将 `data/prompts/general_agent/08_output_format.md` 收敛为一个固定 JSON envelope：`message`、可选／nullable `thinking`、nullable `tool_call`；`tool_call=null` 为 finish，object 为工具调用。
-- 📌 删除模型输出中的 `event_type`、顶层 `tool`、`event_payload` 要求；保留 Input／Output 区分、单对象／无 Markdown、物理换行转义和 Runtime 内部字段重建说明。
-- 📌 更新 `ModelReplyParser`：只解析新 envelope；finish message 必须非空；tool_call 必须含非空 name，arguments 缺失／null 归一化为 `{}`；未知顶层字段忽略；纯文本、array、JSON string、非法 tool_call 和非字符串字段继续拒绝。
-- 📌 不恢复 `event_type/message/tool/event_payload` 或 `content + nested tool_call` 的双协议兼容；原始模型回复不进入 snapshot，切换无需会话数据迁移。
-- 📌 更新 `test_model_reply.py` 与 `test_prompt_renderer.py`，覆盖唯一 schema、finish、tool call、thinking／arguments 宽容边界、非法语义组合、未知字段投影、本地 JSON repair 与旧 flat 形状拒绝。
+- ✅ 将 `data/prompts/general_agent/08_output_format.md` 收敛为一个固定 JSON envelope：`message`、可选／nullable `thinking`、nullable `tool_call`；`tool_call=null` 为 finish，object 为工具调用。
+- ✅ 删除模型输出中的 `event_type`、顶层 `tool`、`event_payload` 要求；保留 Input／Output 区分、单对象／无 Markdown、物理换行转义和 Runtime 内部字段重建说明。
+- ✅ 更新 `ModelReplyParser`：只解析新 envelope；finish message 必须非空；tool_call 必须含非空 name，arguments 缺失／null 归一化为 `{}`；未知顶层字段忽略；纯文本、array、JSON string、非法 tool_call 和非字符串字段继续拒绝。
+- ✅ 不恢复 `event_type/message/tool/event_payload` 或 `content + nested tool_call` 的双协议兼容；原始模型回复不进入 snapshot，切换无需会话数据迁移。
+- ✅ 更新 `test_model_reply.py` 与既有 Prompt 定向覆盖，覆盖唯一 schema、finish、tool call、thinking／arguments 宽容边界、非法语义组合、未知字段投影、本地 JSON repair 与旧 flat 形状拒绝；19 项定向测试通过。
 
 ### 3. 三次 repair 预算与 snapshot 兼容
 

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 243 — 完成 R8-F OutputFormat／Parser 子任务](#决策-243--完成-r8-f-outputformatparser-子任务)
 - [决策 242 — 合并模型输出 envelope 并提高每回合格式修复预算](#决策-242--合并模型输出-envelope-并提高每回合格式修复预算)
 - [决策 241 — 修正文档契约冲突并统一 R8 后权威语义](#决策-241--修正文档契约冲突并统一-r8-后权威语义)
 - [决策 240 — R8 最终审查通过并停在 R9 授权门禁前](#决策-240--r8-最终审查通过并停在-r9-授权门禁前)
@@ -5670,8 +5671,6 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 使用当前 `src/get_me_in/` 代码复核 Paused／WAITING_FOR_USER、Cancelled handoff 保留、Application command/result 和 CloseReport 契约；执行完成态／旧路径／旧语义文本扫描、`git diff --check` 与最终 diff 审查。
 - 验证完成后仍停在 R9 独立授权门禁前；本决策不构成 R9 的检查、设计或实施授权。
 
----
-
 ### 决策 242 —— 合并模型输出 envelope 并提高每回合格式修复预算
 
 **背景：** R8 已完成且 R9 未授权。用户在真实使用中继续观察到模型偶发无法稳定选择当前 `FinishFormat`／`ToolCallFormat`，模型格式修复也容易最终进入 `invalid_model_reply`。只读研究确认：当前 Prompt 分别展示两个完整 JSON 形状，`event_type`、`tool` 与 `event_payload` 重复表达业务意图；重构前 Prompt 使用单一 schema。最小 Runtime 复现还证明，当前 `repair_attempted: bool` 对整个用户 turn 只允许一次模型修复：首次 repair 成功并继续工具链后，同 turn 的后续格式错误会直接暂停。
@@ -5706,3 +5705,19 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 每个非法 completion 都无限获得一次 repair —— 缺少 turn 级上限，可能在长工具链中持续消耗调用，未采用。
 - 继续维持每回合一次 repair —— 最小复现已证明一次成功 repair 后的后续独立格式错误无法恢复，用户明确要求提高冗余。
 - 只做人工 smoke、不写自动化 —— 无法稳定证明预算、暂停、handoff 与 snapshot 兼容，拒绝。
+
+---
+
+### 决策 243 —— 完成 R8-F OutputFormat／Parser 子任务
+
+**背景：** R8-F 已获授权进入代码实施。当前 Parser 仍接受 `event_type`、顶层 `tool`／`event_payload` 的旧 flat 形状，OutputFormat 也同时展示 finish 与 tool-call 两种重复判别协议。
+
+**决定：**
+
+- `data/prompts/general_agent/08_output_format.md` 现在只描述 `message`、可选／nullable `thinking` 与 nullable `tool_call`；`tool_call=null` 或省略表示 finish，object 表示 `name` 与 `arguments` 工具调用。
+- `ModelReplyParser` 只接受新 envelope，忽略未知顶层字段，拒绝旧 flat 字段与 `content` 形状；工具 arguments 缺失／null 归一化为 `{}`，其余业务校验保持严格。
+- Parser／Prompt 定向回归共 19 项通过；Runtime repair 预算与 snapshot 兼容仍是下一独立子任务。
+
+**理由：** 单一 nullable `tool_call` 消除重复意图，且把兼容范围限制在无副作用的省略字段；Parser 继续只产出现有 `ModelReply`，因此不扩大 Runtime、Session 或 CLI 公开边界。
+
+**曾考虑的替代方案：** 保留旧 flat 形状作为第二套兼容协议会继续维护两份模型契约，拒绝；同步修改 Runtime 或 ConversationCodec 会超出本子任务白名单，暂不进行。
