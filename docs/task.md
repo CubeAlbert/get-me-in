@@ -657,10 +657,10 @@
 
 ### 2. 单一 Entity 与 codec
 
-- 📌 新增 `ModelMessageEventType`、immutable `ModelMessageEntity`、`ModelMessageParseError`；Entity 字段为 `id/role/timestamp/event_type/message/tool/tool_call_id/event_payload/thinking/plan_status`，可携带不序列化的本地 repair 诊断；输入和输出按方向使用不同字段子集。
-- 📌 新增 `ModelMessageCodec.encode(system_prompt, records)` 与 `parse(raw)`，集中实现 history encode 与 reply decode；删除独立 `ModelReply` DTO，Runtime 直接消费 Entity。
-- 📌 history encode 保持当前五类 InputFormat 映射、tool result correlation、event_payload error object 与 plan_status；assistant thinking 继续不回放。
-- 📌 reply decode 使用 flat `event_type/message/thinking/tool/event_payload`；模型不必提供 id、role、timestamp、tool_call_id、plan_status，Runtime 必须重建这些值。
+- ✅ 新增 `ModelMessageEventType`、immutable `ModelMessageEntity`、`ModelMessageParseError`；Entity 字段为 `id/role/timestamp/event_type/message/tool/tool_call_id/event_payload/thinking/plan_status`，可携带不序列化的本地 repair 诊断；输入和输出按方向使用不同字段子集。
+- ✅ 新增 `ModelMessageCodec.encode(system_prompt, records)` 与 `parse(raw)`，集中实现 history encode 与 reply decode；旧 `ModelReply` DTO 尚待 Runtime 迁移后删除。
+- ✅ history encode 保持当前五类 InputFormat 映射、tool result correlation、event_payload error object 与 plan_status；assistant thinking 继续不回放。
+- ✅ reply decode 使用 flat `event_type/message/thinking/tool/event_payload`；模型不必提供 id、role、timestamp、tool_call_id、plan_status，Runtime 必须重建这些值。
 - 📌 迁移有效断言和 import 后删除旧 `conversation_codec.py`、`model_reply.py`；更新 Runtime 构造注入与 bootstrap composition，不改变 domain ConversationRecord。
 
 ### 3. 单一 MessageFormat
