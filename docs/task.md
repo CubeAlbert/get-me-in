@@ -653,7 +653,7 @@
 - ✅ 对照删除前 v1 的 `Message.to_json()`／`Message.from_llm_reply()` 与两份格式文档，确认稳定基线是“两个方向文档 + 一个 Message Entity + flat tool/event_payload”。
 - ✅ 按用户要求 hard reset 到 `8111319`，撤销错误合并 Prompt 的 4 个提交；决策 249 取代决策 248 的单文件方案。
 - ✅ 本会话只纠正五份活跃文档并建立 checkpoint，不修改生产代码、Prompt 或测试。
-- 📌 新会话先执行 `/project-bootstrap`，确认 `refactor`、工作区干净、HEAD 包含决策 249；只实施本节，不检查或进入 R9。
+- ✅ 新会话已执行 `/project-bootstrap`，确认 `refactor`、工作区干净、HEAD 包含决策 249；只实施本节，未检查或进入 R9。
 
 ### 2. 单一 Entity 与 codec
 
@@ -669,15 +669,15 @@
 - ✅ 修改独立 `08_output_format.md`：finish 使用 `event_type=finish`；tool_call 使用 `event_type=tool_call`、`tool` 与 object `event_payload`，参数直接放在 event_payload。
 - ✅ finish 的 thinking 在 Prompt 中写为“通常应尽量提供简短、非空、用户可见摘要”，但 parser 继续允许省略／null／空白；tool_call thinking 可选。
 - ✅ 保留 `render_output_format()`；完整 system prompt 同时包含 InputFormat／OutputFormat，Runtime repair 只注入 OutputFormat；`09_reserved.md` 继续最后。
-- 📌 保留每个 Agent 用户 turn 最多 3 次模型 repair、第四次 Paused、新 UserMessage 清零、本地 JSON repair 不计数与 snapshot bool 兼容，不回退已完成修复。
+- ✅ 保留每个 Agent 用户 turn 最多 3 次模型 repair、第四次 Paused、新 UserMessage 清零、本地 JSON repair 不计数与 snapshot bool 兼容，既有修复未回退。
 
 ### 4. 自动化、提交与用户 smoke
 
-- 📌 锁定 InputFormat Git blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4`，并覆盖双文件存在、按 `07` → `08` → `09` 排序、repair 只读取 OutputFormat。
-- 📌 Entity／codec contract 覆盖 input 五类事件、finish、tool_call、event_payload 参数、tool result correlation、plan_status、Runtime-owned 字段与 thinking 保留／剥离。
-- 📌 更新 Runtime／bootstrap 回归，证明工具调用参数、Plan、handoff、三次 repair 和第四次暂停均保持。
-- ✅ 运行完整 unittest 278/278、`compileall`、`git diff --check`；静态扫描无旧 ModelReply／ConversationCodec 引用，待提交独立代码 checkpoint。
-- 📌 工程 checkpoint 后停止，由用户执行 Main finish、Main 工具调用、Main→Resume→工具→finish 的真实 provider smoke；用户不负责补写自动化回归。
+- ✅ 锁定 InputFormat Git blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4`，并覆盖双文件存在、按 `07` → `08` → `09` 排序、repair 只读取 OutputFormat。
+- ✅ Entity／codec contract 覆盖 input 五类事件、finish、tool_call、event_payload 参数、tool result correlation、plan_status、Runtime-owned 字段与 thinking 保留／剥离。
+- ✅ 更新 Runtime／bootstrap 回归，证明工具调用参数、Plan、handoff、三次 repair 和第四次暂停均保持。
+- ✅ 运行完整 unittest 278/278、`compileall`、`git diff --check`；静态扫描无旧 ModelReply／ConversationCodec 引用。代码由 `e05bdfa`、`29e698c`、`a8d55d7`、`077a4d2` 分片 checkpoint。
+- 📌 工程 checkpoint 已完成；停止并由用户执行 Main finish、Main 工具调用、Main→Resume→工具→finish 的真实 provider smoke，用户不负责补写自动化回归。
 - 📌 用户 smoke 通过后再更新 current／task／decision 并建立完成态文档 checkpoint；仍停在 R9 独立授权门禁前。
 
 ### 5. 已确认白名单
@@ -687,6 +687,16 @@
 - 📌 测试新增：`tests/get_me_in/test_model_message.py`；测试修改：`tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_bootstrap.py`；测试删除：`tests/get_me_in/test_conversation_codec.py`、`tests/get_me_in/test_model_reply.py`。
 - 📌 文档 checkpoint：`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`。
 - ⛔ `domain/messages.py`、`ports/llm.py`、session codec/state、provider adapter、Settings、RuntimeEvent、ToolDefinition／ToolExecutor、CLI、依赖、数据或 R9 文件不在范围；如确需修改，停止并提交最小扩展清单。
+
+## R8 后续独立修正 —— query_memory 被动触发契约（已完成）
+
+- ✅ 只读检查确认 `query_memory` 原 `UseWhen` 覆盖技能、经历、偏好、期望等宽泛个人信息，Main 同时以“必要时读取历史 memory”和“尽量利用 memory 减少重复询问”正向鼓励查询；Runtime 只校验 capability 与参数，不判断语义必要性。
+- ✅ 用户确认新策略：Memory 不是主动个性化手段，只在用户明确要求查询已保存个人背景／技术栈／经历／偏好／期望，或完成当前任务必需的信息不在当前上下文、已先询问用户仍未获得时，才进行一次聚焦查询。
+- ✅ `query_memory` 的 `UseWhen`／`DoNotUseWhen` 已明确禁止主动了解用户、补充画像、减少普通提问、确认已知信息、可选信息查询、问候／能力介绍／简单路由／闲聊、绕过用户拒绝和零命中后的近义词重试。
+- ✅ Main `AgentSpec` 已同步改为优先使用当前对话；仅在用户明确要求或路由必需信息经询问仍缺失时，把 `query_memory` 作为一次针对性兜底。capability、审批、schema、handler、Memory 数据和其他 Agent 边界未变。
+- ✅ ToolCatalog 与 production composition 回归锁定完整文字实际进入 Prompt；39 项定向测试、完整 unittest 280/280、`compileall` 与 `git diff --check` 通过，代码 checkpoint 为 `f6d3e37`。
+- 📌 等待用户真实 provider smoke：普通问候／简单路由不得查询 memory；明确查询个人背景时允许调用；必要信息缺失时必须先询问，未果后最多单次兜底。smoke 前不宣称模型行为验收完成。
+- ⛔ 本修正独立于 R8-F-C，不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 

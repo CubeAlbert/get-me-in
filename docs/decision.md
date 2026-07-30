@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 250 — query_memory 改为显式请求或必要信息询问未果后的单次兜底](#决策-250--query_memory-改为显式请求或必要信息询问未果后的单次兜底)
 - [决策 249 — 保留 InputFormat／OutputFormat 并让两者投影同一 Entity](#决策-249--保留-inputformatoutputformat-并让两者投影同一-entity)
 - [决策 248 — 撤回 R8-F smoke 入口并统一 Input／Output 的 LLM-facing Entity](#决策-248--撤回-r8-f-smoke-入口并统一-inputoutput-的-llm-facing-entity)
 - [决策 247 — 完成 bootstrap fixture 最小扩展与工程验证](#决策-247--完成-bootstrap-fixture-最小扩展与工程验证)
@@ -5871,3 +5872,32 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保留 nested `tool_call.name/arguments`，只让它映射到同一 Entity —— 模型仍需在 InputFormat 的 flat tool/event_payload 和 OutputFormat 的 nested tool_call 间切换，拒绝。
 - 要求模型输出 Entity 全部字段 —— id、role、timestamp、call correlation 与 Plan 都不应由模型拥有，拒绝。
 - 把 finish thinking 恢复为严格必填 —— 会因非业务摘要缺失触发 repair；改用明确鼓励但解析宽容。
+
+---
+
+### 决策 250 —— query_memory 改为显式请求或必要信息询问未果后的单次兜底
+
+**背景：** 用户观察到当前模型倾向主动调用 `query_memory`。只读检查确认工具原 `UseWhen` 将技能、经历、偏好、期望等个人信息整体视为可查询场景，`DoNotUseWhen` 只排除公共参考数据；Main 的 Responsibilities 与 SoftConstraints 又分别要求“必要时读取用户历史 memory”和“尽量利用已有 memory 减少重复询问”。这些文字会完整进入 system prompt，而 Runtime 只执行 capability、审批和参数校验，不判断本轮查询是否语义必要，因此现有契约容易把 Memory 解释为常规个性化手段。
+
+**决定：**
+
+- `query_memory` 只允许两类触发：用户明确要求查询其已保存的个人背景、技术栈、经历、偏好或期望；或者完成当前任务必须获得某项个人信息，该信息不在当前对话中，已经先向用户询问但仍未获得有效答案，需要把历史记忆作为最后一次补充尝试。
+- 兜底查询必须聚焦于当前明确缺失的信息，并且最多进行一次；零命中后不得通过近义词改写反复搜索，应回到用户询问。
+- 禁止为了主动了解用户、补充用户画像、个性化回答、减少普通提问或确认已知信息而查询；当前对话、文件或工具结果已有答案、尚未先询问用户、信息仅为可选、问候／能力介绍／简单路由／闲聊、用户拒绝提供或要求不要访问记忆，以及公共参考数据查询均属于禁用场景。
+- Main 的 Responsibilities 与 SoftConstraints 同步收窄：优先使用当前对话；只有用户明确要求，或完成路由必须获得的个人信息经询问仍未获得时，才把 `query_memory` 作为一次针对性兜底。
+- `Capability.MEMORY_QUERY`、`ConfirmationMode.NEVER`、参数 schema、handler、RetrievalPort、MemoryService、数据路径和 Resume capability 均不改变；本修正不增加运行时语义状态或公开接口。
+- ToolCatalog／bootstrap 回归锁定完整提示文字及 production Prompt 注入；39 项定向测试、完整 unittest 280/280、`compileall` 与 `git diff --check` 通过，独立代码 checkpoint 为 `f6d3e37`。
+- 真实模型行为仍由用户 smoke 验证：普通问候／简单路由不得查询，明确查询个人背景时允许调用，必要信息缺失时必须先询问用户并仅在未果后单次兜底。smoke 通过前不宣称行为验收完成。
+- 本决定是 R8 后续独立修正，不进入 R9，也不授权读取、迁移、改写或删除旧运行数据。
+
+**理由：**
+
+- 把 Memory 限定为用户显式意图或必要信息获取失败后的兜底，可以保留长期记忆的实际价值，同时避免模型为泛化个性化而增加无关调用、延迟和隐私暴露。
+- 同步修改 ToolDefinition 与 Main AgentSpec，避免一处要求被动、另一处继续鼓励主动查询的提示冲突。
+- 先用 LLM-facing 契约表达使用边界，保持 Runtime 简单；若真实 smoke 仍出现稳定违规，再基于具体证据评估是否需要独立的 deterministic gate。
+
+**曾考虑的替代方案：**
+
+- 只修改 `UseWhen`／`DoNotUseWhen`，保留 Main“利用 memory 减少重复询问”的软约束 —— system prompt 仍存在相反鼓励，拒绝。
+- 完全移除 Main／Resume 的 `MEMORY_QUERY` capability —— 会破坏用户明确要求查询历史信息和必要信息兜底，拒绝。
+- 立即在 Runtime 增加硬语义门禁 —— Runtime 当前没有“已询问用户但未果”这一可判定状态，直接增加会扩大 typed state 与公开边界；先以 Prompt 契约和真实 smoke 取证，暂不采用。
