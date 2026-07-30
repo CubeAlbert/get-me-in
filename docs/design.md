@@ -176,7 +176,7 @@ MemoryStore 通过回调触发 MemoryIndexer，Indexer 再延迟 import RAG Faca
 ### 5.1 分层与依赖方向
 
 ```text
-interfaces/cli ───────┐
+cli ──────────────────┐
                       v
                 application
                /           \
@@ -196,54 +196,59 @@ domain 和 application 不允许反向 import CLI、OpenAI、Chroma、questionar
 src/get_me_in/
 ├── domain/
 │   ├── agents.py          # AgentSpec / AgentKey / Capability
+│   ├── artifacts.py       # Artifact / ArtifactOperation
+│   ├── knowledge.py       # Knowledge state / manifest
+│   ├── memories.py        # Memory record / build result
 │   ├── messages.py        # ConversationRecord / Role
 │   ├── plans.py           # Plan / PlanItem / PlanStatus
 │   ├── sessions.py        # SessionState / AgentSessionState / HandoffFrame
 │   └── tools.py           # ToolDefinition / ToolOutcome
 ├── application/
+│   ├── application.py     # Application 公开边界
 │   ├── runtime.py         # AgentRuntime 状态机
 │   ├── orchestration.py   # Hub-and-Spoke handoff
 │   ├── commands.py        # RuntimeCommand
 │   ├── app_commands.py    # ApplicationCommand
 │   ├── events.py          # RuntimeEvent
-│   ├── session_service.py
-│   ├── session_codec.py
-│   ├── memory_service.py
-│   └── knowledge_service.py
+│   ├── session_service.py / session_codec.py
+│   ├── plan_service.py / tool_executor.py
+│   ├── knowledge_service.py / memory_service.py
+│   └── artifact_service.py / resources.py
 ├── ports/
-│   ├── llm.py
-│   ├── interaction.py
-│   ├── sessions.py
-│   ├── retrieval.py
-│   ├── workspace.py
-│   └── clock.py
+│   ├── llm.py / web_search.py
+│   ├── sessions.py / retrieval.py
+│   ├── knowledge.py / memories.py
+│   ├── workspace.py / external_files.py
+│   ├── artifacts.py / resume_artifacts.py
+│   └── clock.py / ids.py / process.py / frontend.py
 ├── adapters/
-│   ├── llm/openai.py
+│   ├── openai_llm.py / openai_web_search.py
 │   ├── json_session_repository.py
-│   ├── retrieval/chroma.py
-│   ├── workspace/local.py
-│   └── resume/latex.py
+│   ├── json_manifest_repository.py
+│   ├── json_memory_repository.py
+│   ├── json_artifact_repository.py
+│   ├── chroma_knowledge_index.py
+│   ├── local_workspace.py
+│   └── local_resume_artifacts.py
 ├── tools/
-│   ├── catalog.py
-│   ├── common.py
-│   ├── plan.py
-│   ├── workspace.py
-│   └── resume.py
+│   ├── system.py / plan.py / switch.py
+│   ├── retrieval.py / customer_file.py / web.py
+│   └── workspace.py / resume.py
 ├── agents/
-│   ├── catalog.py
-│   ├── main.py
-│   ├── resume.py
-│   └── job_search.py
-├── interfaces/cli/
+│   └── resume.py          # Resume AgentSpec factory
+├── cli/
 │   ├── app.py
 │   ├── commands.py
 │   ├── input.py
 │   ├── renderer.py
-│   └── worker.py
-└── bootstrap.py           # 唯一 composition root
+│   ├── worker.py
+│   ├── main.py
+│   └── __main__.py
+├── logging_setup.py
+└── bootstrap.py           # 唯一 production composition root；同时声明 Main AgentSpec
 ```
 
-旧 `src/*` 在迁移期间保留。禁止新 v2 模块反向 import 旧 `BaseAgent`、`App`、全局 Registry 或 UIBridge；必要兼容通过最外层 adapter 完成。
+上表只列稳定层级和主要模块，完整文件集合以仓库实际目录为准。R8-D 已删除 legacy production 源码；当前生产代码只有根 `main.py` 与 `src/get_me_in/` v2，不存在供 production 反向 import 的旧 `BaseAgent`、`App`、全局 Registry 或 UIBridge。
 
 ## 6. 核心模型与公开边界
 
@@ -273,25 +278,29 @@ PromptRenderer 接收 AgentSpec、ToolCatalog 和 AgentCatalog，统一生成 sy
 
 Runtime command 保持：`UserMessage`、`Continue`、`Approve`、`Reject`、`SubmitSelection`、`ToolResult`、`Cancel`；R4 增加 `CompleteHandoff(call_id, summary)` 与 `FailHandoff(call_id, code, message)`，专门闭合 `WAITING_FOR_HANDOFF`。R8-O 增加 `CancelSelection(request_id, reason)`，只将 `provide_choices` 的取消作为 tool result 交回当前 Agent，不产生 Agent `Cancelled`，不得关闭活动 handoff；真正的运行取消继续使用 `Cancel`。
 
-Runtime event 保持：`Progress`、`ApprovalRequested`、`SelectionRequested`、`ToolStarted`、`ToolFinished`、`HandoffRequested`、`Completed`、`Failed`、`Cancelled`。`ToolStarted` 携带只读 arguments 映射，`ToolFinished` 可携带 Plan 投影；二者均不要求 CLI 读取 Session 或反解析工具输出字符串。
+Runtime event 保持：`Progress`、`ApprovalRequested`、`SelectionRequested`、`ToolStarted`、`ToolFinished`、`HandoffRequested`、`Completed`、`Failed`、`Paused`、`Cancelled`。`Paused` 表示当前 Agent 已进入 `WAITING_FOR_USER`，活动 handoff 不闭合，CLI 必须等待下一条 `UserMessage`；当前用于模型回复解析失败、审批拒绝和选择取消。`ToolStarted` 携带只读 arguments 映射，`ToolFinished` 可携带 Plan 投影；二者均不要求 CLI 读取 Session 或反解析工具输出字符串。
 
 一个 Application 只暴露一个活动 Session，公开边界调整为：
 
 ```python
-def handle(command: RuntimeCommand) -> RuntimeEvent
+def handle(
+    command: RuntimeCommand | ApplicationCommand,
+) -> RuntimeEvent | SessionView | Path | ApplicationResult
 def view() -> SessionView
 def snapshot() -> SessionSnapshot
 def restore(session_id: str) -> SessionView
 def rewind(turn_id: str) -> SessionView
 def list_sessions() -> tuple[SessionPreview, ...]
 def dump() -> Path
+def exit_subagent(summarize: bool = True) -> RuntimeEvent
 def request_cancel(reason: str = "Cancelled by user") -> None
-def close() -> None
+def finalize_turn() -> TurnFinalizationResult
+def close() -> CloseReport
 ```
 
 `RestoreSession`、`RewindSession`、`ExitSubAgent`、`DumpSession` 等属于 `ApplicationCommand`，不混入模型回合使用的 `RuntimeCommand`。CLI 可以通过统一分发入口调用两类 command，但 Runtime 永远不解释 CLI/Session 命令。
 
-该协议取代当前 Request/Response、UIBridge action 和 switch magic dict。Runtime 每次只推进一个明确状态，不使用多个松散 `_pending_*` 标志表达组合状态。内部 `AgentRuntime.advance(state, command)` 返回 `RuntimeTransition(state, event)`；`RuntimeTransition` 只在 application 层使用，Application 对外仍一次返回一个 `RuntimeEvent`。
+该协议取代旧 Request/Response、UIBridge action 和 switch magic dict。Runtime 每次只推进一个明确状态，不使用多个松散 `_pending_*` 标志表达组合状态。内部 `AgentRuntime.advance(state, command, *, session_id)` 返回 `RuntimeTransition(state, event)`；`RuntimeTransition` 只在 application 层使用。Application 对 RuntimeCommand 返回一个 RuntimeEvent，对 ApplicationCommand 返回对应的只读 view、Path 或强类型 ApplicationResult。
 
 ### 6.3 ToolCatalog、ToolContext 与 ToolOutcome
 
@@ -323,7 +332,7 @@ CLI input history 属于 R5 `InputController`，不进入 domain SessionState。
 
 Hub-and-Spoke 规则保留：只有 Orchestrator 能进行 handoff。Main Runtime 只接收可路由的 Agent descriptor；子 Agent Runtime 不持有完整 `AgentCatalog`，也不直接调用其他子 Agent。
 
-Handoff 使用 `HandoffFrame(source, target, call_id, turn_id, context)`。Orchestrator 切换到子 Agent 时保留源 Agent 的 `WAITING_FOR_HANDOFF` pending call，并立即以 `UserMessage(context)` 启动目标 Runtime，使 CLI 在收到 `HandoffRequested` 后只需继续驱动新的 active agent。子 Agent 返回 summary 后，Orchestrator 向源 Runtime 发送 `CompleteHandoff`，原子地写入 tool result、弹出 frame 并恢复 active agent。未知 Agent、目标启动失败、嵌套切换、子 Agent 失败或取消以及 `/exit_sub` 均必须通过 `FailHandoff` 或 `CompleteHandoff` 闭合原 call id；CLI 不补写 conversation record。
+Handoff 使用 `HandoffFrame(source, target, call_id, turn_id, context)`。Orchestrator 切换到子 Agent 时保留源 Agent 的 `WAITING_FOR_HANDOFF` pending call，并立即以 `UserMessage(context)` 启动目标 Runtime，使 CLI 在收到 `HandoffRequested` 后只需继续驱动新的 active agent。子 Agent 返回 summary 后，Orchestrator 向源 Runtime 发送 `CompleteHandoff`，原子地写入 tool result、弹出 frame 并恢复 active agent。未知 Agent、目标启动失败、嵌套切换和子 Agent `Failed` 通过 `FailHandoff` 闭合原 call id；`/exit_sub` 默认要求 SubAgent 总结并正常 `CompleteHandoff`，显式 `false` 才直接 `FailHandoff`。活动 SubAgent 的 `Cancelled` 只结束当前 run，保留 active agent、handoff frame 与 Main 的 `WAITING_FOR_HANDOFF`，等待下一条用户消息；CLI 不补写 conversation record。
 
 R4 以测试专用 sub Agent 完成 G4 编排门禁；真实 Resume AgentSpec 与领域能力仍在 R7 落地，避免 R4 反向依赖 R7。
 
@@ -394,9 +403,9 @@ CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触
 - `CommandRegistry`：命令解析、帮助文本、alias 与 handler 映射；R6 可替换已注册的 unavailable handler，无需修改 CliApp。
 - `InputController`：autocomplete、进程内输入导航历史、prefill、editor、confirm/select；其中 `confirm()` 使用 questionary 选项列表呈现“✅ 执行 / ❌ 取消”，不使用 `y/N` 确认框；不增加独立 CLI 持久化 schema。restore 后可从 `SessionView.rewind_points` 重建导航历史。
 - `Renderer`：Markdown、Plan、spinner、错误、命令结果和 `SessionView` context recap；工具开始时以脱敏、截断后的 arguments 摘要展示调用，工具结束时显示截断结果预览；Plan 工具结束时直接渲染只读 Plan 表格，不解析输出字符串；不决定下一条业务 command。
-- `WorkerRunner`：使用单 worker 串行执行一个 `Application.handle(RuntimeCommand)`，轮询 Esc/Ctrl+C 并只通过 `Application.request_cancel()` 跨线程取消；不得并发执行 snapshot/restore/另一条 command。
+- `WorkerRunner`：使用单 worker 串行执行 RuntimeCommand 或需要 worker 的 ApplicationCommand，并只接受 `RuntimeEvent | ApplicationResult`；轮询 Esc/Ctrl+C 时仅通过 `Application.request_cancel()` 跨线程取消，不得并发执行 snapshot/restore/另一条 command。
 
-事件推进由 `CliApp` 明确处理：`Progress`、`ToolStarted`、`ToolFinished`、`HandoffRequested` 转为 `Continue`；`ApprovalRequested` 转为 `Approve/Reject`；`SelectionRequested` 的有效值转为 `SubmitSelection`，选择界面或自定义输入中的 Ctrl+C／EOF 转为 `CancelSelection`；`Completed/Failed/Cancelled` 结束内层循环。`CancelSelection` 只闭合当前 interaction 并继续当前 Agent，不能复用会终止 run 的全局 `Cancel`。会返回 RuntimeEvent 的 CLI 命令（当前为 `/exit_sub`）使用 `CommandAction.DRIVE` 将事件交回 `CliApp`，不得只在 handler 内渲染后丢弃；这样 `FailHandoff` 产生的 `ToolFinished` 仍会继续驱动源 Agent。`Reject` 是用户对该次审批的明确否决：Runtime 必须写入已拒绝的 tool result 闭合 pending call，再直接返回 `Cancelled`，不得自动 `Continue` 或把拒绝结果交回模型重试；只有实际工具执行的技术/业务失败才以 `ToolFinished` 交回模型自修复。终态后调用 `Application.snapshot()` 保留旧 CLI 自动保存能力，保存失败单独渲染，不覆盖原终态。
+事件推进由 `CliApp` 明确处理：`Progress`、`ToolStarted`、`ToolFinished`、`HandoffRequested` 转为 `Continue`；`ApprovalRequested` 转为 `Approve/Reject`；`SelectionRequested` 的有效值转为 `SubmitSelection`，选择界面或自定义输入中的 Ctrl+C／EOF 转为 `CancelSelection`；`Completed/Failed/Paused/Cancelled` 结束当前内层循环并把控制权交还输入层。`Reject` 与 `CancelSelection` 都先写入对应 tool result，再进入 `WAITING_FOR_USER` 并返回 `Paused`；不得自动 `Continue` 或再次调用模型，下一条 `UserMessage` 才携带已记录结果继续当前 Agent。真正的运行取消使用全局 `Cancel` 并返回 `Cancelled`；活动 SubAgent 下仍保留 handoff。会返回 RuntimeEvent 的 CLI 命令（当前为 `/exit_sub`）使用 `CommandAction.DRIVE` 将事件交回 `CliApp`，不得只在 handler 内渲染后丢弃；这样直接退出产生的 `ToolFinished` 仍会继续驱动源 Agent。只有实际工具执行的技术／业务失败才以 `ToolFinished` 交回模型自修复。回合终点后调用 `Application.finalize_turn()`，独立尝试 snapshot 与可选 auto-memory；任一持久化失败都不覆盖原 RuntimeEvent。
 
 审批策略属于 CLI 偏好：`/approval` 无参数时在 `prompt` 与 `auto` 间切换，使用 `/approval prompt|auto` 可显式设置；该策略只决定 `ApprovalRequested` 是否自动发送 `Approve`，不修改 ToolDefinition 或 Runtime 状态。`/auto-approve-switch` 不向前兼容。基础 Plan 表格在每次 Plan 工具变更后显示；持续驻留的 Sticky Plan 只有在 Renderer 独占终端生命周期后再加入。
 
@@ -411,7 +420,7 @@ R5 新文件、对象与公开边界清单如下，已由用户在决策 154 中
 | `src/get_me_in/cli/commands.py` | `ApprovalMode`、`CommandAction`、`CommandResult`、`CommandSpec`、`CommandRegistry` | `CommandRegistry(specs=())`、`register(spec) -> None`、`replace(spec) -> None`、`dispatch(text) -> CommandResult | None`、`help_entries() -> tuple[tuple[str, str], ...]`、`completions() -> tuple[str, ...]`、`build_command_registry(application, input_controller, renderer) -> CommandRegistry`；结果使用强类型 action，不返回魔法 dict |
 | `src/get_me_in/cli/input.py` | `CompletionProvider`、`InputController` | `__init__(editor=None)`、`set_completions(provider: CompletionProvider) -> None`、`read(prefill=None) -> str | None`、`edit() -> str | None`、`confirm(prompt) -> bool | None`、`select(prompt, choices, allow_custom=False) -> str | None`、`remember(text) -> None`、`replace_history(entries) -> None` |
 | `src/get_me_in/cli/renderer.py` | `Renderer` | `__init__(console=None)`、`render_event(event) -> None`、`render_session(view) -> None`、`render_help(entries) -> None`、`render_error(message) -> None`、`render_notice(message) -> None`、`status(message)`；不返回下一条 command |
-| `src/get_me_in/cli/worker.py` | `WorkerRunner` | `__init__(application, renderer, poll_interval_seconds=0.1)`、`run(command: RuntimeCommand) -> RuntimeEvent`、`close() -> None`；只管理单 worker、轮询和取消 |
+| `src/get_me_in/cli/worker.py` | `WorkerRunner` | `__init__(application, renderer, poll_interval_seconds=0.1)`、`run(command: RuntimeCommand | ApplicationCommand) -> RuntimeEvent | ApplicationResult`、`close() -> None`；只管理单 worker、轮询和取消 |
 | `src/get_me_in/cli/main.py` | CLI composition function | `main() -> int`；构造 Application 与 CLI 组件，按 worker → application 顺序关闭 |
 | `src/get_me_in/cli/__main__.py` | 模块入口 | 只调用 `main()`，不含业务逻辑 |
 | `tests/get_me_in/test_cli_app.py` | CliApp protocol tests | 覆盖事件推进、handoff continue、终态自动保存与保存失败 |
@@ -446,7 +455,7 @@ Resume 的模板复制、LaTeX 编译和 PDF 产物记录属于 ArtifactService�
 
 ### 6.9 Knowledge 与 Memory
 
-R6 复审结论是保留 Knowledge/Memory 的总体方向，但重新设计命令执行、会话输入、manifest 一致性和资源所有权。R6 只迁移当前 Reference RAG、Memory 构建/查询/删除、`/ragreload`、`/build-memory` 与可配置的终态自动 Memory；不引入 R7 Resume Agent、Artifact schema 或其他新功能。
+本节保留 R6 当时已经确认并最终落地的设计边界，用于解释现有 Knowledge/Memory 实现；其中“本次会话”“后续新会话”和实施切片均为历史实施记录，不代表当前待办或授权状态。R6 复审结论是保留 Knowledge/Memory 的总体方向，但重新设计命令执行、会话输入、manifest 一致性和资源所有权。R6 只迁移当时已有的 Reference RAG、Memory 构建/查询/删除、`/ragreload`、`/build-memory` 与可配置的终态自动 Memory；未引入 R7 Resume Agent、Artifact schema 或其他新功能。
 
 #### 6.9.1 新增、删除与修改
 
@@ -538,7 +547,7 @@ R6-F 允许修改 R6 已确认文件及其对应测试，并允许在 `applicati
 
 ### 6.10 Resume 与 Artifact（R7）
 
-R7 启动前 Review 的总体边界与新文件、对象、公开方法清单均已获用户确认。后续补充 Review 又确认恢复旧决策 117 的 temperature 行为，并固定 Artifact build log 的有界持久化策略。本 checkpoint 只固化设计、计划、任务和决策；用户明确要求当前会话不编码、不切换旧 `main.py`、也不进入 R8。后续新会话必须从 R7-P0 第一切片开始。
+本节保留 R7 当时已经确认并最终落地的设计边界，用于解释现有 Resume/Artifact 实现；其中“当前 composition root”“本次会话”“后续新会话”和实施切片均按 R7 当时状态阅读，不代表当前待办或授权状态。R7 启动前 Review 的总体边界与新文件、对象、公开方法清单均已获用户确认；后续补充 Review 又确认恢复旧决策 117 的 temperature 行为，并固定 Artifact build log 的有界持久化策略。
 
 #### 6.10.1 R7-P0：LLM temperature 契约修复
 
@@ -652,9 +661,9 @@ R7 固定按七个切片实施，每个切片独立验证、独立提交：
 
 6.10.5 清单及后续 temperature/log 补充均已获得用户确认。当前会话按用户要求只执行文档 checkpoint，不编码；后续新会话执行 `/project-bootstrap` 后只能从切片 1 R7-P0 开始。G7 通过后仍须 checkpoint 并停下；未经用户后续确认，不得切换旧 `main.py` 或进入 R8 遗留删除。
 
-### 6.11 入口切换、观察与遗留删除（R8，R8-D 已完成）
+### 6.11 入口切换、观察、遗留删除与文档归一化（R8，已完成）
 
-R8 不新增业务能力，也不改变 v2 的 RuntimeCommand／RuntimeEvent、Application、Session、ToolOutcome 或 port 公共协议。R8 只允许完成生产入口切换、可回退观察、遗留代码删除和最终文档归一化。R8-P、R8-E、R8-O、R8-D 及相应用户审查均已完成；决策 230 确认 R8-G 详细清单，决策 231 已授权本会话实施 R8-G，完成 G8 与 checkpoint 后停止，不进入 R9。
+R8 没有新增未授权业务能力，其公开协议调整仅来自 R8-O 真实 smoke 中经独立授权的最小修复。R8-P、R8-E、R8-O、R8-D、R8-G、完整 G8 与最终用户审查均已完成；决策 239 记录 G8 完成证据，决策 240 记录最终审查，决策 241 收口本轮文档一致性修复。当前继续停在 R9 独立授权门禁前。
 
 #### 6.11.1 强制前置门禁
 
@@ -690,24 +699,24 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 2. **R8-E 入口切换：** 切换根 `main.py`，补齐 `cli.main` 启动异常映射和入口 contract tests，形成独立 commit。该 commit 是删除前的明确回退点。
 3. **R8-O 观察门禁：** 从 `uv run python main.py` 执行完整 smoke matrix，验证启动错误无 traceback、基础对话、命令、审批／取消、Main→Resume→Main、save/restore/rewind、Knowledge/Memory、Resume copy/edit/build/open 与关闭。未通过时用 `git revert <R8-E commit>` 回退，不使用破坏性 reset；R8-P 保留的 legacy rollback 配置使旧入口仍可启动。
 4. **R8-D 遗留删除：** R8-O 经用户审查通过后，由 `7514af3` 精确删除 legacy 源码，3 个 checkpoint 目录作为本地清理证据；import/dependency、Catalog、入口和 legacy-data refusal 验证均已完成，旧运行数据未删除。
-5. **R8-G 文档与 G8：** 决策 231 已授权实施；`.env.example`／README 的 legacy rollback 段已删除，活跃文档与 AGENTS.md 正在同步为已落地 v2 事实，随后完成 G8。历史 smoke/capability 内容已由决策 228 收敛到四份主文档并通过 Git 保留，不把旧 `/auto-approve-switch` 改写成当前命令。
+5. **R8-G 文档与 G8：** `.env.example`／README 的 legacy rollback 段已删除，活跃文档与 AGENTS.md 已同步为已落地 v2 事实；完整 G8、独立缺陷分流、最终 checkpoint 和用户审查均已完成。历史 smoke/capability 内容已由决策 228 收敛到四份主文档并通过 Git 保留，旧 `/auto-approve-switch` 没有被改写成当前命令。
 
 #### 6.11.4 R8-O／G8 证据要求
 
 - 自动化：完整 unittest、`compileall`、`git diff --check`、根入口 import boundary；当前固定验收 Catalog 为 2 个 Agent（Main／Resume）、26 个 ToolDefinition、10 个 CLI 命令（`/help`、`/edit`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、`/approval`、`/exit`）。数量与名称分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 派生，不手工维护第二份运行时注册表。25-tool 是 R3/R7/R8-E 的历史验收值；决策 210 后当前值为 26。
 - 真实 adapter：Chroma/embedder/reranker reload/query、Memory build/query/delete、中文／英文／双语 Resume copy/edit/build/open，且进程结束后后台 worker 与资源正常关闭。
-- 数据边界：只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`；v2 写入仅落在显式的 `data/workspace/` 与 `data/v2/` 边界。旧运行数据只保留，不自动迁移或删除。证明“未访问”必须组合使用：静态扫描 v2 源码／Settings 中的禁用路径和 legacy-only 环境变量、以 sentinel project root 构造 Settings 并断言全部运行路径、在启动／smoke 中安装拒绝访问旧目录的测试边界；目录 mtime／hash 前后对比只能证明“未改写”，不得单独作为“未读取”的证据。
+- 数据边界：只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`；v2 写入仅落在显式的 `data/workspace/` 与 `data/v2/` 边界。旧运行数据只保留，当前及未来 production、测试和 smoke 均不得读取其内容、迁移、改写或删除。决策 206 的一次性测试迁移是已经结束的历史特例，不构成持续权限，也不得重做。当前证明 production “未访问”只组合使用 v2 源码／Settings 静态扫描、sentinel project root 路径断言和拒绝访问旧目录的测试边界；不得通过重新读取旧文件内容或计算内容 hash 建立新证据。
 - 删除后：`main.py` 与 `src/get_me_in/` 不得 import legacy；仓库不再包含列出的 legacy production modules 或 `.ipynb_checkpoints`；文档中的 Agent、tool、command 和配置数量必须与实际 Catalog／Settings 一致。
-- 回退：R8-D 前只需 revert R8-E；当前 R8-D 后、R8-G 前按 `git revert 7514af3` → `git revert 9fbeabc`；未来 R8-G 提交后先 revert R8-G，再 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置，任何回退都不得触碰旧 `data/` 运行数据。
+- 回退：当前 R8 完成态若需回退，先按逆提交顺序 revert R8-G 及其后续文档 checkpoint，再 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置；任何回退都不得读取、迁移、改写或删除旧 `data/` 运行数据。
 
-#### 6.11.5 R8-G 实施边界与失败分流
+#### 6.11.5 R8-G 已完成边界与失败分流记录
 
-- **授权：** 决策 230 确认清单，决策 231 已授权本会话；执行仍须以 bootstrap、`refactor` 分支、干净工作区和 8 文件白名单为边界。
-- **文件白名单：** 只允许修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`。R8-G 不修改生产代码、测试、脚本、数据、依赖或锁文件。
+- **授权与结果：** 决策 230 确认清单，决策 231 授权实施；R8-G、G8、最终 checkpoint 和用户审查现均已完成。
+- **文件白名单：** R8-G 文档／配置提交只修改了 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`。G8 发现的测试与 production adapter 缺陷均先停止，经独立授权、修复和提交后才恢复验证，没有混入 R8-G 文档提交。
 - **配置与文档：** 已删除仅供旧入口回退的示例变量和观察期说明，保留 v2 正式变量及其兼容别名；README 和活跃文档以实际 Catalog、Registry、Settings 与数据目录为准。`docs/decision.md` 只追加完成决策，不改写历史。
-- **G8：** 除完整自动化、静态边界和 2 Agent／26 Tool／10 command Catalog 外，还必须从根入口完成 CLI／handoff／审批／取消，真实 Chroma／Knowledge／Memory，中文／英文／双语 Resume 与 PDF merge，legacy-data 拒绝访问组合证据、写入边界和资源关闭验证。
-- **失败分流：** 若 G8 发现需要修改 `main.py`、`src/`、`tests/`、依赖、公开协议或数据迁移，立即停止并保留证据，另行提交最小修复清单；不得在 R8-G 文档／配置提交中修复。
-- **提交与停止：** staged diff 只能包含文件白名单；G8 通过后创建独立 R8-G 提交并 checkpoint，随后停止等待用户审查，不自动进入 R9。
+- **G8：** 完整自动化、静态边界、2 Agent／26 Tool／10 command Catalog、根入口 CLI／handoff／审批／取消、真实 Chroma／Knowledge／Memory、中文／英文／双语 Resume 与 PDF merge、legacy-data 拒绝访问、写入边界和资源关闭验证均已完成。
+- **失败分流：** Settings 测试断言和 Windows SubprocessRunner 缺陷分别按决策 234～237 停止、授权、独立修复并提交；该流程继续作为未来文档验收发现产品缺陷时的稳定边界。
+- **提交与停止：** 决策 239 完成 R8-G/G8，决策 240 完成最终用户审查；当前仍不得自动进入 R9。
 
 ### 6.12 InterviewAgent Workflow 前置备忘（R9，非确认清单）
 
@@ -800,4 +809,4 @@ v2 只复用以下静态项目资产：
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 v1 migration 工作，v2 使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。R0～R7、G5-F、R6-F 与 R7-T2 均已完成；决策 189 已再次恢复 G7。R8-P、R8-E、R8-O 与 R8-D 已完成，R8-D 提交为 `7514af3`。决策 230 已确认 R8-G 清单，决策 231 已授权本会话从 5.2 实施；完成 G8 与 checkpoint 后停止。
+R-D1～R-D6 已由用户确认。R0～R8、G5-F、R6-F、R7-T2 与完整 G8 均已完成；R8-D 提交为 `7514af3`，决策 239／240 记录 G8 和最终用户审查，决策 241 记录完成态文档契约收口。当前停在 R9 独立授权门禁前。

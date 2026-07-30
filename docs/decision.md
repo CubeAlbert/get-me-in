@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 241 — 修正文档契约冲突并统一 R8 后权威语义](#决策-241--修正文档契约冲突并统一-r8-后权威语义)
 - [决策 240 — R8 最终审查通过并停在 R9 授权门禁前](#决策-240--r8-最终审查通过并停在-r9-授权门禁前)
 - [决策 239 — 完成 R8-G/G8 并在审查门禁停止](#决策-239--完成-r8-gg8-并在审查门禁停止)
 - [决策 238 — R8-G 5.5 真实 adapter 与数据边界 smoke 通过](#决策-238--r8-g-55-真实-adapter-与数据边界-smoke-通过)
@@ -5631,3 +5632,39 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **验证：** 完成态文本扫描通过；完整 unittest `284/284`、`compileall` 与 `git diff --check` 通过。staged diff 仅包含 `AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md` 六个原 R8-G 白名单文档文件；未包含生产代码、测试、配置、依赖、数据或生成物。由此创建独立最终 R8 文档 checkpoint，并停止等待用户后续指示。
 
 **后续门禁：** 未取得用户对 R9 的单独明确授权前，不得检查、设计或实施 R9。
+
+---
+
+### 决策 241 —— 修正文档契约冲突并统一 R8 后权威语义
+
+**背景：** R8 已完成且决策 240 已记录最终用户审查通过。后续只读一致性审查发现，`docs/design.md` 仍混有早期目录蓝图、R6／R7 实施时态和 R8-G 实施中状态；RuntimeEvent、审批拒绝、选择取消、Esc、handoff 与 Application 公开签名也同时保留了旧版和当前版语义。决策记录另有两类需要明确优先级的历史冲突：决策 209／216／221 的取消闭合描述已被决策 223 改变；决策 206 的一次性 legacy Memory 测试迁移与 R-D6 的长期“不读取／不迁移旧运行数据”边界缺少最终收口。用户授权制定计划并处理这些问题，范围仍只限 R8 完成态文档，不进入 R9。
+
+**决定：**
+
+- `docs/current.md` 继续是唯一阶段快照；`docs/design.md` 的“当前架构／公开边界”只描述已经落地的 v2 事实。R6／R7 的文件清单、切片和“本次会话／后续新会话”只作为明确标注的历史实施记录，不构成当前任务或授权。Plan／Task 中已经实施完成的计划和任务状态不因本轮审查被判为矛盾。
+- 当前 RuntimeEvent 包含 `Paused`。模型回复最终解析失败、审批拒绝和 `provide_choices` 选择取消均写入必要记录、进入 `WAITING_FOR_USER` 并返回 `Paused`；CLI 结束当前内层循环，等待下一条 `UserMessage`，不得自动 `Continue` 或再次调用模型。
+- 全局 `Cancel` 产生 `Cancelled`。活动 SubAgent 的 `Cancelled` 只结束当前 run，保留 active SubAgent、handoff frame 和 Main 的 `WAITING_FOR_HANDOFF`；下一条用户消息继续发送给原 SubAgent。只有 `Failed`、显式 `/exit_sub false` 或正常 SubAgent 总结返回才按各自 Fail／Complete 路径闭合 handoff。
+- 上述规则明确记录既有决策优先级：决策 221 取代决策 163 的“Reject 返回 Cancelled”部分；决策 223 取代决策 152、209、216、221 中任何“Cancelled/Cancel 自动闭合活动 handoff”或“取消使用 Failed”的部分；决策 224 取代决策 209 的“选择取消后进入 MODEL_QUEUED 并自动继续”部分。旧决策原文按 append-only 规则保留，只代表其发生时的历史语义。
+- Application 的当前公开边界是 `handle(RuntimeCommand | ApplicationCommand)`，按 command 返回 `RuntimeEvent`、`SessionView`、`Path` 或强类型 `ApplicationResult`；`finalize_turn()` 返回 `TurnFinalizationResult`；`close()` 返回 `CloseReport`。旧的 `handle(RuntimeCommand) -> RuntimeEvent` 和 `close() -> None` 不再是完整 Application 契约。
+- 决策 206 对两份 legacy Markdown Memory 的一次性显式测试迁移是已经执行并关闭的历史特例，只用于当时的 R8-O smoke，不建立 production 兼容层，也不构成可重复或持续授权。自本决策起，`data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 的内容不得由 production、测试或 smoke 读取、迁移、改写或删除；后续边界验证只使用 v2 静态路径扫描、sentinel Settings 路径断言和拒绝访问边界，不再读取旧文件内容或计算内容 hash。
+- `docs/design.md` 的当前目录以实际 `src/get_me_in/` 层级为准；legacy production 源码已由 `7514af3` 删除。R8-P、R8-E、R8-O、R8-D、R8-G、完整 G8 与最终用户审查均已完成；当前仍停在 R9 独立授权门禁前。
+
+**理由：**
+
+- 暂停、取消、失败和 handoff closure 是同一状态机的相邻边界；保留多套互斥描述会直接误导未来维护和 R9 前置 Review。
+- Application command/result 与 `CloseReport` 已经是生产代码和资源生命周期依赖的公开事实，设计文档不能继续只展示 R4 早期窄签名。
+- decision log 必须 append-only，但 append-only 不等于让读者自行猜测互斥条款的有效性；追加明确的优先级映射既保留历史，也提供唯一当前解释。
+- 一次性历史 smoke 例外不能继续削弱旧用户数据的长期隔离规则；关闭该例外后，production 与验证边界重新一致。
+
+**曾考虑的替代方案：**
+
+- 改写决策 152／163／206／209／216／221 的历史正文 —— 会破坏 append-only 审计记录，未采用。
+- 只修正 `design.md` 而不追加优先级决策 —— 无法解决读者从 decision index 直接跳转时看到的取消和旧数据边界冲突，未采用。
+- 把 decision 206 的测试迁移扩展成长期手工迁移流程 —— 会违反 R-D6 并扩大旧数据访问面，明确拒绝。
+- 借文档修复检查或设计 R9 —— 超出本轮授权，拒绝。
+
+**验证与停止门禁：**
+
+- 本次只修改 `docs/design.md`、`docs/decision.md` 和 `docs/current.md`，不修改生产代码、测试、Plan、Task、配置、依赖或数据。
+- 使用当前 `src/get_me_in/` 代码复核 Paused／WAITING_FOR_USER、Cancelled handoff 保留、Application command/result 和 CloseReport 契约；执行完成态／旧路径／旧语义文本扫描、`git diff --check` 与最终 diff 审查。
+- 验证完成后仍停在 R9 独立授权门禁前；本决策不构成 R9 的检查、设计或实施授权。

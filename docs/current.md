@@ -1,14 +1,14 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；当前停在 R9 独立授权门禁前
+**当前阶段：** R8 已完成并通过最终用户审查；完成态文档契约已由决策 241 收口，当前停在 R9 独立授权门禁前
 
-**当前任务：** 无活动实施任务；R8-P／R8-E／R8-O／R8-D／R8-G 与 G8 均已完成
+**当前任务：** 无活动实施任务；R8-P／R8-E／R8-O／R8-D／R8-G、G8 与后续文档一致性修复均已完成
 
-**当前子任务：** R8 最终审查收口已完成：活跃文档当前态一致，最终白名单与停止门禁已复核。
+**当前子任务：** R8 后续文档一致性修复已完成：Runtime／CLI／Application 当前契约、目录、R8 完成态、历史决策优先级与旧数据边界已经统一。
 
-**当前阻塞：** 无。R8 的代码、文档、自动化、Catalog、真实 adapter／业务 smoke、数据边界与回退证据均已闭环；R9 未授权。
+**当前阻塞：** 无。R8 的代码、文档、自动化、Catalog、真实 adapter／业务 smoke、数据边界、回退证据与完成态文档契约均已闭环；R9 未授权。
 
-**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 最终修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 与删除提交 `7514af3` 保持分离，checkpoint `c13d455` 记录完成证据。R8-G 5.2 `c644b12`、5.3 `7e400bd`、5.4 `7742d85`、5.5 `8bd8759` 与 5.6 `10b38e8` 已完成；Settings 测试修复 `ee558b4` 与 SubprocessRunner 修复 `6a092b5` 均独立提交。决策 239 记录完整 G8，决策 240 记录最终审查与活跃文档收口。R8-G 文档提交后的回退顺序为先逆序 revert R8-G 文档 checkpoint，再 revert `7514af3`，最后 revert `9fbeabc`；任何回退始终不得触碰旧运行数据。
+**会话交接说明：** R8-P 提交 `d91e37c`，R8-E 入口切换提交 `9fbeabc`，R8-O 最终修复包含 `9da3242`。R8-D 前置生命周期修复 `b74af9e` 与删除提交 `7514af3` 保持分离，checkpoint `c13d455` 记录完成证据。R8-G 5.2 `c644b12`、5.3 `7e400bd`、5.4 `7742d85`、5.5 `8bd8759` 与 5.6 `10b38e8` 已完成；Settings 测试修复 `ee558b4` 与 SubprocessRunner 修复 `6a092b5` 均独立提交。决策 239 记录完整 G8，决策 240 记录最终审查，决策 241 统一完成态文档中的 Runtime／CLI／Application 契约、历史决策优先级与旧数据边界。R8-G 文档提交后的回退顺序为先逆序 revert R8-G 及其后续文档 checkpoint，再 revert `7514af3`，最后 revert `9fbeabc`；任何回退始终不得读取、迁移、改写或删除旧运行数据。
 
 **下一步：** 停在 R9 独立授权门禁前，等待用户后续指示；不得自动检查、设计或实施 R9。
 
@@ -44,7 +44,7 @@
 203. **恢复 v2 provider JSON mode** — OpenAILLMAdapter 对所有 completion 显式发送 `response_format={"type":"json_object"}`，恢复 legacy provider 约束；AgentRuntime 与 MemoryExtractor 的输出均为 JSON 对象，Web Search 独立 adapter 不变，一次格式 repair 继续作为异常兜底。
 204. **在单次模型修复前增加本地 JSON repair** — ModelReplyParser 在 `json.loads` 语法失败后调用 `json_repair.loads`，但修复结果仍必须是 JSON object 并通过严格业务校验；纯文本、JSON string／array、缺少 finish message 或其他语义错误不得本地归一化。本地修复失败或语义校验失败时沿用决策 172/203 的一次模型 repair，第二次仍失败才返回 typed failure。
 205. **Main 的业务能力只由当前 SubAgent 穷尽定义** — Main 只保留 Plan、当前时间、选项交互、客户文件读取、记忆查询与切换 SubAgent 六类辅助／路由工具；工具不构成对外业务能力。`<SubAgents>` 是唯一且穷尽的当前业务能力来源，禁止根据产品名称、工具、历史、模型知识或未来规划推测能力。无匹配项时只说明暂不支持且不提供替代建议；问候可用用户语言介绍实际 SubAgent 能力但不暴露内部架构。
-206. **空 Memory collection 返回空结果并以显式迁移准备真实测试** — v2 Chroma 已正常加载 reference 数据；尚无 v2 Memory 时，`query_memory` 的 collection-not-found 必须解释为零命中，其他 Chroma 异常继续上抛，并补充 adapter／Tool 回归。后续真实 Memory smoke 前先把当前两份 legacy Markdown 记忆显式转换为 v2 JSON 并建立索引；不得让 production v2 直接读取 legacy 路径，不修改或删除原文件。
+206. **空 Memory collection 返回空结果并以显式迁移准备真实测试（一次性历史特例已由决策 241 关闭）** — v2 Chroma 尚无 Memory collection 时，collection-not-found 解释为零命中，其他异常继续上抛。当时两份 legacy Markdown 记忆曾经独立授权并一次性转换为 v2 测试数据；该历史操作不构成持续权限，今后 production、测试和 smoke 均不得读取或迁移旧运行数据。
 207. **targeted Knowledge reload 只比较目标范围** — `/ragreload <target>` 的 observed sources 与 manifest diff 必须使用相同 target 范围，禁止把非目标 manifest entries 误判为删除；完整 reload 继续比较全部 source。真实 `/ragreload memories` 已证明只保留两条 memory unchanged 且不会删除 references。
 208. **RAG 启动后台预热全部查询模型且不泄漏权重输出** — `KnowledgeIndexPort.prepare()` 在 startup reload 的既有后台串行边界内幂等加载 embedding 与 reranker；manifest 无变化仍必须执行，预热成功后才能进入可查询状态，失败可由显式 reload 重试。生产 CLI 在模型库首次导入前关闭 Hugging Face／tqdm／transformers 进度输出并限制相关 logger，首次用户查询不得承担模型构造或显示权重加载信息。
 209. **选择交互取消不得提升为 Agent 或 handoff 取消（自动继续部分已由 224 取代）** — `SelectionRequested` 中 Ctrl+C／EOF 使用 `CancelSelection` 闭合当前 `provide_choices`，向当前 Agent 返回 typed cancelled tool result；不得复用全局 `Cancel`。选择取消后的自动模型继续已由决策 224 改为等待下一条用户消息。
@@ -67,6 +67,7 @@
 230. **确认 R8-G 详细清单但不授权本会话实施** — R8-G 拆为实施门禁、过渡配置／README、活跃文档、自动化／Catalog、真实 adapter／数据边界、提交／回退六组；只允许 8 个文档／示例配置文件，G8 发现代码缺陷必须停止并分离修复。当前会话只做文档 checkpoint，新会话仍须取得 R8-G 单独授权，完成后不得自动进入 R9。
 231-239. **R8-G 实施、缺陷分流与 G8 完成** — R8-G 按六组清单完成；Settings 测试和 SubprocessRunner 缺陷均经独立授权与独立提交修复，完整 G8、真实 adapter／业务 smoke、数据边界与回退证据由决策 239 闭环。
 240. **R8 最终审查通过并停在 R9 门禁前** — 用户授权处理最终审查发现的活跃文档状态漂移；当前态已统一为 R8 完成，后续不得自动检查、设计或实施 R9。
+241. **修正文档契约冲突并统一 R8 后权威语义** — `Paused/WAITING_FOR_USER`、Cancelled handoff 保留、Application command/result 与 CloseReport 契约已经统一；决策 206 的一次性 legacy Memory 测试迁移被明确关闭，旧运行数据今后不得由 production、测试或 smoke 读取、迁移、改写或删除。Plan／Task 的已实施历史不因本轮审查被判为矛盾；当前仍停在 R9 独立授权门禁前。
 
 **已暂缓：** InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan、CLI banner 客制化等增强统一放到 R9；R0～R8 只做 v2 重构
 
