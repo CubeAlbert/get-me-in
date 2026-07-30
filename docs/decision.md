@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 248 — 撤回 R8-F smoke 入口并统一 Input／Output 的 LLM-facing Entity](#决策-248--撤回-r8-f-smoke-入口并统一-inputoutput-的-llm-facing-entity)
 - [决策 247 — 完成 bootstrap fixture 最小扩展与工程验证](#决策-247--完成-bootstrap-fixture-最小扩展与工程验证)
 - [决策 246 — 全量验证发现白名单外 fixture 阻塞](#决策-246--全量验证发现白名单外-fixture-阻塞)
 - [决策 245 — 完成 R8-F snapshot codec 兼容子任务](#决策-245--完成-r8-f-snapshot-codec-兼容子任务)
@@ -5790,3 +5791,41 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：** 该变更只更新测试输入 fixture，使既有 application 集成回归遵循已确认的新输出协议；不恢复旧输出兼容，也不放宽 Parser。
 
 **曾考虑的替代方案：** 在 Parser 中恢复旧 flat 输出兼容会违反 R8-F 唯一 envelope；修改 ConversationCodec 历史输入会扩大协议范围，均未采用。
+
+---
+
+### 决策 248 —— 撤回 R8-F smoke 入口并统一 Input／Output 的 LLM-facing Entity
+
+**背景：** 决策 242 的首轮实现、bootstrap fixture 迁移与 287/287 自动化已经完成，但用户复核 system prompt 后发现核心目标没有落地：`07_input_format.md` 仍定义旧 flat history envelope，`08_output_format.md` 定义新的 reply envelope，PromptRenderer 同时拼接两者；代码中 `ConversationCodec` 与 `ModelReplyParser` 也分别手写不同字段映射。现有测试分别验证输入端旧形状和输出端新形状，因此全绿只能证明两套契约各自自洽，不能证明 InputFormat／OutputFormat 已统一。用户进一步确认，system prompt 不应再出现旧 InputFormat 的约定项，最终只应由一个 Entity 映射。
+
+**决定：**
+
+- 立即撤回决策 247 的“等待用户 smoke”当前状态。提交 `4cfc19c`、`0727c8a`、`1d3176c`、`b7bb7e9` 与 `50cde77` 仍作为已经发生的历史工程事实保留，但 R8-F 不得据此宣称完成或要求用户开始 smoke。
+- 新的 R8-F-C 以一个 immutable `ModelMessageEntity` 作为唯一 LLM-facing 顶层对象，以一个 `ModelMessageCodec` 作为唯一字段映射与验证所有者。history 路径固定为 `ConversationRecord → ModelMessageEntity → LLMMessage`；reply 路径固定为 `raw JSON → ModelMessageEntity → Runtime/domain`。
+- `ModelMessageEntity` 承载 provider role、message、可选 thinking、可选 tool call、Runtime-owned tool result、Runtime-owned context 与本地 normalization 标记；嵌套值使用 codec 校验的 immutable mapping。内部 event id、timestamp、turn id 与 tool call correlation id 不进入模型可见 JSON。
+- `ModelReply`／`ModelReplyParser` 与当前 hand-written flat `ConversationCodec` 不再各自拥有独立 schema；迁移有效测试与 import 后删除 `model_reply.py`、`conversation_codec.py`，不保留 façade。Runtime 只依赖注入的 `ModelMessageCodec`。domain `ConversationRecord` union 继续是 Session history 的 canonical 类型，不因 LLM 边界合并而替换。
+- `07_input_format.md` 与 `08_output_format.md` 合并为按文件名排序的 `07_message_format.md`。完整 system prompt 与格式 repair 都读取该唯一 MessageFormat；Prompt 不得列出、解释或为了禁止而再次写出旧 InputFormat 字段名。决策 213 的文件名排序原则保留，但其中“两份格式文件”的具体命名被本决策取代。
+- 保留已经完成的每 Agent 用户 turn 最多 3 次模型格式 repair、第四次暂停、新 UserMessage 清零、本地 JSON repair 不计数、`format_repairs_used` 与旧 snapshot bool 0／1 兼容；本修正不回退这些行为。
+- 实施会话负责补齐 Entity／codec、Prompt、Runtime 与 bootstrap 回归并完成全量 unittest、`compileall`、`git diff --check` 和独立代码 checkpoint。工程验证后停止，由用户执行真实 provider smoke；用户不负责替代自动化回归。
+- 当前会话只更新五份活跃文档并建立文档 checkpoint。新会话执行 `/project-bootstrap` 后按 R8-F-C 清单实施；本决定不检查、设计或授权 R9。
+
+**理由：**
+
+- “相同业务含义”如果仍由两个 mapper 和两套 schema 表达，测试再完整也只能锁定割裂状态；一个顶层 Entity 与一个 codec 才能从结构上消除 Input／Output 漂移。
+- Prompt 中解释旧字段或要求模型避开旧字段，仍会把旧协议放进模型上下文；直接删除旧语言并只展示当前 MessageFormat，认知负担更低。
+- Session/domain history 与 LLM-facing Entity 属于不同边界；保留 `ConversationRecord` 并集中转换，既不污染 domain，也不需要改变持久化 schema。
+- 自动化负责确定性映射和状态机，用户 smoke 负责真实模型随机行为，两者职责不同且都需要保留。
+
+**已确认文件与停止门禁：**
+
+- 生产：新增 `src/get_me_in/application/model_message.py`；修改 `src/get_me_in/application/runtime.py`、`src/get_me_in/application/prompt_renderer.py`、`src/get_me_in/bootstrap.py`；迁移后删除 `src/get_me_in/application/conversation_codec.py`、`src/get_me_in/application/model_reply.py`。
+- Prompt：新增 `data/prompts/general_agent/07_message_format.md`；删除 `data/prompts/general_agent/07_input_format.md`、`data/prompts/general_agent/08_output_format.md`。
+- 测试：新增 `tests/get_me_in/test_model_message.py`；修改 `tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_bootstrap.py`；迁移有效断言后删除 `tests/get_me_in/test_conversation_codec.py`、`tests/get_me_in/test_model_reply.py`。
+- checkpoint：五份活跃文档。`domain/messages.py`、`ports/llm.py`、session codec/state、provider adapter、Settings、RuntimeEvent、ToolDefinition／ToolExecutor、CLI、依赖、数据和 R9 文件不在范围；确需修改时必须停止并提交新的最小扩展清单。
+
+**曾考虑的替代方案：**
+
+- 只删除 `07_input_format.md`，继续让 `ConversationCodec` 发送旧 flat JSON —— Prompt 与真实 history 仍不一致，拒绝。
+- 保留 `ModelReply` 与 `ConversationCodec` 两套 mapper，只用共享常量同步字段 —— 仍有两个协议所有者，无法满足一个 Entity 的目标，拒绝。
+- 把 `ConversationRecord` 直接改成模型 JSON DTO —— 会把 LLM/provider 细节污染 Session domain 与 snapshot，拒绝。
+- 让用户先 smoke 再决定是否重构 —— 当前 system prompt 已被静态证据证明存在双协议，smoke 不能替代结构修正，拒绝。

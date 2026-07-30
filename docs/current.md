@@ -1,17 +1,18 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；当前执行 R8 后续的 R8-F 模型输出协议稳定性修复，R9 仍未授权
+**当前阶段：** R8 已完成并通过最终用户审查；当前执行 R8 后续的 R8-F-C 单一模型消息 Entity 修正，R9 仍未授权
 
-**当前任务：** R8-F 工程实现与自动化验证已完成，等待用户执行真实模型 smoke 验收
+**当前任务：** 决策 248 已撤回 R8-F 的 smoke 入口；等待新会话实施 Input／Output 共用一个 `ModelMessageEntity` 与一个 `ModelMessageCodec` 的修正
 
-**当前子任务：** R8-F 4：用户执行 Main finish、Main 工具调用、Main→Resume→工具→finish 的真实 smoke，并观察 repair 是否在三次预算内恢复。
+**当前子任务：** R8-F-C 1：新会话执行 `/project-bootstrap`，按 `docs/task.md` 的 R8-F-C 白名单合并模型消息 Entity、codec 与 Prompt 格式来源；本会话只保存文档计划。
 
-**当前阻塞：** 无工程阻塞。bootstrap 21/21、全量 unittest 287/287、compileall 与 git diff --check 均通过；真实模型稳定性仍需用户 smoke 验收。R9 未授权。
+**当前阻塞：** 当前代码不能进入用户 smoke：`ConversationCodec` 仍把历史输入编码为 `event_type/tool/event_payload` flat envelope，`ModelReplyParser` 却只接受 `message/thinking/tool_call` 输出 envelope；`07_input_format.md` 与 `08_output_format.md` 因而同时向模型展示两套语言。既有 287/287 仅是拆分契约各自自洽的历史工程证据，不构成 R8-F 验收。R9 未授权。
 
-**会话交接说明：** 决策 242 已确认 R8-F：模型输出只使用 `message/thinking/tool_call` 一个 envelope，Parser 继续返回现有 ModelReply，不改变 RuntimeEvent／Session conversation record／Tool／handoff／CLI；每个 Agent 用户 turn 的模型格式 repair 从 bool 改为最多 3 次的计数，本地 JSON repair 不计数，第四次失败才 Paused，下一条 UserMessage 清零。Snapshot 对旧 `repair_attempted` 做 0／1 读取兼容并保留回退投影。生产／测试白名单、自动化、提交和用户 smoke 门禁见 `docs/task.md` 的 R8-F；超出清单必须停止。R8-P～R8-G/G8 与决策 241 的完成态事实不变，任何工作不得读取、迁移、改写或删除旧运行数据。
+**会话交接说明：** 决策 248 取代决策 242 中“只改 OutputFormat／Parser、ConversationCodec 不在范围”和决策 247 中“等待用户 smoke”的当前执行结论。修正后只有一个顶层 LLM-facing `ModelMessageEntity` 和一个 `ModelMessageCodec`：历史 `ConversationRecord` 与模型原始回复都先映射该 Entity，再分别投影为 provider `LLMMessage` 或 Runtime action；`ModelReply`、`ModelReplyParser` 和手写 flat `ConversationCodec` 不再各自持有协议。Prompt 合并为一个 `MessageFormat`，不得出现旧 InputFormat 的字段约定或为禁止旧字段而再次列出它们。既有每回合 3 次 repair 与 snapshot 兼容实现保留。精确文件、测试与停止门禁见 `docs/design.md`、`docs/plan.md` 和 `docs/task.md` 的 R8-F-C；超出白名单必须停止。R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 用户执行真实模型 smoke；若通过，再记录 R8-F 完成态文档 checkpoint。若出现非 fixture 原因的失败，保留证据并暂停。不得检查、设计或实施 R9。
+**下一步：** 新会话执行 `/project-bootstrap`，确认 `refactor`、干净工作区及包含决策 248 的文档 checkpoint，然后从 R8-F-C 的单一 Entity／codec 切片开始实施并编写回归测试。完整自动化通过并建立代码 checkpoint 后才交由用户执行真实模型 smoke。不得检查、设计或实施 R9。
 
+248. **撤回 R8-F smoke 入口并统一 Input／Output 的 LLM-facing Entity** — 当前实现把历史输入留在旧 flat `ConversationCodec`，只合并了输出 Parser，因此 287/287 不足以证明核心目标。R8-F-C 改为一个 `ModelMessageEntity`、一个 `ModelMessageCodec` 和一个 `MessageFormat`；删除两套 mapper/schema 所有权，系统提示词不再出现旧 InputFormat 字段约定。新会话实施回归后才进入用户 smoke；本任务独立于 R9。
 242. **合并模型输出 envelope 并提高每回合格式修复预算** — R8-F 使用唯一 `message/thinking/tool_call` 输出形状，Parser 仍只产出现有 ModelReply；每个 Agent 用户 turn 最多 3 次模型格式 repair，snapshot 兼容旧 bool。新会话按白名单实施并完成自动化，代码 checkpoint 后由用户执行真实 smoke；本任务独立于 R9。
 243. **完成 R8-F OutputFormat／Parser 子任务** — `08_output_format.md` 与 `ModelReplyParser` 已收敛为 `message/thinking/tool_call` envelope；旧 flat 字段被拒绝，未知顶层字段忽略，工具 arguments 缺失／null 归一化为空对象；19 项 Parser／Prompt 定向测试通过，下一步为 Runtime repair 计数。
 244. **完成 R8-F Runtime repair 计数子任务** — `AgentSessionState` 使用 `format_repairs_used`；每回合最多三次模型格式 repair，第四次暂停并保留当前 handoff，新的 `UserMessage` 清零；Runtime 定向测试 26/26 通过，下一步为 snapshot codec 兼容。

@@ -283,28 +283,33 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **实施顺序：** R7-T2/G7 → R8-P → R8-E → R8-O（强制停止／用户审查）→ R8-D → R8-G/G8。R8-P、R8-E、R8-O、R8-D、R8-G 与 G8 均已完成；G8 发现的代码／测试缺陷已按既定边界停止、独立授权、修复并提交。决策 240 完成最终审查，当前停在 R9 独立授权门禁前。
 
-### R8-F —— 模型输出协议稳定性修复（R8 后续，独立于 R9）
+### R8-F-C —— Input／Output 单一模型消息 Entity 修正（R8 后续，独立于 R9）
 
-**目标：** 把模型面对的 `finish`／`tool_call` 两个条件格式收敛为一个固定 envelope，并把整个用户回合一次的模型格式修复预算提高为有界 3 次；不改变 RuntimeEvent、Session 消息记录、工具执行、handoff、CLI 或 provider 边界。
+**目标：** 修正决策 242 首轮实现只合并 OutputFormat 的范围错误，使模型历史输入和模型回复都通过一个 `ModelMessageEntity` 与一个 `ModelMessageCodec`；system prompt 只保留一个 `MessageFormat`，不再出现旧 InputFormat 字段约定。既有每回合 3 次 repair 与 snapshot 兼容继续保留。
 
 **产出：**
 
-- `08_output_format.md` 只声明 `message/thinking/tool_call` 一个 canonical JSON object；`tool_call=null` 表示 finish，object 表示工具调用，不再要求模型协调 `event_type/tool/event_payload`。
-- `ModelReplyParser` 只接受新 envelope 并继续返回现有 `ModelReply`；未知顶层字段忽略，缺失／null thinking 归一化为无摘要，缺失／null arguments 归一化为 `{}` 后交给 ToolExecutor 做既有业务校验。
-- `AgentSessionState.repair_attempted` 替换为 canonical 整数 `format_repairs_used`；每个用户 turn 最多安排 3 次模型格式修复，本地 JSON repair 不计数，第四次失败进入当前 `Paused/WAITING_FOR_USER`，下一条 UserMessage 清零。
-- `SessionSnapshotCodec` 对旧 `repair_attempted` 快照保持 0／1 读取兼容，并在新快照中保留 bool 投影以支持代码回退；不提升 schema version、不读取或迁移 legacy 运行数据。
-- Parser／Runtime／Prompt／Snapshot 自动化回归覆盖单一 envelope、三次预算、第四次暂停、工具链中多次格式错误、新 turn 清零和新旧 snapshot；完整 unittest、`compileall`、`git diff --check` 通过。
+- 新增 immutable `ModelMessageEntity` 作为唯一 LLM-facing 顶层对象；同一字段集合表达 message、thinking、tool call、Runtime-owned tool result 与 context，provider role 由 Entity 映射到外层 `LLMMessage.role`。
+- 新增 `ModelMessageCodec` 作为唯一字段映射／验证所有者，同时完成 `ConversationRecord → ModelMessageEntity → LLMMessage` 与 `raw reply → ModelMessageEntity → Runtime/domain`；迁移引用后删除 `model_reply.py` 与 `conversation_codec.py`，不保留第二个 mapper façade。
+- 用 `07_message_format.md` 替换 `07_input_format.md`／`08_output_format.md`；完整 system prompt 与格式 repair 都从该文件读取，不列出、解释或反向禁止旧 InputFormat 字段。
+- 保持 domain `ConversationRecord`、RuntimeCommand／RuntimeEvent、ToolExecutor、handoff、CLI、provider adapter 与 session snapshot conversation schema 不变；内部 ids、timestamp、turn id 与 tool call correlation id 不进入模型可见 JSON。
+- 保留 `format_repairs_used`、每 turn 3 次模型 repair、本地 JSON repair 不计数、第四次暂停、新 UserMessage 清零，以及旧 snapshot bool 0／1 读取兼容。
 
-**范围：** 生产修改限于 `data/prompts/general_agent/08_output_format.md`、`src/get_me_in/application/model_reply.py`、`src/get_me_in/application/runtime.py`、`src/get_me_in/domain/sessions.py`、`src/get_me_in/application/session_codec.py`；测试修改限于对应的 `test_model_reply.py`、`test_runtime.py`、`test_session_codec.py`、`test_prompt_renderer.py`。checkpoint 可同步五份活跃文档。若实施发现必须修改 ConversationCodec、provider adapter、Settings、RuntimeEvent、ToolDefinition／ToolExecutor、CLI、其他生产模块、依赖或数据，立即停止并提交新的最小清单，不得自行扩大范围。
+**范围：**
+
+- 生产：新增 `src/get_me_in/application/model_message.py`；修改 `src/get_me_in/application/runtime.py`、`src/get_me_in/application/prompt_renderer.py`、`src/get_me_in/bootstrap.py`；迁移后删除 `src/get_me_in/application/conversation_codec.py`、`src/get_me_in/application/model_reply.py`；新增 `data/prompts/general_agent/07_message_format.md` 并删除 `07_input_format.md`、`08_output_format.md`。
+- 测试：新增 `tests/get_me_in/test_model_message.py`；修改 `tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_bootstrap.py`；把全部有效断言迁入新 contract test 后删除 `tests/get_me_in/test_conversation_codec.py`、`tests/get_me_in/test_model_reply.py`。
+- checkpoint：五份活跃文档。`domain/messages.py`、`ports/llm.py`、session codec/state、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖和数据不在范围；若实现证明其中任一项必须改变，立即停止并提交新的最小清单。
 
 **验收门禁：**
 
-- 工程自动化由实施者完成，证明确定性协议与状态机行为；不得以人工 smoke 替代回归测试。
-- 自动化与 diff 审查通过后停止，由用户执行真实模型 smoke，至少覆盖 Main finish、Main 工具调用、Main→Resume→工具→finish，以及可观察到 repair 时能在三次预算内恢复。
-- 用户 smoke 通过后才完成本修复 checkpoint；smoke 若暴露 provider 内容为空、输出仍混淆或 repair 连续失败，保留完整 DEBUG 证据并重新研究，不放宽副作用安全边界。
-- 本任务不构成 R9 授权；完成后仍回到 R9 独立授权门禁前。
+- 实施会话先写 `ModelMessageEntity`／codec contract tests，再替换 history encode 与 reply decode；不得先靠 Prompt 文案掩盖两个 mapper 仍然存在。
+- 回归必须断言生产 system prompt 与 repair prompt 只有一个 MessageFormat，且不包含旧 InputFormat 字段约定；覆盖 user/system/assistant message、tool call、tool result、Plan context、thinking 剥离、方向所有权与非法回复无副作用。
+- 完整 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py`、`git diff --check` 与 diff 白名单审查通过后建立独立代码 checkpoint。
+- 工程 checkpoint 后停止，由用户执行真实模型 smoke；实现会话负责自动化回归，用户负责真实 provider 的 Main finish、Main 工具调用、Main→Resume→工具→finish 与 repair 体验。
+- 本任务不构成 R9 授权；smoke 通过后才记录 R8-F-C 完成态。
 
-**实施顺序：** 新会话 `/project-bootstrap` → 确认 `refactor`／干净工作区／决策 242 → Prompt 与 Parser 单一 envelope → Runtime 三次预算与 snapshot 兼容 → 针对性及完整自动化 → 独立代码 checkpoint → 用户真实 smoke → 文档 checkpoint。当前会话只制定并保存计划，不修改代码或测试。
+**实施顺序：** 新会话 `/project-bootstrap` → 确认 `refactor`／干净工作区／决策 248 → 新 Entity 与 codec contract → history input 迁移 → reply decode／Runtime 迁移 → 单一 MessageFormat 与 repair 来源 → 定向及完整自动化 → 独立代码 checkpoint → 用户真实 smoke → 文档 checkpoint。当前会话只制定并保存计划，不修改代码或测试。
 
 ### R9 —— 新功能恢复
 
