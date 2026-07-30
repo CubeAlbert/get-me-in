@@ -1,17 +1,18 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；R8-F-C 单一模型消息 Entity／双格式投影与 query_memory 被动触发修正均已完成工程 checkpoint，R9 仍未授权
+**当前阶段：** R8 已完成并通过最终用户审查；正在实施 R8 后续独立修正“统一 HandoffContext 接收回合契约”，R9 仍未授权
 
-**当前任务：** R8-F-C 代码已在保留 `07_input_format.md`／`08_output_format.md` 的前提下完成同一 `ModelMessageEntity` 投影；决策 250 另行收窄 query_memory 为显式请求或必要信息询问未果后的单次兜底
+**当前任务：** 按决策 251 先建立文档 checkpoint，再仅通过通用 Prompt、Main／Resume AgentSpec 与 ToolDefinition 元数据统一 Main→Sub 和 Sub→Main 的 HandoffContext；不修改 Runtime、Orchestrator、CLI 或 typed state
 
-**当前子任务：** 停止工程修改，由用户执行 R8-F-C 与 query_memory 触发边界的真实 provider smoke。
+**当前子任务：** 完成 HandoffContext 文档 checkpoint；随后实施提示词与回归测试，验证 handoff 接收回合只确认／汇报并等待下一条真实用户消息。
 
-**当前阻塞：** 无；自动化、`compileall`、`git diff --check` 与独立代码 checkpoint 已完成，等待用户验证真实模型行为。R9 未授权。
+**当前阻塞：** 无；HandoffContext 设计与文件边界已获用户确认。R8-F-C 与 query_memory 的真实 provider smoke 仍待用户验证，R9 未授权。
 
-**会话交接说明：** 决策 249 取代决策 248 中“删除 InputFormat／OutputFormat、合成 `07_message_format.md`、另造 tool_result/context 字段”的全部当前执行结论。`07_input_format.md` 保持不变；`08_output_format.md` 继续单独告诉模型如何输出 `finish` 或 `tool_call`。两份文档描述同一个 flat `ModelMessageEntity` 的不同方向投影：Input 可含系统生成的 id、role、timestamp、tool_call_id、plan_status；Output 只需提供 event_type、message、可选 thinking，并在工具调用时提供 tool 与 event_payload。模型不需要传 Entity 的全部字段。Plan 继续由 Runtime 写入输入侧 plan_status；finish thinking 默认鼓励提供但不设为解析必填。既有每回合 3 次 repair 与 snapshot 兼容保留。决策 250 另行规定 query_memory 不得用于主动个性化、补充画像或减少普通提问：只有用户明确要求查询已保存个人信息，或当前任务必需信息不在现有上下文且已经询问用户仍未获得时，才允许进行一次针对性查询；用户拒绝、信息可选、问候／能力介绍／简单路由／闲聊或零命中后的近义词重试均禁止。R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
+**会话交接说明：** 决策 251 将 HandoffContext 定义为 Agent 间控制权交接摘要，而不是用户消息或执行授权。Main→Sub 使用 `kind="delegate"`；Sub→Main 使用 `kind="return"`。最新输入包含 HandoffContext 的模型回合统一称为“handoff 接收回合”：该回合不得调用任何工具；delegate 接收方只能复述任务、区分已确认与推断信息并请用户确认／纠正，return 接收方只能汇报已完成／阻塞／待决定事项并询问下一步，然后以 `finish` 等待真实用户输入。现有 Orchestrator 注入与 CompleteHandoff 机制、CLI 自动 `Continue`、审批语义、InputFormat／OutputFormat 均保持不变。决策 249 的单一 Entity／双格式投影与决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 由用户执行 Main finish、Main tool call、Main→Resume→tool→finish 的真实 provider smoke，并验证普通问候／简单路由不查询 memory、明确要求查询个人背景时允许查询、必要信息缺失时先询问用户再进行单次兜底。smoke 通过后再建立完成态文档 checkpoint；不得检查、设计或实施 R9。
+**下一步：** 建立决策 251 文档 checkpoint；随后按已确认白名单修改 `04_tools.md`、Main／Resume AgentSpec、handoff ToolDefinition 与相关测试，完成定向／全量验证和代码 checkpoint。之后由用户合并执行 HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke；不得检查、设计或实施 R9。
 
+251. **统一双向 HandoffContext 的接收回合契约** — Main→Sub 与 Sub→Main 使用同一个结构化 HandoffContext envelope；handoff 只转移控制权，不授予执行业务动作。接收回合禁止工具调用，delegate 先向用户确认，return 先向用户汇报并询问下一步；只改 Prompt／AgentSpec／ToolDefinition 元数据与回归测试，不改 Runtime、Orchestrator、CLI、InputFormat／OutputFormat 或 typed state。
 250. **query_memory 改为显式请求或必要信息询问未果后的单次兜底** — 不再把 Memory 作为主动个性化、补充画像或减少普通提问的常规手段。用户明确要求查询已保存个人信息时可调用；否则只有完成当前任务必须获得的信息不在当前上下文、且已经询问用户仍未获得时，才可进行一次聚焦查询。用户拒绝、信息可选、当前上下文已有答案、问候／能力介绍／简单路由／闲聊及零命中后的近义词重试均禁止；Main 元数据已同步收窄。本修正独立于 R8-F-C 与 R9。
 249. **保留 InputFormat／OutputFormat 并让两者投影同一 Entity** — 决策 248 错把“一个承载 Entity”扩大成“一份 Prompt 文件”，相关实现已 reset。当前 InputFormat 保持不变；OutputFormat 恢复 `event_type/message/thinking/tool/event_payload` flat 输出，工具参数放 event_payload，Plan 由系统放输入侧 plan_status，Runtime 补齐其他字段；finish thinking 默认鼓励但不强制。本任务仍独立于 R9。
 248. **撤回 R8-F smoke 入口并统一 Input／Output 的 LLM-facing Entity（单文件方案已由 249 取代）** — “需要一个共同 Entity”的问题判断保留；删除双格式文档、创建单一 MessageFormat 及新 tool_result/context envelope 的方案已撤销，不得作为当前实施依据。

@@ -334,6 +334,8 @@ Hub-and-Spoke 规则保留：只有 Orchestrator 能进行 handoff。Main Runtim
 
 Handoff 使用 `HandoffFrame(source, target, call_id, turn_id, context)`。Orchestrator 切换到子 Agent 时保留源 Agent 的 `WAITING_FOR_HANDOFF` pending call，并立即以 `UserMessage(context)` 启动目标 Runtime，使 CLI 在收到 `HandoffRequested` 后只需继续驱动新的 active agent。子 Agent 返回 summary 后，Orchestrator 向源 Runtime 发送 `CompleteHandoff`，原子地写入 tool result、弹出 frame 并恢复 active agent。未知 Agent、目标启动失败、嵌套切换和子 Agent `Failed` 通过 `FailHandoff` 闭合原 call id；`/exit_sub` 默认要求 SubAgent 总结并正常 `CompleteHandoff`，显式 `false` 才直接 `FailHandoff`。活动 SubAgent 的 `Cancelled` 只结束当前 run，保留 active agent、handoff frame 与 Main 的 `WAITING_FOR_HANDOFF`，等待下一条用户消息；CLI 不补写 conversation record。
 
+LLM-facing handoff 内容统一使用结构化 `<HandoffContext>` envelope，并把“最新输入包含该 envelope 的模型回合”定义为 handoff 接收回合。Main→Sub 使用 `kind="delegate"`，由目标 Agent 复述原始请求、已确认信息、推断信息与待用户决定项；Sub→Main 使用 `kind="return"`，由 Main 汇报完成项、阻塞和待用户决定项。Handoff 只转移控制权，用户对 `switch_to_subagent` 的审批只批准切换，不批准摘要中建议的业务动作；任一接收回合均不得调用工具，必须以 `finish` 完成同步并等待下一条真实用户消息。该契约由 `data/prompts/general_agent/04_tools.md`、Main／Resume AgentSpec 与两个 handoff ToolDefinition 的 LLM-facing 元数据共同表达；不得改变 Orchestrator 的 context 注入／CompleteHandoff、CLI 对 `HandoffRequested` 的自动 `Continue`、Runtime typed state 或 InputFormat／OutputFormat。
+
 R4 以测试专用 sub Agent 完成 G4 编排门禁；真实 Resume AgentSpec 与领域能力仍在 R7 落地，避免 R4 反向依赖 R7。
 
 ### 6.5 持久化

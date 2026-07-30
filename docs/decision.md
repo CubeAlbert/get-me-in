@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 251 — 统一双向 HandoffContext 的接收回合契约](#决策-251--统一双向-handoffcontext-的接收回合契约)
 - [决策 250 — query_memory 改为显式请求或必要信息询问未果后的单次兜底](#决策-250--query_memory-改为显式请求或必要信息询问未果后的单次兜底)
 - [决策 249 — 保留 InputFormat／OutputFormat 并让两者投影同一 Entity](#决策-249--保留-inputformatoutputformat-并让两者投影同一-entity)
 - [决策 248 — 撤回 R8-F smoke 入口并统一 Input／Output 的 LLM-facing Entity](#决策-248--撤回-r8-f-smoke-入口并统一-inputoutput-的-llm-facing-entity)
@@ -5901,3 +5902,41 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 只修改 `UseWhen`／`DoNotUseWhen`，保留 Main“利用 memory 减少重复询问”的软约束 —— system prompt 仍存在相反鼓励，拒绝。
 - 完全移除 Main／Resume 的 `MEMORY_QUERY` capability —— 会破坏用户明确要求查询历史信息和必要信息兜底，拒绝。
 - 立即在 Runtime 增加硬语义门禁 —— Runtime 当前没有“已询问用户但未果”这一可判定状态，直接增加会扩大 typed state 与公开边界；先以 Prompt 契约和真实 smoke 取证，暂不采用。
+
+---
+
+### 决策 251 —— 统一双向 HandoffContext 的接收回合契约
+
+**背景：** 用户观察到 Main 经 `switch_to_subagent` 转交 Resume 后，Resume 会把 Main 提供的 context 当作新的用户指令，立即调用 `workspace_list` 开始工作。只读检查确认：Main→Sub 的 context 被 Orchestrator 作为 `UserMessage(context)` 注入目标 Runtime，Sub→Main 的 summary 则作为原 handoff tool result 恢复 Main；CLI 对 `HandoffRequested` 自动发送 `Continue`。这些机制本身负责闭合 typed handoff，但现有 Prompt 没有说明 context／summary 只用于交接；Resume 的“信息足够直接执行”“避免为了确认而确认”还会强化立即行动。切回 Main 时已有历史，因此不能把约束写成“Agent 第一轮”。
+
+**决定：**
+
+- 将 Main→Sub 与 Sub→Main 的 LLM-facing 交接内容统一声明为 `<HandoffContext>`。固定字段为 `OriginalUserRequest`、`ConfirmedInformation`、`InferredInformation`、`CompletedWork` 与 `PendingUserDecision`；`kind="delegate"` 表示 Main→Sub，`kind="return"` 表示 Sub→Main，并显式写出 source、target 与 status。
+- HandoffContext 是 Agent 间控制权交接摘要，不是用户消息，也不是执行授权。用户批准 `switch_to_subagent` 只表示允许切换；摘要中的建议、推断或待办不能因此视为已经获得用户确认。
+- “handoff 接收回合”由最新输入是否包含 HandoffContext 判断，不依赖 Agent 是否第一次被调用或 history 是否为空。任一接收回合都不得调用任何工具，必须以 `finish` 与用户同步并等待下一条真实用户消息。
+- `kind="delegate"` 的接收 Agent 复述原始请求和已确认信息，明确标出推断与待确认项，并请用户确认或纠正；不得读取 workspace、Memory、Plan 或执行其他业务动作。
+- `kind="return"` 的 Main 汇报 SubAgent 已完成、阻塞和待决定事项，询问用户下一步；不得在同一回合继续调用工具、重新路由或实施建议。用户下一条消息确认／纠正后，才按普通回合继续。
+- canonical 契约写入 `data/prompts/general_agent/04_tools.md` 的 ToolAuthority 后；Main／Resume AgentSpec 消除相反指引；`switch_to_subagent.context` 与 `switch_to_mainagent.summary` 的 ToolDefinition 元数据分别要求生成 delegate／return envelope 和中性摘要。
+- 本修正只修改 Prompt、AgentSpec、handoff ToolDefinition 的 LLM-facing 元数据及相关回归测试。Orchestrator 的 `UserMessage(context)`／`CompleteHandoff`、CLI 自动 `Continue`、Runtime／Session typed state、审批、capability、handler、`07_input_format.md`、`08_output_format.md`、依赖和数据均不改变。
+- 先更新活跃文档并建立独立文档 checkpoint，再编码、运行定向与完整回归并建立代码 checkpoint。真实模型是否稳定遵守由用户在工程验证后 smoke；smoke 前不宣称行为验收完成。本决定不进入或授权 R9。
+
+**理由：**
+
+- 两个方向虽然通过不同 Runtime 载体传递，但在模型侧都属于“另一个 Agent 提供的交接摘要”；统一 envelope 和接收回合定义可以避免依赖第一轮等不成立的条件。
+- 保留当前 typed handoff 状态机，只修复 LLM 对交接内容的解释，符合已观察问题的最小范围；如果真实 smoke 仍稳定违规，再基于证据独立评估 deterministic gate。
+- 强制一次用户同步把“批准切换”和“批准具体业务动作”分开，避免 SubAgent 依据 Main 的推断直接产生 workspace 或其他副作用。
+
+**已确认文件与停止门禁：**
+
+- Prompt：`data/prompts/general_agent/04_tools.md`。
+- AgentSpec：`src/get_me_in/agents/main.py`、`src/get_me_in/agents/resume.py`。
+- ToolDefinition：`src/get_me_in/tools/switch.py`。
+- 测试：`tests/get_me_in/test_tool_catalog.py`、`tests/get_me_in/test_bootstrap.py`；如现有 Prompt renderer 的直接契约需要最小锁定，可修改 `tests/get_me_in/test_prompt_renderer.py`。
+- 文档：`docs/current.md`、`docs/design.md`、`docs/task.md`、`docs/decision.md`；`docs/plan.md` 因里程碑、顺序和 R9 门禁不变而不修改。
+- 上述以外任何生产、Prompt、测试、依赖或数据文件如确需修改，必须停止并提交最小扩展清单。
+
+**曾考虑的替代方案：**
+
+- 只修改 Resume 的“首次对话”规则 —— Sub→Main 不是 Main 第一轮，也无法统一两个方向，拒绝。
+- 修改 CLI，使 handoff 后不自动调用目标模型 —— 会扩大事件推进和交互状态语义，并让目标 Agent 无法向用户解释已接收内容，暂不采用。
+- 在 Runtime 增加“handoff 等待用户确认”typed phase —— deterministic gate 更强，但当前尚未用最小 Prompt 修正和真实 smoke 证明必要性，暂不采用。

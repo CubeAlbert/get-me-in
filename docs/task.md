@@ -698,6 +698,30 @@
 - 📌 等待用户真实 provider smoke：普通问候／简单路由不得查询 memory；明确查询个人背景时允许调用；必要信息缺失时必须先询问，未果后最多单次兜底。smoke 前不宣称模型行为验收完成。
 - ⛔ 本修正独立于 R8-F-C，不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
 
+## R8 后续独立修正 —— 统一 HandoffContext 接收回合契约（已确认，实施中）
+
+### 1. 语义与方向
+
+- ✅ 用户确认统一覆盖 Main→Sub 与 Sub→Main；切换回 Main 不是会话第一轮，因此规则基于“最新输入包含 HandoffContext 的接收回合”，不基于 Agent 首轮或空 history。
+- ✅ HandoffContext 是 Agent 间控制权交接摘要，不是用户消息；handoff 审批只批准切换，不等于授权接收 Agent 立即执行摘要中的动作。
+- ✅ 使用同一结构化 envelope：`kind="delegate"` 表示 Main→Sub，`kind="return"` 表示 Sub→Main；字段区分原始用户请求、已确认信息、推断信息、完成工作和待用户决定。
+- ✅ 任一 handoff 接收回合均禁止调用工具并必须 `finish` 等待下一条真实用户消息。delegate 接收方先复述并请用户确认／纠正；return 接收方先汇报完成／阻塞／待决定事项并询问下一步。
+
+### 2. Prompt-only 实施
+
+- 📌 在 `data/prompts/general_agent/04_tools.md` 的 ToolAuthority 后新增 canonical `HandoffContextContract`，定义 envelope、接收回合和双向行为；不修改 `07_input_format.md` 或 `08_output_format.md`。
+- 📌 更新 Main AgentSpec：创建 delegate context 时使用中性结构化摘要并区分已确认／推断；收到 return context 后本回合不得调用工具或再次路由，只汇报并询问用户。
+- 📌 更新 Resume AgentSpec：收到 delegate context 后本回合不得调用 Plan、Memory、workspace 或 artifact 工具，只复述并确认；原“信息足够直接执行”和“避免为了确认而确认”仅适用于非 handoff 接收回合或用户已经确认后的后续回合。
+- 📌 更新 `switch_to_subagent.context` 与 `switch_to_mainagent.summary` 的 LLM-facing 元数据，分别要求 `kind="delegate"`／`kind="return"`，禁止使用命令式摘要暗示已经获得执行授权。
+- ⛔ 不修改 Runtime、Orchestrator、CLI、Session／handoff typed state、审批、capability、handler、InputFormat／OutputFormat、依赖或数据。
+
+### 3. 验证、checkpoint 与 smoke
+
+- 📌 更新 ToolCatalog／bootstrap Prompt 回归，锁定 canonical contract、双向 ToolDefinition 文字和 Main／Resume 冲突消除；既有 Orchestrator／CLI 自动推进测试保持不变。
+- 📌 运行定向测试、完整 unittest、`compileall` 与 `git diff --check`；先建立文档 checkpoint，再建立独立代码 checkpoint。
+- 📌 工程验证后由用户执行真实 provider smoke：Main→Resume 在审批后只确认而不读 workspace；Resume→Main 返回后只汇报／询问而不继续调用工具；用户下一条确认后才允许工作。
+- ⛔ 本修正不声明真实模型行为已经验收，不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
+
 ## R9 —— 重构后功能（不在当前执行范围）
 
 ### 1. InterviewAgent Workflow 前置 Review
