@@ -633,13 +633,13 @@
 - ✅ 将 `AgentSessionState.repair_attempted: bool` 替换为 `format_repairs_used: int = 0`；未保留第二份 domain canonical repair 状态。
 - ✅ Runtime 每安排一次模型格式 repair 将计数加一；同一 turn 的合法解析与工具执行不清零，最多允许 3 次；第四次解析失败进入 `Paused/WAITING_FOR_USER` 并保留活动 SubAgent/handoff。
 - ✅ 新 `UserMessage` 创建 turn 时把计数归零；本地 `json_repair` 不计数；`model_calls` 与默认 100 次 `AGENT_MAX_MODEL_CALLS` 契约不变。
-- 📌 `SessionSnapshotCodec` 写入 `format_repairs_used`，同时写由该值投影的 `repair_attempted` bool；恢复优先使用严格非负整数计数，缺失时把旧 bool 映射为 0／1，保持 schema_version=2 与代码回退可读。
+- ✅ `SessionSnapshotCodec` 写入 `format_repairs_used`，同时写由该值投影的 `repair_attempted` bool；恢复优先使用严格非负整数计数，缺失时把旧 bool 映射为 0／1，保持 schema_version=2 与代码回退可读。
 - ✅ 更新 `test_runtime.py`：覆盖同回合三次 repair、第四次暂停、一次 repair 成功→工具→后续错误仍可第二次 repair、新 turn 清零、调用上限和 handoff 下暂停不闭合；定向测试 26/26 通过。
-- 📌 更新 `test_session_codec.py`：覆盖新计数 round-trip、旧 bool 快照兼容、双写投影、非法负数／bool-as-int／错误类型拒绝。
+- ✅ 更新 `test_session_codec.py`：覆盖新计数 round-trip、旧 bool 快照兼容、双写投影、非法负数／bool-as-int／错误类型拒绝；定向测试 8/8 通过。
 
 ### 4. 工程验证、提交与用户 smoke 门禁
 
-- 📌 运行 Parser／Prompt／Runtime／Snapshot 针对性测试，再运行完整 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py` 与 `git diff --check`。
+- ⏸️ 全量验证被白名单外的 `tests/get_me_in/test_bootstrap.py` 旧模型输出 fixture 阻塞：定向 53/53、compileall 与 diff check 通过；287 项 unittest 中 281 项通过，需用户授权后才能迁移该测试 fixture。
 - 📌 复核 diff 只包含计划白名单；若需要修改 ConversationCodec、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖、数据或其他生产模块，立即停止并提交最小扩展清单。
 - 📌 建立独立代码 checkpoint 后停止，不以 fake LLM 回归宣称真实模型稳定性完成。
 - 📌 用户执行真实 smoke：Main finish、Main 工具调用、Main→Resume→工具→finish；若观察到 repair，确认可在三次预算内恢复且不会提前 `invalid_model_reply`。

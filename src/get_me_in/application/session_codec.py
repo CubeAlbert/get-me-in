@@ -120,6 +120,7 @@ class SessionSnapshotCodec:
     @staticmethod
     def _validate_agent(key: AgentKey, state: AgentSessionState) -> None:
         del key
+        _integer(state.format_repairs_used, "format_repairs_used")
         call_ids = {record.call_id for record in state.history if isinstance(record, ToolCallRecord)}
         result_ids = {record.call_id for record in state.history if isinstance(record, ToolResultRecord)}
         if not result_ids <= call_ids:
@@ -144,7 +145,8 @@ class SessionSnapshotCodec:
                 "tool_name": state.pending_tool.tool_name,
                 "arguments": dict(state.pending_tool.arguments),
             },
-            "repair_attempted": state.repair_attempted,
+            "format_repairs_used": state.format_repairs_used,
+            "repair_attempted": state.format_repairs_used > 0,
             "cancel_reason": state.cancel_reason,
             "plan": self._encode_plan(state.plan),
         }
@@ -156,13 +158,14 @@ class SessionSnapshotCodec:
             _text(_mapping(pending_raw, "pending_tool")["tool_name"], "pending_tool.tool_name"),
             _mapping(_mapping(pending_raw, "pending_tool")["arguments"], "pending_tool.arguments"),
         )
+        format_repairs_used = _decode_format_repairs(payload)
         return AgentSessionState(
             phase=RuntimePhase(_text(payload["phase"], "phase")),
             history=tuple(self._decode_record(_mapping(item, "history item")) for item in _sequence(payload["history"], "history")),
             turn_id=_string(payload.get("turn_id", ""), "turn_id"),
             model_calls=_integer(payload["model_calls"], "model_calls"),
             pending_tool=pending,
-            repair_attempted=_boolean(payload["repair_attempted"], "repair_attempted"),
+            format_repairs_used=format_repairs_used,
             cancel_reason=_text(payload["cancel_reason"], "cancel_reason"),
             plan=self._decode_plan(payload.get("plan")),
         )
@@ -261,6 +264,14 @@ def _boolean(value: object, label: str) -> bool:
     if not isinstance(value, bool):
         raise TypeError(f"{label} must be a boolean")
     return value
+
+
+def _decode_format_repairs(payload: Mapping[str, object]) -> int:
+    if "format_repairs_used" in payload:
+        return _integer(payload["format_repairs_used"], "format_repairs_used")
+    if "repair_attempted" in payload:
+        return int(_boolean(payload["repair_attempted"], "repair_attempted"))
+    return 0
 
 
 def _optional_thinking(payload: Mapping[str, object]) -> str | None:

@@ -13,9 +13,10 @@ from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, Pendi
 class SessionSnapshotCodecTests(unittest.TestCase):
     def test_round_trip_preserves_tagged_records_and_turn_id(self) -> None:
         codec = SessionSnapshotCodec()
-        snapshot = _snapshot()
+        snapshot = _snapshot(format_repairs_used=2)
 
-        restored = codec.decode(codec.encode(snapshot))
+        payload = codec.encode(snapshot)
+        restored = codec.decode(payload)
 
         record = restored.session.agents[AgentKey.MAIN].history[1]
         self.assertIsInstance(record, MessageRecord)
@@ -24,6 +25,41 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         self.assertEqual("plan-1", record.plan.plan_id)
         self.assertEqual("session-1", restored.session.session_id)
         self.assertEqual("turn-1", restored.session.agents[AgentKey.MAIN].turn_id)
+        self.assertEqual(2, restored.session.agents[AgentKey.MAIN].format_repairs_used)
+        self.assertEqual(2, payload["agents"]["main"]["format_repairs_used"])
+        self.assertTrue(payload["agents"]["main"]["repair_attempted"])
+
+    def test_decode_prefers_new_repair_count_and_reads_legacy_bool_projection(self) -> None:
+        codec = SessionSnapshotCodec()
+        payload = codec.encode(_snapshot(format_repairs_used=2))
+        payload["agents"]["main"]["repair_attempted"] = False
+
+        self.assertEqual(
+            2,
+            codec.decode(payload).session.agents[AgentKey.MAIN].format_repairs_used,
+        )
+
+        del payload["agents"]["main"]["format_repairs_used"]
+        payload["agents"]["main"]["repair_attempted"] = True
+        self.assertEqual(
+            1,
+            codec.decode(payload).session.agents[AgentKey.MAIN].format_repairs_used,
+        )
+
+    def test_rejects_invalid_repair_count_and_legacy_projection_types(self) -> None:
+        codec = SessionSnapshotCodec()
+        for value in (-1, True, "2", 1.5):
+            with self.subTest(value=value):
+                payload = codec.encode(_snapshot())
+                payload["agents"]["main"]["format_repairs_used"] = value
+                with self.assertRaises(ValueError):
+                    codec.decode(payload)
+
+        payload = codec.encode(_snapshot())
+        del payload["agents"]["main"]["format_repairs_used"]
+        payload["agents"]["main"]["repair_attempted"] = "yes"
+        with self.assertRaises(ValueError):
+            codec.decode(payload)
 
     def test_decode_repairs_legacy_handoff_snapshot_without_agent_turn_id(self) -> None:
         codec = SessionSnapshotCodec()
@@ -93,7 +129,12 @@ class SessionSnapshotCodecTests(unittest.TestCase):
             SessionSnapshotCodec().encode(inconsistent)
 
 
-def _snapshot(*, phase: RuntimePhase = RuntimePhase.READY, tool_thinking: bool = False) -> SessionSnapshot:
+def _snapshot(
+    *,
+    phase: RuntimePhase = RuntimePhase.READY,
+    tool_thinking: bool = False,
+    format_repairs_used: int = 0,
+) -> SessionSnapshot:
     plan = Plan(
         "plan-1",
         (PlanItem("item-1", "step", PlanStatus.IN_PROGRESS),),
@@ -111,6 +152,7 @@ def _snapshot(*, phase: RuntimePhase = RuntimePhase.READY, tool_thinking: bool =
             phase=phase,
             history=tuple(history),
             turn_id="turn-1",
+            format_repairs_used=format_repairs_used,
         )},
         handoff_stack=(),
         created_at=_now(),

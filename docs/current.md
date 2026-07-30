@@ -4,17 +4,19 @@
 
 **当前任务：** R8-F 进入代码实施，已完成 OutputFormat／Parser 子任务，继续按决策 242 和 `docs/task.md` 的 R8-F 清单推进
 
-**当前子任务：** R8-F 3：更新 `SessionSnapshotCodec` 写入 `format_repairs_used` 与旧 `repair_attempted` 投影，并兼容旧快照读取。
+**当前子任务：** R8-F 4：运行 Parser／Prompt／Runtime／Snapshot 定向测试、完整 unittest、compileall 与 diff 检查，复核代码白名单并建立最终代码 checkpoint。
 
-**当前阻塞：** 无。OutputFormat／Parser 定向测试 19/19、Runtime 定向测试 26/26 已通过；真实模型稳定性须在全部代码 checkpoint 后由用户执行 smoke 验收。R9 未授权。
+**当前阻塞：** 全量 unittest 为 287 项，其中 281 项通过；剩余 3 个失败、3 个错误集中在白名单外的 `tests/get_me_in/test_bootstrap.py` 旧 `event_type/tool/event_payload` fixture。需用户明确是否扩展白名单迁移该测试 fixture；R9 未授权。
 
 **会话交接说明：** 决策 242 已确认 R8-F：模型输出只使用 `message/thinking/tool_call` 一个 envelope，Parser 继续返回现有 ModelReply，不改变 RuntimeEvent／Session conversation record／Tool／handoff／CLI；每个 Agent 用户 turn 的模型格式 repair 从 bool 改为最多 3 次的计数，本地 JSON repair 不计数，第四次失败才 Paused，下一条 UserMessage 清零。Snapshot 对旧 `repair_attempted` 做 0／1 读取兼容并保留回退投影。生产／测试白名单、自动化、提交和用户 smoke 门禁见 `docs/task.md` 的 R8-F；超出清单必须停止。R8-P～R8-G/G8 与决策 241 的完成态事实不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 让 snapshot codec 双写 `format_repairs_used` 与投影的 `repair_attempted`，恢复时优先严格读取非负整数计数，缺失时把旧 bool 映射为 0／1，并覆盖非法类型回归。不得检查、设计或实施 R9。
+**下一步：** 等待用户确认是否将 `tests/get_me_in/test_bootstrap.py` 作为最小扩展，仅把旧模型 fixture 改为 `message/thinking/tool_call`；获授权后重跑全量验证并建立最终代码 checkpoint。不得检查、设计或实施 R9。
 
 242. **合并模型输出 envelope 并提高每回合格式修复预算** — R8-F 使用唯一 `message/thinking/tool_call` 输出形状，Parser 仍只产出现有 ModelReply；每个 Agent 用户 turn 最多 3 次模型格式 repair，snapshot 兼容旧 bool。新会话按白名单实施并完成自动化，代码 checkpoint 后由用户执行真实 smoke；本任务独立于 R9。
 243. **完成 R8-F OutputFormat／Parser 子任务** — `08_output_format.md` 与 `ModelReplyParser` 已收敛为 `message/thinking/tool_call` envelope；旧 flat 字段被拒绝，未知顶层字段忽略，工具 arguments 缺失／null 归一化为空对象；19 项 Parser／Prompt 定向测试通过，下一步为 Runtime repair 计数。
 244. **完成 R8-F Runtime repair 计数子任务** — `AgentSessionState` 使用 `format_repairs_used`；每回合最多三次模型格式 repair，第四次暂停并保留当前 handoff，新的 `UserMessage` 清零；Runtime 定向测试 26/26 通过，下一步为 snapshot codec 兼容。
+245. **完成 R8-F snapshot codec 兼容子任务** — snapshot 双写 `format_repairs_used` 与 `repair_attempted` 投影，恢复优先严格非负整数计数并兼容旧 bool 0/1；非法负数、bool-as-int 与错误类型被拒绝，Snapshot 定向测试 8/8 通过。
+246. **全量验证发现白名单外 fixture 阻塞** — 287 项 unittest 中 281 项通过；6 个失败／错误均源于 `tests/get_me_in/test_bootstrap.py` 仍发送旧 flat 模型输出。按 R8-F 白名单要求暂停，不修改该文件，等待用户授权最小扩展。
 174. **G6 原通过结论已由决策 175 撤销** — R6 六个切片完成后曾进入 R6-T，但审查发现交叉一致性、取消、关闭与测试退出问题；R7 始终未启动。
 175. **撤销 G6 通过结论并授权 R6-F** — 用户确认 typed background job result、可取消 task callback、Memory delete finalize callback 与四个独立修复切片；全部复验前不得恢复 G6 结论或进入 R7/R8。
 176. **R6-F 完成并重新通过 G6** — 四个修复切片独立提交，187 项自动化测试与 `compileall` 正常结束，真实 Chroma/embedder/reranker smoke 通过；再次停在 R6-T，等待用户审查。

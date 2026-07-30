@@ -8,6 +8,8 @@
 
 ## 目录
 
+- [决策 246 — 全量验证发现白名单外 fixture 阻塞](#决策-246--全量验证发现白名单外-fixture-阻塞)
+- [决策 245 — 完成 R8-F snapshot codec 兼容子任务](#决策-245--完成-r8-f-snapshot-codec-兼容子任务)
 - [决策 244 — 完成 R8-F Runtime repair 计数子任务](#决策-244--完成-r8-f-runtime-repair-计数子任务)
 - [决策 243 — 完成 R8-F OutputFormat／Parser 子任务](#决策-243--完成-r8-f-outputformatparser-子任务)
 - [决策 242 — 合并模型输出 envelope 并提高每回合格式修复预算](#决策-242--合并模型输出-envelope-并提高每回合格式修复预算)
@@ -5738,3 +5740,36 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：** 非负计数能够表达 turn 内已消耗的 repair 预算，避免 bool 在合法工具链后过早暂停，同时以固定上限阻止无限模型循环；把 snapshot 迁移留在下一独立子任务可保持提交边界清晰。
 
 **曾考虑的替代方案：** 保留 bool 并额外增加计数会产生两个 domain 真相，拒绝；在合法解析或工具执行后清零会允许单一 turn 无限 repair，拒绝。
+
+---
+
+### 决策 245 —— 完成 R8-F snapshot codec 兼容子任务
+
+**背景：** Runtime repair 状态已经改为 `format_repairs_used`，但 snapshot codec 仍需在 schema_version=2 下保存新计数并支持旧代码／旧快照读取。
+
+**决定：**
+
+- 新 snapshot agent payload 双写非负整数 `format_repairs_used` 与由其投影的 `repair_attempted = count > 0`。
+- 解码时优先严格校验新计数；缺失新字段时严格读取旧 bool 并映射为 0／1；新字段存在时旧投影不参与 canonical 状态判断。
+- encode/decode 统一拒绝负数、bool-as-int、错误类型和错误旧 bool 类型；schema_version 仍为 2，未引入迁移文件或读取 legacy 运行数据。
+- Snapshot 定向回归 8/8 通过；Parser／Prompt 与 Runtime 已分别在前两个 checkpoint 验证。
+
+**理由：** 双写保持代码回退读取能力，优先新计数避免旧投影覆盖更精确状态；严格类型检查防止持久化错误值被静默转成 repair 预算。
+
+**曾考虑的替代方案：** 修改 schema_version 或引入独立 migration 会扩大当前切片；仅写新计数会削弱回退读取；两者均未采用。
+
+---
+
+### 决策 246 —— 全量验证发现白名单外 fixture 阻塞
+
+**背景：** R8-F Parser／Prompt／Runtime／Snapshot 定向测试共 53/53 通过，`compileall` 与 `git diff --check` 通过；全量 unittest 运行 287 项时，`tests/get_me_in/test_bootstrap.py` 仍向真实 application 发送旧 `event_type/tool/event_payload` 模型输出。
+
+**决定：**
+
+- 暂不修改 `tests/get_me_in/test_bootstrap.py`，因为 R8-F 已确认测试白名单只包含 `test_model_reply.py`、`test_runtime.py`、`test_session_codec.py` 与 `test_prompt_renderer.py`。
+- 记录全量结果为 281 项通过、3 个失败、3 个错误；失败／错误均发生在旧 fixture 被新 Parser 拒绝后，fixture 列表耗尽或未产生预期 Approval／Handoff 事件。
+- 停止最终代码 checkpoint，等待用户明确是否把 `test_bootstrap.py` 作为最小范围扩展，仅迁移其模型输出 fixture；不进入 R9。
+
+**理由：** 修改该文件在行为上是模型协议迁移的直接必要修复，但属于已确认白名单外的测试变更，不能隐式扩大任务边界；先取得授权可保持审查与提交边界可追溯。
+
+**曾考虑的替代方案：** 放宽 Parser 继续兼容旧 flat fixture 会违反 R8-F 唯一 envelope 决策；跳过 bootstrap 测试会削弱全量验收；两者均拒绝。
