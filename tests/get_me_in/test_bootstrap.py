@@ -85,6 +85,14 @@ class BootstrapTests(unittest.TestCase):
             llm.request.messages[0].content,
         )
         self.assertIn(
+            "<HandoffContextContract>",
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
+            "handoff 接收回合不得调用任何工具",
+            llm.request.messages[0].content,
+        )
+        self.assertIn(
             "以上列表是当前会话全部业务能力的唯一、权威且穷尽来源",
             llm.request.messages[0].content,
         )
@@ -223,7 +231,7 @@ class BootstrapTests(unittest.TestCase):
                 verbosity="适中，操作类信息简洁，内容建议可以详细。",
                 explanation_style='按"当前状态 → 修改计划 → 执行 → 结果"的流程呈现。',
                 rules=(
-                    "- 首次对话先确认用户意图：新建简历还是修改已有简历。",
+                    "- 收到kind=\"delegate\"的HandoffContext时先向用户确认或纠正交接内容；非handoff回合再按需要确认是新建简历还是修改已有简历。",
                     "- 新建时先与用户确认语言和文件名前缀。",
                     "- 每次编辑前先读取文件，确认行号和内容后再编辑。",
                     "- 大段内容修改用全局替换，精确行级修改用逐行编辑。",
@@ -257,7 +265,8 @@ class BootstrapTests(unittest.TestCase):
                     "- 仅从当前<SubAgents>穷尽清单中选择与用户需求匹配的子Agent。",
                     "- 在切换Agent前收集必要上下文信息。",
                     "- 仅在用户明确要求查询历史个人信息，或完成路由必须获得的个人信息经询问仍未获得时，才使用query_memory作一次针对性兜底。",
-                    "- 使用switch_to_subagent工具完成会话入口切换。",
+                    "- 使用switch_to_subagent工具完成会话入口切换，并在context中提供kind=\"delegate\"的中性HandoffContext，区分已确认信息与推断信息。",
+                    "- 收到kind=\"return\"的HandoffContext时，只向用户汇报完成／阻塞／待决定事项并询问下一步。",
                     "- 在无法确定用户需求时，通过提问澄清。",
                     "- 问候或用户询问能力时，只按当前<SubAgents>的真实职责介绍可用服务。",
                     "- 当前<SubAgents>没有匹配项时，只说明暂不支持该请求。",
@@ -292,6 +301,7 @@ class BootstrapTests(unittest.TestCase):
                     "- 如果用户请求属于当前某个SubAgent能力范围，必须切换Agent。",
                     "- 如果没有匹配SubAgent，只能说明当前暂不支持，不得提供平台、资料、步骤或其他替代建议。",
                     "- 如果无法判断用户需求，必须向用户提问，而不是猜测。",
+                    "- 最新输入包含HandoffContext时即为handoff接收回合；该回合不得调用任何工具或再次路由，必须finish并等待下一条真实用户消息。",
                 ),
                 (
                     "- 优先保持连续对话体验。",
@@ -331,7 +341,7 @@ class BootstrapTests(unittest.TestCase):
                     "- 用户确认当前版本符合需求或明确结束任务。",
                 ),
                 (
-                    "1. 优先获取完成当前任务所需的最少信息。已有足够信息则直接执行，缺少关键输入再向用户询问。",
+                    "1. 非handoff接收回合或用户已确认交接内容后，优先获取完成当前任务所需的最少信息；已有足够信息则直接执行，缺少关键输入再向用户询问。",
                     "2. 先理解用户需求和当前状态（新建/修改）。",
                     "3. 单次改动尽量批量提交编辑，减少 tool call。",
                     "4. 关键节点（模板复制、编译）前征得用户确认，避免频繁操作影响效率。",
@@ -347,12 +357,13 @@ class BootstrapTests(unittest.TestCase):
                     "- 如果编译失败，应优先依据 stderr 定位错误，再进行修复，而不是盲目修改文件。",
                     "- 除非用户明确要求，否则不要修改无关内容。保持修改最小化，一次尽量完成相关修改。",
                     "- 不得路由或调度其他子 Agent；需要其他能力时应退回主 Agent。",
+                    "- 最新输入包含kind=\"delegate\"的HandoffContext时即为handoff接收回合；该回合不得调用Plan、Memory、workspace、artifact或任何其他工具，只能复述任务、区分已确认与推断信息、请用户确认或纠正，然后finish并等待下一条真实用户消息。",
                 ),
                 (
                     "- 优先保持模板原有格式和样式，只替换内容。",
                     "- 修改内容时保持 LaTeX 语法正确，注意特殊字符转义。",
                     "- 与用户确认重要信息（姓名、联系方式）后再编译。",
-                    "- 避免为了确认而确认。避免重复询问已经知道的信息。",
+                    "- handoff接收回合的确认是必需步骤；用户确认后的普通回合避免为了确认而确认，也避免重复询问已经知道的信息。",
                 ),
             ),
             (
@@ -487,6 +498,15 @@ class BootstrapTests(unittest.TestCase):
             )
             self.assertIn(
                 "<DoNotUseWhen>不要为了主动了解用户、补充用户画像、个性化回答",
+                resume_prompt,
+            )
+            self.assertIn("<HandoffContextContract>", resume_prompt)
+            self.assertIn(
+                "handoff 接收回合不得调用任何工具",
+                resume_prompt,
+            )
+            self.assertIn(
+                "最新输入包含kind=\"delegate\"的HandoffContext时即为handoff接收回合",
                 resume_prompt,
             )
             self.assertIn(

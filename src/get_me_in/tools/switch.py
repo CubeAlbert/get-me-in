@@ -10,10 +10,10 @@ def build_switch_tools() -> tuple[ToolDefinition, ...]:
     return (
         ToolDefinition(
             name="switch_to_subagent",
-            purpose="将用户切换至指定的专业子 Agent 处理其请求。切换后子 Agent 会接管对话，你无法再看到中间过程，仅在子 Agent 返回总结时恢复控制。",
+            purpose="将对话控制权切换至指定的专业子 Agent。切换后目标 Agent 先依据HandoffContext向用户确认交接内容，并等待下一条用户消息；用户确认后才开始工作。你无法看到中间过程，仅在子 Agent 返回总结时恢复控制。",
             use_when="用户的请求属于某个子 Agent 的职责范围，需要由专业 Agent 接手处理。参考 <SubAgents> 列表选择合适的子 Agent。",
             do_not_use_when="用户请求不属于当前任何 <SubAgents> 职责范围，或无法确定用户意图时。不确定时必须先向用户提问澄清；没有匹配项时不得猜测目标。",
-            expected_output="切换至子 Agent，等待子 Agent 返回总结后恢复控制。",
+            expected_output="切换至子 Agent；目标 Agent 先确认交接内容并等待用户回复，完成后再携带总结返回。",
             schema=ToolSchema(
                 {
                     "agent_name": ToolParameter(
@@ -22,7 +22,7 @@ def build_switch_tools() -> tuple[ToolDefinition, ...]:
                     ),
                     "context": ToolParameter(
                         str,
-                        "给子 Agent 的完整上下文：用户需求、背景、已收集的关键信息等。越详细越好。",
+                        "必须使用kind=\"delegate\"的完整<HandoffContext> envelope；source=\"main\"，target为目标Agent，status=\"pending_confirmation\"。分别填写OriginalUserRequest、ConfirmedInformation、InferredInformation、CompletedWork和PendingUserDecision，没有内容写“无”。使用中性摘要，不得用“请执行”等命令式措辞暗示用户已授权具体动作。",
                         default="",
                     ),
                 },
@@ -36,15 +36,15 @@ def build_switch_tools() -> tuple[ToolDefinition, ...]:
         ),
         ToolDefinition(
             name="switch_to_mainagent",
-            purpose="结束当前子 Agent 会话，携带执行总结退回主 Agent。调用此工具后主 Agent 会收到你的总结并继续为用户服务。",
+            purpose="结束当前子 Agent 会话，携带结构化执行总结把控制权退回主 Agent。主 Agent 收到HandoffContext后先向用户汇报并询问下一步，等待用户回复后才继续行动。",
             use_when="已完成用户请求的任务、用户明确表示要退出、或遇到无法处理的情况需要主 Agent 重新接手。",
             do_not_use_when="任务尚未完成且用户未要求退出。",
-            expected_output="退回主 Agent，主 Agent 收到你的总结后继续决策。",
+            expected_output="退回主 Agent；主 Agent 先汇报完成／阻塞／待决定事项并等待用户下一步指示。",
             schema=ToolSchema(
                 {
                     "summary": ToolParameter(
                         str,
-                        "本次子 Agent 会话的执行总结：做了什么、结论、关键发现、需要主 Agent 继续跟进的事项。",
+                        "必须使用kind=\"return\"的完整<HandoffContext> envelope；source为当前子Agent，target=\"main\"，status为completed、blocked或user_exit。分别填写OriginalUserRequest、ConfirmedInformation、InferredInformation、CompletedWork和PendingUserDecision，没有内容写“无”。使用中性总结，不得用命令式措辞暗示主Agent已获授权继续执行。",
                     )
                 },
                 frozenset({"summary"}),

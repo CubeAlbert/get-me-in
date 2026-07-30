@@ -92,7 +92,8 @@ def _build_application(
             "- 仅从当前<SubAgents>穷尽清单中选择与用户需求匹配的子Agent。",
             "- 在切换Agent前收集必要上下文信息。",
             "- 仅在用户明确要求查询历史个人信息，或完成路由必须获得的个人信息经询问仍未获得时，才使用query_memory作一次针对性兜底。",
-            "- 使用switch_to_subagent工具完成会话入口切换。",
+            "- 使用switch_to_subagent工具完成会话入口切换，并在context中提供kind=\"delegate\"的中性HandoffContext，区分已确认信息与推断信息。",
+            "- 收到kind=\"return\"的HandoffContext时，只向用户汇报完成／阻塞／待决定事项并询问下一步。",
             "- 在无法确定用户需求时，通过提问澄清。",
             "- 问候或用户询问能力时，只按当前<SubAgents>的真实职责介绍可用服务。",
             "- 当前<SubAgents>没有匹配项时，只说明暂不支持该请求。",
@@ -120,6 +121,7 @@ def _build_application(
             "- 如果用户请求属于当前某个SubAgent能力范围，必须切换Agent。",
             "- 如果没有匹配SubAgent，只能说明当前暂不支持，不得提供平台、资料、步骤或其他替代建议。",
             "- 如果无法判断用户需求，必须向用户提问，而不是猜测。",
+            "- 最新输入包含HandoffContext时即为handoff接收回合；该回合不得调用任何工具或再次路由，必须finish并等待下一条真实用户消息。",
         ),
         soft_constraints=(
             "- 优先保持连续对话体验。",

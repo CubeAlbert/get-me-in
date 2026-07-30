@@ -66,7 +66,8 @@ class PromptRendererTests(unittest.TestCase):
             "<Mission>",
             "<Constraints>",
             "<Tools>",
-            "<SubAgents>",
+            "<HandoffContextContract>",
+            "\n<SubAgents>\n",
             "<CommunicationStyle>",
             "<InputFormat>",
             "<OutputFormat>",
@@ -75,6 +76,31 @@ class PromptRendererTests(unittest.TestCase):
         positions = tuple(rendered.index(section) for section in sections)
 
         self.assertEqual(tuple(sorted(positions)), positions)
+
+    def test_production_handoff_context_contract_is_directional_and_turn_based(self) -> None:
+        rendered = PromptRenderer(Path("data/prompts")).render(_spec())
+
+        self.assertEqual(1, rendered.count("<HandoffContextContract>"))
+        self.assertIn(
+            '<HandoffContext kind="delegate|return" source="agent-key" '
+            'target="agent-key" status="pending_confirmation|completed|blocked|user_exit">',
+            rendered,
+        )
+        for field in (
+            "OriginalUserRequest",
+            "ConfirmedInformation",
+            "InferredInformation",
+            "CompletedWork",
+            "PendingUserDecision",
+        ):
+            self.assertIn(f"<{field}>", rendered)
+        self.assertIn(
+            "无论该 Agent 是否首次运行、是否已有 history",
+            rendered,
+        )
+        self.assertIn("handoff 接收回合不得调用任何工具", rendered)
+        self.assertIn('kind="delegate" 时，只复述', rendered)
+        self.assertIn('kind="return" 时，只向用户汇报', rendered)
 
     def test_input_format_is_the_locked_history_projection(self) -> None:
         input_format = Path("data/prompts/general_agent/07_input_format.md")

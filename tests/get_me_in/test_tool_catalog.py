@@ -151,6 +151,29 @@ class ProductionToolMetadataTests(unittest.TestCase):
         choices = self.by_name["provide_choices"]
         self.assertIs(str, choices.schema.properties["choices"].items)
 
+    def test_handoff_tools_require_directional_context_envelopes(self) -> None:
+        to_subagent = self.by_name["switch_to_subagent"]
+        to_main = self.by_name["switch_to_mainagent"]
+
+        self.assertIn("目标 Agent 先依据HandoffContext向用户确认交接内容", to_subagent.purpose)
+        self.assertIn("等待用户回复后才继续行动", to_main.purpose)
+        self.assertEqual(
+            "必须使用kind=\"delegate\"的完整<HandoffContext> envelope；source=\"main\"，"
+            "target为目标Agent，status=\"pending_confirmation\"。分别填写OriginalUserRequest、"
+            "ConfirmedInformation、InferredInformation、CompletedWork和PendingUserDecision，"
+            "没有内容写“无”。使用中性摘要，不得用“请执行”等命令式措辞暗示用户已授权具体动作。",
+            to_subagent.schema.properties["context"].description,
+        )
+        self.assertEqual(
+            "必须使用kind=\"return\"的完整<HandoffContext> envelope；source为当前子Agent，"
+            "target=\"main\"，status为completed、blocked或user_exit。分别填写OriginalUserRequest、"
+            "ConfirmedInformation、InferredInformation、CompletedWork和PendingUserDecision，"
+            "没有内容写“无”。使用中性总结，不得用命令式措辞暗示主Agent已获授权继续执行。",
+            to_main.schema.properties["summary"].description,
+        )
+        self.assertEqual(ConfirmationMode.ALWAYS, to_subagent.policy.confirmation)
+        self.assertEqual(ConfirmationMode.ALWAYS, to_main.policy.confirmation)
+
     def test_catalog_export_keeps_runtime_policy_separate_from_prompt_guidance(self) -> None:
         catalog = ToolCatalog(self.definitions)
         descriptor = next(
