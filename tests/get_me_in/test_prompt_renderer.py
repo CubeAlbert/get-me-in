@@ -217,12 +217,29 @@ class PromptRendererTests(unittest.TestCase):
 
     def test_production_output_format_uses_flat_message_entity_projection(self) -> None:
         rendered = PromptRenderer(Path("data/prompts")).render_output_format()
+        schema_text = rendered.split("<Schema>\n", 1)[1].split("\n</Schema>", 1)[0]
+        schema = json.loads(schema_text)
 
-        self.assertIn('"event_type": "finish"', rendered)
-        self.assertIn('"event_type": "tool_call"', rendered)
-        self.assertIn('"event_payload"', rendered)
-        self.assertIn("工具参数必须直接放在 event_payload 中", rendered)
-        self.assertNotIn('"tool_call": {', rendered)
+        self.assertEqual(1, rendered.count("<Schema>"))
+        self.assertNotIn("<FinishFormat>", rendered)
+        self.assertNotIn("<ToolCallFormat>", rendered)
+        self.assertEqual(
+            ["finish", "tool_call"],
+            schema["properties"]["event_type"]["enum"],
+        )
+        self.assertEqual(
+            ["event_type", "message"],
+            schema["required"],
+        )
+        payload_description = schema["properties"]["event_payload"]["description"]
+        self.assertIn("tool_call 时为工具参数对象", payload_description)
+        self.assertIn("参数名和类型必须匹配对应 Tool 的 Arguments", payload_description)
+        self.assertIn(
+            "InputFormat> 和 <OutputFormat> 是同一个 ModelMessageEntity 的不同方向投影",
+            rendered,
+        )
+        self.assertIn("省略、null 或空白字符串仍合法，不能因此触发 repair", rendered)
+        self.assertIn("参数必须直接放入 event_payload", rendered)
 
     def test_renders_sub_agents_as_xml_only_for_routing_agent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
