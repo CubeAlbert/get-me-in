@@ -27,7 +27,7 @@ from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.application import Application
 from src.get_me_in.application.background_worker import BackgroundWorker
 from src.get_me_in.application.cancellation import CancellationToken
-from src.get_me_in.application.conversation_codec import ConversationCodec
+from src.get_me_in.application.model_message import ModelMessageCodec
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.runtime import AgentRuntime
@@ -270,7 +270,7 @@ def _build_application(
         cancellation=main_cancellation,
         agent_catalog=catalog,
         tool_catalog=tool_catalog,
-        conversation_codec=ConversationCodec(),
+        conversation_codec=ModelMessageCodec(),
         max_model_calls=settings.max_model_calls_per_run,
         model_timeout_seconds=settings.llm_timeout_seconds,
         tool_executor=tool_executor,
@@ -291,7 +291,7 @@ def _build_application(
     resume_runtime = AgentRuntime(
         spec=resume_spec, prompt_renderer=prompt_renderer, llm=runtime_llms[AgentKey.RESUME],
         clock=clock, id_generator=id_generator, cancellation=resume_cancellation,
-        agent_catalog=catalog, tool_catalog=tool_catalog, conversation_codec=ConversationCodec(),
+        agent_catalog=catalog, tool_catalog=tool_catalog, conversation_codec=ModelMessageCodec(),
         max_model_calls=settings.max_model_calls_per_run, model_timeout_seconds=settings.llm_timeout_seconds,
         tool_executor=tool_executor,
         tool_context=ToolContext(

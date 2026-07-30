@@ -661,14 +661,14 @@
 - ✅ 新增 `ModelMessageCodec.encode(system_prompt, records)` 与 `parse(raw)`，集中实现 history encode 与 reply decode；旧 `ModelReply` DTO 尚待 Runtime 迁移后删除。
 - ✅ history encode 保持当前五类 InputFormat 映射、tool result correlation、event_payload error object 与 plan_status；assistant thinking 继续不回放。
 - ✅ reply decode 使用 flat `event_type/message/thinking/tool/event_payload`；模型不必提供 id、role、timestamp、tool_call_id、plan_status，Runtime 必须重建这些值。
-- 📌 迁移有效断言和 import 后删除旧 `conversation_codec.py`、`model_reply.py`；更新 Runtime 构造注入与 bootstrap composition，不改变 domain ConversationRecord。
+- ✅ 迁移有效断言和 import 后删除旧 `conversation_codec.py`、`model_reply.py`；更新 Runtime 构造注入与 bootstrap composition，不改变 domain ConversationRecord。
 
 ### 3. 单一 MessageFormat
 
 - ✅ `data/prompts/general_agent/07_input_format.md` 保持内容不变；不得删除、重命名或并入其他文件。已增加内容 hash 与 flat history 字段回归锁定。
-- 📌 修改独立 `08_output_format.md`：finish 使用 `event_type=finish`；tool_call 使用 `event_type=tool_call`、`tool` 与 object `event_payload`，参数直接放在 event_payload。
-- 📌 finish 的 thinking 在 Prompt 中写为“通常应尽量提供简短、非空、用户可见摘要”，但 parser 继续允许省略／null／空白；tool_call thinking 可选。
-- 📌 保留 `render_output_format()`；完整 system prompt 同时包含 InputFormat／OutputFormat，Runtime repair 只注入 OutputFormat；`09_reserved.md` 继续最后。
+- ✅ 修改独立 `08_output_format.md`：finish 使用 `event_type=finish`；tool_call 使用 `event_type=tool_call`、`tool` 与 object `event_payload`，参数直接放在 event_payload。
+- ✅ finish 的 thinking 在 Prompt 中写为“通常应尽量提供简短、非空、用户可见摘要”，但 parser 继续允许省略／null／空白；tool_call thinking 可选。
+- ✅ 保留 `render_output_format()`；完整 system prompt 同时包含 InputFormat／OutputFormat，Runtime repair 只注入 OutputFormat；`09_reserved.md` 继续最后。
 - 📌 保留每个 Agent 用户 turn 最多 3 次模型 repair、第四次 Paused、新 UserMessage 清零、本地 JSON repair 不计数与 snapshot bool 兼容，不回退已完成修复。
 
 ### 4. 自动化、提交与用户 smoke
@@ -676,7 +676,7 @@
 - 📌 锁定 InputFormat Git blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4`，并覆盖双文件存在、按 `07` → `08` → `09` 排序、repair 只读取 OutputFormat。
 - 📌 Entity／codec contract 覆盖 input 五类事件、finish、tool_call、event_payload 参数、tool result correlation、plan_status、Runtime-owned 字段与 thinking 保留／剥离。
 - 📌 更新 Runtime／bootstrap 回归，证明工具调用参数、Plan、handoff、三次 repair 和第四次暂停均保持。
-- 📌 运行完整 unittest、`compileall`、`git diff --check`；复核 diff 只包含 R8-F-C 白名单，并建立独立代码 checkpoint。
+- ✅ 运行完整 unittest 278/278、`compileall`、`git diff --check`；静态扫描无旧 ModelReply／ConversationCodec 引用，待提交独立代码 checkpoint。
 - 📌 工程 checkpoint 后停止，由用户执行 Main finish、Main 工具调用、Main→Resume→工具→finish 的真实 provider smoke；用户不负责补写自动化回归。
 - 📌 用户 smoke 通过后再更新 current／task／decision 并建立完成态文档 checkpoint；仍停在 R9 独立授权门禁前。
 

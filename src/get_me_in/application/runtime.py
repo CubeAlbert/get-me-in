@@ -19,7 +19,12 @@ from src.get_me_in.application.commands import (
     ToolResult,
     UserMessage,
 )
-from src.get_me_in.application.conversation_codec import ConversationCodec
+from src.get_me_in.application.model_message import (
+    ModelMessageCodec,
+    ModelMessageEventType,
+    ModelMessageParseError,
+    thaw_model_value,
+)
 from src.get_me_in.application.events import (
     ApprovalRequested,
     Cancelled,
@@ -33,7 +38,6 @@ from src.get_me_in.application.events import (
     ToolFinished,
     ToolStarted,
 )
-from src.get_me_in.application.model_reply import ModelReplyParseError, ModelReplyParser
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
@@ -83,7 +87,7 @@ class AgentRuntime:
         cancellation: CancellationToken,
         agent_catalog: AgentCatalog,
         tool_catalog: ToolCatalog,
-        conversation_codec: ConversationCodec | None = None,
+        conversation_codec: ModelMessageCodec | None = None,
         max_model_calls: int = 100,
         model_timeout_seconds: float = 60,
         tool_executor: ToolExecutor | None = None,
@@ -101,7 +105,7 @@ class AgentRuntime:
         self._cancellation = cancellation
         self._agent_catalog = agent_catalog
         self._tool_catalog = tool_catalog
-        self._conversation_codec = conversation_codec or ConversationCodec()
+        self._conversation_codec = conversation_codec or ModelMessageCodec()
         self._max_model_calls = max_model_calls
         self._model_timeout_seconds = model_timeout_seconds
         self._tool_executor = tool_executor
@@ -272,8 +276,8 @@ class AgentRuntime:
             result.content,
         )
         try:
-            reply = ModelReplyParser().parse(result.content)
-        except ModelReplyParseError as error:
+            reply = self._conversation_codec.parse(result.content)
+        except ModelMessageParseError as error:
             logger.warning(
                 "Invalid model reply: agent=%s turn=%s format_repairs_used=%s error=%s "
                 "chars=%d raw_reply=%r",
@@ -314,35 +318,38 @@ class AgentRuntime:
                 reply.repair_kind,
             )
 
-        if reply.tool_name is not None:
+        if reply.event_type is ModelMessageEventType.TOOL_CALL:
+            arguments = thaw_model_value(reply.event_payload or {})
+            assert isinstance(arguments, dict)
+            assert reply.tool is not None
             call_id = self._id_generator.new_id()
             tool_call = ToolCallRecord(
                 event_id=self._id_generator.new_id(),
                 call_id=call_id,
-                tool_name=reply.tool_name,
-                arguments=dict(reply.tool_arguments or {}),
+                tool_name=reply.tool,
+                arguments=arguments,
                 timestamp=self._clock.now(),
                 turn_id=self._state.turn_id,
                 thinking=reply.thinking,
                 plan=self._state.plan,
-                content=reply.content,
+                content=reply.message,
             )
             self._state = replace(
                 self._state,
                 phase=RuntimePhase.TOOL_READY,
                 history=(*self._state.history, tool_call),
-                pending_tool=PendingToolCall(call_id, reply.tool_name, dict(reply.tool_arguments or {})),
+                pending_tool=PendingToolCall(call_id, reply.tool, arguments),
             )
             return ToolStarted(
                 call_id,
-                reply.tool_name,
-                dict(reply.tool_arguments or {}),
+                reply.tool,
+                arguments,
                 reply.thinking,
             )
 
         assistant = self._message(
             Role.ASSISTANT,
-            reply.content,
+            reply.message,
             self._state.turn_id,
             thinking=reply.thinking,
         )

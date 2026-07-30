@@ -64,7 +64,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_malformed_json_is_repaired_locally_without_another_model_call(self) -> None:
         runtime, llm, temporary_dir = _runtime(
-            ['{"message":"answer","thinking":"summary","tool_call":null,}']
+            ['{"event_type":"finish","message":"answer","thinking":"summary",}']
         )
         self.addCleanup(temporary_dir.cleanup)
 
@@ -85,9 +85,9 @@ class RuntimeTests(unittest.TestCase):
                         "tool_call_id": "untrusted-call",
                         "plan_status": {"current": "wrong"},
                         "unknown": "ignored",
+                        "event_type": "finish",
                         "message": "answer",
                         "thinking": "summary",
-                        "tool_call": None,
                     }
                 )
             ]
@@ -170,7 +170,7 @@ class RuntimeTests(unittest.TestCase):
     def test_semantic_error_uses_model_repair_without_local_default(self) -> None:
         runtime, llm, temporary_dir = _runtime(
             [
-                '{"message":"invalid thinking","thinking":1,"tool_call":null}',
+                '{"event_type":"finish","message":"invalid thinking","thinking":1}',
                 _finish("repaired", "summary"),
             ]
         )
@@ -599,9 +599,9 @@ def _cancel_during_completion(cancellation: CancellationSignal) -> str:
 def _finish(message: str, thinking: str) -> str:
     return json.dumps(
         {
+            "event_type": "finish",
             "message": message,
             "thinking": thinking,
-            "tool_call": None,
         },
         ensure_ascii=False,
     )
@@ -614,11 +614,10 @@ def _tool_call(
     thinking: str | None = None,
 ) -> str:
     payload: dict[str, object] = {
+        "event_type": "tool_call",
         "message": "",
-        "tool_call": {
-            "name": name,
-            "arguments": arguments or {},
-        },
+        "tool": name,
+        "event_payload": arguments or {},
     }
     if thinking is not None:
         payload["thinking"] = thinking

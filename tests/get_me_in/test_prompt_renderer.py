@@ -215,6 +215,15 @@ class PromptRendererTests(unittest.TestCase):
 
         self.assertEqual("<OutputFormat>canonical</OutputFormat>", rendered)
 
+    def test_production_output_format_uses_flat_message_entity_projection(self) -> None:
+        rendered = PromptRenderer(Path("data/prompts")).render_output_format()
+
+        self.assertIn('"event_type": "finish"', rendered)
+        self.assertIn('"event_type": "tool_call"', rendered)
+        self.assertIn('"event_payload"', rendered)
+        self.assertIn("工具参数必须直接放在 event_payload 中", rendered)
+        self.assertNotIn('"tool_call": {', rendered)
+
     def test_renders_sub_agents_as_xml_only_for_routing_agent(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             root = Path(temporary_dir) / "general_agent"
