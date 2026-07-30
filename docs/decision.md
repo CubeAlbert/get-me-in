@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 244 — 完成 R8-F Runtime repair 计数子任务](#决策-244--完成-r8-f-runtime-repair-计数子任务)
 - [决策 243 — 完成 R8-F OutputFormat／Parser 子任务](#决策-243--完成-r8-f-outputformatparser-子任务)
 - [决策 242 — 合并模型输出 envelope 并提高每回合格式修复预算](#决策-242--合并模型输出-envelope-并提高每回合格式修复预算)
 - [决策 241 — 修正文档契约冲突并统一 R8 后权威语义](#决策-241--修正文档契约冲突并统一-r8-后权威语义)
@@ -5721,3 +5722,19 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：** 单一 nullable `tool_call` 消除重复意图，且把兼容范围限制在无副作用的省略字段；Parser 继续只产出现有 `ModelReply`，因此不扩大 Runtime、Session 或 CLI 公开边界。
 
 **曾考虑的替代方案：** 保留旧 flat 形状作为第二套兼容协议会继续维护两份模型契约，拒绝；同步修改 Runtime 或 ConversationCodec 会超出本子任务白名单，暂不进行。
+
+---
+
+### 决策 244 —— 完成 R8-F Runtime repair 计数子任务
+
+**背景：** 单一 OutputFormat／Parser 已完成，但 Runtime 仍以 `repair_attempted: bool` 限制整个用户 turn 只能进行一次模型格式 repair，无法覆盖长工具链中的后续独立格式错误。
+
+**决定：**
+
+- `AgentSessionState` 只保留 `format_repairs_used: int` 作为 canonical repair 状态；Runtime 每安排一次模型格式 repair 加一，同回合合法解析与工具执行不清零，达到三次后下一次格式错误返回 `Paused("invalid_model_reply")` 并进入 `WAITING_FOR_USER`。
+- 新 `UserMessage` 创建 turn 时通过新状态初始化将 repair 计数清零；本地 `json_repair` 成功不经过 Runtime repair 分支，因此不计数；总模型调用上限保持 100。
+- Runtime 回归覆盖四次失败暂停、三次预算、工具调用后继续 repair 与新 turn 清零；定向测试 26/26 通过。Snapshot 双写与旧 bool 读取兼容仍未实施。
+
+**理由：** 非负计数能够表达 turn 内已消耗的 repair 预算，避免 bool 在合法工具链后过早暂停，同时以固定上限阻止无限模型循环；把 snapshot 迁移留在下一独立子任务可保持提交边界清晰。
+
+**曾考虑的替代方案：** 保留 bool 并额外增加计数会产生两个 domain 真相，拒绝；在合法解析或工具执行后清零会允许单一 turn 无限 repair，拒绝。

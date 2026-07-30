@@ -41,7 +41,7 @@ class AgentSessionState:
     history: tuple[ConversationRecord, ...] = ()
     model_calls: int = 0
     pending_tool: PendingToolCall | None = None
-    repair_attempted: bool = False
+    format_repairs_used: int = 0
     cancel_reason: str = "Cancelled by user"
     turn_id: str = ""
     plan: Plan | None = None

@@ -64,7 +64,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_malformed_json_is_repaired_locally_without_another_model_call(self) -> None:
         runtime, llm, temporary_dir = _runtime(
-            ['{"event_type":"finish","message":"answer","thinking":"summary",}']
+            ['{"message":"answer","thinking":"summary","tool_call":null,}']
         )
         self.addCleanup(temporary_dir.cleanup)
 
@@ -85,9 +85,9 @@ class RuntimeTests(unittest.TestCase):
                         "tool_call_id": "untrusted-call",
                         "plan_status": {"current": "wrong"},
                         "unknown": "ignored",
-                        "event_type": "finish",
                         "message": "answer",
                         "thinking": "summary",
+                        "tool_call": None,
                     }
                 )
             ]
@@ -114,9 +114,14 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("answer", events[-1].message.content)
         self.assertEqual("", events[-1].message.thinking)
 
-    def test_unrecoverable_reply_fails_after_one_model_repair(self) -> None:
+    def test_unrecoverable_reply_pauses_after_three_model_repairs(self) -> None:
         runtime, llm, temporary_dir = _runtime(
-            ['["ambiguous", "structure"]', '["still", "ambiguous"]']
+            [
+                '["ambiguous", "structure"]',
+                '["still", "ambiguous"]',
+                '["third", "ambiguous"]',
+                '["fourth", "ambiguous"]',
+            ]
         )
         self.addCleanup(temporary_dir.cleanup)
 
@@ -124,12 +129,48 @@ class RuntimeTests(unittest.TestCase):
 
         self.assertIsInstance(events[-1], Paused)
         self.assertEqual("invalid_model_reply", events[-1].code)
-        self.assertEqual(2, len(llm.requests))
+        self.assertEqual(4, len(llm.requests))
+
+    def test_new_user_message_clears_format_repair_budget(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            [
+                "bad response 1",
+                "bad response 2",
+                "bad response 3",
+                "bad response 4",
+                _finish("recovered on a new turn", ""),
+            ]
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        paused = _pump(runtime, UserMessage("first question"))[-1]
+        completed = _pump(runtime, UserMessage("second question"))[-1]
+
+        self.assertIsInstance(paused, Paused)
+        self.assertIsInstance(completed, Completed)
+        self.assertEqual(5, len(llm.requests))
+
+    def test_repair_budget_survives_a_tool_call_within_the_same_turn(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            [
+                _tool_call("inspect"),
+                "bad response after tool",
+                "another bad response after tool",
+                _finish("recovered", ""),
+            ],
+            definitions=(_tool("inspect"),),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("inspect then answer"))
+
+        self.assertIsInstance(events[-1], Completed)
+        self.assertEqual(4, len(llm.requests))
 
     def test_semantic_error_uses_model_repair_without_local_default(self) -> None:
         runtime, llm, temporary_dir = _runtime(
             [
-                '{"event_type":"finish","message":"invalid thinking","thinking":1}',
+                '{"message":"invalid thinking","thinking":1,"tool_call":null}',
                 _finish("repaired", "summary"),
             ]
         )
@@ -348,7 +389,7 @@ class RuntimeTests(unittest.TestCase):
             FailHandoff(
                 requested.call_id,
                 "subagent_failed",
-                "Model response remained invalid after one repair attempt",
+                "Model response remained invalid after three repair attempts",
                 terminal=True,
             )
         )
@@ -360,7 +401,9 @@ class RuntimeTests(unittest.TestCase):
     def test_invalid_model_reply_logs_the_complete_raw_message(self) -> None:
         first_raw = "first invalid response " + ("A" * 700)
         second_raw = "second invalid response " + ("B" * 700)
-        runtime, _, temporary_dir = _runtime([first_raw, second_raw])
+        third_raw = "third invalid response " + ("C" * 700)
+        fourth_raw = "fourth invalid response " + ("D" * 700)
+        runtime, _, temporary_dir = _runtime([first_raw, second_raw, third_raw, fourth_raw])
         self.addCleanup(temporary_dir.cleanup)
 
         with self.assertLogs("src.get_me_in.application.runtime", level="WARNING") as captured:
@@ -556,9 +599,9 @@ def _cancel_during_completion(cancellation: CancellationSignal) -> str:
 def _finish(message: str, thinking: str) -> str:
     return json.dumps(
         {
-            "event_type": "finish",
             "message": message,
             "thinking": thinking,
+            "tool_call": None,
         },
         ensure_ascii=False,
     )
@@ -571,10 +614,11 @@ def _tool_call(
     thinking: str | None = None,
 ) -> str:
     payload: dict[str, object] = {
-        "event_type": "tool_call",
         "message": "",
-        "tool": name,
-        "event_payload": arguments or {},
+        "tool_call": {
+            "name": name,
+            "arguments": arguments or {},
+        },
     }
     if thinking is not None:
         payload["thinking"] = thinking

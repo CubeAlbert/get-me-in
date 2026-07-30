@@ -630,11 +630,11 @@
 
 ### 3. 三次 repair 预算与 snapshot 兼容
 
-- 📌 将 `AgentSessionState.repair_attempted: bool` 替换为 `format_repairs_used: int = 0`；禁止同时保留两份 domain canonical repair 状态。
-- 📌 Runtime 每安排一次模型格式 repair 将计数加一；同一 turn 的合法解析与工具执行不清零，最多允许 3 次；第四次解析失败沿用 `Paused/WAITING_FOR_USER` 并保留活动 SubAgent/handoff。
-- 📌 新 `UserMessage` 创建 turn 时把计数归零；本地 `json_repair` 不计数；`model_calls` 与默认 100 次 `AGENT_MAX_MODEL_CALLS` 契约不变。
+- ✅ 将 `AgentSessionState.repair_attempted: bool` 替换为 `format_repairs_used: int = 0`；未保留第二份 domain canonical repair 状态。
+- ✅ Runtime 每安排一次模型格式 repair 将计数加一；同一 turn 的合法解析与工具执行不清零，最多允许 3 次；第四次解析失败进入 `Paused/WAITING_FOR_USER` 并保留活动 SubAgent/handoff。
+- ✅ 新 `UserMessage` 创建 turn 时把计数归零；本地 `json_repair` 不计数；`model_calls` 与默认 100 次 `AGENT_MAX_MODEL_CALLS` 契约不变。
 - 📌 `SessionSnapshotCodec` 写入 `format_repairs_used`，同时写由该值投影的 `repair_attempted` bool；恢复优先使用严格非负整数计数，缺失时把旧 bool 映射为 0／1，保持 schema_version=2 与代码回退可读。
-- 📌 更新 `test_runtime.py`：覆盖同回合三次 repair、第四次暂停、一次 repair 成功→工具→后续错误仍可第二次 repair、新 turn 清零、调用上限和 handoff 下暂停不闭合。
+- ✅ 更新 `test_runtime.py`：覆盖同回合三次 repair、第四次暂停、一次 repair 成功→工具→后续错误仍可第二次 repair、新 turn 清零、调用上限和 handoff 下暂停不闭合；定向测试 26/26 通过。
 - 📌 更新 `test_session_codec.py`：覆盖新计数 round-trip、旧 bool 快照兼容、双写投影、非法负数／bool-as-int／错误类型拒绝。
 
 ### 4. 工程验证、提交与用户 smoke 门禁

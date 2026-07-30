@@ -60,6 +60,7 @@ from src.get_me_in.ports.llm import LLMPort, LLMRequest, ModelProfile
 
 
 logger = logging.getLogger(__name__)
+_MAX_FORMAT_REPAIRS = 3
 
 
 @dataclass(frozen=True)
@@ -274,20 +275,20 @@ class AgentRuntime:
             reply = ModelReplyParser().parse(result.content)
         except ModelReplyParseError as error:
             logger.warning(
-                "Invalid model reply: agent=%s turn=%s repair_attempted=%s error=%s "
+                "Invalid model reply: agent=%s turn=%s format_repairs_used=%s error=%s "
                 "chars=%d raw_reply=%r",
                 self._spec.key.value,
                 self._state.turn_id,
-                self._state.repair_attempted,
+                self._state.format_repairs_used,
                 error,
                 len(result.content),
                 result.content,
             )
-            if self._state.repair_attempted:
+            if self._state.format_repairs_used >= _MAX_FORMAT_REPAIRS:
                 self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_USER)
                 return Paused(
                     "invalid_model_reply",
-                    "Model response remained invalid after one repair attempt",
+                    f"Model response remained invalid after {_MAX_FORMAT_REPAIRS} repair attempts",
                 )
             repair = self._message(
                 Role.SYSTEM,
@@ -302,7 +303,7 @@ class AgentRuntime:
                 self._state,
                 phase=RuntimePhase.MODEL_PENDING,
                 history=(*self._state.history, repair),
-                repair_attempted=True,
+                format_repairs_used=self._state.format_repairs_used + 1,
             )
             return Progress("Repairing model response format")
         if reply.repair_kind is not None:
