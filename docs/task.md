@@ -710,7 +710,7 @@
 ### 2. Prompt-only 实施
 
 - 📌 在 `data/prompts/general_agent/04_tools.md` 的 ToolAuthority 后新增 canonical `HandoffContextContract`，定义 envelope、接收回合和双向行为；不修改 `07_input_format.md` 或 `08_output_format.md`。
-- 📌 更新 Main AgentSpec：创建 delegate context 时使用中性结构化摘要并区分已确认／推断；收到 return context 后本回合不得调用工具或再次路由，只汇报并询问用户。
+- 📌 更新 `src/get_me_in/bootstrap.py` 中的 Main AgentSpec：创建 delegate context 时使用中性结构化摘要并区分已确认／推断；收到 return context 后本回合不得调用工具或再次路由，只汇报并询问用户。只改 AgentSpec 元数据，不改 composition 行为。
 - 📌 更新 Resume AgentSpec：收到 delegate context 后本回合不得调用 Plan、Memory、workspace 或 artifact 工具，只复述并确认；原“信息足够直接执行”和“避免为了确认而确认”仅适用于非 handoff 接收回合或用户已经确认后的后续回合。
 - 📌 更新 `switch_to_subagent.context` 与 `switch_to_mainagent.summary` 的 LLM-facing 元数据，分别要求 `kind="delegate"`／`kind="return"`，禁止使用命令式摘要暗示已经获得执行授权。
 - ⛔ 不修改 Runtime、Orchestrator、CLI、Session／handoff typed state、审批、capability、handler、InputFormat／OutputFormat、依赖或数据。

@@ -2,7 +2,7 @@
 
 **当前阶段：** R8 已完成并通过最终用户审查；正在实施 R8 后续独立修正“统一 HandoffContext 接收回合契约”，R9 仍未授权
 
-**当前任务：** 按决策 251 先建立文档 checkpoint，再仅通过通用 Prompt、Main／Resume AgentSpec 与 ToolDefinition 元数据统一 Main→Sub 和 Sub→Main 的 HandoffContext；不修改 Runtime、Orchestrator、CLI 或 typed state
+**当前任务：** 按决策 251／252 先建立文档 checkpoint，再仅通过通用 Prompt、`bootstrap.py` 内 Main AgentSpec、Resume AgentSpec 与 ToolDefinition 元数据统一 Main→Sub 和 Sub→Main 的 HandoffContext；不修改 composition 行为、Runtime、Orchestrator、CLI 或 typed state
 
 **当前子任务：** 完成 HandoffContext 文档 checkpoint；随后实施提示词与回归测试，验证 handoff 接收回合只确认／汇报并等待下一条真实用户消息。
 
@@ -10,8 +10,9 @@
 
 **会话交接说明：** 决策 251 将 HandoffContext 定义为 Agent 间控制权交接摘要，而不是用户消息或执行授权。Main→Sub 使用 `kind="delegate"`；Sub→Main 使用 `kind="return"`。最新输入包含 HandoffContext 的模型回合统一称为“handoff 接收回合”：该回合不得调用任何工具；delegate 接收方只能复述任务、区分已确认与推断信息并请用户确认／纠正，return 接收方只能汇报已完成／阻塞／待决定事项并询问下一步，然后以 `finish` 等待真实用户输入。现有 Orchestrator 注入与 CompleteHandoff 机制、CLI 自动 `Continue`、审批语义、InputFormat／OutputFormat 均保持不变。决策 249 的单一 Entity／双格式投影与决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 建立决策 251 文档 checkpoint；随后按已确认白名单修改 `04_tools.md`、Main／Resume AgentSpec、handoff ToolDefinition 与相关测试，完成定向／全量验证和代码 checkpoint。之后由用户合并执行 HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke；不得检查、设计或实施 R9。
+**下一步：** 决策 251 文档 checkpoint 已建立；先按决策 252 纠正 Main AgentSpec 的实际文件所有权并建立补充文档 checkpoint，随后修改 `04_tools.md`、Main／Resume AgentSpec、handoff ToolDefinition 与相关测试，完成定向／全量验证和代码 checkpoint。之后由用户合并执行 HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke；不得检查、设计或实施 R9。
 
+252. **纠正 Main AgentSpec 的实际文件所有权** — 仓库不存在 `src/get_me_in/agents/main.py`；Main AgentSpec 实际定义在 composition root `src/get_me_in/bootstrap.py`。HandoffContext 实施白名单以 `bootstrap.py` 的 AgentSpec 元数据段替换错误路径，禁止修改该文件的装配、资源所有权或 Runtime 行为；其余决策 251 边界不变。
 251. **统一双向 HandoffContext 的接收回合契约** — Main→Sub 与 Sub→Main 使用同一个结构化 HandoffContext envelope；handoff 只转移控制权，不授予执行业务动作。接收回合禁止工具调用，delegate 先向用户确认，return 先向用户汇报并询问下一步；只改 Prompt／AgentSpec／ToolDefinition 元数据与回归测试，不改 Runtime、Orchestrator、CLI、InputFormat／OutputFormat 或 typed state。
 250. **query_memory 改为显式请求或必要信息询问未果后的单次兜底** — 不再把 Memory 作为主动个性化、补充画像或减少普通提问的常规手段。用户明确要求查询已保存个人信息时可调用；否则只有完成当前任务必须获得的信息不在当前上下文、且已经询问用户仍未获得时，才可进行一次聚焦查询。用户拒绝、信息可选、当前上下文已有答案、问候／能力介绍／简单路由／闲聊及零命中后的近义词重试均禁止；Main 元数据已同步收窄。本修正独立于 R8-F-C 与 R9。
 249. **保留 InputFormat／OutputFormat 并让两者投影同一 Entity** — 决策 248 错把“一个承载 Entity”扩大成“一份 Prompt 文件”，相关实现已 reset。当前 InputFormat 保持不变；OutputFormat 恢复 `event_type/message/thinking/tool/event_payload` flat 输出，工具参数放 event_payload，Plan 由系统放输入侧 plan_status，Runtime 补齐其他字段；finish thinking 默认鼓励但不强制。本任务仍独立于 R9。

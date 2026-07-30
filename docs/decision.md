@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 252 — 纠正 Main AgentSpec 的实际文件所有权](#决策-252--纠正-main-agentspec-的实际文件所有权)
 - [决策 251 — 统一双向 HandoffContext 的接收回合契约](#决策-251--统一双向-handoffcontext-的接收回合契约)
 - [决策 250 — query_memory 改为显式请求或必要信息询问未果后的单次兜底](#决策-250--query_memory-改为显式请求或必要信息询问未果后的单次兜底)
 - [决策 249 — 保留 InputFormat／OutputFormat 并让两者投影同一 Entity](#决策-249--保留-inputformatoutputformat-并让两者投影同一-entity)
@@ -5940,3 +5941,21 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 只修改 Resume 的“首次对话”规则 —— Sub→Main 不是 Main 第一轮，也无法统一两个方向，拒绝。
 - 修改 CLI，使 handoff 后不自动调用目标模型 —— 会扩大事件推进和交互状态语义，并让目标 Agent 无法向用户解释已接收内容，暂不采用。
 - 在 Runtime 增加“handoff 等待用户确认”typed phase —— deterministic gate 更强，但当前尚未用最小 Prompt 修正和真实 smoke 证明必要性，暂不采用。
+
+---
+
+### 决策 252 —— 纠正 Main AgentSpec 的实际文件所有权
+
+**背景：** 决策 251 的实施前检查发现仓库不存在其白名单所写的 `src/get_me_in/agents/main.py`。当前 Main AgentSpec 实际以内联元数据定义在唯一 composition root `src/get_me_in/bootstrap.py`；Resume AgentSpec 才位于独立的 `src/get_me_in/agents/resume.py`。若不先纠正文件边界，就无法按已确认的“双 AgentSpec 同步消除冲突”实施。
+
+**决定：**
+
+- 用 `src/get_me_in/bootstrap.py` 的 Main AgentSpec 元数据段替换决策 251 中不存在的 `src/get_me_in/agents/main.py`，作为本修正唯一新增生产文件白名单。
+- 对 `bootstrap.py` 的授权仅限 Main AgentSpec 的 responsibilities、constraints、style 与 priorities 等 LLM-facing 字符串；不得修改 composition、依赖构造、资源所有权、Catalog、Runtime 或其他行为。
+- `data/prompts/general_agent/04_tools.md`、`src/get_me_in/agents/resume.py`、`src/get_me_in/tools/switch.py` 和既有测试白名单不变；其余决策 251 语义、验证、smoke 与 R9 停止门禁全部不变。
+- 本次纠正先建立补充文档 checkpoint，再继续编码。
+
+**理由：**
+
+- 用户已经授权修改 Main AgentSpec；纠正实际承载文件是落实该授权所必需的事实修正，不扩大 LLM-facing 语义范围。
+- 独立记录而不回写决策 251，保持决策日志追加式，同时把 composition root 中允许修改的区段限制到最小。
