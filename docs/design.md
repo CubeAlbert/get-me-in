@@ -389,40 +389,43 @@ R4 新增文件、类和公开方法清单如下，编码前仍需用户确认�
 
 #### 6.6.1 JSON `thinking` 契约（R6 前置修复）
 
-R8-F-C 完成后，静态 `07_message_format.md` 中的 `thinking` 是模型生成、允许向用户展示的推理摘要，与 provider 原生 `reasoning_content` 和 `LLM_THINKING_ENABLED` 完全分离。finish 回复可以省略 thinking；如果提供 `null`、空字符串或空白字符串表示没有摘要，其他非空值必须是 string。tool_call 的 thinking 仍可省略但如果提供必须是 string。该规则由决策 219 取代决策 212 对 finish thinking 非空的要求，并恢复 finish thinking 的可选语义。v2 继续执行决策 136，不读取、保存或展示 provider 原生 reasoning_content。
+静态 `08_output_format.md` 中的 `thinking` 是模型生成、允许向用户展示的推理摘要，与 provider 原生 `reasoning_content` 和 `LLM_THINKING_ENABLED` 完全分离。finish 回复默认应尽量提供简短、非空、用户可见的 thinking 摘要；但为避免仅因摘要缺失触发格式 repair，解析契约继续允许省略、`null`、空字符串或空白字符串。tool_call 的 thinking 同样可选。其他非空值必须是 string。该规则保留决策 219 对决策 212 的取代关系；v2 继续执行决策 136，不读取、保存或展示 provider 原生 reasoning_content。
 
-`MessageRecord` 和 `ToolCallRecord` 保存可选 thinking；Runtime 必须把 `ModelReplyParser` 的结果投影到 Completed/ToolStarted，使 Renderer 可在独立 `SHOW_THINKING` setting 开启时显示“思考摘要”。Session snapshot 对 assistant message/tool call 的 thinking 做可选 round-trip，缺失字段兼容为 `None`。thinking 不参与业务状态转换、tool closure、handoff、rewind 边界或 Plan。
+`MessageRecord` 和 `ToolCallRecord` 保存可选 thinking；R8-F-C 完成后 Runtime 必须把 `ModelMessageCodec` 解码得到的 `ModelMessageEntity` 投影到 Completed/ToolStarted，使 Renderer 可在独立 `SHOW_THINKING` setting 开启时显示“思考摘要”。Session snapshot 对 assistant message/tool call 的 thinking 做可选 round-trip，缺失字段兼容为 `None`。thinking 不参与业务状态转换、tool closure、handoff、rewind 边界或 Plan。
 
-“保留”不等于“回放”。R8-F-C 完成后由 `ModelMessageCodec` 编码下一轮 LLMRequest，并必须对所有历史记录剥离 thinking；R6 的 `SessionService.memory_source()` 同样必须复制出 thinking 为 `None` 的 provider-neutral 记录，MemoryExtractor 不得接收展示摘要。这样修复只为 R6 增加 G5-F 前置依赖和一条 MemoryBuildSource 投影约束，不改变 R6 的总体架构、已确认文件清单或第一切片。
+“保留”不等于“回放”。R8-F-C 完成后由 `ModelMessageCodec` 编码下一轮 LLMRequest，并必须对所有历史记录剥离 thinking；因此 `07_input_format.md` 不声明 thinking。R6 的 `SessionService.memory_source()` 同样必须复制出 thinking 为 `None` 的 provider-neutral 记录，MemoryExtractor 不得接收展示摘要。这样修复只为 R6 增加 G5-F 前置依赖和一条 MemoryBuildSource 投影约束，不改变 R6 的总体架构、已确认文件清单或第一切片。
 
-#### 6.6.2 单一模型消息 Entity 与有界格式修复（R8-F-C，已确认）
+#### 6.6.2 单一模型消息 Entity、双方向格式投影与有界修复（R8-F-C，已确认）
 
-决策 242 的首轮实现只收敛了模型输出：`ModelReplyParser` 接受 `message/thinking/tool_call`，但 `ConversationCodec` 仍把历史记录手写为另一套 flat JSON；`07_input_format.md` 与 `08_output_format.md` 又把两套字段语言一起拼入 system prompt。两个 mapper、两个 Prompt schema 和两个不同的中间对象各自有测试，因而 287 项自动化可以全绿，却没有实现 Input／Output 共用一个 Entity 的核心目标。决策 248 撤回该实现的 smoke 入口。
+删除前 v1 的真实实现证明了稳定基线：`07_input_format.md` 与 `08_output_format.md` 是两份独立 Prompt 文档，但 history serialize 与 LLM reply parse 都承载在同一个 `Message` 上。代码结构可以重做，方向边界必须保留。决策 248 错把“一个 Entity”扩大成“一份 Prompt 文件”，又另造 `tool_result/context` 字段；决策 249 完全取代这些内容。当前 `07_input_format.md` 的字段、事件说明、tool result error payload 与 Plan 描述均保持不变。
 
-修正后的唯一 LLM-facing 顶层对象是 immutable `ModelMessageEntity`。它表达 provider role、`message`、可选 `thinking`、可选 `tool_call`、可选的系统注入 `tool_result`、可选 `context` 与仅供本地诊断的 normalization 标记；嵌套值使用经过 codec 校验的 immutable mapping，不再创建第二个 reply entity。role 只映射 provider `LLMMessage.role`，其余模型可见字段使用同一个 JSON envelope：
+新的 immutable `ModelMessageEntity` 是唯一 LLM-facing 承载对象，字段与当前 InputFormat 对齐：
 
-```json
-{
-  "message": "文本",
-  "thinking": null,
-  "tool_call": null,
-  "tool_result": null,
-  "context": null
-}
+```text
+id | role | timestamp | event_type | message | tool | tool_call_id
+event_payload | thinking | plan_status
 ```
 
-同一个 `ModelMessageCodec` 是唯一字段映射与验证所有者：
+具体新增对象固定为：
 
-- 历史输入：`MessageRecord | ToolCallRecord | ToolResultRecord` → `ModelMessageEntity` → `LLMMessage`。assistant 历史的 thinking 继续剥离；Tool call 映射到 `tool_call`；Tool result 映射到 `tool_result={"name": ..., "value": ...}`；Plan 映射到 `context={"plan": ...}`。内部 event id、timestamp、turn id 与 tool call correlation id 不进入模型可见 JSON。
-- 模型输出：原始 JSON → `ModelMessageEntity(role=assistant, ...)` → Runtime 的 `Completed`／`ToolStarted` 与既有 domain record。模型只可填 `message`、`thinking`、`tool_call`；`tool_result` 与 `context` 是 Runtime-owned，模型返回非空值时拒绝。`tool_call=null` 表示 finish，object 表示工具调用；finish message 必须非空。`arguments` 缺失／null 可归一化为 `{}` 后交给 ToolExecutor 做既有校验。
-- `ModelReply`／`ModelReplyParser` 与当前手写 flat `ConversationCodec` 不再作为独立协议所有者；迁移测试与 import 后删除这两个旧模块，由 `AgentRuntime` 只依赖注入的 `ModelMessageCodec`，不得在 Runtime、PromptRenderer 或测试 fixture 中再次手写同一字段转换。
-- `ConversationRecord` union 继续是 Session/domain 的 canonical history，不因 LLM 边界合并而替换；RuntimeCommand、RuntimeEvent、ToolDefinition、ToolExecutor、Capability、审批、handoff、CLI、provider `json_object` 和 snapshot conversation schema 均保持不变。
+- `ModelMessageEventType(StrEnum)`：`USER_INPUT`、`TOOL_CALL_RESULT`、`SYSTEM_MESSAGE`、`TOOL_CALL`、`FINISH`。
+- `ModelMessageEntity`：上述模型消息字段均为 typed attribute；为允许方向性子集，Runtime-owned 字段在 reply decode 阶段可以为 `None`。可附带不参与 JSON serialize 的本地 `repair_kind`，用于保留 `json_repair` 诊断，但不得形成第二个 reply DTO。
+- `ModelMessageParseError(ValueError)`：统一表示 JSON object 或方向性业务字段校验失败。
+- `ModelMessageCodec.encode(system_prompt, records) -> tuple[LLMMessage, ...]`：替代现有 ConversationCodec 输入路径。
+- `ModelMessageCodec.parse(raw) -> ModelMessageEntity`：替代现有 ModelReplyParser 输出路径。
 
-首条完整 system prompt 继续作为 provider 外层 `Role.SYSTEM` 控制消息，不伪装成 conversation JSON；其后的 history record 与模型 reply 才统一经过 `ModelMessageEntity`。Prompt 模板只保留一个按文件名排序的 `07_message_format.md`，删除 `07_input_format.md` 与 `08_output_format.md`。该文件展示上面的唯一 envelope，并用“history-owned／assistant-owned”说明字段所有权；不得出现旧 InputFormat 的字段列表，也不得为了说“禁止旧格式”而再次把旧字段名写入 system prompt。`PromptRenderer.render_message_format()` 从这一文件读取格式修复内容，完整 system prompt 与 repair 注入因而使用同一来源；决策 213 的“顺序只由文件名决定”继续有效，但其中 InputFormat／OutputFormat 两文件命名被决策 248 取代。
+一个 Entity 不表示每个方向都必须提供全部字段。`ModelMessageCodec` 按方向执行不同的 required/owned 规则：
 
-首轮实现中已经落地的有界 repair 计数继续保留：本地 `json_repair` 成功不计数；每个 Agent 用户 turn 最多安排 3 次模型格式 repair；合法回复和工具执行不清零；第四次失败进入 `Paused("invalid_model_reply")`／`WAITING_FOR_USER` 并保留 handoff；下一条 `UserMessage` 清零。`format_repairs_used` 与 snapshot 对旧 bool 的 0／1 兼容不回退。
+- **history input：** `ConversationRecord → ModelMessageEntity → LLMMessage`。Runtime／codec 提供 `id`、`role`、`timestamp`、`event_type`、`message`，按记录类型提供 `tool`、`tool_call_id`、`event_payload`，并把当前 Plan 投影到 `plan_status={current, completed, remaining}`。assistant history 的 thinking 必须剥离。此路径严格保持现有 `07_input_format.md`。
+- **model output：** 原始 JSON → 同一个 `ModelMessageEntity` → Runtime/domain。模型只需提供当前方向所需字段：`event_type`、`message`、可选 `thinking`；`tool_call` 时还必须提供非空 `tool` 与 object `event_payload`，参数名和值直接放在 `event_payload`。`finish` 时 `tool`／`event_payload` 省略或为 null。
+- **Runtime-owned 字段：** 模型无需提供 `id`、`role`、`timestamp`、`tool_call_id` 或 `plan_status`；即使提供也不作为可信值，Runtime 使用 IdGenerator、Clock、当前 Agent/turn、pending call 与当前 Plan 重建。模型输出的 Plan 不覆盖 Session canonical plan；新记录在下一轮 history encode 时才重新收到 `plan_status`。
+- **thinking：** Entity 可以承载模型输出 thinking，Runtime 继续投影到 MessageRecord／ToolCallRecord、RuntimeEvent、snapshot 与 Renderer；history encode 时剥离。OutputFormat 对 finish 明确写“通常应尽量提供简短、非空摘要”，但 parser 不把它设为必填；tool_call thinking 可选。
 
-回归测试必须证明：所有 history record 与 reply 都经过同一个 Entity／codec；system prompt 和 repair prompt 只含一个 MessageFormat 且不含旧 InputFormat 字段约定；message、tool call、tool result、system repair、Plan context 的映射与方向所有权；thinking 不回放；非法输出不触发猜测或副作用；三次 repair、第四次暂停和 snapshot 兼容保持有效。完整自动化和独立代码 checkpoint 通过后，才交由用户执行真实 Main finish、Main 工具链、Main→Resume→工具→finish smoke。本修正不进入、检查或设计 R9。
+`08_output_format.md` 必须继续单独存在，并使用与 InputFormat 相同的 flat 字段名：`event_type/message/thinking/tool/event_payload`。不得使用 nested `tool_call={"name","arguments"}`，不得把 InputFormat 与 OutputFormat 合并。完整 system prompt 继续按文件名拼接 `07_input_format.md` → `08_output_format.md` → `09_reserved.md`；格式 repair 只注入 `PromptRenderer.render_output_format()` 返回的 OutputFormat，因为 repair 的目标是模型回复而不是 history。
+
+`ModelReply` 不再作为第二个 reply Entity；`AgentRuntime` 消费 `ModelMessageEntity`。实现可以把 encode/decode 集中在 `ModelMessageCodec`，但“单一 codec”不允许改变两份 Prompt 的方向职责。`ConversationRecord` union 继续是 Session/domain canonical history；RuntimeCommand、RuntimeEvent、ToolDefinition、ToolExecutor、Capability、审批、handoff、CLI、provider `json_object` 与 snapshot conversation schema 均不变。
+
+现有有界 repair 计数继续保留：本地 `json_repair` 成功不计数；每个 Agent 用户 turn 最多 3 次模型 repair；合法回复和工具执行不清零；第四次失败进入 `Paused("invalid_model_reply")`／`WAITING_FOR_USER` 并保留 handoff；下一条 `UserMessage` 清零。回归必须证明 InputFormat 内容未漂移、双文件都存在且顺序正确、两个方向都映射同一 Entity、工具参数进入 event_payload、Plan 进入输入侧 plan_status、finish thinking 被鼓励但可缺省、repair 只注入 OutputFormat，以及既有 Runtime/snapshot 行为未回退。工程 checkpoint 后才交由用户执行真实 provider smoke。本修正不进入、检查或设计 R9。
 
 ### 6.7 CLI
 

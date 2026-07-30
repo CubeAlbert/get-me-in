@@ -640,48 +640,50 @@
 ### 4. 工程验证、提交与用户 smoke 门禁
 
 - ✅ 全量验证完成：bootstrap 定向测试 21/21、完整 unittest 287/287、`compileall` 与 `git diff --check` 通过；旧 fixture 迁移独立提交为 `b7bb7e9`。
-- ✅ 后续复核证明核心修正必须修改原白名单外的 ConversationCodec 与 InputFormat；已按停止规则暂停并由决策 248 建立 R8-F-C 最小扩展清单。
+- ✅ 后续复核证明核心修正必须把原白名单外的 ConversationCodec 纳入共同 Entity 映射，并让 OutputFormat 对齐现有 InputFormat；已按停止规则暂停，当前最小清单由决策 249 最终取代。
 - ✅ `b7bb7e9` 与 `50cde77` 只保留为首轮实现的代码／文档 checkpoint 历史证据，不再代表可以进入真实模型验收。
 - ⛔ 按首轮 R8-F 执行用户 smoke —— 已由决策 248 撤回，必须先完成 R8-F-C。
 - ⛔ 按首轮 R8-F 记录完成态 —— 已由 R8-F-C 的工程验证、用户 smoke 与完成态 checkpoint 取代。
 
-## R8-F-C —— Input／Output 单一模型消息 Entity 修正（已确认，新会话实施）
+## R8-F-C —— 单一模型消息 Entity 与双格式投影修正（已确认，新会话实施）
 
 ### 1. 问题确认与门禁
 
-- ✅ 用户复核发现当前 Input／Output 仍割裂，并明确要求最终只由一个 Entity 映射；system prompt 不得出现旧 InputFormat 约定内容。
-- ✅ 代码取证确认 `ConversationCodec` 手写旧 flat history JSON，`ModelReplyParser` 只解析新 reply envelope，PromptRenderer 同时拼接 `07_input_format.md`／`08_output_format.md`；现有测试分别锁定两端，因此 287/287 不构成核心目标验收。
-- ✅ 决策 248 撤回“等待用户 smoke”状态；本会话只更新五份活跃文档并建立文档 checkpoint，不修改生产代码或测试。
-- 📌 新会话先执行 `/project-bootstrap`，确认 `refactor`、工作区干净、HEAD 包含决策 248；只实施本节，不检查或进入 R9。
+- ✅ 用户复核确认：InputFormat 设计保持现状；InputFormat／OutputFormat 必须同时存在，一个 Entity 只表示共同承载，不表示模型输出全部字段或把两份 Prompt 合成一份。
+- ✅ 对照删除前 v1 的 `Message.to_json()`／`Message.from_llm_reply()` 与两份格式文档，确认稳定基线是“两个方向文档 + 一个 Message Entity + flat tool/event_payload”。
+- ✅ 按用户要求 hard reset 到 `8111319`，撤销错误合并 Prompt 的 4 个提交；决策 249 取代决策 248 的单文件方案。
+- ✅ 本会话只纠正五份活跃文档并建立 checkpoint，不修改生产代码、Prompt 或测试。
+- 📌 新会话先执行 `/project-bootstrap`，确认 `refactor`、工作区干净、HEAD 包含决策 249；只实施本节，不检查或进入 R9。
 
 ### 2. 单一 Entity 与 codec
 
-- 📌 新增 immutable `ModelMessageEntity`，作为唯一 LLM-facing 顶层对象；字段与方向所有权严格遵循 `docs/design.md` 6.6.2。
-- 📌 新增 `ModelMessageCodec`，集中实现 Entity 校验、history encode 与 reply decode；Runtime、PromptRenderer 和 fixture 不得各自手写第二套字段映射。
-- 📌 把 `MessageRecord`、`ToolCallRecord`、`ToolResultRecord` 全部映射到同一 Entity；内部 ids、timestamp、turn id 与 call correlation 不暴露给模型，assistant thinking 继续不回放。
-- 📌 模型原始 JSON 先解析为同一 Entity，再由 Runtime 投影现有 Completed／ToolStarted 与 domain record；删除独立 `ModelReply` 中间对象。
-- 📌 把有效断言与 import 迁入新 Entity／codec 后删除 `conversation_codec.py`、`model_reply.py` 及其中的 `ConversationCodec`、`ModelReply`、`ModelReplyParser`；更新 Runtime 构造注入与 bootstrap composition，最终生产路径只能有一个模型消息 codec，不保留 façade。
+- 📌 新增 `ModelMessageEventType`、immutable `ModelMessageEntity`、`ModelMessageParseError`；Entity 字段为 `id/role/timestamp/event_type/message/tool/tool_call_id/event_payload/thinking/plan_status`，可携带不序列化的本地 repair 诊断；输入和输出按方向使用不同字段子集。
+- 📌 新增 `ModelMessageCodec.encode(system_prompt, records)` 与 `parse(raw)`，集中实现 history encode 与 reply decode；删除独立 `ModelReply` DTO，Runtime 直接消费 Entity。
+- 📌 history encode 保持当前五类 InputFormat 映射、tool result correlation、event_payload error object 与 plan_status；assistant thinking 继续不回放。
+- 📌 reply decode 使用 flat `event_type/message/thinking/tool/event_payload`；模型不必提供 id、role、timestamp、tool_call_id、plan_status，Runtime 必须重建这些值。
+- 📌 迁移有效断言和 import 后删除旧 `conversation_codec.py`、`model_reply.py`；更新 Runtime 构造注入与 bootstrap composition，不改变 domain ConversationRecord。
 
 ### 3. 单一 MessageFormat
 
-- 📌 用 `data/prompts/general_agent/07_message_format.md` 替换 `07_input_format.md` 与 `08_output_format.md`，只展示一个 envelope 及 history-owned／assistant-owned 字段说明。
-- 📌 system prompt 不得列出旧 InputFormat 字段，也不得用“禁止旧字段”的方式再次暴露那些名称；`09_reserved.md` 继续由文件名保证最后顺序。
-- 📌 将 `render_output_format()` 替换为 `render_message_format()`；完整 system prompt 与 Runtime repair 注入读取同一文件。
+- 📌 `data/prompts/general_agent/07_input_format.md` 保持内容不变；不得删除、重命名或并入其他文件。
+- 📌 修改独立 `08_output_format.md`：finish 使用 `event_type=finish`；tool_call 使用 `event_type=tool_call`、`tool` 与 object `event_payload`，参数直接放在 event_payload。
+- 📌 finish 的 thinking 在 Prompt 中写为“通常应尽量提供简短、非空、用户可见摘要”，但 parser 继续允许省略／null／空白；tool_call thinking 可选。
+- 📌 保留 `render_output_format()`；完整 system prompt 同时包含 InputFormat／OutputFormat，Runtime repair 只注入 OutputFormat；`09_reserved.md` 继续最后。
 - 📌 保留每个 Agent 用户 turn 最多 3 次模型 repair、第四次 Paused、新 UserMessage 清零、本地 JSON repair 不计数与 snapshot bool 兼容，不回退已完成修复。
 
 ### 4. 自动化、提交与用户 smoke
 
-- 📌 新建／调整 Entity／codec contract tests，覆盖 user/system/assistant message、tool call、tool result、Plan context、role 映射、thinking 剥离、JSON repair、finish/tool-call 校验与 Runtime-owned 字段拒绝。
-- 📌 增加 prompt 回归：完整 prompt 与 repair prompt 只有一个 MessageFormat，且扫描确认旧 InputFormat 字段约定不再进入 production system prompt。
-- 📌 更新 Runtime／bootstrap 回归，证明 history encode 与 reply decode 使用同一个注入 codec，工具调用／结果关联、handoff、三次 repair 和第四次暂停均保持。
+- 📌 锁定 InputFormat Git blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4`，并覆盖双文件存在、按 `07` → `08` → `09` 排序、repair 只读取 OutputFormat。
+- 📌 Entity／codec contract 覆盖 input 五类事件、finish、tool_call、event_payload 参数、tool result correlation、plan_status、Runtime-owned 字段与 thinking 保留／剥离。
+- 📌 更新 Runtime／bootstrap 回归，证明工具调用参数、Plan、handoff、三次 repair 和第四次暂停均保持。
 - 📌 运行完整 unittest、`compileall`、`git diff --check`；复核 diff 只包含 R8-F-C 白名单，并建立独立代码 checkpoint。
 - 📌 工程 checkpoint 后停止，由用户执行 Main finish、Main 工具调用、Main→Resume→工具→finish 的真实 provider smoke；用户不负责补写自动化回归。
 - 📌 用户 smoke 通过后再更新 current／task／decision 并建立完成态文档 checkpoint；仍停在 R9 独立授权门禁前。
 
 ### 5. 已确认白名单
 
-- 📌 生产新增：`src/get_me_in/application/model_message.py`；生产修改：`src/get_me_in/application/runtime.py`、`src/get_me_in/application/prompt_renderer.py`、`src/get_me_in/bootstrap.py`；生产删除：`src/get_me_in/application/conversation_codec.py`、`src/get_me_in/application/model_reply.py`。
-- 📌 Prompt 新增：`data/prompts/general_agent/07_message_format.md`；Prompt 删除：`data/prompts/general_agent/07_input_format.md`、`data/prompts/general_agent/08_output_format.md`。
+- 📌 生产新增：`src/get_me_in/application/model_message.py`；生产修改：`src/get_me_in/application/runtime.py`、`src/get_me_in/bootstrap.py`；生产删除：迁移后删除 `src/get_me_in/application/conversation_codec.py`、`src/get_me_in/application/model_reply.py`。`PromptRenderer` 生产行为保持不变。
+- 📌 Prompt 修改：仅 `data/prompts/general_agent/08_output_format.md`；`07_input_format.md` 只读锁定，禁止修改／删除／重命名；不得创建 `07_message_format.md`。
 - 📌 测试新增：`tests/get_me_in/test_model_message.py`；测试修改：`tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_bootstrap.py`；测试删除：`tests/get_me_in/test_conversation_codec.py`、`tests/get_me_in/test_model_reply.py`。
 - 📌 文档 checkpoint：`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`。
 - ⛔ `domain/messages.py`、`ports/llm.py`、session codec/state、provider adapter、Settings、RuntimeEvent、ToolDefinition／ToolExecutor、CLI、依赖、数据或 R9 文件不在范围；如确需修改，停止并提交最小扩展清单。

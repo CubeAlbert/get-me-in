@@ -283,33 +283,36 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **实施顺序：** R7-T2/G7 → R8-P → R8-E → R8-O（强制停止／用户审查）→ R8-D → R8-G/G8。R8-P、R8-E、R8-O、R8-D、R8-G 与 G8 均已完成；G8 发现的代码／测试缺陷已按既定边界停止、独立授权、修复并提交。决策 240 完成最终审查，当前停在 R9 独立授权门禁前。
 
-### R8-F-C —— Input／Output 单一模型消息 Entity 修正（R8 后续，独立于 R9）
+### R8-F-C —— 单一模型消息 Entity 与双格式投影修正（R8 后续，独立于 R9）
 
-**目标：** 修正决策 242 首轮实现只合并 OutputFormat 的范围错误，使模型历史输入和模型回复都通过一个 `ModelMessageEntity` 与一个 `ModelMessageCodec`；system prompt 只保留一个 `MessageFormat`，不再出现旧 InputFormat 字段约定。既有每回合 3 次 repair 与 snapshot 兼容继续保留。
+**目标：** 保留当前 `07_input_format.md` 和独立 `08_output_format.md`，让 history input 与 model output 成为同一个 `ModelMessageEntity` 的方向性投影；模型只提供输出方向所需字段，Runtime 补齐可信内部字段。既有三次 repair 与 snapshot 兼容继续保留。
 
 **产出：**
 
-- 新增 immutable `ModelMessageEntity` 作为唯一 LLM-facing 顶层对象；同一字段集合表达 message、thinking、tool call、Runtime-owned tool result 与 context，provider role 由 Entity 映射到外层 `LLMMessage.role`。
-- 新增 `ModelMessageCodec` 作为唯一字段映射／验证所有者，同时完成 `ConversationRecord → ModelMessageEntity → LLMMessage` 与 `raw reply → ModelMessageEntity → Runtime/domain`；迁移引用后删除 `model_reply.py` 与 `conversation_codec.py`，不保留第二个 mapper façade。
-- 用 `07_message_format.md` 替换 `07_input_format.md`／`08_output_format.md`；完整 system prompt 与格式 repair 都从该文件读取，不列出、解释或反向禁止旧 InputFormat 字段。
-- 保持 domain `ConversationRecord`、RuntimeCommand／RuntimeEvent、ToolExecutor、handoff、CLI、provider adapter 与 session snapshot conversation schema 不变；内部 ids、timestamp、turn id 与 tool call correlation id 不进入模型可见 JSON。
-- 保留 `format_repairs_used`、每 turn 3 次模型 repair、本地 JSON repair 不计数、第四次暂停、新 UserMessage 清零，以及旧 snapshot bool 0／1 读取兼容。
+- 新增 `ModelMessageEventType`、immutable `ModelMessageEntity` 与 `ModelMessageParseError`；Entity 的模型字段集合为 `id/role/timestamp/event_type/message/tool/tool_call_id/event_payload/thinking/plan_status`，并可携带不序列化的本地 repair 诊断。它是唯一 LLM-facing Entity，但各方向 required 字段不同。
+- 新增 `ModelMessageCodec.encode(system_prompt, records)` 与 `parse(raw)`：history encode 将现有 ConversationRecord 投影为完整输入 Entity；reply decode 将 flat OutputFormat 投影为同一 Entity，再由 Runtime 生成 domain record。删除独立 `ModelReply` DTO。
+- `07_input_format.md` 内容不修改；`08_output_format.md` 恢复 flat `event_type/message/thinking/tool/event_payload`，明确 tool_call 的工具名与参数，finish thinking 默认尽量提供但解析允许缺省。
+- Runtime 生成／覆盖 id、role、timestamp、tool_call_id、plan_status；Plan 只从 Session canonical state 投影到下一轮输入 Entity，不接受模型回写。
+- 保留 PromptRenderer 的文件名排序与 `render_output_format()`；full prompt 同时包含 InputFormat 和 OutputFormat，repair 只注入 OutputFormat。
+- 保留 `format_repairs_used`、每 turn 3 次模型 repair、本地 JSON repair 不计数、第四次暂停、新 UserMessage 清零与旧 snapshot bool 兼容。
 
 **范围：**
 
-- 生产：新增 `src/get_me_in/application/model_message.py`；修改 `src/get_me_in/application/runtime.py`、`src/get_me_in/application/prompt_renderer.py`、`src/get_me_in/bootstrap.py`；迁移后删除 `src/get_me_in/application/conversation_codec.py`、`src/get_me_in/application/model_reply.py`；新增 `data/prompts/general_agent/07_message_format.md` 并删除 `07_input_format.md`、`08_output_format.md`。
-- 测试：新增 `tests/get_me_in/test_model_message.py`；修改 `tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_bootstrap.py`；把全部有效断言迁入新 contract test 后删除 `tests/get_me_in/test_conversation_codec.py`、`tests/get_me_in/test_model_reply.py`。
-- checkpoint：五份活跃文档。`domain/messages.py`、`ports/llm.py`、session codec/state、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖和数据不在范围；若实现证明其中任一项必须改变，立即停止并提交新的最小清单。
+- 生产新增：`src/get_me_in/application/model_message.py`。
+- 生产修改：`data/prompts/general_agent/08_output_format.md`、`src/get_me_in/application/runtime.py`、`src/get_me_in/bootstrap.py`。`PromptRenderer.render()`／`render_output_format()` 行为保持不变。
+- 生产替换／删除：把 `src/get_me_in/application/conversation_codec.py` 与 `src/get_me_in/application/model_reply.py` 的有效逻辑迁入 `ModelMessageCodec` 后删除旧模块；不得删除或修改 `data/prompts/general_agent/07_input_format.md`。
+- 测试新增／修改：`tests/get_me_in/test_model_message.py`、`tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_bootstrap.py`；迁移有效断言后删除 `test_conversation_codec.py`、`test_model_reply.py`。
+- checkpoint：五份活跃文档。`domain/messages.py`、`ports/llm.py`、session codec/state、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖和数据不在范围；确需改变时停止并提交最小扩展清单。
 
 **验收门禁：**
 
-- 实施会话先写 `ModelMessageEntity`／codec contract tests，再替换 history encode 与 reply decode；不得先靠 Prompt 文案掩盖两个 mapper 仍然存在。
-- 回归必须断言生产 system prompt 与 repair prompt 只有一个 MessageFormat，且不包含旧 InputFormat 字段约定；覆盖 user/system/assistant message、tool call、tool result、Plan context、thinking 剥离、方向所有权与非法回复无副作用。
-- 完整 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py`、`git diff --check` 与 diff 白名单审查通过后建立独立代码 checkpoint。
-- 工程 checkpoint 后停止，由用户执行真实模型 smoke；实现会话负责自动化回归，用户负责真实 provider 的 Main finish、Main 工具调用、Main→Resume→工具→finish 与 repair 体验。
+- 实施前先锁定当前 `07_input_format.md` Git blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4` 不变，并断言 `07_input_format.md`、`08_output_format.md`、`09_reserved.md` 均存在且顺序正确。
+- Entity／codec 回归覆盖五类 input event、finish output、tool_call output、event_payload 参数、tool result correlation、plan_status 输入投影、Runtime-owned 字段重建和 thinking 输出保留／历史剥离。
+- Prompt 回归必须证明 ToolCallFormat 明确展示 `tool` 与 `event_payload` 参数 object，finish 提示模型通常尽量提供 thinking，且 repair 仍只读取 `08_output_format.md`。
+- 完整 unittest、`compileall`、`git diff --check` 与 diff 白名单审查通过后建立独立代码 checkpoint；实现会话负责回归，随后由用户执行真实 provider smoke。
 - 本任务不构成 R9 授权；smoke 通过后才记录 R8-F-C 完成态。
 
-**实施顺序：** 新会话 `/project-bootstrap` → 确认 `refactor`／干净工作区／决策 248 → 新 Entity 与 codec contract → history input 迁移 → reply decode／Runtime 迁移 → 单一 MessageFormat 与 repair 来源 → 定向及完整自动化 → 独立代码 checkpoint → 用户真实 smoke → 文档 checkpoint。当前会话只制定并保存计划，不修改代码或测试。
+**实施顺序：** 新会话 `/project-bootstrap` → 确认决策 249／干净工作区 → 锁定 InputFormat 与双文件顺序 → 新 Entity／codec contract → flat OutputFormat 与 reply decode → Runtime/bootstrap 接入 → 定向及完整自动化 → 独立代码 checkpoint → 用户真实 smoke → 文档 checkpoint。本会话只纠正文档，不修改代码或测试。
 
 ### R9 —— 新功能恢复
 

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 249 — 保留 InputFormat／OutputFormat 并让两者投影同一 Entity](#决策-249--保留-inputformatoutputformat-并让两者投影同一-entity)
 - [决策 248 — 撤回 R8-F smoke 入口并统一 Input／Output 的 LLM-facing Entity](#决策-248--撤回-r8-f-smoke-入口并统一-inputoutput-的-llm-facing-entity)
 - [决策 247 — 完成 bootstrap fixture 最小扩展与工程验证](#决策-247--完成-bootstrap-fixture-最小扩展与工程验证)
 - [决策 246 — 全量验证发现白名单外 fixture 阻塞](#决策-246--全量验证发现白名单外-fixture-阻塞)
@@ -5829,3 +5830,44 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保留 `ModelReply` 与 `ConversationCodec` 两套 mapper，只用共享常量同步字段 —— 仍有两个协议所有者，无法满足一个 Entity 的目标，拒绝。
 - 把 `ConversationRecord` 直接改成模型 JSON DTO —— 会把 LLM/provider 细节污染 Session domain 与 snapshot，拒绝。
 - 让用户先 smoke 再决定是否重构 —— 当前 system prompt 已被静态证据证明存在双协议，smoke 不能替代结构修正，拒绝。
+
+---
+
+### 决策 249 —— 保留 InputFormat／OutputFormat 并让两者投影同一 Entity
+
+**背景：** 决策 248 正确识别了 Input／Output 使用不同中间对象的问题，却错误地把“一个 Entity 承载”推导为“合并成一份 Prompt 文件”，并设计了新的 `tool_result/context` envelope。另一个会话按该清单完成 `ceb5452`、`7b242a1`、`53aa41f`、`8097025` 4 个提交后，用户指出模型失去了明确的 tool call 参数、Plan 注入和 finish thinking 指导；相关提交已按用户明确要求通过 `git reset --hard 8111319` 从当前分支撤销。进一步对照删除前 v1 的真实 `Message.to_json()`、`Message.from_llm_reply()` 与 `07_input_format.md`／`08_output_format.md` 证明：稳定设计一直是两份方向文档共同描述一个 Message Entity，而不是一份文档或要求模型输出 Entity 全字段。
+
+**决定：**
+
+- 永久保留 `data/prompts/general_agent/07_input_format.md` 和 `08_output_format.md` 两份独立 Prompt 文档。当前 InputFormat 的 schema、五类事件、tool result/error payload 与 plan_status 说明保持不变；不得删除、重命名、合并或借本修复改写。
+- 新增 `ModelMessageEventType`、唯一 immutable `ModelMessageEntity` 与 `ModelMessageParseError`。Entity 的模型字段为 `id/role/timestamp/event_type/message/tool/tool_call_id/event_payload/thinking/plan_status`，可以携带不参与 JSON serialize 的本地 repair 诊断。InputFormat 与 OutputFormat 是该 Entity 的两个方向性投影，不要求任何一方传入全部字段。
+- history input 由 Runtime／codec 填充可信元数据、tool correlation 与 `plan_status`；assistant thinking 在发送下一轮模型前剥离。模型只读取这些字段，不拥有 Plan 或内部 id。
+- model output 使用与 Entity 相同的 flat 字段：始终提供 `event_type` 与 `message`；`tool_call` 还必须提供非空 `tool` 和 object `event_payload`，工具参数直接放入 event_payload；`finish` 的 tool/event_payload 省略或为 null。
+- 模型无需输出 `id`、`role`、`timestamp`、`tool_call_id`、`plan_status`。Runtime 使用 IdGenerator、Clock、当前 Agent/turn、pending call 与 Session canonical Plan 重建；模型提供的这些值不得覆盖内部状态。
+- finish 通常应尽量提供简短、非空、用户可见的 thinking 摘要，但 omission/null/blank 继续是合法输入，不能只因缺少摘要触发 repair；tool_call thinking 可选。thinking 继续进入 RuntimeEvent／snapshot／Renderer，但不回放给模型。
+- 完整 system prompt 继续按文件名包含 InputFormat 与 OutputFormat；格式 repair 只注入 `render_output_format()` 的 OutputFormat。不得创建 `07_message_format.md`，不得把 repair 改为注入 InputFormat。
+- `ModelReply` 不再是第二个 reply Entity；`ModelMessageCodec.encode(system_prompt, records)` 与 `parse(raw)` 把 history 与 raw reply 映射到同一 `ModelMessageEntity`。domain ConversationRecord、RuntimeEvent、ToolExecutor、provider、CLI 与 snapshot conversation schema 不变。
+- 现有每 turn 3 次模型 repair、本地 JSON repair 不计数、第四次暂停、新 UserMessage 清零与 snapshot bool 兼容全部保留。
+- 当前会话只纠正五份活跃文档并建立 checkpoint。新会话按 R8-F-C 清单实施自动化与代码；本决定不检查、设计或授权 R9。
+
+**理由：**
+
+- Entity 是代码中的承载边界，InputFormat／OutputFormat 是模型两个方向的使用说明；二者不属于同一层，不能因共享 Entity 而合并文档。
+- flat `event_type/tool/event_payload` 与 InputFormat 同名，模型可以直接理解工具名、参数和随后收到的工具结果；nested tool_call 会重新制造第二套词汇。
+- `plan_status` 是 Runtime → model 的上下文，不是 model → Runtime 的命令；只在输入投影中注入可以保护 Session canonical Plan。
+- thinking 采用“Prompt 鼓励、parser 宽容”同时保留体验与稳定性，不让非业务摘要成为格式失败原因。
+
+**已确认文件与停止门禁：**
+
+- 生产新增：`src/get_me_in/application/model_message.py`。
+- 生产修改：`data/prompts/general_agent/08_output_format.md`、`src/get_me_in/application/runtime.py`、`src/get_me_in/bootstrap.py`；`PromptRenderer.render()`／`render_output_format()` 行为保持不变。
+- 生产迁移／删除：迁移有效逻辑后删除 `src/get_me_in/application/conversation_codec.py`、`src/get_me_in/application/model_reply.py`。
+- 测试：新增 `tests/get_me_in/test_model_message.py`；修改 `test_prompt_renderer.py`、`test_runtime.py`、`test_bootstrap.py`；迁移有效断言后删除 `test_conversation_codec.py`、`test_model_reply.py`。
+- `data/prompts/general_agent/07_input_format.md` 的 Git blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4` 是只读验收基线，不在修改白名单；`domain/messages.py`、`ports/llm.py`、session codec/state、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖、数据和 R9 文件不在范围。确需改变时必须停止并提交新的最小扩展清单。
+
+**曾考虑的替代方案：**
+
+- 合并成 `07_message_format.md` —— 混淆 Entity 与 Prompt 方向，已由真实实施暴露问题，撤销。
+- 保留 nested `tool_call.name/arguments`，只让它映射到同一 Entity —— 模型仍需在 InputFormat 的 flat tool/event_payload 和 OutputFormat 的 nested tool_call 间切换，拒绝。
+- 要求模型输出 Entity 全部字段 —— id、role、timestamp、call correlation 与 Plan 都不应由模型拥有，拒绝。
+- 把 finish thinking 恢复为严格必填 —— 会因非业务摘要缺失触发 repair；改用明确鼓励但解析宽容。
