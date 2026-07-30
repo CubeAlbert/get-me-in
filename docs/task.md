@@ -698,7 +698,7 @@
 - 📌 等待用户真实 provider smoke：普通问候／简单路由不得查询 memory；明确查询个人背景时允许调用；必要信息缺失时必须先询问，未果后最多单次兜底。smoke 前不宣称模型行为验收完成。
 - ⛔ 本修正独立于 R8-F-C，不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
 
-## R8 后续独立修正 —— 统一 HandoffContext 接收回合契约（已确认，实施中）
+## R8 后续独立修正 —— 统一 HandoffContext 接收回合契约（工程已完成，待 smoke）
 
 ### 1. 语义与方向
 
@@ -709,16 +709,16 @@
 
 ### 2. Prompt-only 实施
 
-- 📌 在 `data/prompts/general_agent/04_tools.md` 的 ToolAuthority 后新增 canonical `HandoffContextContract`，定义 envelope、接收回合和双向行为；不修改 `07_input_format.md` 或 `08_output_format.md`。
-- 📌 更新 `src/get_me_in/bootstrap.py` 中的 Main AgentSpec：创建 delegate context 时使用中性结构化摘要并区分已确认／推断；收到 return context 后本回合不得调用工具或再次路由，只汇报并询问用户。只改 AgentSpec 元数据，不改 composition 行为。
-- 📌 更新 Resume AgentSpec：收到 delegate context 后本回合不得调用 Plan、Memory、workspace 或 artifact 工具，只复述并确认；原“信息足够直接执行”和“避免为了确认而确认”仅适用于非 handoff 接收回合或用户已经确认后的后续回合。
-- 📌 更新 `switch_to_subagent.context` 与 `switch_to_mainagent.summary` 的 LLM-facing 元数据，分别要求 `kind="delegate"`／`kind="return"`，禁止使用命令式摘要暗示已经获得执行授权。
+- ✅ 在 `data/prompts/general_agent/04_tools.md` 的 ToolAuthority 后新增 canonical `HandoffContextContract`，定义 envelope、接收回合和双向行为；未修改 `07_input_format.md` 或 `08_output_format.md`。
+- ✅ 更新 `src/get_me_in/bootstrap.py` 中的 Main AgentSpec：创建 delegate context 时使用中性结构化摘要并区分已确认／推断；收到 return context 后本回合不得调用工具或再次路由，只汇报并询问用户。只改 AgentSpec 元数据，未改 composition 行为。
+- ✅ 更新 Resume AgentSpec：收到 delegate context 后本回合不得调用 Plan、Memory、workspace 或 artifact 工具，只复述并确认；原“信息足够直接执行”和“避免为了确认而确认”仅适用于非 handoff 接收回合或用户已经确认后的后续回合。
+- ✅ 更新 `switch_to_subagent.context` 与 `switch_to_mainagent.summary` 的 LLM-facing 元数据，分别要求 `kind="delegate"`／`kind="return"`，禁止使用命令式摘要暗示已经获得执行授权。
 - ⛔ 不修改 Runtime、Orchestrator、CLI、Session／handoff typed state、审批、capability、handler、InputFormat／OutputFormat、依赖或数据。
 
 ### 3. 验证、checkpoint 与 smoke
 
-- 📌 更新 ToolCatalog／bootstrap Prompt 回归，锁定 canonical contract、双向 ToolDefinition 文字和 Main／Resume 冲突消除；既有 Orchestrator／CLI 自动推进测试保持不变。
-- 📌 运行定向测试、完整 unittest、`compileall` 与 `git diff --check`；先建立文档 checkpoint，再建立独立代码 checkpoint。
+- ✅ 更新 ToolCatalog／PromptRenderer／bootstrap Prompt 回归，锁定 canonical contract、双向 ToolDefinition 文字和 Main／Resume 冲突消除；既有 Orchestrator／CLI 自动推进行为保持不变。
+- ✅ 50 项定向测试、完整 unittest 282/282、`compileall` 与 `git diff --check` 通过；初始文档 checkpoint 为 `43bbdfd`，文件所有权补充 checkpoint 为 `161dc39`，代码 checkpoint 为 `8dd876c`。
 - 📌 工程验证后由用户执行真实 provider smoke：Main→Resume 在审批后只确认而不读 workspace；Resume→Main 返回后只汇报／询问而不继续调用工具；用户下一条确认后才允许工作。
 - ⛔ 本修正不声明真实模型行为已经验收，不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
 

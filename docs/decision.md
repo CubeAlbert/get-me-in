@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 253 — 统一 HandoffContext Prompt-only 工程修正完成](#决策-253--统一-handoffcontext-prompt-only-工程修正完成)
 - [决策 252 — 纠正 Main AgentSpec 的实际文件所有权](#决策-252--纠正-main-agentspec-的实际文件所有权)
 - [决策 251 — 统一双向 HandoffContext 的接收回合契约](#决策-251--统一双向-handoffcontext-的接收回合契约)
 - [决策 250 — query_memory 改为显式请求或必要信息询问未果后的单次兜底](#决策-250--query_memory-改为显式请求或必要信息询问未果后的单次兜底)
@@ -5959,3 +5960,24 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 用户已经授权修改 Main AgentSpec；纠正实际承载文件是落实该授权所必需的事实修正，不扩大 LLM-facing 语义范围。
 - 独立记录而不回写决策 251，保持决策日志追加式，同时把 composition root 中允许修改的区段限制到最小。
+
+---
+
+### 决策 253 —— 统一 HandoffContext Prompt-only 工程修正完成
+
+**背景：** 决策 251／252 的文档与文件边界确认后，已按白名单完成双向 HandoffContext 提示词修正和自动化回归。
+
+**结果：**
+
+- `data/prompts/general_agent/04_tools.md` 已包含 canonical `HandoffContextContract`：完整 envelope、delegate／return 方向、基于最新输入的接收回合判断、禁止工具调用、`finish` 后等待真实用户消息。
+- Main AgentSpec 已要求创建中性 `kind="delegate"` context，并在收到 `kind="return"` 时只汇报／询问；Resume AgentSpec 已把 handoff 接收确认设为强制例外，消除“信息足够直接执行”和“避免为了确认而确认”的冲突。
+- `switch_to_subagent.context` 与 `switch_to_mainagent.summary` 已要求方向性完整 envelope，区分 confirmed／inferred／completed／pending，并禁止命令式摘要暗示执行授权。
+- ToolCatalog、PromptRenderer 和 production bootstrap 回归已锁定完整契约实际进入 Main／Resume system prompt；修正测试定位了独立 `<SubAgents>` 区块，避免工具说明中的同名标签造成歧义。
+- 50 项定向测试通过；完整 `uv run python -m unittest discover -s tests/get_me_in -t .` 为 282/282；`uv run python -m compileall src/get_me_in main.py` 与 `git diff --check` 通过。
+- 初始文档 checkpoint 为 `43bbdfd`，Main AgentSpec 文件所有权补充 checkpoint 为 `161dc39`，代码 checkpoint 为 `8dd876c`。
+- 未修改 Runtime、Orchestrator、CLI、Session／handoff typed state、审批、capability、handler、`07_input_format.md`、`08_output_format.md`、依赖或数据；没有进入 R9。
+
+**剩余门禁：**
+
+- 工程证据只能证明 Prompt 已正确生成，不能证明真实 provider 一定服从。用户需验证 Main→Resume 切换后 Resume 只确认且不调用 `workspace_list` 等工具，Resume→Main 返回后 Main 只汇报／询问，下一条真实用户确认后才开始工作。
+- 同一 smoke 会话可继续复验 R8-F-C 的 finish／tool call 和 query_memory 的被动触发边界；通过后再建立完成态文档 checkpoint。

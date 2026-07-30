@@ -1,17 +1,18 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；正在实施 R8 后续独立修正“统一 HandoffContext 接收回合契约”，R9 仍未授权
+**当前阶段：** R8 已完成并通过最终用户审查；R8 后续独立修正“统一 HandoffContext 接收回合契约”已完成工程 checkpoint，R9 仍未授权
 
-**当前任务：** 按决策 251／252 先建立文档 checkpoint，再仅通过通用 Prompt、`bootstrap.py` 内 Main AgentSpec、Resume AgentSpec 与 ToolDefinition 元数据统一 Main→Sub 和 Sub→Main 的 HandoffContext；不修改 composition 行为、Runtime、Orchestrator、CLI 或 typed state
+**当前任务：** 决策 251／252 的统一 HandoffContext Prompt-only 修正已由代码提交 `8dd876c` 完成；Main→Sub 与 Sub→Main 的接收回合均先确认／汇报并等待下一条真实用户消息
 
-**当前子任务：** 完成 HandoffContext 文档 checkpoint；随后实施提示词与回归测试，验证 handoff 接收回合只确认／汇报并等待下一条真实用户消息。
+**当前子任务：** 停止工程修改，由用户执行 HandoffContext、R8-F-C 与 query_memory 触发边界的真实 provider smoke。
 
-**当前阻塞：** 无；HandoffContext 设计与文件边界已获用户确认。R8-F-C 与 query_memory 的真实 provider smoke 仍待用户验证，R9 未授权。
+**当前阻塞：** 无；HandoffContext 50 项定向测试、完整 unittest 282/282、`compileall` 与 `git diff --check` 已通过。真实模型行为仍待用户验证，R9 未授权。
 
-**会话交接说明：** 决策 251 将 HandoffContext 定义为 Agent 间控制权交接摘要，而不是用户消息或执行授权。Main→Sub 使用 `kind="delegate"`；Sub→Main 使用 `kind="return"`。最新输入包含 HandoffContext 的模型回合统一称为“handoff 接收回合”：该回合不得调用任何工具；delegate 接收方只能复述任务、区分已确认与推断信息并请用户确认／纠正，return 接收方只能汇报已完成／阻塞／待决定事项并询问下一步，然后以 `finish` 等待真实用户输入。现有 Orchestrator 注入与 CompleteHandoff 机制、CLI 自动 `Continue`、审批语义、InputFormat／OutputFormat 均保持不变。决策 249 的单一 Entity／双格式投影与决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
+**会话交接说明：** 决策 251 将 HandoffContext 定义为 Agent 间控制权交接摘要，而不是用户消息或执行授权；决策 252 纠正 Main AgentSpec 实际由 `bootstrap.py` 持有。Main→Sub 使用 `kind="delegate"`；Sub→Main 使用 `kind="return"`。最新输入包含 HandoffContext 的模型回合统一称为“handoff 接收回合”：该回合不得调用任何工具；delegate 接收方只能复述任务、区分已确认与推断信息并请用户确认／纠正，return 接收方只能汇报已完成／阻塞／待决定事项并询问下一步，然后以 `finish` 等待真实用户输入。`04_tools.md`、Main／Resume AgentSpec 和两个 handoff ToolDefinition 已同步；现有 Orchestrator 注入与 CompleteHandoff 机制、CLI 自动 `Continue`、审批语义、InputFormat／OutputFormat 均保持不变。决策 249 的单一 Entity／双格式投影与决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 决策 251 文档 checkpoint 已建立；先按决策 252 纠正 Main AgentSpec 的实际文件所有权并建立补充文档 checkpoint，随后修改 `04_tools.md`、Main／Resume AgentSpec、handoff ToolDefinition 与相关测试，完成定向／全量验证和代码 checkpoint。之后由用户合并执行 HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke；不得检查、设计或实施 R9。
+**下一步：** 由用户执行真实 provider smoke：Main→Resume 在切换审批后只确认交接内容、不调用 `workspace_list` 等工具；Resume→Main 返回后 Main 只汇报／询问、不继续调用工具；用户下一条确认后才开始工作。同时复验 R8-F-C 与 query_memory 触发边界。smoke 通过后再建立完成态文档 checkpoint；不得检查、设计或实施 R9。
 
+253. **统一 HandoffContext Prompt-only 工程修正完成** — canonical `HandoffContextContract`、双向 handoff ToolDefinition 和 Main／Resume AgentSpec 已同步；Runtime、Orchestrator、CLI、typed state 与 InputFormat／OutputFormat 未修改。50 项定向测试、完整 unittest 282/282、`compileall` 和 `git diff --check` 通过，代码 checkpoint 为 `8dd876c`；真实模型行为仍需用户 smoke。
 252. **纠正 Main AgentSpec 的实际文件所有权** — 仓库不存在 `src/get_me_in/agents/main.py`；Main AgentSpec 实际定义在 composition root `src/get_me_in/bootstrap.py`。HandoffContext 实施白名单以 `bootstrap.py` 的 AgentSpec 元数据段替换错误路径，禁止修改该文件的装配、资源所有权或 Runtime 行为；其余决策 251 边界不变。
 251. **统一双向 HandoffContext 的接收回合契约** — Main→Sub 与 Sub→Main 使用同一个结构化 HandoffContext envelope；handoff 只转移控制权，不授予执行业务动作。接收回合禁止工具调用，delegate 先向用户确认，return 先向用户汇报并询问下一步；只改 Prompt／AgentSpec／ToolDefinition 元数据与回归测试，不改 Runtime、Orchestrator、CLI、InputFormat／OutputFormat 或 typed state。
 250. **query_memory 改为显式请求或必要信息询问未果后的单次兜底** — 不再把 Memory 作为主动个性化、补充画像或减少普通提问的常规手段。用户明确要求查询已保存个人信息时可调用；否则只有完成当前任务必须获得的信息不在当前上下文、且已经询问用户仍未获得时，才可进行一次聚焦查询。用户拒绝、信息可选、当前上下文已有答案、问候／能力介绍／简单路由／闲聊及零命中后的近义词重试均禁止；Main 元数据已同步收窄。本修正独立于 R8-F-C 与 R9。
