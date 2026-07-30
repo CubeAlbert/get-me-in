@@ -256,7 +256,7 @@ class BootstrapTests(unittest.TestCase):
                     "- 对属于求职领域的请求进行意图分类。",
                     "- 仅从当前<SubAgents>穷尽清单中选择与用户需求匹配的子Agent。",
                     "- 在切换Agent前收集必要上下文信息。",
-                    "- 必要时读取用户历史memory辅助理解用户背景。",
+                    "- 仅在用户明确要求查询历史个人信息，或完成路由必须获得的个人信息经询问仍未获得时，才使用query_memory作一次针对性兜底。",
                     "- 使用switch_to_subagent工具完成会话入口切换。",
                     "- 在无法确定用户需求时，通过提问澄清。",
                     "- 问候或用户询问能力时，只按当前<SubAgents>的真实职责介绍可用服务。",
@@ -296,7 +296,7 @@ class BootstrapTests(unittest.TestCase):
                 (
                     "- 优先保持连续对话体验。",
                     "- 提问时尽量减少用户负担。",
-                    "- 尽量利用已有memory减少重复询问。",
+                    "- 优先使用当前对话信息；不得为主动个性化、补充用户画像或减少普通提问而查询memory。",
                     "- 使用简洁明确的语言沟通。",
                 ),
             ),
@@ -479,6 +479,14 @@ class BootstrapTests(unittest.TestCase):
                 self.assertIn(tool_name, resume_prompt)
             self.assertIn(
                 "<DoNotUseWhen>需要查询用户个人记忆时 — 用 query_memory</DoNotUseWhen>",
+                resume_prompt,
+            )
+            self.assertIn(
+                "<UseWhen>仅在以下情况使用：用户明确要求查询其已保存的个人背景",
+                resume_prompt,
+            )
+            self.assertIn(
+                "<DoNotUseWhen>不要为了主动了解用户、补充用户画像、个性化回答",
                 resume_prompt,
             )
             self.assertIn(

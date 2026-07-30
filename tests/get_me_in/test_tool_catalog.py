@@ -117,13 +117,31 @@ class ProductionToolMetadataTests(unittest.TestCase):
             frozenset({Capability.KNOWLEDGE_QUERY}),
             reference.policy.required_capabilities,
         )
-        self.assertIn("只查询用户个人记忆", memory.do_not_use_when)
         self.assertIn("query_memory", reference.do_not_use_when)
         self.assertEqual(5, memory.schema.properties["top_k"].default)
         self.assertEqual(
             ("fact", "preference"),
             memory.schema.properties["memory_type"].allowed_values,
         )
+
+    def test_query_memory_is_explicit_or_last_resort_only(self) -> None:
+        memory = self.by_name["query_memory"]
+
+        self.assertEqual(
+            "仅在以下情况使用：用户明确要求查询其已保存的个人背景、技术栈、经历、偏好或期望；"
+            "或者完成当前任务必须获得某项个人信息，该信息不在当前对话中，已先向用户询问但仍未获得有效答案，"
+            "需要将历史记忆作为最后一次补充尝试。查询必须聚焦于当前明确缺失的信息。",
+            memory.use_when,
+        )
+        self.assertEqual(
+            "不要为了主动了解用户、补充用户画像、个性化回答、减少普通提问或确认已知信息而调用。"
+            "当前对话、文件或工具结果已经提供所需信息时不要调用；尚未先向用户询问时不要调用；"
+            "缺失信息只是可选信息、不影响任务继续时不要调用；问候、能力介绍、简单路由或闲聊时不要调用；"
+            "用户拒绝提供该信息、要求不要访问记忆或查询公共参考数据时不要调用。"
+            "查询无结果后不要更换近义词反复尝试，应回到用户询问。",
+            memory.do_not_use_when,
+        )
+        self.assertEqual(ConfirmationMode.NEVER, memory.policy.confirmation)
 
         edit = self.by_name["workspace_edit"]
         self.assertIn("workspace_read", edit.use_when)
