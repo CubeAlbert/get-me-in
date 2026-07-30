@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from dataclasses import replace
@@ -74,6 +75,20 @@ class PromptRendererTests(unittest.TestCase):
         positions = tuple(rendered.index(section) for section in sections)
 
         self.assertEqual(tuple(sorted(positions)), positions)
+
+    def test_input_format_is_the_locked_history_projection(self) -> None:
+        input_format = Path("data/prompts/general_agent/07_input_format.md")
+
+        self.assertEqual(
+            "0917629fa08e67910501debccda4747706ace7c8e6ea7e6ee08804aa94e01d81",
+            hashlib.sha256(input_format.read_bytes()).hexdigest(),
+        )
+        source = input_format.read_text(encoding="utf-8")
+        self.assertIn('"event_type"', source)
+        self.assertIn('"tool_call_id"', source)
+        self.assertIn('"event_payload"', source)
+        self.assertIn('"plan_status"', source)
+        self.assertNotIn('"thinking"', source)
 
     def test_rejects_unsupported_template_variable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:

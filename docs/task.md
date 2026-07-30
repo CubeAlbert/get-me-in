@@ -665,7 +665,7 @@
 
 ### 3. 单一 MessageFormat
 
-- 📌 `data/prompts/general_agent/07_input_format.md` 保持内容不变；不得删除、重命名或并入其他文件。
+- ✅ `data/prompts/general_agent/07_input_format.md` 保持内容不变；不得删除、重命名或并入其他文件。已增加内容 hash 与 flat history 字段回归锁定。
 - 📌 修改独立 `08_output_format.md`：finish 使用 `event_type=finish`；tool_call 使用 `event_type=tool_call`、`tool` 与 object `event_payload`，参数直接放在 event_payload。
 - 📌 finish 的 thinking 在 Prompt 中写为“通常应尽量提供简短、非空、用户可见摘要”，但 parser 继续允许省略／null／空白；tool_call thinking 可选。
 - 📌 保留 `render_output_format()`；完整 system prompt 同时包含 InputFormat／OutputFormat，Runtime repair 只注入 OutputFormat；`09_reserved.md` 继续最后。
