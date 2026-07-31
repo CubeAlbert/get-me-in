@@ -145,6 +145,27 @@ class ResumeToolTests(unittest.TestCase):
                 with self.assertRaisesRegex(ResumeArtifactError, "未找到 pdflatex"):
                     adapter.build_pdf(Path("resume.tex"), workspace=workspace, cancellation=CancellationToken())
 
+    def test_local_adapter_disables_tex_shell_escape_and_preserves_process_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            workspace = LocalWorkspace(root / "workspace")
+            workspace.write(Path("resume.tex"), "\\documentclass{article}")
+            runner = _RecordingRunner()
+            adapter = LocalResumeArtifacts(root, runner, 37)
+            cancellation = CancellationToken()
+
+            with patch("src.get_me_in.adapters.local_resume_artifacts.shutil.which", return_value="pdflatex.exe"):
+                result = adapter.build_pdf(Path("resume.tex"), workspace=workspace, cancellation=cancellation)
+
+            self.assertEqual(ProcessResult(0, "", ""), result)
+            self.assertEqual(
+                ("pdflatex.exe", "-no-shell-escape", "-synctex=1", "-interaction=nonstopmode", "resume.tex"),
+                runner.command,
+            )
+            self.assertEqual(workspace.resolve(Path(".")), runner.cwd)
+            self.assertEqual(37, runner.timeout_seconds)
+            self.assertIs(cancellation, runner.cancellation)
+
     def test_local_adapter_merges_pdf_pages_in_requested_order(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -234,4 +255,25 @@ class _Artifacts:
 
 class _Runner:
     def run(self, *args: object, **kwargs: object) -> ProcessResult:
+        return ProcessResult(0, "", "")
+
+
+class _RecordingRunner:
+    command: tuple[str, ...] | None = None
+    cwd: Path | None = None
+    timeout_seconds: float | None = None
+    cancellation: object | None = None
+
+    def run(
+        self,
+        command: tuple[str, ...],
+        *,
+        cwd: Path,
+        timeout_seconds: float,
+        cancellation: object,
+    ) -> ProcessResult:
+        self.command = command
+        self.cwd = cwd
+        self.timeout_seconds = timeout_seconds
+        self.cancellation = cancellation
         return ProcessResult(0, "", "")

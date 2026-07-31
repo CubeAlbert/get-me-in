@@ -1,4 +1,4 @@
-"""Local reader that permits only paths explicitly authorized by the frontend."""
+"""Local reader for files approved by the customer-file tool."""
 
 from pathlib import Path
 
@@ -8,15 +8,10 @@ from src.get_me_in.ports.external_files import ExternalFileContent
 
 
 class AuthorizedFileReader:
-    def __init__(self, authorized_paths: frozenset[Path] = frozenset()) -> None:
-        self._authorized_paths = frozenset(path.resolve() for path in authorized_paths)
-
     def read(self, path: Path) -> ExternalFileContent:
         resolved = path.resolve()
         if not resolved.is_absolute():
             raise ValueError("External file path must be absolute")
-        if resolved not in self._authorized_paths:
-            raise PermissionError(f"Path was not explicitly authorized: {path}")
         suffix = resolved.suffix.lower()
         if suffix in {".txt", ".md"}:
             match = from_bytes(resolved.read_bytes()).best()

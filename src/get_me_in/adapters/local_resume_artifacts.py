@@ -68,7 +68,13 @@ class LocalResumeArtifacts:
         if pdflatex is None:
             raise ResumeArtifactError("系统中未找到 pdflatex，无法编译 PDF")
         return self._process_runner.run(
-            (pdflatex, "-synctex=1", "-interaction=nonstopmode", source.name),
+            (
+                pdflatex,
+                "-no-shell-escape",
+                "-synctex=1",
+                "-interaction=nonstopmode",
+                source.name,
+            ),
             cwd=source.parent,
             timeout_seconds=self._build_timeout_seconds,
             cancellation=cancellation,
