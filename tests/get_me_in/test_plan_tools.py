@@ -43,7 +43,7 @@ class PlanToolTests(unittest.TestCase):
         )
 
         self.assertIsInstance(outcome, ToolFailure)
-        self.assertEqual("invalid_plan_status", outcome.code)
+        self.assertEqual("invalid_argument_value", outcome.code)
 
 
 class _Ids:

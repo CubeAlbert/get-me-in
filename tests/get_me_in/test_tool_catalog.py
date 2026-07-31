@@ -310,6 +310,66 @@ class ToolExecutorTests(unittest.TestCase):
         self.assertIsInstance(outcome, ToolSuccess)
         self.assertIsNone(outcome.output)
 
+    def test_allowed_values_and_list_items_are_checked_before_handlers(self) -> None:
+        seen: list[object] = []
+        definition = ToolDefinition(
+            name="schema_boundary",
+            purpose="validate schema boundaries",
+            use_when="testing",
+            do_not_use_when="otherwise",
+            expected_output="validated arguments",
+            schema=ToolSchema(
+                {
+                    "mode": ToolParameter(str, "mode", allowed_values=("safe", "fast")),
+                    "items": ToolParameter(list, "items", items=str),
+                },
+                frozenset({"mode", "items"}),
+            ),
+            policy=ToolPolicy(),
+            handler=lambda arguments, context: seen.append(arguments) or ToolSuccess(arguments),
+        )
+        executor = ToolExecutor(ToolCatalog((definition,)))
+
+        invalid_value = executor.execute(
+            "value", "schema_boundary", {"mode": "unsafe", "items": ["ok"]}, self.context
+        )
+        invalid_item = executor.execute(
+            "item", "schema_boundary", {"mode": "safe", "items": ["ok", 1]}, self.context
+        )
+        values = ["ok"]
+        valid = executor.execute(
+            "valid", "schema_boundary", {"mode": "safe", "items": values, "unknown": "ignored"}, self.context
+        )
+
+        self.assertEqual("invalid_argument_value", invalid_value.code)
+        self.assertEqual("invalid_argument_item_type", invalid_item.code)
+        self.assertIsInstance(valid, ToolSuccess)
+        self.assertIs(values, seen[0]["items"])
+        self.assertEqual({"mode", "items"}, set(seen[0]))
+
+    def test_production_schema_boundaries_reject_invalid_values_before_handlers(self) -> None:
+        approved = ToolContext("session", AgentKey.MAIN, CancellationToken(), approved=True)
+        resume = ToolExecutor(ToolCatalog(build_resume_tools()))
+        choices = ToolExecutor(ToolCatalog(build_switch_tools()))
+        workspace = ToolExecutor(ToolCatalog(build_workspace_tools()))
+
+        invalid_template = resume.execute(
+            "template", "copy_template", {"template": "invalid", "prefix": "resume"}, approved
+        )
+        invalid_choices = choices.execute(
+            "choices", "provide_choices", {"question": "pick", "choices": [1]}, self.context
+        )
+        invalid_edits = workspace.execute(
+            "edits",
+            "workspace_edit",
+            {"path": "file.txt", "revision": "rev", "edits": ["invalid"]},
+            approved,
+        )
+
+        self.assertEqual("invalid_argument_value", invalid_template.code)
+        self.assertEqual("invalid_argument_item_type", invalid_choices.code)
+        self.assertEqual("invalid_argument_item_type", invalid_edits.code)
+
 
 def _tool(
     name: str,

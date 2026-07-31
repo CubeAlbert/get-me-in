@@ -112,4 +112,17 @@ class ToolExecutor:
                     "invalid_argument_type",
                     f"Argument {name} must be {expected_type.__name__}",
                 )
+            if parameter.allowed_values and value not in parameter.allowed_values:
+                allowed = ", ".join(repr(item) for item in parameter.allowed_values)
+                return ToolFailure(
+                    "invalid_argument_value",
+                    f"Argument {name} must be one of: {allowed}",
+                )
+            if parameter.items is not None:
+                for index, item in enumerate(value):
+                    if not isinstance(item, parameter.items):
+                        return ToolFailure(
+                            "invalid_argument_item_type",
+                            f"Argument {name}[{index}] must be {parameter.items.__name__}",
+                        )
         return None
