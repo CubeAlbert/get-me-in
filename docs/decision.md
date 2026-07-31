@@ -6136,3 +6136,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 启动时迁移或删除根目录旧 dump —— 超出本专项数据边界，拒绝。
 - 只在测试中禁止若干 tag —— 不能覆盖生产 Renderer 的全部动态输出点，拒绝。
+
+---
+
+### 决策 260 —— Q6 依赖升级子任务完成但完整验证阻塞
+
+**背景：** Q6 只读 outdated／audit 显示目标依赖存在已确认升级路径：`sentence-transformers 5.6.0`、`torch 2.10.0`、`setuptools 81.0.0`；升级前 audit 共 6 个公告。完整验证另外发现 `tests/get_me_in/test_retrieval_tools.py` 仍期待 Q3 之前 handler 的错误码。
+
+**决定：**
+
+- 只在 `uv.lock` 中定向升级 `sentence-transformers` 至 5.6.1、`torch` 至 2.13.0、`setuptools` 至 83.0.0；不把 torch 或 setuptools 新增为直接业务依赖。
+- 接受 lock 中 CUDA 12→13 的 Linux 传递依赖变化，保留 universal markers；`pyproject.toml` 未修改，未执行 Ubuntu/Linux 安装 smoke。
+- Windows `uv sync --locked` 通过；真实 Knowledge 使用临时 v2 目录和本地模型缓存离线完成 prepare/query/close：state ready、6 sources added、3 hits、worker close 无 issue。远端模型 HEAD 首次请求被断开，不能作为通过证据，已由本地缓存复核覆盖。
+- 升级后 audit 从 6 个公告降为 `chromadb 1.5.9` 的 2 个无修复公告；不降级、不换源，继续仅使用嵌入式 `PersistentClient`。
+- `compileall` 与 `git diff --check` 通过；完整 unittest 293 项中 292 通过、1 项失败。失败测试期待 `invalid_reference_category`，但 Q3 已确认的外层 `allowed_values` 在 handler 前返回 `invalid_argument_value`。该测试不在 Q6 依赖白名单内，暂不修改，等待用户授权最小测试迁移。
+- 依赖／lock checkpoint 为 `48e3773`；Q6 整体未完成，Q7 与 Linux smoke 继续开放。
+
+**理由：**
+
+- 仅更新已确认存在安全修复的目标依赖，避免为解决 Chroma 审计公告而引入未经批准的降级、换源或服务边界变化。
+- 将 Q3 旧断言视为范围外 fixture 漂移，避免用 Q6 依赖提交隐式扩大测试迁移范围。
+
+**曾考虑的替代方案：**
+
+- 顺手修改 `test_retrieval_tools.py` 使完整 unittest 变绿 —— 超出当前 Q6 依赖白名单，需用户单独授权，暂不执行。
+- 降级或切换 Chroma 来源消除审计告警 —— 当前无修复版本且违背既有 PersistentClient／源配置边界，拒绝。
