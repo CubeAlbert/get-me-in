@@ -134,7 +134,7 @@ class ResumeToolTests(unittest.TestCase):
             self.assertEqual("中文", workspace.read(Path("resume/candidate_CHN.tex")).content)
             self.assertEqual("说明", workspace.read(Path("resume/README.md")).content)
 
-    def test_local_adapter_reports_missing_pdflatex(self) -> None:
+    def test_local_adapter_reports_missing_xelatex(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workspace = LocalWorkspace(root / "workspace")
@@ -142,10 +142,10 @@ class ResumeToolTests(unittest.TestCase):
             adapter = LocalResumeArtifacts(root, _Runner(), 60)
 
             with patch("src.get_me_in.adapters.local_resume_artifacts.shutil.which", return_value=None):
-                with self.assertRaisesRegex(ResumeArtifactError, "未找到 pdflatex"):
+                with self.assertRaisesRegex(ResumeArtifactError, "未找到 xelatex"):
                     adapter.build_pdf(Path("resume.tex"), workspace=workspace, cancellation=CancellationToken())
 
-    def test_local_adapter_disables_tex_shell_escape_and_preserves_process_contract(self) -> None:
+    def test_local_adapter_uses_xelatex_and_preserves_process_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             workspace = LocalWorkspace(root / "workspace")
@@ -154,12 +154,12 @@ class ResumeToolTests(unittest.TestCase):
             adapter = LocalResumeArtifacts(root, runner, 37)
             cancellation = CancellationToken()
 
-            with patch("src.get_me_in.adapters.local_resume_artifacts.shutil.which", return_value="pdflatex.exe"):
+            with patch("src.get_me_in.adapters.local_resume_artifacts.shutil.which", return_value="xelatex.exe"):
                 result = adapter.build_pdf(Path("resume.tex"), workspace=workspace, cancellation=cancellation)
 
             self.assertEqual(ProcessResult(0, "", ""), result)
             self.assertEqual(
-                ("pdflatex.exe", "-no-shell-escape", "-synctex=1", "-interaction=nonstopmode", "resume.tex"),
+                ("xelatex.exe", "-no-shell-escape", "-synctex=1", "-interaction=nonstopmode", "resume.tex"),
                 runner.command,
             )
             self.assertEqual(workspace.resolve(Path(".")), runner.cwd)

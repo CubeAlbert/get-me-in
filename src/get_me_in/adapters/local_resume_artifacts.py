@@ -19,7 +19,7 @@ class ResumeArtifactError(ValueError):
 
 
 class LocalResumeArtifacts:
-    """在 R7 前执行模板复制与 pdflatex 编译，但不持久化 Artifact 记录。"""
+    """执行模板复制与 XeLaTeX 编译，但不持久化 Artifact 记录。"""
 
     _templates = {"chn": "CHN_Template.tex", "en": "EN_Template.tex"}
 
@@ -64,12 +64,12 @@ class LocalResumeArtifacts:
             raise ResumeArtifactError(f"文件不存在: {path}")
         if source.suffix.lower() != ".tex":
             raise ResumeArtifactError("build_pdf 仅支持 .tex 文件")
-        pdflatex = shutil.which("pdflatex")
-        if pdflatex is None:
-            raise ResumeArtifactError("系统中未找到 pdflatex，无法编译 PDF")
+        xelatex = shutil.which("xelatex")
+        if xelatex is None:
+            raise ResumeArtifactError("系统中未找到 xelatex，无法编译 PDF")
         return self._process_runner.run(
             (
-                pdflatex,
+                xelatex,
                 "-no-shell-escape",
                 "-synctex=1",
                 "-interaction=nonstopmode",

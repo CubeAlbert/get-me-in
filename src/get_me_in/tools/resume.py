@@ -67,7 +67,7 @@ def build_resume_tools() -> tuple[ToolDefinition, ...]:
             name="build_pdf",
             purpose="编译工作区中的 .tex 文件为 PDF。",
             use_when="简历 LaTeX 文件填充完成后，需要生成 PDF 时",
-            do_not_use_when=".tex 文件不存在或 pdflatex 环境未安装时",
+            do_not_use_when=".tex 文件不存在或 xelatex 环境未安装时",
             expected_output='{"stdout": "...", "stderr": "...", "exit_code": 0}',
             schema=ToolSchema(
                 {

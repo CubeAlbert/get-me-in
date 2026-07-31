@@ -8,6 +8,8 @@
 
 ## 目录
 
+- [决策 266 — 确认 Windows/Linux Resume XeLaTeX 真实 smoke 已完成](#决策-266--确认-windowslinux-resume-xelatex-真实-smoke-已完成)
+- [决策 265 — 统一 Resume 跨平台编译引擎为 XeLaTeX](#决策-265--统一-resume-跨平台编译引擎为-xelatex)
 - [决策 264 — 完成 R9 前质量加固 Q7 与文档状态收口](#决策-264--完成-r9-前质量加固-q7-与文档状态收口)
 
 - [决策 254 — 建立 R9 前质量加固独立执行计划并暂停实施](#决策-254--建立-r9-前质量加固独立执行计划并暂停实施)
@@ -6115,8 +6117,6 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 新增独立 `WorkspacePort.create()` —— 会扩展公共 port，且 Q4 已明确要求在现有 write 边界增加模式，拒绝。
 - 让 `workspace_read` 继续调用 `read_lines` —— 保留重复读取和可能的 snapshot 漂移，拒绝。
 
----
-
 ### 决策 259 —— 完成 R9 前质量加固 Q5
 
 **背景：** Q5 审查确认 session dump 与 canonical session 文件共用根目录，历史 `*.dump.json` 会被 session list 当作可恢复 session；Renderer 还把模型、工具、provider、文件和用户输入直接插入 Rich markup，存在格式注入风险。
@@ -6244,3 +6244,46 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 保留 Q7 未完成状态等待再次 smoke —— 已有用户确认和独立验证证据，属于重复验收，拒绝。
 - 借文档收口进入 R9 —— 超出当前授权，拒绝。
+
+---
+
+### 决策 265 —— 统一 Resume 跨平台编译引擎为 XeLaTeX
+
+**背景：** 中文简历模板使用 `ctex` 与 `fontset=fandol`，Linux 上使用 `pdflatex` 会触发 CTeX fontset 不可用错误；Windows 与 Linux 的自动字体选择也可能导致输出字体不一致。此前适配器固定查找 `pdflatex`，与中文模板的 Unicode 字体方案不匹配。
+
+**决定：**
+
+- 中文模板保留 `CJK` 并固定使用 `\usepackage[UTF8,fontset=fandol]{ctex}`；英文模板移除 `CJK`、`ctex` 等中文环境包。
+- `LocalResumeArtifacts.build_pdf()` 统一查找并执行 `xelatex`，保留 `-no-shell-escape`、`-synctex=1`、`-interaction=nonstopmode`、工作目录、超时、取消和 `ProcessResult` stdout/stderr 契约。
+- 不修改 `SubprocessRunner` 的 stdout/stderr 捕获；继续由 `ArtifactService._bound_log()` 对持久化编译日志执行工作区脱敏、UTF-8 安全截断，并保存原始字节数与截断标记。
+- 同步 Resume 工具描述、缺失编译器错误提示和定向测试；不改写历史中记录的 pdflatex 验证事实，不进入 R9。
+
+**理由：**
+
+- XeLaTeX 原生支持 UTF-8 与 CTeX/xeCJK 字体配置，能够让中文和英文模板在 Windows/Linux 使用同一编译引擎；显式 Fandol 字体减少操作系统字体差异。
+- 两种引擎的输出内容可能不同，但当前边界只要求字符串化捕获和有界持久化，不依赖具体日志文本。定向 Resume、SubprocessRunner、Artifact 测试 20/20、`compileall` 与 `git diff --check` 均通过。
+
+**曾考虑的替代方案：**
+
+- 按平台分别选择 `pdflatex`／`xelatex` —— 会使中文模板行为和字体结果依赖操作系统，拒绝。
+- 保持 `pdflatex` 并仅补装 Fandol —— CTeX 的 Fandol 配置不适用于当前 pdfLaTeX 中文方案，不能解决引擎不匹配，拒绝。
+
+**未完成验证：** 本机 Windows MiKTeX 首次初始化访问 `C:\Users\Albert\AppData\Roaming\MiKTeX\2.9` 被拒绝，真实 Windows 中文／英文 PDF smoke 待初始化修复后执行。
+
+---
+
+### 决策 266 —— 确认 Windows/Linux Resume XeLaTeX 真实 smoke 已完成
+
+**背景：** 决策 265 将 Resume 编译器统一为 XeLaTeX，并因本机 MiKTeX 首次初始化访问权限错误暂记 Windows smoke 未完成；用户随后更正说明已在 Windows 和 Linux 分别完成中文与英文模板的真实 XeLaTeX 编译验证。
+
+**决定：**
+
+- 将 Windows/Linux 中文与英文 XeLaTeX 真实 PDF smoke 记录为已完成。
+- 清除 `docs/current.md` 中此前的 MiKTeX 初始化阻塞和待执行 smoke；R9 独立授权门禁保持关闭。
+- 保留决策 265 的原始未完成验证记录作为当时状态，不改写历史决策正文。
+
+**理由：** 用户提供了直接的跨平台真实编译验收结果；此前本机诊断失败不应覆盖用户已完成的项目级验证。
+
+**曾考虑的替代方案：**
+
+- 保留 Windows smoke 待执行状态 —— 与用户已提供的验证事实冲突，拒绝。
