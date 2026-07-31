@@ -6087,3 +6087,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 让每个 handler 自行检查 allowed values／list items —— 会重复实现且允许非法值先进入业务层，拒绝。
 - 递归校验任意嵌套 mapping/list —— 超出已确认的一层 schema 边界，拒绝。
 - 在校验器中注入默认值或转换参数 —— 会改变既有 handler 输入契约，拒绝。
+
+---
+
+### 决策 258 —— 完成 R9 前质量加固 Q4
+
+**背景：** Q4 审查确认 `workspace_write` 通过先 `exists` 再调用默认覆盖写入，存在目标在检查后被创建时被覆盖的竞态；`workspace_read` 还会在已读取 snapshot 后再次调用 `read_lines`，`find_files` 则先完整递归再截断结果。
+
+**决定：**
+
+- `WorkspacePort.write()` 与 `LocalWorkspace.write()` 增加 `replace: bool = True` 选项；默认保持现有覆盖写入，`replace=False` 使用独占文件创建并在目标已存在时抛出 `FileExistsError`，不新增 `create()`。
+- `workspace_write` 删除预先 `exists` 检查，始终调用 `workspace.write(..., replace=False)`，将目标已存在或并发创建返回为 `workspace_path_exists`；replace、edit、Artifact 等既有覆盖路径继续使用默认语义。
+- `workspace_read` 只调用一次 `workspace.read()`，从 `FileSnapshot.content` 计算分页、总行数和 truncated；`find_files` 达到 `max_results` 后停止遍历，再排序有限命中结果。
+- 增加已有目标、竞态写入、单次 snapshot 读取和有限搜索测试；Q4 仅修改已确认白名单中的 3 个生产文件和 2 个既有测试文件，LocalWorkspace／Workspace／Resume Artifact 定向测试 40/40、`compileall` 与 `git diff --check` 通过，代码／测试 checkpoint 为 `b72c4d0`。
+
+**理由：**
+
+- no-replace 必须由写入边界原子承担，不能由调用方的 `exists` 与后续写入组合模拟；默认 replace 保留已有内部覆盖操作的兼容性。
+- snapshot 已是 workspace read 的统一结果，直接投影可消除重复 I/O，并避免两次读取之间的内容漂移。
+- 先收集有限命中再排序满足确定性返回，同时避免在达到上限后继续扫描整个工作区。
+
+**曾考虑的替代方案：**
+
+- 继续在 `workspace_write` 中先 `exists` 再调用默认 `write` —— 无法关闭并发创建竞态，拒绝。
+- 新增独立 `WorkspacePort.create()` —— 会扩展公共 port，且 Q4 已明确要求在现有 write 边界增加模式，拒绝。
+- 让 `workspace_read` 继续调用 `read_lines` —— 保留重复读取和可能的 snapshot 漂移，拒绝。

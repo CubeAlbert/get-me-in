@@ -1,17 +1,18 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；R9 前质量加固 Q1～Q3 已完成，Q4～Q7 仍待实施，R9 仍未授权
+**当前阶段：** R8 已完成并通过最终用户审查；R9 前质量加固 Q1～Q4 已完成，Q5～Q7 仍待实施，R9 仍未授权
 
-**当前任务：** 继续按 `docs/pre-r9-quality-hardening.md` 执行 R9 前质量加固，Q1～Q3 已独立提交，下一切片为 Workspace no-replace 与性能
+**当前任务：** 继续按 `docs/pre-r9-quality-hardening.md` 执行 R9 前质量加固，Q1～Q4 已独立提交，下一切片为 Session dump 与 CLI 输出安全
 
-**当前子任务：** Q4：在现有 `WorkspacePort.write()` 上增加 no-replace 模式，修复 workspace_read 单次 snapshot 读取和 find_files 有限遍历，并补齐竞态／性能回归；HandoffContext、R8-F-C 与 query_memory 触发边界的真实 provider smoke 继续保持开放。
+**当前子任务：** Q5：将新 dump 写入独立目录，保持 canonical session 可恢复，并统一 Renderer 的不可信 Rich 字符串转义；HandoffContext、R8-F-C 与 query_memory 触发边界的真实 provider smoke 继续保持开放。
 
-**当前阻塞：** 无；Q4 尚未开始。Q3 定向测试 67/67、`compileall` 与 `git diff --check` 通过，代码 checkpoint 为 `fb8b3cb`；Q1～Q3 结果不能替代 HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke，R9 未授权。
+**当前阻塞：** 无；Q5 尚未开始。Q4 定向测试 40/40、`compileall` 与 `git diff --check` 通过，代码 checkpoint 为 `b72c4d0`；Q1～Q4 结果不能替代 HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke，R9 未授权。
 
-**会话交接说明：** 决策 254 建立 `docs/pre-r9-quality-hardening.md`，作为后续唯一质量加固执行清单；Q1 由 `425d722` 完成，Q2 由 `26d492d` 完成，Q3 仅修改 `src/get_me_in/application/tool_executor.py` 及两个既有测试文件，并由 `fb8b3cb` 独立提交。Q1 已加入 `pdflatex -no-shell-escape`、客户文件逐次审批边界、绝对路径／格式失败回归；Q2 已加入 typed approval／selection、Plan snapshot 变化投影和自定义 Plan mutation 回归；Q3 已加入 `allowed_values`、一层 list `items` 外层校验、未知参数／默认值／合法参数对象不变和生产工具边界回归；Q4～Q7 仍按专项清单待执行。`AGENTS.md` 已同步为先加载四份核心活跃文档，再按 `docs/current.md` 的显式路由加载当前专项文档。已确认范围包括 TeX `-no-shell-escape`、客户文件逐次审批、typed interaction、Plan snapshot 变化检测、Tool Schema 外层校验、Workspace no-replace 与性能、Session dump 独立目录、CLI Rich 转义和定向依赖升级；原始模型回复日志、Artifact replay 验证、完整 TeX 沙箱、rewind 时间戳、Runtime 整体拆分、ChromaDB 无修复公告和其余可读性／维护性项目均在同一文件保留明确接受或暂缓边界。决策 251／252／253 的 HandoffContext 契约和开放 smoke、决策 249 的单一 Entity／双格式投影、决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
+**会话交接说明：** 决策 254 建立 `docs/pre-r9-quality-hardening.md`，作为后续唯一质量加固执行清单；Q1 由 `425d722` 完成，Q2 由 `26d492d` 完成，Q3 由 `fb8b3cb` 完成，Q4 仅修改 `src/get_me_in/ports/workspace.py`、`src/get_me_in/adapters/local_workspace.py`、`src/get_me_in/tools/workspace.py` 及两个既有测试文件，并由 `b72c4d0` 独立提交。Q1 已加入 `pdflatex -no-shell-escape`、客户文件逐次审批边界、绝对路径／格式失败回归；Q2 已加入 typed approval／selection、Plan snapshot 变化投影和自定义 Plan mutation 回归；Q3 已加入 `allowed_values`、一层 list `items` 外层校验、未知参数／默认值／合法参数对象不变和生产工具边界回归；Q4 已加入 Workspace no-replace、单次 snapshot 读取和 `max_results` 有限遍历；Q5～Q7 仍按专项清单待执行。`AGENTS.md` 已同步为先加载四份核心活跃文档，再按 `docs/current.md` 的显式路由加载当前专项文档。已确认范围包括 TeX `-no-shell-escape`、客户文件逐次审批、typed interaction、Plan snapshot 变化检测、Tool Schema 外层校验、Workspace no-replace 与性能、Session dump 独立目录、CLI Rich 转义和定向依赖升级；原始模型回复日志、Artifact replay 验证、完整 TeX 沙箱、rewind 时间戳、Runtime 整体拆分、ChromaDB 无修复公告和其余可读性／维护性项目均在同一文件保留明确接受或暂缓边界。决策 251／252／253 的 HandoffContext 契约和开放 smoke、决策 249 的单一 Entity／双格式投影、决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 从 `docs/pre-r9-quality-hardening.md` 的 Q4 开始实施，先锁定 Workspace no-replace 与性能的精确生产文件白名单；不得检查、设计或实施 R9。
+**下一步：** 从 `docs/pre-r9-quality-hardening.md` 的 Q5 开始实施，先锁定 Session repository／CLI Renderer 的精确生产文件白名单；不得检查、设计或实施 R9。
 
+258. **完成 R9 前质量加固 Q4** — `WorkspacePort.write()` 增加默认保持覆盖语义的 `replace` 选项，`replace=False` 使用独占创建；`workspace_write` 直接使用 no-replace 并将目标已存在／并发创建映射为 `workspace_path_exists`，`workspace_read` 从一次 `FileSnapshot` 完成分页和行数计算，`find_files` 达到 `max_results` 后停止遍历并排序有限命中。新增 LocalWorkspace、竞态工具、单次 snapshot 和有限搜索回归；LocalWorkspace／Workspace／Resume Artifact 定向测试 40/40、`compileall` 与 `git diff --check` 通过；代码／测试独立 checkpoint 为 `b72c4d0`。Q5～Q7 和真实 provider smoke 仍未完成，R9 未授权。
 257. **完成 R9 前质量加固 Q3** — `ToolExecutor` 增加 `allowed_values` 和一层 list `items` 外层校验；非法值和非法 item 在 handler 前分别返回明确 `invalid_argument_value`／`invalid_argument_item_type`，未知参数继续静默投影、默认值不注入、合法 list 对象不被替换。新增 `copy_template`、`provide_choices`、`workspace_edit` 和通用 schema 边界回归；ToolCatalog／Plan／Switch／Workspace／Resume／Runtime 定向测试 67/67、`compileall` 与 `git diff --check` 通过；代码／测试独立 checkpoint 为 `fb8b3cb`。Q4～Q7 和真实 provider smoke 仍未完成，R9 未授权。
 256. **完成 R9 前质量加固 Q2** — 将 `ToolInteraction` 拆分为 `ToolApproval` 与 `ToolSelection`，Runtime 改用 `isinstance()` 分支并删除 interaction kind 字符串；Plan 投影改为比较工具执行前后的 `PlanService.snapshot()`，不再依赖 Plan 工具名称，普通工具在活动 Plan 下不重复产生 `ToolFinished.plan`。新增自定义 Plan mutation 与普通工具回归；Runtime／Plan／ToolCatalog／Workspace／Resume／customer-file 定向测试 68/68、`compileall` 与 `git diff --check` 通过；代码／测试独立 checkpoint 为 `26d492d`。Q3～Q7 和真实 provider smoke 仍未完成，R9 未授权。
 255. **完成 R9 前质量加固 Q1** — `pdflatex` 增加 `-no-shell-escape` 且保留原有 cwd、timeout 与 cancellation 传递；`AuthorizedFileReader` 移除内部路径白名单，客户文件读取仍由 `read_customer_file` 的逐次 `ConfirmationMode.ALWAYS` 审批和绝对路径／格式校验控制。新增定向回归后 Resume/customer-file 测试 14/14、`compileall` 与 `git diff --check` 通过；代码／测试独立 checkpoint 为 `425d722`。Q2～Q7 和真实 provider smoke 仍未完成，R9 未授权。

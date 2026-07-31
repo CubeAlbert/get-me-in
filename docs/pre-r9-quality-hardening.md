@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** Q1～Q3 已完成代码、测试与独立 checkpoint；Q4～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
+- **状态：** Q1～Q4 已完成代码、测试与独立 checkpoint；Q5～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
@@ -126,13 +126,13 @@
 
 ### Q4 —— Workspace no-replace 与性能
 
-- [ ] 在现有 `write()` 边界增加明确的 no-replace 写入模式，不新增 `create()`。
-- [ ] `workspace_write` 始终使用 no-replace；移除“先 exists 再 force replace”留下的竞态覆盖可能。
-- [ ] 保留 replace、edit、Artifact 等已有覆盖路径的语义。
-- [ ] `workspace_read` 改为单次读取 snapshot。
-- [ ] `find_files` 达到 `max_results` 后停止遍历。
-- [ ] 增加已存在目标、并发创建、单次读取和有限遍历的测试。
-- [ ] 运行 LocalWorkspace、Workspace tools、Resume Artifact 定向测试、`compileall`、`git diff --check`。
+- [x] 在现有 `write()` 边界增加明确的 no-replace 写入模式，不新增 `create()`。
+- [x] `workspace_write` 始终使用 no-replace；移除“先 exists 再 force replace”留下的竞态覆盖可能。
+- [x] 保留 replace、edit、Artifact 等已有覆盖路径的语义。
+- [x] `workspace_read` 改为单次读取 snapshot。
+- [x] `find_files` 达到 `max_results` 后停止遍历。
+- [x] 增加已存在目标、并发创建、单次读取和有限遍历的测试。
+- [x] 运行 LocalWorkspace、Workspace tools、Resume Artifact 定向测试、`compileall`、`git diff --check`。
 
 ### Q5 —— Session dump 与 CLI 输出安全
 
