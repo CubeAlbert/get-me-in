@@ -6036,3 +6036,29 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 保留 `AuthorizedFileReader` 路径集合并由前端预先注入 —— 与逐次 `ConfirmationMode.ALWAYS` 审批重复，且不符合 Q1 已确认设计，拒绝。
 - 顺手开始 Q2 或修改 `ToolInteraction` —— 超出 Q1 白名单，留到下一独立切片。
+
+---
+
+### 决策 256 —— 完成 R9 前质量加固 Q2
+
+**背景：** Q1 已完成并提交后，Q2 对 interaction 控制结果和 Plan 投影的 Runtime 硬编码进行了实施。实际取证确认 interaction 类型定义在 `domain/tools.py`，审批构造在 `ToolExecutor`，选择构造在 `tools/switch.py`，Plan 投影硬编码在 `AgentRuntime`。
+
+**决定：**
+
+- 删除 `ToolInteraction`，改为不可变的 `ToolApproval` 与 `ToolSelection` outcome；所有生产构造点和既有测试迁移完成，Runtime 使用 `isinstance()`，不再读取 interaction kind 字符串。
+- `AgentRuntime` 在工具执行前后读取注入的 `PlanService.snapshot()`；成功工具仅在 snapshot 发生变化时把新 Plan 投影到 `ToolResultRecord`、Runtime state 和 `ToolFinished.plan`，不再依赖 Plan 工具名称集合。
+- 增加自定义名称的 Plan mutation handler 回归，证明投影逻辑与工具名无关；增加活动 Plan 下普通工具不重复产生 `ToolFinished.plan` 的回归。
+- Q2 不修改 `_complete_model()`、PlanService、Plan tool 定义、Session service、公开 Runtime command/event 或 R9 功能。
+- Q2 仅修改已确认白名单中的 4 个生产文件和 5 个既有测试文件；Runtime／Plan／ToolCatalog／Workspace／Resume／customer-file 定向测试 68/68、`compileall` 与 `git diff --check` 通过，代码／测试 checkpoint 为 `26d492d`。
+
+**理由：**
+
+- interaction 的控制语义是 Runtime 消费的类型，不应以可扩展字符串字段表达；拆分 outcome 保留现有审批／选择事件和状态语义，同时让未知控制结果不能静默落入字符串分支。
+- Plan 是否变化是服务状态事实，工具名称不是可靠的能力边界；执行前后 immutable snapshot 比较能够支持自定义 Plan mutation handler，并避免普通工具因活动 Plan 重复触发 UI 投影。
+- 将比较放在既有工具执行边界和 `_handle_tool_outcome()` 之前，保持 `_complete_model()` 及其他状态转换不变。
+
+**曾考虑的替代方案：**
+
+- 仅把 interaction kind 改成枚举 —— 仍保留单一混合 outcome 和 Runtime 分支，未达到 typed approval／selection 的目标，拒绝。
+- 保留 Plan 工具名集合并补充自定义名称白名单 —— 仍把行为耦合到名称，拒绝。
+- 拆分 `_complete_model()` 或重构 PlanService —— 超出 Q2 范围，留在专项清单的暂缓项中。

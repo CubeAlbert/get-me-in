@@ -1,17 +1,18 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；R9 前质量加固 Q1 已完成，Q2～Q7 仍待实施，R9 仍未授权
+**当前阶段：** R8 已完成并通过最终用户审查；R9 前质量加固 Q1～Q2 已完成，Q3～Q7 仍待实施，R9 仍未授权
 
-**当前任务：** 继续按 `docs/pre-r9-quality-hardening.md` 执行 R9 前质量加固，Q1 已独立提交，下一切片为 typed interaction 与 Plan 去硬编码
+**当前任务：** 继续按 `docs/pre-r9-quality-hardening.md` 执行 R9 前质量加固，Q1～Q2 已独立提交，下一切片为 Tool Schema 外层校验
 
-**当前子任务：** Q2：定义 typed approval／selection outcomes，迁移 Runtime 与生产构造点，并移除 Plan 工具名硬编码；HandoffContext、R8-F-C 与 query_memory 触发边界的真实 provider smoke 继续保持开放。
+**当前子任务：** Q3：增加 Tool Schema 的 `allowed_values` 与一层 list `items` 外层校验，并补齐边界测试；HandoffContext、R8-F-C 与 query_memory 触发边界的真实 provider smoke 继续保持开放。
 
-**当前阻塞：** 无；Q2 尚未开始。Q1 定向测试 14/14、`compileall` 与 `git diff --check` 通过，代码 checkpoint 为 `425d722`；Q1 结果不能替代 HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke，R9 未授权。
+**当前阻塞：** 无；Q3 尚未开始。Q2 定向测试 68/68、`compileall` 与 `git diff --check` 通过，代码 checkpoint 为 `26d492d`；Q1/Q2 结果不能替代 HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke，R9 未授权。
 
-**会话交接说明：** 决策 254 建立 `docs/pre-r9-quality-hardening.md`，作为后续唯一质量加固执行清单；本次 Q1 仅修改 `src/get_me_in/adapters/authorized_file_reader.py`、`src/get_me_in/adapters/local_resume_artifacts.py` 及对应两个既有测试文件，并由 `425d722` 独立提交。Q1 已加入 `pdflatex -no-shell-escape`、客户文件逐次审批边界、绝对路径／格式失败回归；Q2～Q7 仍按专项清单待执行。`AGENTS.md` 已同步为先加载四份核心活跃文档，再按 `docs/current.md` 的显式路由加载当前专项文档。已确认范围包括 TeX `-no-shell-escape`、客户文件逐次审批、typed interaction、Plan snapshot 变化检测、Tool Schema 外层校验、Workspace no-replace 与性能、Session dump 独立目录、CLI Rich 转义和定向依赖升级；原始模型回复日志、Artifact replay 验证、完整 TeX 沙箱、rewind 时间戳、Runtime 整体拆分、ChromaDB 无修复公告和其余可读性／维护性项目均在同一文件保留明确接受或暂缓边界。决策 251／252／253 的 HandoffContext 契约和开放 smoke、决策 249 的单一 Entity／双格式投影、决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
+**会话交接说明：** 决策 254 建立 `docs/pre-r9-quality-hardening.md`，作为后续唯一质量加固执行清单；Q1 由 `425d722` 完成，Q2 仅修改 `src/get_me_in/domain/tools.py`、`src/get_me_in/application/tool_executor.py`、`src/get_me_in/application/runtime.py`、`src/get_me_in/tools/switch.py` 及 5 个既有测试文件，并由 `26d492d` 独立提交。Q1 已加入 `pdflatex -no-shell-escape`、客户文件逐次审批边界、绝对路径／格式失败回归；Q2 已加入 typed approval／selection、Plan snapshot 变化投影和自定义 Plan mutation 回归；Q3～Q7 仍按专项清单待执行。`AGENTS.md` 已同步为先加载四份核心活跃文档，再按 `docs/current.md` 的显式路由加载当前专项文档。已确认范围包括 TeX `-no-shell-escape`、客户文件逐次审批、typed interaction、Plan snapshot 变化检测、Tool Schema 外层校验、Workspace no-replace 与性能、Session dump 独立目录、CLI Rich 转义和定向依赖升级；原始模型回复日志、Artifact replay 验证、完整 TeX 沙箱、rewind 时间戳、Runtime 整体拆分、ChromaDB 无修复公告和其余可读性／维护性项目均在同一文件保留明确接受或暂缓边界。决策 251／252／253 的 HandoffContext 契约和开放 smoke、决策 249 的单一 Entity／双格式投影、决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 从 `docs/pre-r9-quality-hardening.md` 的 Q2 开始实施，先锁定 typed interaction 与 Plan snapshot 的精确生产文件白名单；不得检查、设计或实施 R9。
+**下一步：** 从 `docs/pre-r9-quality-hardening.md` 的 Q3 开始实施，先锁定 Tool Schema 外层校验的精确生产文件白名单；不得检查、设计或实施 R9。
 
+256. **完成 R9 前质量加固 Q2** — 将 `ToolInteraction` 拆分为 `ToolApproval` 与 `ToolSelection`，Runtime 改用 `isinstance()` 分支并删除 interaction kind 字符串；Plan 投影改为比较工具执行前后的 `PlanService.snapshot()`，不再依赖 Plan 工具名称，普通工具在活动 Plan 下不重复产生 `ToolFinished.plan`。新增自定义 Plan mutation 与普通工具回归；Runtime／Plan／ToolCatalog／Workspace／Resume／customer-file 定向测试 68/68、`compileall` 与 `git diff --check` 通过；代码／测试独立 checkpoint 为 `26d492d`。Q3～Q7 和真实 provider smoke 仍未完成，R9 未授权。
 255. **完成 R9 前质量加固 Q1** — `pdflatex` 增加 `-no-shell-escape` 且保留原有 cwd、timeout 与 cancellation 传递；`AuthorizedFileReader` 移除内部路径白名单，客户文件读取仍由 `read_customer_file` 的逐次 `ConfirmationMode.ALWAYS` 审批和绝对路径／格式校验控制。新增定向回归后 Resume/customer-file 测试 14/14、`compileall` 与 `git diff --check` 通过；代码／测试独立 checkpoint 为 `425d722`。Q2～Q7 和真实 provider smoke 仍未完成，R9 未授权。
 254. **建立 R9 前质量加固独立执行计划并暂停实施** — `docs/pre-r9-quality-hardening.md` 是后续唯一执行清单，完整记录已确认修改、Q1～Q7 验收切片、数据／R9 门禁以及当前接受或暂缓的问题。本次只更新文档，不修改代码、测试、依赖或数据；后续必须由用户明确授权后才能从 Q1 开始。
 253. **统一 HandoffContext Prompt-only 工程修正完成** — canonical `HandoffContextContract`、双向 handoff ToolDefinition 和 Main／Resume AgentSpec 已同步；Runtime、Orchestrator、CLI、typed state 与 InputFormat／OutputFormat 未修改。50 项定向测试、完整 unittest 282/282、`compileall` 和 `git diff --check` 通过，代码 checkpoint 为 `8dd876c`；真实模型行为仍需用户 smoke。

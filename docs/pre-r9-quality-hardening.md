@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** Q1 已完成代码、测试与独立 checkpoint；Q2～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
+- **状态：** Q1～Q2 已完成代码、测试与独立 checkpoint；Q3～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
@@ -107,14 +107,14 @@
 
 ### Q2 —— typed interaction 与 Plan 去硬编码
 
-- [ ] 定义 typed approval/selection outcomes，并迁移所有生产构造点和测试。
-- [ ] Runtime 改用类型分支，删除 interaction kind 字符串。
-- [ ] 删除 Plan 工具名集合。
-- [ ] 以 Plan snapshot 前后比较决定是否投影 Plan。
-- [ ] 增加非 Plan 工具在活动 Plan 下不重复渲染 Plan 的回归测试。
-- [ ] 增加 Plan 工具改名／自定义 Plan mutation handler 仍能投影 Plan 的测试，证明逻辑不依赖名称。
-- [ ] 不修改 `_complete_model()`。
-- [ ] 运行 Runtime、Plan、ToolCatalog 定向测试、`compileall`、`git diff --check`。
+- [x] 定义 typed approval/selection outcomes，并迁移所有生产构造点和测试。
+- [x] Runtime 改用类型分支，删除 interaction kind 字符串。
+- [x] 删除 Plan 工具名集合。
+- [x] 以 Plan snapshot 前后比较决定是否投影 Plan。
+- [x] 增加非 Plan 工具在活动 Plan 下不重复渲染 Plan 的回归测试。
+- [x] 增加 Plan 工具改名／自定义 Plan mutation handler 仍能投影 Plan 的测试，证明逻辑不依赖名称。
+- [x] 不修改 `_complete_model()`。
+- [x] 运行 Runtime、Plan、ToolCatalog 定向测试、`compileall`、`git diff --check`。
 
 ### Q3 —— Tool Schema 边界
 
