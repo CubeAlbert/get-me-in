@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** Q1～Q2 已完成代码、测试与独立 checkpoint；Q3～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
+- **状态：** Q1～Q3 已完成代码、测试与独立 checkpoint；Q4～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
@@ -118,11 +118,11 @@
 
 ### Q3 —— Tool Schema 边界
 
-- [ ] 在 `ToolExecutor` 增加 `allowed_values` 检查。
-- [ ] 增加一层 list `items` 类型检查。
-- [ ] 锁定未知参数继续静默投影、默认值不注入、合法参数对象不被改写。
-- [ ] 增加 `copy_template(template="invalid")`、`provide_choices(choices=[1])`、`workspace_edit(edits=["invalid"])` 等边界测试。
-- [ ] 运行 ToolCatalog、Plan、Switch、Workspace、Resume 定向测试、`compileall`、`git diff --check`。
+- [x] 在 `ToolExecutor` 增加 `allowed_values` 检查。
+- [x] 增加一层 list `items` 类型检查。
+- [x] 锁定未知参数继续静默投影、默认值不注入、合法参数对象不被改写。
+- [x] 增加 `copy_template(template="invalid")`、`provide_choices(choices=[1])`、`workspace_edit(edits=["invalid"])` 等边界测试。
+- [x] 运行 ToolCatalog、Plan、Switch、Workspace、Resume 定向测试、`compileall`、`git diff --check`。
 
 ### Q4 —— Workspace no-replace 与性能
 

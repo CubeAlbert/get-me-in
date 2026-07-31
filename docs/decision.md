@@ -6062,3 +6062,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 仅把 interaction kind 改成枚举 —— 仍保留单一混合 outcome 和 Runtime 分支，未达到 typed approval／selection 的目标，拒绝。
 - 保留 Plan 工具名集合并补充自定义名称白名单 —— 仍把行为耦合到名称，拒绝。
 - 拆分 `_complete_model()` 或重构 PlanService —— 超出 Q2 范围，留在专项清单的暂缓项中。
+
+---
+
+### 决策 257 —— 完成 R9 前质量加固 Q3
+
+**背景：** Q3 审查确认 `ToolParameter` 已声明 `allowed_values` 与 list `items` 元数据，但 `ToolExecutor` 只执行整体值类型和 required 校验，非法值可能进入 handler。
+
+**决定：**
+
+- 在既有外层参数校验中增加 `allowed_values` 检查和一层 list `items` 类型检查；非法枚举值返回 `invalid_argument_value`，非法列表元素返回 `invalid_argument_item_type`。
+- 保留未知参数静默投影、required 检查、默认值不注入、合法参数对象不转换／不改写和 handler 内部防御校验；不递归解释业务结构。
+- 更新既有 Plan 测试，使已由外层 schema 拦截的非法 `PlanStatus` 使用 `invalid_argument_value`，并增加通用 schema 与 `copy_template`、`provide_choices`、`workspace_edit` 边界回归。
+- Q3 仅修改 `src/get_me_in/application/tool_executor.py`、`tests/get_me_in/test_tool_catalog.py` 和 `tests/get_me_in/test_plan_tools.py`；ToolCatalog／Plan／Switch／Workspace／Resume／Runtime 定向测试 67/67、`compileall` 与 `git diff --check` 通过，代码／测试 checkpoint 为 `fb8b3cb`。
+
+**理由：**
+
+- Schema 中已有的约束元数据只有在 handler 前执行才构成统一边界；明确错误码便于 Runtime 和测试区分参数形状错误与业务逻辑错误。
+- 仅增加一层 list 元素检查可覆盖当前声明的工具契约，同时避免把 handler 的嵌套业务结构解释逻辑搬入通用执行器。
+- 保持过滤、默认值和合法对象的现有行为，避免以安全校验名义改变 v1 兼容语义或参数 identity。
+
+**曾考虑的替代方案：**
+
+- 让每个 handler 自行检查 allowed values／list items —— 会重复实现且允许非法值先进入业务层，拒绝。
+- 递归校验任意嵌套 mapping/list —— 超出已确认的一层 schema 边界，拒绝。
+- 在校验器中注入默认值或转换参数 —— 会改变既有 handler 输入契约，拒绝。
