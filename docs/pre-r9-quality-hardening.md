@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** Q1～Q6 已完成代码、测试与独立 checkpoint；Q7 尚未开始，Linux lock/install 与真实 provider smoke 门禁仍未完成。
+- **状态：** Q1～Q6 已完成代码、测试与独立 checkpoint；Q7 用户 smoke 1～5 已完成，第 6 项 Ubuntu/Linux lock/install smoke 有问题待后续处理，最终静态与文档 checkpoint 尚未完成。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
@@ -159,10 +159,10 @@
 - [ ] 完整运行 `uv run python -m unittest discover -s tests/get_me_in -t .`。
 - [ ] 完整运行 `uv run python -m compileall src/get_me_in main.py`。
 - [ ] 运行 `git diff --check`、legacy import/path 静态扫描和 Catalog 数量复核。
-- [ ] 运行真实客户文件审批、Workspace no-replace、Session dump、CLI markup、Resume PDF build smoke。
-- [ ] 确认未读取、迁移、改写或删除四个 legacy 数据目录。
+- [x] 运行真实客户文件审批、Workspace no-replace、Session dump、CLI markup、Resume PDF build smoke；用户确认 Q7 真实业务 smoke 已完成。
+- [x] 确认未读取、迁移、改写或删除四个 legacy 数据目录；用户确认 Q7 数据边界 smoke 已完成。
 - [ ] 分离代码／测试、依赖和文档 checkpoint；不得把 R9 内容混入。
-- [ ] 本计划完成后仍需单独完成 HandoffContext、R8-F-C 与 query_memory provider smoke。
+- [x] 单独完成 HandoffContext、R8-F-C 与 query_memory provider smoke；用户确认 smoke 1～4 已完成。
 - [ ] 由用户完成最终审查后，才决定是否授权 R9。
 
 ## 4. 当前明确暂缓或接受的问题

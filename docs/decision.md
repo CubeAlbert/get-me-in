@@ -6183,3 +6183,24 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 同时兼容旧错误码与新错误码 —— 会掩盖当前 typed schema 契约，拒绝。
 - 修改 retrieval 生产 handler —— 超出用户授权范围，拒绝。
+
+---
+
+### 决策 262 —— 记录 Q7 用户 smoke 1～5 完成并暂停第 6 项
+
+**背景：** Q6 已完成，用户按清单执行了 Q7 前置真实 smoke，并确认前五项通过；第 6 项 Ubuntu/Linux lock/install smoke 存在问题，但暂未提供错误细节并表示稍后处理。
+
+**决定：**
+
+- 记录 Main→Resume、Resume→Main handoff，R8-F-C finish／tool call，query_memory 被动触发边界，Q7 客户文件／Workspace／Session dump／CLI markup／Resume PDF 真实业务，以及 legacy 数据边界 smoke 已由用户完成。
+- 第 6 项 Ubuntu/Linux lock/install smoke 保持待处理状态；在用户提供具体错误或继续授权前，不执行 Linux 修复、依赖扩展、静态验收或 R9。
+- Q7 尚未完成最终静态边界与文档 checkpoint；本次只更新 `docs/current.md`、`docs/pre-r9-quality-hardening.md` 和本决策记录。
+
+**理由：**
+
+- 用户 smoke 是真实 provider、交互和业务适配器行为的验收证据，不能由自动化测试替代；第 6 项缺少错误细节时无法安全定位，也不应推测原因扩大范围。
+
+**曾考虑的替代方案：**
+
+- 先按常见 CUDA／uv 问题猜测并修复 —— 缺少错误证据且可能扩大依赖或平台范围，拒绝。
+- 将 Q7 直接标记完成 —— Linux smoke 与最终静态／文档验收尚未完成，拒绝。
