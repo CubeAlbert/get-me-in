@@ -6011,3 +6011,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 直接把所有项目追加到 `docs/task.md` —— 会把 R8 完成态、开放 provider smoke 和新的质量审查清单混在同一历史任务树中，拒绝。
 - 立即开始已同意的代码修改，再补计划 —— 用户明确要求先停止执行并完整记录，包括现阶段不考虑的问题，拒绝。
 - 只创建孤立文档而不更新 `docs/current.md`／决策入口 —— 新会话按当前状态恢复时容易遗漏，拒绝。
+
+---
+
+### 决策 255 —— 完成 R9 前质量加固 Q1
+
+**背景：** 用户已明确授权从 `docs/pre-r9-quality-hardening.md` 的 Q1 开始实施，并要求每个子任务完成后 checkpoint、提交，遇到范围不明或阻塞时停止。Q1 覆盖 TeX shell escape 边界和客户文件逐次审批边界。
+
+**决定：**
+
+- `LocalResumeArtifacts.build_pdf()` 在原有 `pdflatex` 参数 tuple 中加入 `-no-shell-escape`，保留工作区 cwd、构建 timeout、cancellation 和 `ProcessRunner` 边界。
+- `AuthorizedFileReader` 删除内部不可变路径白名单；客户文件访问改由 `read_customer_file` 的 `ConfirmationMode.ALWAYS` 逐次审批承担，继续拒绝相对路径和不支持格式。
+- 新增回归覆盖编译命令参数、cwd／timeout／cancellation 传递、未审批拦截、审批后读取受支持绝对路径、相对路径和不支持格式失败。
+- Q1 仅修改 `src/get_me_in/adapters/authorized_file_reader.py`、`src/get_me_in/adapters/local_resume_artifacts.py`、`tests/get_me_in/test_customer_file_tools.py` 和 `tests/get_me_in/test_resume_tools.py`；代码／测试 checkpoint 为 `425d722`。
+- Q1 文档状态另行 checkpoint；Q2～Q7、HandoffContext／R8-F-C／query_memory 真实 provider smoke 和 R9 仍未完成或未授权。
+
+**理由：**
+
+- TeX shell escape 是本切片可直接收紧的执行边界，且参数级回归能证明既有进程契约未被改变。
+- 路径白名单与每次工具审批形成重复且会阻止用户批准后读取任意受支持外部文件；移除内部集合后仍由 ToolExecutor 的逐次审批和 Reader 的格式／路径校验共同提供边界。
+- 代码／测试与文档分开提交，便于独立审查和回退；未修改 `docs/task.md`，避免把专项 Q1～Q7 混入 R8 历史任务树。
+
+**曾考虑的替代方案：**
+
+- 保留 `AuthorizedFileReader` 路径集合并由前端预先注入 —— 与逐次 `ConfirmationMode.ALWAYS` 审批重复，且不符合 Q1 已确认设计，拒绝。
+- 顺手开始 Q2 或修改 `ToolInteraction` —— 超出 Q1 白名单，留到下一独立切片。

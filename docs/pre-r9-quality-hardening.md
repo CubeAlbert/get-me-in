@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** 已完成问题审查、方案讨论与计划记录；尚未开始代码、测试、依赖或数据修改。
+- **状态：** Q1 已完成代码、测试与独立 checkpoint；Q2～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
@@ -98,12 +98,12 @@
 
 ### Q1 —— TeX 与客户文件边界
 
-- [ ] `pdflatex` 增加 `-no-shell-escape`。
-- [ ] 增加命令参数测试，证明未启用 shell escape，且原有 cwd、timeout、cancellation 不变。
-- [ ] 移除 Reader 路径集合及对应拒绝逻辑。
-- [ ] 更新客户文件测试：未审批仍被 ToolExecutor 拦截；审批后可读取任意受支持的绝对路径；相对路径和不支持格式仍失败。
-- [ ] 运行 Resume/customer-file 定向测试、`compileall`、`git diff --check`。
-- [ ] 独立审查本切片 diff 后再进入 Q2。
+- [x] `pdflatex` 增加 `-no-shell-escape`。
+- [x] 增加命令参数测试，证明未启用 shell escape，且原有 cwd、timeout、cancellation 不变。
+- [x] 移除 Reader 路径集合及对应拒绝逻辑。
+- [x] 更新客户文件测试：未审批仍被 ToolExecutor 拦截；审批后可读取任意受支持的绝对路径；相对路径和不支持格式仍失败。
+- [x] 运行 Resume/customer-file 定向测试、`compileall`、`git diff --check`。
+- [x] 独立审查本切片 diff 后再进入 Q2。
 
 ### Q2 —— typed interaction 与 Plan 去硬编码
 
