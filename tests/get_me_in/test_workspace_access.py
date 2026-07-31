@@ -23,3 +23,12 @@ class WorkspaceAccessStateTests(unittest.TestCase):
 
         with self.assertRaises(RevisionMismatchError):
             access.require_revision("session", Path("resume.tex"), "revision")
+
+    def test_consumed_revision_requires_a_fresh_read(self) -> None:
+        access = WorkspaceAccessState()
+        access.authorize_read("session", Path("resume.tex"), "revision")
+
+        access.consume_revision("session", Path("resume.tex"), "revision")
+
+        with self.assertRaises(RevisionMismatchError):
+            access.require_revision("session", Path("resume.tex"), "revision")

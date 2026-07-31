@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 267 — 修复 workspace_edit 多行修改后的 read-before-edit 行号漂移回归](#决策-267--修复-workspace_edit-多行修改后的-read-before-edit-行号漂移回归)
 - [决策 266 — 确认 Windows/Linux Resume XeLaTeX 真实 smoke 已完成](#决策-266--确认-windowslinux-resume-xelatex-真实-smoke-已完成)
 - [决策 265 — 统一 Resume 跨平台编译引擎为 XeLaTeX](#决策-265--统一-resume-跨平台编译引擎为-xelatex)
 - [决策 264 — 完成 R9 前质量加固 Q7 与文档状态收口](#决策-264--完成-r9-前质量加固-q7-与文档状态收口)
@@ -6287,3 +6288,38 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **曾考虑的替代方案：**
 
 - 保留 Windows smoke 待执行状态 —— 与用户已提供的验证事实冲突，拒绝。
+
+---
+
+### 决策 267 —— 修复 workspace_edit 多行修改后的 read-before-edit 行号漂移回归
+
+**背景：** 当前 `workspace_edit` 成功后会把返回的新 revision 自动重新写入 session-scoped workspace access。模型因此可以跳过下一次 `workspace_read`，仅凭新 revision 继续 edit。多行插入、删除或替换会改变后续行号，revision 一致并不能证明模型仍掌握最新行号；`old_content` 只能拦截部分错误行号，重复内容时仍可能存在误改风险。
+
+**决定：**
+
+- `WorkspaceAccessState` 增加 session/path/revision 级授权消费；授权消费后同一 read revision 不得再次用于 edit。
+- 成功 `workspace_edit` 后消费本次 `workspace_read` 授权，不再自动授权 edit 返回的新 revision。
+- 失败的行号或 `old_content` 校验不写入文件，并保留本次 read 授权以便模型修正参数后重试。
+- `workspace_edit` 返回的 revision 保留，以避免扩大既有输出结构；该 revision 仅表示修改后的文件版本，不能直接授权下一次 edit。
+- 更新 ToolDefinition 的 UseWhen 和 revision 参数说明，明确每次成功 edit 后必须重新 `workspace_read`。
+- 不恢复进程级 `_read_files`，不修改 `LocalWorkspace` revision 算法、WorkspacePort、`workspace_replace`、旧运行数据或 R9。
+
+**理由：**
+
+- 多行 edit 的核心安全边界是重新获得最新内容和行号，而不是只验证文件 hash/revision。
+- 成功 edit 后消费授权可以在代码层强制恢复“一次 read 对应一次成功 edit”，不依赖模型遵守提示词。
+- 保留失败校验后的授权，允许模型在文件未改变时修正错误参数，不增加无意义的重复 read。
+- 保留返回 revision 维持现有 ToolSuccess 输出兼容性，同时通过授权消费阻断 revision-only 连续 edit。
+
+**验证：**
+
+- Workspace、ToolCatalog、Bootstrap 定向测试 54/54 通过。
+- 完整 unittest 295/295 通过。
+- `compileall` 与 `git diff --check` 通过。
+- 回归测试覆盖多行插入／删除后的过时行号、成功 edit 后复用返回 revision、失败校验重试和 session 隔离。
+
+**曾考虑的替代方案：**
+
+- 仅返回新 revision —— 不能提供新的行号和内容，无法解决模型上下文过时，拒绝。
+- 仅返回完整行号映射 —— 增加输出复杂度，仍不能替代模型重新读取，拒绝。
+- 继续自动授权 edit 返回的新 revision —— 会保留本次已发现的行号漂移风险，拒绝。

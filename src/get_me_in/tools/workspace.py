@@ -224,7 +224,7 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
         ToolDefinition(
             name="workspace_edit",
             purpose="基于 workspace_read 返回的 revision 精确编辑工作区文件。用新内容替换指定行，可一次提交多行编辑；所有行号引用修改前的原始文件，任一 revision、行号或原内容校验失败则不写入。",
-            use_when="需要精确修改文件的特定行、插入新行或删除行时；必须先调用 workspace_read 获取当前 revision、精确行号和内容",
+            use_when="需要精确修改文件的特定行、插入新行或删除行时；每次成功 edit 后都必须先调用 workspace_read 获取最新 revision、行号和内容",
             do_not_use_when="已确认全部匹配位置的全局替换用 workspace_replace；新建文件用 workspace_write；没有当前 revision 或文件可能已变化时必须重新 workspace_read",
             expected_output='{"path": "...", "revision": "...", "edits_applied": N, "edits": [{"line": N, "status": "applied"}]}',
             schema=ToolSchema(
@@ -235,7 +235,7 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
                     ),
                     "revision": ToolParameter(
                         str,
-                        "最近一次 workspace_read 返回的文件 revision；文件变化后旧 revision 会被拒绝",
+                        "最近一次 workspace_read 返回的文件 revision；每次成功 workspace_edit 后必须重新 workspace_read，不能直接复用 edit 返回的 revision",
                     ),
                     "edits": ToolParameter(
                         list,
@@ -433,8 +433,8 @@ def _edit(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
             lines[line - 1 : line] = content.split("\n") if content else []
             applied.append({"line": line, "status": "applied"})
         updated = workspace.edit(path, snapshot.revision, "\n".join(lines))
-        context.workspace_access.authorize_read(
-            context.session_id, updated.path, updated.revision
+        context.workspace_access.consume_revision(
+            context.session_id, updated.path, snapshot.revision
         )
     except RevisionMismatchError:
         return ToolFailure("workspace_revision_mismatch", "Read the file again before editing")

@@ -165,6 +165,14 @@
 - [x] 单独完成 HandoffContext、R8-F-C 与 query_memory provider smoke；用户确认对应真实 provider smoke 已完成。
 - [x] 用户已接受本次独立审查结论；R9 仍需独立授权。
 
+### Q7 后续回归修正 —— Workspace edit 行号稳定性
+
+- [x] 确认 revision 不能替代多行 edit 后的最新行号；成功 `workspace_edit` 后必须重新 `workspace_read`。
+- [x] 增加 session/path/revision 级 read 授权消费；不恢复进程级 `_read_files` 全局状态。
+- [x] 覆盖多行插入／删除后的过时行号、成功 edit 后复用返回 revision、失败校验重试和 session 隔离。
+- [x] 更新 ToolCatalog／Bootstrap Prompt 回归，确保模型看到每次成功 edit 后重新 read 的约束。
+- [x] 定向测试 54/54、完整 unittest 295/295、`compileall` 与 `git diff --check` 通过；本修正不进入 R9。
+
 ## 4. 当前明确暂缓或接受的问题
 
 下列项目必须保留在后续审查台账中，但不属于 Q1～Q7 当前实现范围。

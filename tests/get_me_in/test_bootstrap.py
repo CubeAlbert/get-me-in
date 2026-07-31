@@ -519,7 +519,7 @@ class BootstrapTests(unittest.TestCase):
                 resume_prompt,
             )
             self.assertIn(
-                '"description": "最近一次 workspace_read 返回的文件 revision；文件变化后旧 revision 会被拒绝"',
+            '"description": "最近一次 workspace_read 返回的文件 revision；每次成功 workspace_edit 后必须重新 workspace_read，不能直接复用 edit 返回的 revision"',
                 resume_prompt,
             )
             self.assertNotIn("<SubAgent name=", resume_prompt)

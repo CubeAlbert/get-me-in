@@ -117,7 +117,7 @@ class WorkspaceToolTests(unittest.TestCase):
         self.assertFalse(racing.replace_requested)
 
     def test_edit_requires_current_revision_and_applies_multiple_original_lines(self) -> None:
-        self.workspace.write(Path("edit.txt"), "one\ntwo\nthree")
+        self.workspace.write(Path("edit.txt"), "header\ntarget-a\ntarget-b\nfooter")
         read = self.executor.execute(
             "read", "workspace_read", {"path": "edit.txt"}, self.context
         )
@@ -125,14 +125,43 @@ class WorkspaceToolTests(unittest.TestCase):
         approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, workspace_access=self.access, approved=True)
         outcome = self.executor.execute(
             "edit", "workspace_edit", {"path": "edit.txt", "revision": revision,
-              "edits": [{"line": 1, "old_content": "one", "content": "ONE"}, {"line": 3, "old_content": "three", "content": ""}]}, approved
+              "edits": [{"line": 1, "old_content": "header", "content": "header\ninserted"}, {"line": 3, "old_content": "target-b", "content": ""}]}, approved
         )
-        stale = self.executor.execute(
-            "stale", "workspace_edit", {"path": "edit.txt", "revision": revision, "edits": []}, approved
+        stale_line = self.executor.execute(
+            "stale-line", "workspace_edit", {"path": "edit.txt", "revision": outcome.output["revision"],
+              "edits": [{"line": 2, "old_content": "target-a", "content": "TARGET-A"}]}, approved
         )
-        self.assertEqual("ONE\ntwo", self.workspace.read(Path("edit.txt")).content.replace("\r\n", "\n"))
+        self.assertEqual("header\ninserted\ntarget-a\nfooter", self.workspace.read(Path("edit.txt")).content.replace("\r\n", "\n"))
+        refreshed = self.executor.execute(
+            "refresh", "workspace_read", {"path": "edit.txt"}, self.context
+        )
+        current = self.executor.execute(
+            "current-line", "workspace_edit", {"path": "edit.txt", "revision": refreshed.output["revision"],
+              "edits": [{"line": 3, "old_content": "target-a", "content": "TARGET-A"}]}, approved
+        )
         self.assertEqual(2, outcome.output["edits_applied"])
-        self.assertEqual("workspace_revision_mismatch", stale.code)
+        self.assertEqual("workspace_revision_mismatch", stale_line.code)
+        self.assertEqual(1, current.output["edits_applied"])
+        self.assertEqual("header\ninserted\nTARGET-A\nfooter", self.workspace.read(Path("edit.txt")).content.replace("\r\n", "\n"))
+
+    def test_failed_line_validation_preserves_read_authorization(self) -> None:
+        self.workspace.write(Path("edit.txt"), "one\ntwo")
+        read = self.executor.execute(
+            "read", "workspace_read", {"path": "edit.txt"}, self.context
+        )
+        approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, workspace_access=self.access, approved=True)
+
+        failed = self.executor.execute(
+            "failed", "workspace_edit", {"path": "edit.txt", "revision": read.output["revision"],
+              "edits": [{"line": 1, "old_content": "wrong", "content": "ONE"}]}, approved
+        )
+        succeeded = self.executor.execute(
+            "retry", "workspace_edit", {"path": "edit.txt", "revision": read.output["revision"],
+              "edits": [{"line": 1, "old_content": "one", "content": "ONE"}]}, approved
+        )
+
+        self.assertEqual("workspace_edit_content_mismatch", failed.code)
+        self.assertEqual(1, succeeded.output["edits_applied"])
 
     def test_open_uses_the_injected_frontend(self) -> None:
         self.workspace.write(Path("preview.pdf"), "placeholder")

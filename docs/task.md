@@ -722,6 +722,15 @@
 - ✅ 用户已完成并确认真实 provider smoke：Main→Resume 在审批后只确认而不读 workspace；Resume→Main 返回后只汇报／询问而不继续调用工具；用户下一条确认后才允许工作。
 - ✅ 真实模型行为已由用户 provider smoke 验收；本修正不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
 
+## R8 后续独立修正 —— Workspace edit 行号稳定性（已完成）
+
+- ✅ 确认 revision 只能证明文件版本一致，不能让模型获得多行插入／删除后的最新行号；成功 `workspace_edit` 后自动授权新 revision 会允许模型绕过重新读取。
+- ✅ `WorkspaceAccessState` 增加 session/path/revision 级授权消费；成功 `workspace_edit` 后消费本次 read 授权，不再自动授权返回的新 revision。
+- ✅ 保留失败行号／old_content 校验不写入文件，并验证失败校验后仍可使用同一 read 授权重试。
+- ✅ 更新 `workspace_edit` 工具说明，明确每次成功 edit 后必须重新 `workspace_read`；保留返回 revision 以维持输出结构，但不将其视为下一次 edit 授权。
+- ✅ 增加多行插入／删除导致行号漂移、授权消费和失败重试回归；定向测试 54/54、完整 unittest 295/295、`compileall` 与 `git diff --check` 通过。
+- ⛔ 本修正独立于 R9，不修改 `LocalWorkspace` revision 算法、WorkspacePort、workspace_replace、旧运行数据或 R9 文件。
+
 ## R9 —— 重构后功能（不在当前执行范围）
 
 ### 1. InterviewAgent Workflow 前置 Review
