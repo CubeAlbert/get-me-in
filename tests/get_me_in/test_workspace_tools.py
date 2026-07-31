@@ -41,6 +41,25 @@ class WorkspaceToolTests(unittest.TestCase):
         self.assertTrue(outcome.output["truncated"])
         self.assertTrue(outcome.output["revision"])
 
+    def test_read_uses_one_snapshot_for_pagination_and_line_count(self) -> None:
+        counting = _SnapshotWorkspace("one\ntwo\nthree")
+        context = type(self.context)(
+            "session",
+            AgentKey.MAIN,
+            CancellationToken(),
+            workspace=counting,
+            workspace_access=self.access,
+        )
+
+        outcome = self.executor.execute(
+            "read", "workspace_read", {"path": "notes.txt", "offset": 2, "limit": 1}, context
+        )
+
+        self.assertIsInstance(outcome, ToolSuccess)
+        self.assertEqual(1, counting.read_calls)
+        self.assertEqual(3, outcome.output["total_lines"])
+        self.assertEqual(((2, "two"),), outcome.output["lines"])
+
     def test_list_returns_single_directory_level(self) -> None:
         self.workspace.write(Path("folder") / "note.txt", "text")
 
@@ -79,6 +98,24 @@ class WorkspaceToolTests(unittest.TestCase):
         self.assertEqual(("folder\\two.txt",), deleted.output["deleted"])
         self.assertEqual("missing.txt", deleted.output["errors"][0]["path"])
 
+    def test_write_uses_no_replace_when_target_is_created_between_checks(self) -> None:
+        racing = _RacingWorkspace()
+        context = type(self.context)(
+            "session",
+            AgentKey.MAIN,
+            CancellationToken(),
+            workspace=racing,
+            workspace_access=self.access,
+            approved=True,
+        )
+
+        outcome = self.executor.execute(
+            "write", "workspace_write", {"path": "one.txt", "content": "new"}, context
+        )
+
+        self.assertEqual("workspace_path_exists", outcome.code)
+        self.assertFalse(racing.replace_requested)
+
     def test_edit_requires_current_revision_and_applies_multiple_original_lines(self) -> None:
         self.workspace.write(Path("edit.txt"), "one\ntwo\nthree")
         read = self.executor.execute(
@@ -112,3 +149,24 @@ class _Frontend:
 
     def open_file(self, path: Path) -> None:
         self.opened = path
+
+
+class _SnapshotWorkspace:
+    def __init__(self, content: str) -> None:
+        from src.get_me_in.ports.workspace import FileSnapshot
+
+        self.snapshot = FileSnapshot(Path("notes.txt"), content, "revision")
+        self.read_calls = 0
+
+    def read(self, path: Path):
+        self.read_calls += 1
+        return self.snapshot
+
+
+class _RacingWorkspace:
+    def __init__(self) -> None:
+        self.replace_requested = False
+
+    def write(self, path: Path, content: str, *, replace: bool = True):
+        self.replace_requested = replace
+        raise FileExistsError(path)

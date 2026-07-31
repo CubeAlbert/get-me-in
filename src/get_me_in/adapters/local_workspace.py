@@ -102,17 +102,22 @@ class LocalWorkspace:
         if max_results is not None and max_results < 1:
             raise ValueError("max_results must be positive")
         scope = self.resolve(path)
-        candidates = (scope,) if scope.is_file() else sorted(scope.rglob("*"))
-        results = [
-            candidate.relative_to(self._root)
-            for candidate in candidates
-            if candidate.is_file() and fnmatch.fnmatch(candidate.name, pattern)
-        ]
-        return tuple(results if max_results is None else results[:max_results])
+        candidates = (scope,) if scope.is_file() else scope.rglob("*")
+        results: list[Path] = []
+        for candidate in candidates:
+            if candidate.is_file() and fnmatch.fnmatch(candidate.name, pattern):
+                results.append(candidate.relative_to(self._root))
+                if max_results is not None and len(results) >= max_results:
+                    break
+        return tuple(sorted(results))
 
-    def write(self, path: Path, content: str) -> FileSnapshot:
+    def write(self, path: Path, content: str, *, replace: bool = True) -> FileSnapshot:
         resolved = self.resolve(path)
         resolved.parent.mkdir(parents=True, exist_ok=True)
+        if not replace:
+            with resolved.open("x", encoding="utf-8", newline="") as destination:
+                destination.write(content)
+            return FileSnapshot(resolved.relative_to(self._root), content, _revision(content))
         with tempfile.NamedTemporaryFile(
             mode="w", encoding="utf-8", newline="", dir=resolved.parent, delete=False
         ) as temporary:

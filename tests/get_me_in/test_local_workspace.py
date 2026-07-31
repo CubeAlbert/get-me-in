@@ -48,6 +48,22 @@ class LocalWorkspaceTests(unittest.TestCase):
         with self.assertRaises(RevisionMismatchError):
             self.workspace.edit(Path("note.txt"), original.revision, "three")
 
+    def test_no_replace_write_rejects_existing_target(self) -> None:
+        self.workspace.write(Path("note.txt"), "one")
+
+        with self.assertRaises(FileExistsError):
+            self.workspace.write(Path("note.txt"), "two", replace=False)
+
+        self.assertEqual("one", self.workspace.read(Path("note.txt")).content)
+
+    def test_find_files_stops_after_max_results_and_returns_sorted_matches(self) -> None:
+        for name in ("c.txt", "a.txt", "b.txt"):
+            self.workspace.write(Path(name), name)
+
+        matches = self.workspace.find_files("*.txt", max_results=2)
+        self.assertEqual(2, len(matches))
+        self.assertEqual(tuple(sorted(matches)), matches)
+
     def test_path_cannot_escape_root(self) -> None:
         with self.assertRaises(WorkspacePathError):
             self.workspace.resolve(Path("..") / "outside.txt")

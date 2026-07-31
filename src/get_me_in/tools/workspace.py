@@ -280,7 +280,13 @@ def _read(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
         return ToolFailure("invalid_range", "offset and limit must be positive")
     try:
         snapshot = workspace.read(path)
-        lines = workspace.read_lines(path, offset=offset - 1, limit=limit)
+        all_lines = snapshot.content.splitlines()
+        lines = tuple(
+            (index + 1, value)
+            for index, value in enumerate(
+                all_lines[offset - 1 : offset - 1 + limit], offset - 1
+            )
+        )
         if context.workspace_access is not None:
             context.workspace_access.authorize_read(
                 context.session_id, snapshot.path, snapshot.revision
@@ -291,11 +297,11 @@ def _read(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
         {
             "path": str(snapshot.path),
             "revision": snapshot.revision,
-            "total_lines": len(snapshot.content.splitlines()),
+            "total_lines": len(all_lines),
             "offset": offset,
             "limit": limit,
-            "truncated": offset - 1 + len(lines) < len(snapshot.content.splitlines()),
-            "lines": tuple((line.number, line.content) for line in lines),
+            "truncated": offset - 1 + len(lines) < len(all_lines),
+            "lines": lines,
         }
     )
 
@@ -371,9 +377,9 @@ def _write(arguments: Mapping[str, object], context: WorkspaceToolContext) -> To
     if isinstance(workspace, ToolFailure): return workspace
     path = Path(arguments["path"])
     try:
-        if workspace.exists(path):
-            return ToolFailure("workspace_path_exists", f"File already exists: {path}")
-        workspace.write(path, arguments["content"])
+        workspace.write(path, arguments["content"], replace=False)
+    except FileExistsError:
+        return ToolFailure("workspace_path_exists", f"File already exists: {path}")
     except (OSError, WorkspaceError) as error:
         return ToolFailure("workspace_write_failed", str(error))
     return ToolSuccess({"path": str(path), "written": True})
