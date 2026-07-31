@@ -6204,3 +6204,18 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 先按常见 CUDA／uv 问题猜测并修复 —— 缺少错误证据且可能扩大依赖或平台范围，拒绝。
 - 将 Q7 直接标记完成 —— Linux smoke 与最终静态／文档验收尚未完成，拒绝。
+
+---
+
+### 决策 263 —— 记录 Q7 用户 smoke 1～6 全部完成
+
+**背景：** 用户补充确认第 6 项 Ubuntu/Linux lock/install smoke 无问题，Q7 用户 smoke 1～6 均已完成。
+
+**决定：**
+
+- 将 Ubuntu/Linux lock/install smoke 从开放问题更新为已通过；不执行额外 Linux 修复或依赖扩展。
+- 保持 Q7 未完成状态，因为最终静态边界复核和文档 checkpoint 尚未执行；R9 仍未授权。
+
+**理由：**
+
+- 用户已提供明确 smoke 结果；当前只需同步状态，不应重复执行或引入额外范围。

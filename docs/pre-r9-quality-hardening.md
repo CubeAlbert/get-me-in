@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** Q1～Q6 已完成代码、测试与独立 checkpoint；Q7 用户 smoke 1～5 已完成，第 6 项 Ubuntu/Linux lock/install smoke 有问题待后续处理，最终静态与文档 checkpoint 尚未完成。
+- **状态：** Q1～Q6 已完成代码、测试与独立 checkpoint；Q7 用户 smoke 1～6 已完成，最终静态与文档 checkpoint 尚未完成。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
@@ -151,7 +151,7 @@
 - [x] `uv sync --locked` 验证当前 Windows 环境。
 - [x] 运行完整 unittest、`compileall`、`git diff --check`；293/293 unittest、`compileall` 与 diff-check 通过；测试迁移 checkpoint 为 `51ae04b`，依赖 checkpoint 为 `48e3773`。
 - [x] 运行真实 Knowledge prepare/query/close smoke，确认 embedding、reranker 与 Chroma PersistentClient 正常；远端模型 HEAD 首次断开，使用已有本地模型缓存离线复核通过：ready、6 added、3 hits、worker closed。
-- [ ] 在可用环境中完成 Ubuntu/Linux lock/install smoke；未执行时必须保留为开放门禁。
+- [x] 在可用环境中完成 Ubuntu/Linux lock/install smoke；用户确认第 6 项无问题。
 - [x] 重新运行依赖审计并记录 `chromadb` 的无修复例外与不可达边界；`chromadb 1.5.9` 仍有 2 个公告且无 fix version，不降级、不换源，继续保持嵌入式 PersistentClient 边界。
 
 ### Q7 —— 完整验收与文档 checkpoint
