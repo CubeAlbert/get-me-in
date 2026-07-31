@@ -28,7 +28,7 @@ class RetrievalToolTests(unittest.TestCase):
     def test_reference_query_rejects_unknown_category(self) -> None:
         outcome = self.executor.execute("call", "query_reference_data", {"query": "职位", "category": "unknown"}, self.context)
 
-        self.assertEqual(ToolFailure("invalid_reference_category", "Unsupported reference category: unknown"), outcome)
+        self.assertEqual(ToolFailure("invalid_argument_value", "Argument category must be one of: 'company_info', 'interview_questions', 'job_descriptions', 'knowledge_base', 'recommended_materials', 'resume_examples'"), outcome)
 
     def test_invalid_top_k_is_rejected_before_adapter_call(self) -> None:
         outcome = self.executor.execute("call", "query_memory", {"query": "偏好", "top_k": 0}, self.context)
