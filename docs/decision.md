@@ -6112,3 +6112,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 继续在 `workspace_write` 中先 `exists` 再调用默认 `write` —— 无法关闭并发创建竞态，拒绝。
 - 新增独立 `WorkspacePort.create()` —— 会扩展公共 port，且 Q4 已明确要求在现有 write 边界增加模式，拒绝。
 - 让 `workspace_read` 继续调用 `read_lines` —— 保留重复读取和可能的 snapshot 漂移，拒绝。
+
+---
+
+### 决策 259 —— 完成 R9 前质量加固 Q5
+
+**背景：** Q5 审查确认 session dump 与 canonical session 文件共用根目录，历史 `*.dump.json` 会被 session list 当作可恢复 session；Renderer 还把模型、工具、provider、文件和用户输入直接插入 Rich markup，存在格式注入风险。
+
+**决定：**
+
+- `JsonSessionRepository.dump()` 将新 dump 写入 `SESSIONS_DIR/dumps/<session_id>.json`；不移动、删除或改写根目录现有 `*.dump.json`。
+- `JsonSessionRepository.list()` 只枚举根目录 canonical `*.json`，显式忽略根目录 `*.dump.json`；canonical `save`／`load` 与 restore 路径保持不变。
+- Renderer 对 Progress、ToolStarted／Finished、Approval、Selection、handoff、错误、通知、Plan description、help、session view、application result、thinking、status 和参数摘要使用 `escape` 或 `Text`；assistant Markdown 正文继续使用 `Markdown`。
+- 增加真实 `JsonSessionRepository` dump/list/load 回归、根目录历史 dump 保留回归、bootstrap dump 路径回归和 Rich tag 注入回归。
+- Q5 仅修改 `src/get_me_in/adapters/json_session_repository.py`、`src/get_me_in/cli/renderer.py` 及三个既有测试文件；JsonSessionRepository 4、CLI commands 23、CLI app 12、bootstrap 21 定向测试合计 60/60，`compileall` 与 `git diff --check` 通过，代码／测试 checkpoint 为 `0beb960`。
+
+**理由：**
+
+- 将 dump 与 canonical session 分目录可避免导出历史污染 restore 列表，同时不触碰已有数据。
+- `Text` 和统一转义使不可信内容不能改变固定样式或注入审批等 Rich tag；Markdown assistant 正文仍保留既有用户可见格式能力。
+
+**曾考虑的替代方案：**
+
+- 启动时迁移或删除根目录旧 dump —— 超出本专项数据边界，拒绝。
+- 只在测试中禁止若干 tag —— 不能覆盖生产 Renderer 的全部动态输出点，拒绝。

@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** Q1～Q4 已完成代码、测试与独立 checkpoint；Q5～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
+- **状态：** Q1～Q5 已完成代码、测试与独立 checkpoint；Q6～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
@@ -136,12 +136,12 @@
 
 ### Q5 —— Session dump 与 CLI 输出安全
 
-- [ ] 新 dump 写入 `sessions/dumps/`。
-- [ ] session list 忽略根目录历史 `*.dump.json`，不移动现存数据。
-- [ ] 增加真实 `JsonSessionRepository` dump/list/load 回归测试。
-- [ ] 对 Renderer 中不可信 Rich 字符串统一转义。
-- [ ] 增加含 `[bold]`、`[/]`、伪审批 tag 的 Progress、Tool、Approval、Selection、Plan、错误和通知测试。
-- [ ] 运行 Session、CLI commands、CLI app、bootstrap 定向测试、`compileall`、`git diff --check`。
+- [x] 新 dump 写入 `sessions/dumps/`。
+- [x] session list 忽略根目录历史 `*.dump.json`，不移动现存数据。
+- [x] 增加真实 `JsonSessionRepository` dump/list/load 回归测试。
+- [x] 对 Renderer 中不可信 Rich 字符串统一转义。
+- [x] 增加含 `[bold]`、`[/]`、伪审批 tag 的 Progress、Tool、Approval、Selection、Plan、错误和通知测试。
+- [x] 运行 Session、CLI commands、CLI app、bootstrap 定向测试、`compileall`、`git diff --check`；定向测试合计 60/60 通过，代码 checkpoint 为 `0beb960`。
 
 ### Q6 —— 依赖升级
 
