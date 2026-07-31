@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** Q1～Q5 已完成代码、测试与独立 checkpoint；Q6～Q7 尚未开始，依赖与真实 smoke 门禁仍未完成。
+- **状态：** Q1～Q6 已完成代码、测试与独立 checkpoint；Q7 尚未开始，Linux lock/install 与真实 provider smoke 门禁仍未完成。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
@@ -149,7 +149,7 @@
 - [x] 定向升级 `sentence-transformers`、`torch`、`setuptools`；不新增无直接 import 的业务依赖，版本分别为 5.6.1、2.13.0、83.0.0。
 - [x] 审查 `pyproject.toml` 与 `uv.lock`，确认 universal markers、CUDA 12→13 Linux 传递依赖和非目标包漂移；`pyproject.toml` 未新增直接依赖。
 - [x] `uv sync --locked` 验证当前 Windows 环境。
-- [ ] 运行完整 unittest、`compileall`、`git diff --check`；`compileall` 与 diff-check 已通过，但完整 unittest 293 项中 292 通过、1 项被 Q3 遗留 retrieval test 断言阻塞。
+- [x] 运行完整 unittest、`compileall`、`git diff --check`；293/293 unittest、`compileall` 与 diff-check 通过；测试迁移 checkpoint 为 `51ae04b`，依赖 checkpoint 为 `48e3773`。
 - [x] 运行真实 Knowledge prepare/query/close smoke，确认 embedding、reranker 与 Chroma PersistentClient 正常；远端模型 HEAD 首次断开，使用已有本地模型缓存离线复核通过：ready、6 added、3 hits、worker closed。
 - [ ] 在可用环境中完成 Ubuntu/Linux lock/install smoke；未执行时必须保留为开放门禁。
 - [x] 重新运行依赖审计并记录 `chromadb` 的无修复例外与不可达边界；`chromadb 1.5.9` 仍有 2 个公告且无 fix version，不降级、不换源，继续保持嵌入式 PersistentClient 边界。

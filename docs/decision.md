@@ -6161,3 +6161,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 顺手修改 `test_retrieval_tools.py` 使完整 unittest 变绿 —— 超出当前 Q6 依赖白名单，需用户单独授权，暂不执行。
 - 降级或切换 Chroma 来源消除审计告警 —— 当前无修复版本且违背既有 PersistentClient／源配置边界，拒绝。
+
+---
+
+### 决策 261 —— 完成 R9 前质量加固 Q6
+
+**背景：** Q6 依赖升级已完成，但完整 unittest 暴露一个由 Q3 外层 `allowed_values` 校验造成的旧测试断言漂移；用户授权仅迁移该断言。
+
+**决定：**
+
+- 仅修改 `tests/get_me_in/test_retrieval_tools.py` 中 `test_reference_query_rejects_unknown_category` 的期望，将 `invalid_reference_category` 改为 `invalid_argument_value`，并使用实际 schema allowed-values 消息。
+- 不修改生产代码，不兼容两个错误码，不修改 `48e3773`，不扩大到其他失败或白名单外测试。
+- 定向 retrieval 测试 5/5、完整 unittest 293/293、`compileall` 与 `git diff --check` 通过；测试 checkpoint 为 `51ae04b`。
+- Q6 完成态文档在本 checkpoint 单独提交；Q7、Ubuntu/Linux lock/install smoke、HandoffContext／R8-F-C／query_memory 真实 provider smoke 仍开放，R9 未授权。
+
+**理由：**
+
+- 该断言只验证 Q3 已确认的外层 schema 行为，迁移不改变生产行为，也不掩盖其他失败。
+
+**曾考虑的替代方案：**
+
+- 同时兼容旧错误码与新错误码 —— 会掩盖当前 typed schema 契约，拒绝。
+- 修改 retrieval 生产 handler —— 超出用户授权范围，拒绝。
