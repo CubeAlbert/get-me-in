@@ -109,8 +109,16 @@ class ToolHandoff(ToolOutcome):
 
 
 @dataclass(frozen=True)
-class ToolInteraction(ToolOutcome):
-    kind: str
+class ToolApproval(ToolOutcome):
+    """A tool call paused until the frontend approves or rejects it."""
+
+    prompt: str
+
+
+@dataclass(frozen=True)
+class ToolSelection(ToolOutcome):
+    """A tool call paused until the frontend submits or cancels a choice."""
+
     prompt: str
     choices: tuple[str, ...] = ()
 

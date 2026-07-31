@@ -52,10 +52,11 @@ from src.get_me_in.domain.messages import (
 from src.get_me_in.domain.plans import Plan
 from src.get_me_in.domain.sessions import AgentSessionState, PendingToolCall, RuntimePhase
 from src.get_me_in.domain.tools import (
+    ToolApproval,
     ToolFailure,
     ToolHandoff,
-    ToolInteraction,
     ToolOutcome,
+    ToolSelection,
     ToolSuccess,
 )
 from src.get_me_in.ports.clock import Clock
@@ -376,6 +377,7 @@ class AgentRuntime:
             approved=approved,
             rejected=rejected,
         )
+        plan_before = self._plan_snapshot()
         outcome = self._tool_executor.execute(
             pending.call_id,
             pending.tool_name,
@@ -383,17 +385,21 @@ class AgentRuntime:
             context,
             self._spec.capabilities,
         )
-        return self._handle_tool_outcome(pending, outcome)
+        return self._handle_tool_outcome(pending, outcome, plan_before=plan_before)
 
-    def _handle_tool_outcome(self, pending: PendingToolCall, outcome: ToolOutcome) -> RuntimeEvent:
-        if isinstance(outcome, ToolInteraction):
-            if outcome.kind == "approval":
-                self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_APPROVAL)
-                return ApprovalRequested(pending.call_id, outcome.prompt)
-            if outcome.kind == "selection":
-                self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_SELECTION)
-                return SelectionRequested(pending.call_id, outcome.prompt, outcome.choices)
-            return Failed("unsupported_interaction", f"Unsupported interaction: {outcome.kind}")
+    def _handle_tool_outcome(
+        self,
+        pending: PendingToolCall,
+        outcome: ToolOutcome,
+        *,
+        plan_before: Plan | None = None,
+    ) -> RuntimeEvent:
+        if isinstance(outcome, ToolApproval):
+            self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_APPROVAL)
+            return ApprovalRequested(pending.call_id, outcome.prompt)
+        if isinstance(outcome, ToolSelection):
+            self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_SELECTION)
+            return SelectionRequested(pending.call_id, outcome.prompt, outcome.choices)
         if isinstance(outcome, ToolHandoff):
             self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_HANDOFF)
             return HandoffRequested(
@@ -403,11 +409,7 @@ class AgentRuntime:
                 outcome.context,
             )
         if isinstance(outcome, ToolSuccess):
-            return self._finish_tool(
-                pending,
-                outcome.output,
-                plan=self._plan_projection(pending.tool_name),
-            )
+            return self._finish_tool(pending, outcome.output, plan=self._changed_plan(plan_before))
         assert isinstance(outcome, ToolFailure)
         return self._finish_tool(
             pending,
@@ -441,12 +443,14 @@ class AgentRuntime:
         )
         return ToolFinished(pending.call_id, pending.tool_name, rendered, plan)
 
-    def _plan_projection(self, tool_name: str) -> Plan | None:
-        if tool_name not in {"create_plan", "update_plan_status", "cancel_all_plans", "replan"}:
-            return None
+    def _plan_snapshot(self) -> Plan | None:
         if self._tool_context is None or self._tool_context.plan is None:
             return None
         return self._tool_context.plan.snapshot()
+
+    def _changed_plan(self, before: Plan | None) -> Plan | None:
+        after = self._plan_snapshot()
+        return after if after != before else None
 
     def _approve(self, command: Approve) -> RuntimeEvent:
         failure = self._validate_pending(command.call_id, RuntimePhase.WAITING_FOR_APPROVAL)

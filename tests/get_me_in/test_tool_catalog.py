@@ -9,6 +9,7 @@ from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, Capability
 from src.get_me_in.domain.tools import (
     ConfirmationMode,
+    ToolApproval,
     ToolDefinition,
     ToolFailure,
     ToolParameter,
@@ -216,7 +217,7 @@ class ToolExecutorTests(unittest.TestCase):
 
         outcome = executor.execute("call", "delete", {"text": "x"}, self.context)
 
-        self.assertEqual("approval", outcome.kind)
+        self.assertIsInstance(outcome, ToolApproval)
 
     def test_rejection_and_cancellation_close_the_call_without_handler_execution(self) -> None:
         executor = ToolExecutor(ToolCatalog((_tool("echo"),)))

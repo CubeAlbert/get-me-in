@@ -9,7 +9,7 @@ from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey
-from src.get_me_in.domain.tools import ToolFailure, ToolInteraction, ToolSuccess
+from src.get_me_in.domain.tools import ToolApproval, ToolFailure, ToolSuccess
 from src.get_me_in.tools.customer_file import build_customer_file_tools
 
 
@@ -31,8 +31,7 @@ class CustomerFileToolTests(unittest.TestCase):
             executor = ToolExecutor(ToolCatalog(build_customer_file_tools()))
             context = ToolContext("session", AgentKey.MAIN, CancellationToken(), external_files=AuthorizedFileReader())
             outcome = executor.execute("call", "read_customer_file", {"path": str(path)}, context)
-            self.assertIsInstance(outcome, ToolInteraction)
-            self.assertEqual("approval", outcome.kind)
+            self.assertIsInstance(outcome, ToolApproval)
 
     def test_relative_and_unsupported_paths_still_fail_after_approval(self) -> None:
         executor = ToolExecutor(ToolCatalog(build_customer_file_tools()))

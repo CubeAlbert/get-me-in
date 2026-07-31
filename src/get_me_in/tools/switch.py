@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 
 from src.get_me_in.domain.agents import AgentKey, Capability
-from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandoff, ToolInteraction, ToolParameter, ToolPolicy, ToolSchema
+from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolFailure, ToolHandoff, ToolParameter, ToolPolicy, ToolSchema, ToolSelection
 
 
 def build_switch_tools() -> tuple[ToolDefinition, ...]:
@@ -96,6 +96,6 @@ def _to_mainagent(arguments: Mapping[str, object], context: object) -> ToolHando
     return ToolHandoff(AgentKey.MAIN, arguments["summary"])
 
 
-def _choices(arguments: Mapping[str, object], context: object) -> ToolInteraction:
+def _choices(arguments: Mapping[str, object], context: object) -> ToolSelection:
     del context
-    return ToolInteraction("selection", arguments["question"], tuple(arguments["choices"]))
+    return ToolSelection(arguments["question"], tuple(arguments["choices"]))

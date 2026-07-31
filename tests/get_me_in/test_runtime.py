@@ -243,6 +243,34 @@ class RuntimeTests(unittest.TestCase):
             tool_result["plan_status"],
         )
 
+    def test_plan_projection_uses_snapshot_change_not_tool_name(self) -> None:
+        def create_custom_plan(arguments: object, context: object) -> ToolSuccess:
+            del arguments
+            assert context.plan is not None
+            context.plan.create(("custom step",))
+            return ToolSuccess({"created": True})
+
+        runtime, _, temporary_dir = _runtime(
+            [
+                _tool_call("custom_plan_mutation"),
+                _tool_call("inspect"),
+                _finish("done", "done"),
+            ],
+            definitions=(
+                _tool("custom_plan_mutation", handler=create_custom_plan),
+                _tool("inspect"),
+            ),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("create and inspect"))
+
+        finished = [event for event in events if isinstance(event, ToolFinished)]
+        self.assertEqual(2, len(finished))
+        self.assertIsNotNone(finished[0].plan)
+        self.assertEqual("custom step", finished[0].plan.items[0].description)
+        self.assertIsNone(finished[1].plan)
+
     def test_approval_and_rejection_close_the_matching_call(self) -> None:
         approved_runtime, _, approved_dir = _runtime(
             [_tool_call("delete"), _finish("done", "done")],

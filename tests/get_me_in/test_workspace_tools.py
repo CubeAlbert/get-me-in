@@ -10,7 +10,7 @@ from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey
-from src.get_me_in.domain.tools import ToolSuccess
+from src.get_me_in.domain.tools import ToolApproval, ToolSuccess
 from src.get_me_in.tools.workspace import build_workspace_tools
 
 
@@ -67,7 +67,7 @@ class WorkspaceToolTests(unittest.TestCase):
 
     def test_approved_write_replace_delete_and_move_operations(self) -> None:
         write = self.executor.execute("write", "workspace_write", {"path": "one.txt", "content": "old old"}, self.context)
-        self.assertEqual("approval", write.kind)
+        self.assertIsInstance(write, ToolApproval)
         approved = type(self.context)("session", AgentKey.MAIN, CancellationToken(), workspace=self.workspace, workspace_access=self.access, approved=True)
         self.executor.execute("write", "workspace_write", {"path": "one.txt", "content": "old old"}, approved)
         replaced = self.executor.execute("replace", "workspace_replace", {"path": "one.txt", "old_str": "old", "new_str": "new"}, approved)

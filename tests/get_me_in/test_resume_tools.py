@@ -14,7 +14,7 @@ from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey
-from src.get_me_in.domain.tools import ToolFailure, ToolInteraction, ToolSuccess
+from src.get_me_in.domain.tools import ToolApproval, ToolFailure, ToolSuccess
 from src.get_me_in.ports.process import ProcessResult
 from src.get_me_in.ports.resume_artifacts import PdfMergeResult, TemplateCopyResult
 from src.get_me_in.tools.resume import build_resume_tools
@@ -30,7 +30,7 @@ class ResumeToolTests(unittest.TestCase):
         pending = self.executor.execute("call", "copy_template", {"template": "chn", "prefix": "resume"}, self.context)
         outcome = self.executor.execute("call", "copy_template", {"template": "chn", "prefix": "resume"}, self.context.__class__(**{**self.context.__dict__, "approved": True}))
 
-        self.assertIsInstance(pending, ToolInteraction)
+        self.assertIsInstance(pending, ToolApproval)
         self.assertIsInstance(outcome, ToolSuccess)
         self.assertEqual("chn", self.artifacts.template)
         self.assertEqual(("resume_CHN.tex", "README.md"), outcome.output["files"])
@@ -80,7 +80,7 @@ class ResumeToolTests(unittest.TestCase):
             approved,
         )
 
-        self.assertIsInstance(pending, ToolInteraction)
+        self.assertIsInstance(pending, ToolApproval)
         self.assertEqual(
             ToolSuccess(
                 {
