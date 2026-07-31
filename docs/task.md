@@ -645,7 +645,7 @@
 - ⛔ 按首轮 R8-F 执行用户 smoke —— 已由决策 248 撤回，必须先完成 R8-F-C。
 - ⛔ 按首轮 R8-F 记录完成态 —— 已由 R8-F-C 的工程验证、用户 smoke 与完成态 checkpoint 取代。
 
-## R8-F-C —— 单一模型消息 Entity 与双格式投影修正（已确认，新会话实施）
+## R8-F-C —— 单一模型消息 Entity 与双格式投影修正（已完成）
 
 ### 1. 问题确认与门禁
 
@@ -677,8 +677,8 @@
 - ✅ Entity／codec contract 覆盖 input 五类事件、finish、tool_call、event_payload 参数、tool result correlation、plan_status、Runtime-owned 字段与 thinking 保留／剥离。
 - ✅ 更新 Runtime／bootstrap 回归，证明工具调用参数、Plan、handoff、三次 repair 和第四次暂停均保持。
 - ✅ 运行完整 unittest 278/278、`compileall`、`git diff --check`；静态扫描无旧 ModelReply／ConversationCodec 引用。代码由 `e05bdfa`、`29e698c`、`a8d55d7`、`077a4d2` 分片 checkpoint。
-- 📌 工程 checkpoint 已完成；停止并由用户执行 Main finish、Main 工具调用、Main→Resume→工具→finish 的真实 provider smoke，用户不负责补写自动化回归。
-- 📌 用户 smoke 通过后再更新 current／task／decision 并建立完成态文档 checkpoint；仍停在 R9 独立授权门禁前。
+- ✅ 用户已完成并确认 R8-F-C finish／tool call 的真实 provider smoke；行为符合当前单一 Entity 与双格式投影契约。
+- ✅ 用户 smoke 已通过；已同步 current／task／decision 并建立完成态文档 checkpoint，仍停在 R9 独立授权门禁前。
 
 ### 5. 已确认白名单
 
@@ -695,10 +695,10 @@
 - ✅ `query_memory` 的 `UseWhen`／`DoNotUseWhen` 已明确禁止主动了解用户、补充画像、减少普通提问、确认已知信息、可选信息查询、问候／能力介绍／简单路由／闲聊、绕过用户拒绝和零命中后的近义词重试。
 - ✅ Main `AgentSpec` 已同步改为优先使用当前对话；仅在用户明确要求或路由必需信息经询问仍缺失时，把 `query_memory` 作为一次针对性兜底。capability、审批、schema、handler、Memory 数据和其他 Agent 边界未变。
 - ✅ ToolCatalog 与 production composition 回归锁定完整文字实际进入 Prompt；39 项定向测试、完整 unittest 280/280、`compileall` 与 `git diff --check` 通过，代码 checkpoint 为 `f6d3e37`。
-- 📌 等待用户真实 provider smoke：普通问候／简单路由不得查询 memory；明确查询个人背景时允许调用；必要信息缺失时必须先询问，未果后最多单次兜底。smoke 前不宣称模型行为验收完成。
+- ✅ 用户已完成并确认真实 provider smoke：普通问候／简单路由不得查询 memory；明确查询个人背景时允许调用；必要信息缺失时必须先询问，未果后最多单次兜底。
 - ⛔ 本修正独立于 R8-F-C，不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
 
-## R8 后续独立修正 —— 统一 HandoffContext 接收回合契约（工程已完成，待 smoke）
+## R8 后续独立修正 —— 统一 HandoffContext 接收回合契约（已完成）
 
 ### 1. 语义与方向
 
@@ -719,8 +719,8 @@
 
 - ✅ 更新 ToolCatalog／PromptRenderer／bootstrap Prompt 回归，锁定 canonical contract、双向 ToolDefinition 文字和 Main／Resume 冲突消除；既有 Orchestrator／CLI 自动推进行为保持不变。
 - ✅ 50 项定向测试、完整 unittest 282/282、`compileall` 与 `git diff --check` 通过；初始文档 checkpoint 为 `43bbdfd`，文件所有权补充 checkpoint 为 `161dc39`，代码 checkpoint 为 `8dd876c`。
-- 📌 工程验证后由用户执行真实 provider smoke：Main→Resume 在审批后只确认而不读 workspace；Resume→Main 返回后只汇报／询问而不继续调用工具；用户下一条确认后才允许工作。
-- ⛔ 本修正不声明真实模型行为已经验收，不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
+- ✅ 用户已完成并确认真实 provider smoke：Main→Resume 在审批后只确认而不读 workspace；Resume→Main 返回后只汇报／询问而不继续调用工具；用户下一条确认后才允许工作。
+- ✅ 真实模型行为已由用户 provider smoke 验收；本修正不检查、设计或实施 R9，不读取、迁移、改写或删除旧运行数据。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 

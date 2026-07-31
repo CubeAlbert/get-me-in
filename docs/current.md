@@ -1,16 +1,18 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；R9 前质量加固 Q1～Q6 已完成，Q7 用户 smoke 1～6 已完成，最终静态／文档验收待处理，R9 仍未授权
+**当前阶段：** R8 已完成并通过最终用户审查；R9 前质量加固 Q1～Q7 及最终文档验收已完成，本专项已收口，R9 仍未授权
 
-**当前任务：** 继续按 `docs/pre-r9-quality-hardening.md` 执行 R9 前质量加固，Q1～Q6 已独立提交，Q7 仅剩最终静态／文档验收
+**当前任务：** R9 前质量加固专项已完成，等待 R9 独立授权；不得将当前文档收口解释为 R9 授权
 
-**当前子任务：** Q7：执行最终静态边界复核与文档 checkpoint；用户 smoke 1～6 已确认完成，R9 仍未授权。
+**当前子任务：** Q7：最终静态边界复核、用户审查与文档 checkpoint 已完成；R9 仍未授权。
 
-**当前阻塞：** 用户已确认 smoke 1～6 全部完成：Main→Resume、Resume→Main、R8-F-C finish／tool call、query_memory 被动触发边界、Q7 真实业务与数据边界，以及 Ubuntu/Linux lock/install smoke。当前无已报告阻塞；Q7 最终静态／文档验收尚未执行，R9 未授权。
+**当前阻塞：** 无专项阻塞；用户已接受 Q7 独立审查结论，R9 独立授权门禁仍保持关闭。
 
-**会话交接说明：** 决策 254 建立 `docs/pre-r9-quality-hardening.md`，作为后续唯一质量加固执行清单；Q1 由 `425d722` 完成，Q2 由 `26d492d` 完成，Q3 由 `fb8b3cb` 完成，Q4 由 `b72c4d0` 完成，Q5 由 `0beb960` 完成，Q6 依赖由 `48e3773` 完成、测试迁移由 `51ae04b` 完成。用户已确认 smoke 1～6 全部完成：Main→Resume 与 Resume→Main handoff、R8-F-C finish／tool call、query_memory 被动触发边界、Q7 真实业务及 legacy 数据边界、Ubuntu/Linux lock/install smoke。Q1 已加入 `pdflatex -no-shell-escape`、客户文件逐次审批边界、绝对路径／格式失败回归；Q2 已加入 typed approval／selection、Plan snapshot 变化投影和自定义 Plan mutation 回归；Q3 已加入 `allowed_values`、一层 list `items` 外层校验、未知参数／默认值／合法参数对象不变和生产工具边界回归；Q4 已加入 Workspace no-replace、单次 snapshot 读取和 `max_results` 有限遍历；Q5 已将新 dump 隔离到 `sessions/dumps/`、使 session list 忽略根目录历史 `*.dump.json`、保留 canonical session load／restore，并用 `escape`／`Text` 统一保护 Renderer 的不可信 Rich 字符串；Q6 已完成目标依赖升级、Windows lock 验证、离线 Knowledge smoke、audit 复核与完整 unittest。Q7 仅剩最终静态边界复核和文档 checkpoint，R9 仍未授权。`AGENTS.md` 已同步为先加载四份核心活跃文档，再按 `docs/current.md` 的显式路由加载当前专项文档。已确认范围包括 TeX `-no-shell-escape`、客户文件逐次审批、typed interaction、Plan snapshot 变化检测、Tool Schema 外层校验、Workspace no-replace 与性能、Session dump 独立目录、CLI Rich 转义和定向依赖升级；原始模型回复日志、Artifact replay 验证、完整 TeX 沙箱、rewind 时间戳、Runtime 整体拆分、ChromaDB 无修复公告和其余可读性／维护性项目均在同一文件保留明确接受或暂缓边界。决策 251／252／253 的 HandoffContext 契约和开放 smoke、决策 249 的单一 Entity／双格式投影、决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
+**会话交接说明：** 决策 254 建立 `docs/pre-r9-quality-hardening.md`，作为后续唯一质量加固执行清单；Q1 由 `425d722` 完成，Q2 由 `26d492d` 完成，Q3 由 `fb8b3cb` 完成，Q4 由 `b72c4d0` 完成，Q5 由 `0beb960` 完成，Q6 依赖由 `48e3773` 完成、测试迁移由 `51ae04b` 完成。用户已确认 smoke 1～6 全部完成：Main→Resume 与 Resume→Main handoff、R8-F-C finish／tool call、query_memory 被动触发边界、Q7 真实业务及 legacy 数据边界、Ubuntu/Linux lock/install smoke。Q1 已加入 `pdflatex -no-shell-escape`、客户文件逐次审批边界、绝对路径／格式失败回归；Q2 已加入 typed approval／selection、Plan snapshot 变化投影和自定义 Plan mutation 回归；Q3 已加入 `allowed_values`、一层 list `items` 外层校验、未知参数／默认值／合法参数对象不变和生产工具边界回归；Q4 已加入 Workspace no-replace、单次 snapshot 读取和 `max_results` 有限遍历；Q5 已将新 dump 隔离到 `sessions/dumps/`、使 session list 忽略根目录历史 `*.dump.json`、保留 canonical session load／restore，并用 `escape`／`Text` 统一保护 Renderer 的不可信 Rich 字符串；Q6 已完成目标依赖升级、Windows lock 验证、离线 Knowledge smoke、audit 复核与完整 unittest。Q7 已完成最终静态边界复核、用户最终审查和独立文档 checkpoint，R9 仍未授权。`AGENTS.md` 已同步为先加载四份核心活跃文档，再按 `docs/current.md` 的显式路由加载当前专项文档。已确认范围包括 TeX `-no-shell-escape`、客户文件逐次审批、typed interaction、Plan snapshot 变化检测、Tool Schema 外层校验、Workspace no-replace 与性能、Session dump 独立目录、CLI Rich 转义和定向依赖升级；原始模型回复日志、Artifact replay 验证、完整 TeX 沙箱、rewind 时间戳、Runtime 整体拆分、ChromaDB 无修复公告和其余可读性／维护性项目均在同一文件保留明确接受或暂缓边界。决策 251／252／253 的 HandoffContext 契约和已完成 smoke、决策 249 的单一 Entity／双格式投影、决策 250 的 query_memory 被动触发契约继续有效；R8-P～R8-G/G8 完成态不变，任何工作不得读取、迁移、改写或删除旧运行数据。
 
-**下一步：** 执行 Q7 最终静态边界复核并建立文档 checkpoint；不得检查、设计或实施 R9。
+**下一步：** 等待用户明确授权 R9；在此之前不得检查、设计或实施 R9。
+
+264. **完成 R9 前质量加固 Q7 与文档状态收口** — 用户确认 Q1～Q6 coding 符合方案且无生产代码问题；完整 unittest 293/293、`compileall`、`git diff --check`、Import boundary 2/2、legacy import/path 静态扫描和 Catalog 复核通过。Q7 用户 smoke 1～6、HandoffContext、R8-F-C 与 query_memory provider smoke 均已完成；本次同步专项计划、任务清单和最终审查状态并建立独立文档 checkpoint。R9 仍需独立授权。
 
 263. **记录 Q7 用户 smoke 1～6 全部完成** — 用户确认 Main→Resume、Resume→Main、R8-F-C finish／tool call、query_memory 被动触发边界、Q7 真实业务与 legacy 数据边界，以及 Ubuntu/Linux lock/install smoke 均无问题。本次只更新状态；Q7 最终静态边界复核和文档 checkpoint 仍待执行，R9 未授权。
 262. **记录 Q7 用户 smoke 1～5 完成并暂停第 6 项** — 用户确认 Main→Resume、Resume→Main、R8-F-C finish／tool call、query_memory 被动触发边界、Q7 真实业务与 legacy 数据边界 smoke 均已完成；第 6 项 Ubuntu/Linux lock/install smoke 存在问题，用户稍后处理，当前不提供错误细节。本次只更新状态，不执行 Linux 修复、依赖扩展、静态验收或 R9。

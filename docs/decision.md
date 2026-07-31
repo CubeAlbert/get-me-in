@@ -8,6 +8,8 @@
 
 ## 目录
 
+- [决策 264 — 完成 R9 前质量加固 Q7 与文档状态收口](#决策-264--完成-r9-前质量加固-q7-与文档状态收口)
+
 - [决策 254 — 建立 R9 前质量加固独立执行计划并暂停实施](#决策-254--建立-r9-前质量加固独立执行计划并暂停实施)
 - [决策 253 — 统一 HandoffContext Prompt-only 工程修正完成](#决策-253--统一-handoffcontext-prompt-only-工程修正完成)
 - [决策 252 — 纠正 Main AgentSpec 的实际文件所有权](#决策-252--纠正-main-agentspec-的实际文件所有权)
@@ -6219,3 +6221,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **理由：**
 
 - 用户已提供明确 smoke 结果；当前只需同步状态，不应重复执行或引入额外范围。
+
+---
+
+### 决策 264 —— 完成 R9 前质量加固 Q7 与文档状态收口
+
+**背景：** 用户独立复核确认 Q1～Q6 coding 符合已确认方案，完整 unittest 293/293、`compileall`、`git diff --check`、Import boundary 2/2、legacy import/path 静态扫描和 Catalog 复核均通过；Q7 真实 smoke 1～6 也已完成。此前专项计划与任务清单仍保留三个 provider smoke 未完成及 Q7 自动化验收未勾选的状态漂移。
+
+**决定：**
+
+- 将 HandoffContext、R8-F-C 和 query_memory 的真实 provider smoke 在专项计划与任务清单中同步标记为已完成。
+- 将 Q7 的完整 unittest、compileall、diff-check、静态边界、Catalog 复核、提交分离和用户最终审查同步标记为已完成。
+- 建立本次独立文档 checkpoint；Q1～Q6 coding、测试、依赖和文档提交保持分离，不混入 R9、旧数据或额外生产文件。
+- R9 仍保持独立授权门禁；未获明确授权前不得检查、设计或实施 R9。
+
+**理由：**
+
+- 用户已提供独立验证和最终审查结论，继续保留“待 smoke／待自动化验收”会使 `current.md`、专项计划和任务清单互相矛盾。
+- 本次只收口活跃文档状态，不改变生产代码、测试、依赖或数据边界。
+
+**曾考虑的替代方案：**
+
+- 保留 Q7 未完成状态等待再次 smoke —— 已有用户确认和独立验证证据，属于重复验收，拒绝。
+- 借文档收口进入 R9 —— 超出当前授权，拒绝。

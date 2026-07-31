@@ -2,13 +2,13 @@
 
 ## 1. 文档状态与执行门禁
 
-- **状态：** Q1～Q6 已完成代码、测试与独立 checkpoint；Q7 用户 smoke 1～6 已完成，最终静态与文档 checkpoint 尚未完成。
+- **状态：** Q1～Q7 已完成代码、测试、真实 smoke、最终静态复核与独立文档 checkpoint；本专项完成，R9 仍未授权。
 - **目的：** 在进入 R9 前，按已确认边界修复当前 v2 的安全、结构、维护性与性能问题，并持续记录本轮明确暂缓的问题，避免后续遗忘。
 - **执行入口：** 后续只有在用户明确要求开始本计划后，才从 Q1 按顺序执行。
 - **停止边界：** 本计划独立于 R9；不得借质量加固检查、设计或实施 InterviewAgent、Workflow、Sticky Plan、Job Search 或其他 R9 功能。
 - **状态真相：** `docs/current.md` 仍是项目唯一阶段快照；本文件只承载本轮 R9 前质量加固的执行清单和暂缓项。
 - **数据边界：** 不得读取、迁移、改写或删除 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/`。现存 v2 session dump 也不得在未获单独数据操作授权时自动移动。
-- **现有门禁：** HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke 仍未完成；本计划的自动化结果不能替代这些 smoke。
+- **现有门禁：** HandoffContext、R8-F-C 与 query_memory 的真实 provider smoke 已由用户确认完成；本计划的自动化结果仍不能替代真实 smoke 证据。
 
 ## 2. 已确认设计
 
@@ -156,14 +156,14 @@
 
 ### Q7 —— 完整验收与文档 checkpoint
 
-- [ ] 完整运行 `uv run python -m unittest discover -s tests/get_me_in -t .`。
-- [ ] 完整运行 `uv run python -m compileall src/get_me_in main.py`。
-- [ ] 运行 `git diff --check`、legacy import/path 静态扫描和 Catalog 数量复核。
+- [x] 完整运行 `uv run python -m unittest discover -s tests/get_me_in -t .`；293/293 通过。
+- [x] 完整运行 `uv run python -m compileall src/get_me_in main.py`；通过。
+- [x] 运行 `git diff --check`、legacy import/path 静态扫描和 Catalog 数量复核；均通过，Import boundary 2/2，实际导出为 2 Agent、26 Tool、10 CLI 命令。
 - [x] 运行真实客户文件审批、Workspace no-replace、Session dump、CLI markup、Resume PDF build smoke；用户确认 Q7 真实业务 smoke 已完成。
 - [x] 确认未读取、迁移、改写或删除四个 legacy 数据目录；用户确认 Q7 数据边界 smoke 已完成。
-- [ ] 分离代码／测试、依赖和文档 checkpoint；不得把 R9 内容混入。
-- [x] 单独完成 HandoffContext、R8-F-C 与 query_memory provider smoke；用户确认 smoke 1～4 已完成。
-- [ ] 由用户完成最终审查后，才决定是否授权 R9。
+- [x] 分离代码／测试、依赖和文档 checkpoint；Q1～Q6 提交范围分离正确，本专项文档 checkpoint 不含 R9、旧数据或额外生产文件。
+- [x] 单独完成 HandoffContext、R8-F-C 与 query_memory provider smoke；用户确认对应真实 provider smoke 已完成。
+- [x] 用户已接受本次独立审查结论；R9 仍需独立授权。
 
 ## 4. 当前明确暂缓或接受的问题
 
