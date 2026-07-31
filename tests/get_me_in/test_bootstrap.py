@@ -400,6 +400,7 @@ class BootstrapTests(unittest.TestCase):
             dump_path = application.handle(DumpSession())
 
             self.assertEqual(RuntimePhase.CANCELLED, snapshot.session.agents[AgentKey.MAIN].phase)
+            self.assertEqual(Path(temporary) / "dumps" / f"{snapshot.session.session_id}.json", dump_path)
             self.assertTrue(dump_path.exists())
 
     def test_rewind_and_restore_use_public_session_commands(self) -> None:

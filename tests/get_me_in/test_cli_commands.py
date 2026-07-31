@@ -19,7 +19,18 @@ from src.get_me_in.cli.commands import (
 )
 from src.get_me_in.cli.input import InputController
 from src.get_me_in.cli.renderer import Renderer
-from src.get_me_in.application.events import Completed, Failed, Paused, ToolFinished, ToolStarted
+from src.get_me_in.application.events import (
+    ApprovalRequested,
+    Cancelled,
+    Completed,
+    Failed,
+    HandoffRequested,
+    Paused,
+    Progress,
+    SelectionRequested,
+    ToolFinished,
+    ToolStarted,
+)
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
@@ -270,6 +281,29 @@ class RendererTests(unittest.TestCase):
         Renderer(console=_console(output), show_thinking=True).render_event(Completed(message))
 
         self.assertNotIn("思考摘要", output.getvalue())
+
+    def test_escapes_untrusted_rich_markup_in_events_plan_help_and_arguments(self) -> None:
+        output = StringIO()
+        renderer = Renderer(console=_console(output), show_thinking=True)
+        payload = "[bold]owned[/] [yellow]approval[/]"
+        plan = Plan("plan", (PlanItem(payload, payload, PlanStatus.IN_PROGRESS),))
+
+        renderer.render_event(Progress(payload))
+        renderer.render_event(ToolStarted(payload, payload, {payload: payload}, thinking=payload))
+        renderer.render_event(ToolFinished(payload, payload, payload))
+        renderer.render_event(ApprovalRequested(payload, payload))
+        renderer.render_event(SelectionRequested(payload, payload, (payload,)))
+        renderer.render_event(HandoffRequested(payload, AgentKey.MAIN, payload, payload))
+        renderer.render_event(Failed(payload, payload))
+        renderer.render_event(Paused(payload, payload))
+        renderer.render_event(Cancelled(payload))
+        renderer.render_event(ToolFinished(payload, payload, "", plan))
+        renderer.render_help(((payload, payload),))
+        renderer.render_error(payload)
+        renderer.render_notice(payload)
+
+        text = output.getvalue()
+        self.assertGreaterEqual(text.count(payload), 12)
 
 
 @dataclass(frozen=True)

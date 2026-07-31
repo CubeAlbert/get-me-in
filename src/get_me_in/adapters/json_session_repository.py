@@ -19,7 +19,7 @@ class JsonSessionRepository:
         self._write(target, self._codec.encode(snapshot))
 
     def dump(self, snapshot: object) -> Path:
-        target = self._root / f"{snapshot.session.session_id}.dump.json"
+        target = self._root / "dumps" / f"{snapshot.session.session_id}.json"
         self._write(target, self._codec.encode(snapshot))
         return target
 
@@ -46,6 +46,8 @@ class JsonSessionRepository:
             return ()
         previews = []
         for path in self._root.glob("*.json"):
+            if path.name.endswith(".dump.json"):
+                continue
             snapshot = self.load(path.stem)
             session = snapshot.session
             previews.append(SessionPreview(session.session_id, session.active_agent, session.updated_at, _latest_user_preview(session)))
