@@ -9,13 +9,14 @@
 ## 新会话恢复顺序
 
 1. 必须先执行 `/project-bootstrap` 并读取 `docs/current.md`。
-2. 只加载 `current.md` 明确列出的四份活跃文档：
+2. 始终加载 `current.md` 明确列出的四份核心活跃文档：
    - `docs/design.md`
    - `docs/plan.md`
    - `docs/task.md`
    - `docs/decision.md`
-3. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 已收敛为当前 v2 事实，不再存在并行的 `docs/refactor-*.md`。
-4. 历史 baseline、audit、matrix 和 smoke 原文由 Git 保存；不要在 `docs/` 重新创建归档副本，也不得据此覆盖 `current.md` 的阶段与授权状态。
+3. 若 `docs/current.md` 明确路由专项执行文档，只额外加载其当前指定的文件；当前质量加固专项文档为 `docs/pre-r9-quality-hardening.md`。
+4. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 已收敛为当前 v2 事实，不再存在并行的 `docs/refactor-*.md`。
+5. 历史 baseline、audit、matrix 和 smoke 原文由 Git 保存；不要在 `docs/` 重新创建归档副本，也不得据此覆盖 `current.md` 的阶段与授权状态。
 
 ## R8 完成状态与 R9 授权门禁
 
@@ -178,7 +179,8 @@ main.py
 | `docs/current.md` | 唯一当前状态快照：阶段、任务、阻塞、下一步和活跃文档路由 | 每次新会话必读 |
 | `docs/design.md` | 当前 v2 架构、迁移边界和未来设计备忘 | 涉及架构、边界或 R8 删除范围时 |
 | `docs/plan.md` | 里程碑、依赖、验收和停止门禁 | 排期、进入阶段或检查验收时 |
-| `docs/task.md` | 唯一执行清单与状态标记 | 开始、完成或审查任务时 |
+| `docs/task.md` | R0～R8 主执行清单与状态标记 | 开始、完成或审查主任务时 |
 | `docs/decision.md` | 按编号追加的历史决策与理由 | 需要追溯边界或新增重要决定时 |
+| `docs/pre-r9-quality-hardening.md` | 当前 R9 前质量加固专项执行清单与暂缓问题台账 | `docs/current.md` 路由到该专项计划时 |
 
 不要重新创建 `docs/refactor-design.md`、`docs/refactor-plan.md` 或 `docs/refactor-task.md`。

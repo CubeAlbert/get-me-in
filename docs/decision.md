@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 254 — 建立 R9 前质量加固独立执行计划并暂停实施](#决策-254--建立-r9-前质量加固独立执行计划并暂停实施)
 - [决策 253 — 统一 HandoffContext Prompt-only 工程修正完成](#决策-253--统一-handoffcontext-prompt-only-工程修正完成)
 - [决策 252 — 纠正 Main AgentSpec 的实际文件所有权](#决策-252--纠正-main-agentspec-的实际文件所有权)
 - [决策 251 — 统一双向 HandoffContext 的接收回合契约](#决策-251--统一双向-handoffcontext-的接收回合契约)
@@ -5981,3 +5982,32 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 工程证据只能证明 Prompt 已正确生成，不能证明真实 provider 一定服从。用户需验证 Main→Resume 切换后 Resume 只确认且不调用 `workspace_list` 等工具，Resume→Main 返回后 Main 只汇报／询问，下一条真实用户确认后才开始工作。
 - 同一 smoke 会话可继续复验 R8-F-C 的 finish／tool call 和 query_memory 的被动触发边界；通过后再建立完成态文档 checkpoint。
+
+---
+
+### 决策 254 —— 建立 R9 前质量加固独立执行计划并暂停实施
+
+**背景：** R8 重构与既有问题修复完成后，用户要求在进入 R9 前重新审查可读性、结构、维护性、安全性和性能。只读审查与多轮讨论确认了一组应在 R9 前处理的问题，也确认了原始模型回复日志、Artifact committed replay 验证、完整 TeX 沙箱、rewind 时间戳、Runtime 整体拆分、ChromaDB 无可升级修复和其余维护性问题的接受或暂缓边界。用户要求本轮不要执行代码，先在 `docs/` 建立新的计划文档，并确保暂不处理的问题不会遗忘。
+
+**决定：**
+
+- 新增 `docs/pre-r9-quality-hardening.md`，作为后续唯一的 R9 前质量加固执行清单；`docs/current.md` 只保存阶段快照和该文件入口，不把清单复制进 `docs/task.md`。
+- 同步 `AGENTS.md` 的新会话恢复规则：四份核心活跃文档始终加载，专项执行文档仅按 `docs/current.md` 的显式路由额外加载；当前专项入口为 `docs/pre-r9-quality-hardening.md`。
+- 已确认实施范围拆为 Q1～Q7：TeX `-no-shell-escape` 与客户文件逐次审批；typed approval／selection 与 Plan snapshot 变化检测；Tool Schema 外层约束；Workspace no-replace 与有限读取／搜索；Session dump 独立目录与 CLI Rich 转义；依赖升级；完整验收与文档 checkpoint。
+- Workspace 不新增 `create()`；`workspace_write` 必须使用现有 write 边界的 no-replace 模式，在目标已存在或并发创建时失败，内部已确认的 replace 写入继续保留。
+- Plan 变化不由工具名或 `ToolOutcome` 字段声明；Runtime 在成功工具执行前后比较 immutable Plan snapshot，仅在实际变化时投影。
+- Schema 校验只在 handler 外层增加 `allowed_values` 和一层 list `items` 检查；不得注入默认值、转换合法参数或借此改写 handler 业务逻辑。
+- 原始模型回复日志保持现状；Artifact replay 文件验证、完整 TeX 文件系统沙箱、rewind 碰撞、Runtime／`_complete_model()` 大拆分、ChromaDB 无修复公告和其余可读性／维护性问题进入同一计划的 deferred ledger，并写明重启条件。
+- 当前只创建和路由文档，不修改生产代码、测试、依赖、锁文件或数据。后续必须由用户明确授权后从 Q1 开始；本决定不替代仍开放的 HandoffContext、R8-F-C 与 query_memory 真实 provider smoke，也不授权 R9。
+
+**理由：**
+
+- 把已确认修复和暂缓事项放在同一个可执行文档中，可以避免未来会话只处理当前切片而遗忘已知风险，同时避免把新的临时清单混入已经收敛的 R0～R8 主任务历史。
+- 独立 Q 切片和验证门禁便于保持代码／测试、依赖和文档 checkpoint 分离，并在发现白名单外影响时及时停止。
+- 保留 `docs/current.md` 的入口可以让新会话从唯一阶段快照恢复到本计划，而不把计划误解释成 R9 或已经完成的工程事实。
+
+**曾考虑的替代方案：**
+
+- 直接把所有项目追加到 `docs/task.md` —— 会把 R8 完成态、开放 provider smoke 和新的质量审查清单混在同一历史任务树中，拒绝。
+- 立即开始已同意的代码修改，再补计划 —— 用户明确要求先停止执行并完整记录，包括现阶段不考虑的问题，拒绝。
+- 只创建孤立文档而不更新 `docs/current.md`／决策入口 —— 新会话按当前状态恢复时容易遗漏，拒绝。
