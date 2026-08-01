@@ -441,6 +441,8 @@ OutputFormat 删除 `<InputOutputDistinction>`，只在 Requirements 中说明�
 
 工程实现已由 `0694c2b` 与 `5a43fda` 分片提交；定向测试分别为 65/65、84/84，完整 unittest 296/296、`compileall`、`git diff --check`、InputFormat blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4` 和 production-component smoke 均通过。真实 provider 对 Prompt 的遵从性与真实终端 Markdown／thinking 开关体验仍须在用户环境完成，不能由 fake LLM 或 production-component smoke 代替。
 
+用户随后完成 `SHOW_THINKING=false` 与 `true` 两组真实 provider／TTY smoke：两次 tool call 均先显示非空 message，再显示 `get_current_datetime` 工具状态与结果；关闭时未显示思考摘要，开启时 provider 未为 tool call 提供可选 thinking，但 finish 返回的纯文本 thinking 通过 Panel 显示在最终 Markdown message 上方。该结果符合“message 始终显示、thinking 仅在存在且开关开启时显示”的契约，真实 smoke 门禁已关闭。
+
 ### 6.7 CLI
 
 CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触 AgentRuntime、PlanService、CancellationToken 实例、完整 SessionSnapshot 或任何私有 history。拆分职责如下：

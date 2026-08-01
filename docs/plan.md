@@ -340,7 +340,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **实施顺序：** 设计文档 checkpoint → OutputFormat/codec 与定向测试 → 独立提交 → ToolStarted/Runtime/Renderer 与定向测试 → 独立提交 → 完整验证 → 完成态文档 checkpoint。任何必须扩展白名单的情况先停止确认；不得进入 R9。
 
-**当前状态：** 设计 checkpoint `b190a06`、Prompt/codec checkpoint `0694c2b`、RuntimeEvent/CLI checkpoint `5a43fda` 已完成。定向 65/65 与 84/84、完整 unittest 296/296、`compileall`、diff-check、InputFormat blob 和 production-component smoke 通过；等待用户在真实 provider／TTY 下分别复核 `SHOW_THINKING=false` 与 `true` 的工具调用展示，确认后再建立最终完成态文档 checkpoint。
+**当前状态：** 已完成。设计 checkpoint `b190a06`、Prompt/codec checkpoint `0694c2b`、RuntimeEvent/CLI checkpoint `5a43fda` 已提交；定向 65/65 与 84/84、完整 unittest 296/296、`compileall`、diff-check、InputFormat blob 和 production-component smoke 通过。用户已完成 `SHOW_THINKING=false`／`true` 两组真实 provider／TTY smoke，确认 message 始终显示、thinking 仅在存在且开启时以纯文本 Panel 位于 message 上方；最终完成态文档独立 checkpoint。本修正关闭，仍不得进入 R9。
 
 ### R9 —— 新功能恢复
 

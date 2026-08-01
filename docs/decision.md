@@ -6379,3 +6379,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 用完整 unittest 代替真实 provider smoke —— 无法证明模型遵从提示词或真实终端体验，拒绝。
 - 在没有用户 TTY 确认时直接记录最终完成 —— 会夸大验收状态，拒绝。
 - 为完成 smoke 修改 provider、CLI harness 或交互边界 —— 超出已确认白名单且无必要，拒绝。
+
+---
+
+### 决策 270 —— 完成 tool call message 修正的真实 provider smoke 与最终收口
+
+**背景：** 决策 269 完成工程实现与自动化门禁后，仍保留 `SHOW_THINKING=false`／`true` 两组真实 provider／TTY smoke。用户已在真实 CLI 中分别调用 `get_current_datetime` 并提供完整输出。
+
+**决定：**
+
+- `SHOW_THINKING=false` 时，模型返回非空 tool-call message“正在获取当前日期和时间，请稍候。”；CLI 先显示该 message，再显示工具名、工具结果和最终回复，全程未显示思考摘要。
+- `SHOW_THINKING=true` 时，模型返回非空 tool-call message“正在获取当前日期和时间。”；CLI 同样先显示 message，再显示工具状态与结果。该 tool call 未返回可选 thinking，符合 parser 与 OutputFormat 对 tool-call thinking 不设必填的边界。
+- 开启 thinking 的 finish 回复返回“已获取当前时间并告知用户。”，CLI 以纯文本“思考摘要”Panel 显示在最终 Markdown message 上方，确认 thinking 开关、格式和顺序正确。
+- 两组真实 smoke 与自动化／component 证据共同关闭本修正；同步五份活跃文档并建立最终完成态文档 checkpoint。R9 仍未授权，不读取、迁移、改写或删除旧运行数据。
+
+**理由：**
+
+- 两组输出证明 tool-call message 不再因空协议或 RuntimeEvent 投影缺失而消失，并确认关闭 thinking 不影响 message 展示。
+- tool-call thinking 缺失是明确允许的模型行为；finish thinking 的真实展示已经覆盖 Panel、纯文本、开关与顺序边界，不应把可选 tool-call thinking 缺失误判为失败。
+- 真实 provider/TTY 证据补足了 fake LLM、单元测试和 component smoke 无法证明的随机模型遵从性与终端体验。
+
+**曾考虑的替代方案：**
+
+- 因 tool call 未返回 thinking 判定 smoke 失败 —— 与 tool-call thinking 可选契约冲突，拒绝。
+- 只记录 `SHOW_THINKING=true` 结果 —— 无法证明关闭开关时 message 仍独立展示，拒绝。
+- smoke 通过后进入 R9 —— 本修正不构成 R9 授权，拒绝。
