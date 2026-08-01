@@ -76,11 +76,11 @@ class ProductionToolMetadataTests(unittest.TestCase):
         self.definitions = (
             *build_system_tools(object()),
             *build_plan_tools(),
-            *build_workspace_tools(),
+            *build_workspace_tools(100, 50, 50),
             *build_web_tools(),
             *build_switch_tools(),
-            *build_customer_file_tools(),
-            *build_retrieval_tools("app.log"),
+            *build_customer_file_tools(100),
+            *build_retrieval_tools("app.log", 5),
             *build_resume_tools(),
         )
         self.by_name = {
@@ -351,7 +351,7 @@ class ToolExecutorTests(unittest.TestCase):
         approved = ToolContext("session", AgentKey.MAIN, CancellationToken(), approved=True)
         resume = ToolExecutor(ToolCatalog(build_resume_tools()))
         choices = ToolExecutor(ToolCatalog(build_switch_tools()))
-        workspace = ToolExecutor(ToolCatalog(build_workspace_tools()))
+        workspace = ToolExecutor(ToolCatalog(build_workspace_tools(100, 50, 50)))
 
         invalid_template = resume.execute(
             "template", "copy_template", {"template": "invalid", "prefix": "resume"}, approved

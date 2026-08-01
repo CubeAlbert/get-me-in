@@ -39,7 +39,11 @@ def main() -> int:
     exit_code = 1
     logging_ready = False
     try:
-        renderer = Renderer(show_thinking=settings.show_thinking)
+        renderer = Renderer(
+            show_thinking=settings.show_thinking,
+            result_preview_chars=settings.cli_result_preview_chars,
+            argument_preview_chars=settings.cli_argument_preview_chars,
+        )
         log_path = configure_logging(
             settings.log_dir,
             settings.log_level,
@@ -51,7 +55,12 @@ def main() -> int:
         logger.info("v2 CLI starting; log=%s level=%s", log_path, settings.log_level)
         application = build_application(settings)
         input_controller = InputController()
-        commands = build_command_registry(application, input_controller, renderer)
+        commands = build_command_registry(
+            application,
+            input_controller,
+            renderer,
+            session_preview_chars=settings.session_preview_chars,
+        )
         input_controller.set_completions(commands.completions)
         worker = WorkerRunner(
             application,

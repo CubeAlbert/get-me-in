@@ -27,7 +27,21 @@ class WorkspaceToolTests(unittest.TestCase):
             workspace=self.workspace,
             workspace_access=self.access,
         )
-        self.executor = ToolExecutor(ToolCatalog(build_workspace_tools()))
+        self.executor = ToolExecutor(ToolCatalog(build_workspace_tools(100, 50, 50)))
+
+    def test_schema_and_handler_share_injected_defaults(self) -> None:
+        catalog = ToolCatalog(build_workspace_tools(2, 3, 4))
+        self.assertEqual(2, catalog.get("workspace_read").schema.properties["limit"].default)
+        self.assertEqual(3, catalog.get("workspace_grep").schema.properties["max_matches"].default)
+        self.assertEqual(4, catalog.get("workspace_search_file").schema.properties["max_results"].default)
+
+        self.workspace.write(Path("notes.txt"), "one\ntwo\nthree")
+        outcome = ToolExecutor(catalog).execute(
+            "read", "workspace_read", {"path": "notes.txt"}, self.context
+        )
+
+        self.assertEqual(2, outcome.output["limit"])
+        self.assertTrue(outcome.output["truncated"])
 
     def test_read_returns_one_based_lines_and_revision(self) -> None:
         self.workspace.write(Path("notes.txt"), "one\ntwo\nthree")

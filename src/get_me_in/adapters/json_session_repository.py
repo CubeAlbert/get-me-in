@@ -10,9 +10,10 @@ from src.get_me_in.domain.agents import AgentKey
 
 
 class JsonSessionRepository:
-    def __init__(self, root: Path, *, codec: object) -> None:
+    def __init__(self, root: Path, *, codec: object, session_preview_chars: int) -> None:
         self._root = Path(root)
         self._codec = codec
+        self._session_preview_chars = session_preview_chars
 
     def save(self, snapshot: object) -> None:
         target = self._path(snapshot.session.session_id)
@@ -50,7 +51,14 @@ class JsonSessionRepository:
                 continue
             snapshot = self.load(path.stem)
             session = snapshot.session
-            previews.append(SessionPreview(session.session_id, session.active_agent, session.updated_at, _latest_user_preview(session)))
+            previews.append(
+                SessionPreview(
+                    session.session_id,
+                    session.active_agent,
+                    session.updated_at,
+                    _latest_user_preview(session, self._session_preview_chars),
+                )
+            )
         return tuple(sorted(previews, key=lambda item: item.updated_at, reverse=True))
 
     def close(self) -> None:
@@ -62,10 +70,10 @@ class JsonSessionRepository:
         return self._root / f"{session_id}.json"
 
 
-def _latest_user_preview(session: object) -> str:
+def _latest_user_preview(session: object, preview_chars: int) -> str:
     history = session.agents.get(AgentKey.MAIN).history if AgentKey.MAIN in session.agents else ()
     for record in reversed(history):
         if isinstance(record, MessageRecord) and record.role is Role.USER:
             preview = " ".join(record.content.split())
-            return f"{preview[:79]}…" if len(preview) > 80 else preview
+            return f"{preview[:preview_chars - 1]}…" if len(preview) > preview_chars else preview
     return ""

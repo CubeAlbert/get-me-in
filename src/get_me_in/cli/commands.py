@@ -108,7 +108,13 @@ class CommandRegistry:
         return tuple(sorted(self._names))
 
 
-def build_command_registry(application: object, input_controller: object, renderer: object) -> CommandRegistry:
+def build_command_registry(
+    application: object,
+    input_controller: object,
+    renderer: object,
+    *,
+    session_preview_chars: int | None = None,
+) -> CommandRegistry:
     """Build R5 commands using only public Application and frontend APIs."""
 
     def handled(message: str | None = None) -> CommandResult:
@@ -146,7 +152,7 @@ def build_command_registry(application: object, input_controller: object, render
         if not arguments:
             if not points:
                 return handled("没有可回退的用户输入。")
-            choices = _rewind_choices(points)
+            choices = _rewind_choices(points, preview_chars=session_preview_chars)
             selected = input_controller.select("选择要回退的输入:", (*choices, _CANCEL_SELECTION))
             if selected is None or selected == _CANCEL_SELECTION:
                 return CommandResult(CommandAction.HANDLED)
@@ -210,13 +216,15 @@ def _validate_name(name: str) -> str:
     return normalized
 
 
-def _rewind_choices(points: Iterable[object]) -> dict[str, str]:
+def _rewind_choices(
+    points: Iterable[object], *, preview_chars: int | None = None
+) -> dict[str, str]:
     """Build human-readable rewind labels while keeping opaque turn ids internal."""
     choices: dict[str, str] = {}
     for index, point in enumerate(points, start=1):
         preview = " ".join(point.user_text.split()) or "（空白输入）"
-        if len(preview) > 80:
-            preview = f"{preview[:79]}…"
+        if preview_chars is not None and len(preview) > preview_chars:
+            preview = f"{preview[:preview_chars - 1]}…"
         choices[f"{index}. {preview}"] = point.turn_id
     return choices
 

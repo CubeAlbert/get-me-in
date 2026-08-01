@@ -30,15 +30,23 @@ from src.get_me_in.domain.sessions import SessionView
 
 
 _SENSITIVE_ARGUMENT_NAMES = frozenset({"api_key", "authorization", "credential", "password", "secret", "token"})
-_PREVIEW_LIMIT = 500
 
 
 class Renderer:
     """Renders typed events and frontend projections without business decisions."""
 
-    def __init__(self, console: Console | None = None, *, show_thinking: bool = False) -> None:
+    def __init__(
+        self,
+        console: Console | None = None,
+        *,
+        show_thinking: bool = False,
+        result_preview_chars: int | None = None,
+        argument_preview_chars: int | None = None,
+    ) -> None:
         self._console = console or Console(force_terminal=True)
         self._show_thinking = show_thinking
+        self._result_preview_chars = result_preview_chars
+        self._argument_preview_chars = argument_preview_chars
 
     def render_welcome(self) -> None:
         """Render the stable product identity before the first input prompt."""
@@ -61,7 +69,7 @@ class Renderer:
             elif event.output:
                 self._console.print(
                     Panel(
-                        Text(self._preview(event.output)),
+                        Text(self._preview(event.output, limit=self._result_preview_chars)),
                         title=f"工具结果 · {escape(event.tool_name)}",
                         border_style="dim",
                     )
@@ -132,18 +140,20 @@ class Renderer:
     def status(self, message: str) -> AbstractContextManager[Any]:
         return self._console.status(Text(message))
 
-    @staticmethod
-    def _arguments_summary(arguments: Mapping[str, object]) -> str:
+    def _arguments_summary(self, arguments: Mapping[str, object]) -> str:
         if not arguments:
             return ""
         values: list[str] = []
         for name, value in arguments.items():
-            rendered = "***" if name.casefold() in _SENSITIVE_ARGUMENT_NAMES else Renderer._preview(value, limit=160)
+            rendered = "***" if name.casefold() in _SENSITIVE_ARGUMENT_NAMES else self._preview(
+                value, limit=self._argument_preview_chars
+            )
             values.append(f"{escape(str(name))}={escape(rendered)}")
         return f" ({', '.join(values)})"
 
     @staticmethod
-    def _preview(value: object, *, limit: int = _PREVIEW_LIMIT) -> str:
+    def _preview(value: object, *, limit: int | None = None) -> str:
         text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, sort_keys=True)
         text = " ".join(text.split())
+        limit = len(text) if limit is None else limit
         return text if len(text) <= limit else f"{text[:limit - 1]}…"

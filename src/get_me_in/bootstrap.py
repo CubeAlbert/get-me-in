@@ -252,11 +252,18 @@ def _build_application(
         (
             *build_system_tools(clock),
             *build_plan_tools(),
-            *build_workspace_tools(),
+            *build_workspace_tools(
+                settings.workspace_read_default_limit,
+                settings.workspace_search_max_matches,
+                settings.workspace_file_search_max_results,
+            ),
             *build_web_tools(),
             *build_switch_tools(),
-            *build_customer_file_tools(),
-            *build_retrieval_tools(settings.log_file_name),
+            *build_customer_file_tools(settings.customer_file_read_default_limit),
+            *build_retrieval_tools(
+                settings.log_file_name,
+                settings.retrieval_default_top_k,
+            ),
             *build_resume_tools(),
         )
     )
@@ -356,7 +363,11 @@ def _build_application(
         session,
         orchestrator=Orchestrator({AgentKey.MAIN: main_runtime, AgentKey.RESUME: resume_runtime}),
         plans={AgentKey.MAIN: main_plan, AgentKey.RESUME: resume_plan},
-        repository=JsonSessionRepository(settings.sessions_dir, codec=SessionSnapshotCodec()),
+        repository=JsonSessionRepository(
+            settings.sessions_dir,
+            codec=SessionSnapshotCodec(),
+            session_preview_chars=settings.session_preview_chars,
+        ),
         clock=clock,
         id_generator=id_generator,
         workspace_access=workspace_access,

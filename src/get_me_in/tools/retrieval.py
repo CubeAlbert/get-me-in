@@ -33,16 +33,28 @@ logger = logging.getLogger(__name__)
 _FILE_ONLY_LOG = {"_get_me_in_file_only": True}
 
 
-def build_retrieval_tools(log_file_name: str) -> tuple[ToolDefinition, ...]:
+def build_retrieval_tools(
+    log_file_name: str, default_top_k: int
+) -> tuple[ToolDefinition, ...]:
     def query_memory(
         arguments: Mapping[str, object], context: RetrievalToolContext
     ) -> ToolSuccess | ToolFailure:
-        return _query_memory(arguments, context, log_file_name=log_file_name)
+        return _query_memory(
+            arguments,
+            context,
+            log_file_name=log_file_name,
+            default_top_k=default_top_k,
+        )
 
     def query_reference_data(
         arguments: Mapping[str, object], context: RetrievalToolContext
     ) -> ToolSuccess | ToolFailure:
-        return _query_reference_data(arguments, context, log_file_name=log_file_name)
+        return _query_reference_data(
+            arguments,
+            context,
+            log_file_name=log_file_name,
+            default_top_k=default_top_k,
+        )
 
     return (
         ToolDefinition(
@@ -76,8 +88,8 @@ def build_retrieval_tools(log_file_name: str) -> tuple[ToolDefinition, ...]:
                     ),
                     "top_k": ToolParameter(
                         int,
-                        "返回结果数量，默认 5",
-                        default=5,
+                        f"返回结果数量，默认 {default_top_k}",
+                        default=default_top_k,
                     ),
                 },
                 frozenset({"query"}),
@@ -111,8 +123,8 @@ def build_retrieval_tools(log_file_name: str) -> tuple[ToolDefinition, ...]:
                     ),
                     "top_k": ToolParameter(
                         int,
-                        "返回结果数量，默认 5",
-                        default=5,
+                        f"返回结果数量，默认 {default_top_k}",
+                        default=default_top_k,
                     ),
                 },
                 frozenset({"query"}),
@@ -131,6 +143,7 @@ def _query_memory(
     context: RetrievalToolContext,
     *,
     log_file_name: str,
+    default_top_k: int,
 ) -> ToolSuccess | ToolFailure:
     category = arguments.get("memory_type")
     if category is not None and category not in MemoryType:
@@ -141,6 +154,7 @@ def _query_memory(
         collection="memories",
         category=category,
         log_file_name=log_file_name,
+        default_top_k=default_top_k,
     )
 
 
@@ -149,6 +163,7 @@ def _query_reference_data(
     context: RetrievalToolContext,
     *,
     log_file_name: str,
+    default_top_k: int,
 ) -> ToolSuccess | ToolFailure:
     category = arguments.get("category")
     if category is not None and category not in ReferenceCategory:
@@ -159,6 +174,7 @@ def _query_reference_data(
         collection="references",
         category=category,
         log_file_name=log_file_name,
+        default_top_k=default_top_k,
     )
 
 
@@ -169,10 +185,11 @@ def _search(
     collection: str,
     category: object | None,
     log_file_name: str,
+    default_top_k: int,
 ) -> ToolSuccess | ToolFailure:
     if context.retrieval is None:
         return ToolFailure("retrieval_unavailable", "This application has no retrieval adapter")
-    top_k = arguments.get("top_k", 5)
+    top_k = arguments.get("top_k", default_top_k)
     if top_k < 1:
         return ToolFailure("invalid_top_k", "top_k must be at least 1")
     try:

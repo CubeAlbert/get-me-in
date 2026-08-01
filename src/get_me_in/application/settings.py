@@ -70,6 +70,14 @@ class Settings:
     log_backup_count: int
     cli_worker_poll_interval_seconds: float
     subprocess_poll_interval_seconds: float
+    cli_result_preview_chars: int
+    cli_argument_preview_chars: int
+    session_preview_chars: int
+    workspace_read_default_limit: int
+    workspace_search_max_matches: int
+    workspace_file_search_max_results: int
+    customer_file_read_default_limit: int
+    retrieval_default_top_k: int
     hf_hub_disable_progress_bars: bool
     tqdm_disable: bool
     transformers_verbosity: str
@@ -123,6 +131,14 @@ class Settings:
             "LOG_BACKUP_COUNT",
             "CLI_WORKER_POLL_INTERVAL_SECONDS",
             "SUBPROCESS_POLL_INTERVAL_SECONDS",
+            "CLI_RESULT_PREVIEW_CHARS",
+            "CLI_ARGUMENT_PREVIEW_CHARS",
+            "SESSION_PREVIEW_CHARS",
+            "WORKSPACE_READ_DEFAULT_LIMIT",
+            "WORKSPACE_SEARCH_MAX_MATCHES",
+            "WORKSPACE_FILE_SEARCH_MAX_RESULTS",
+            "CUSTOMER_FILE_READ_DEFAULT_LIMIT",
+            "RETRIEVAL_DEFAULT_TOP_K",
             "HF_HUB_DISABLE_PROGRESS_BARS",
             "TQDM_DISABLE",
             "TRANSFORMERS_VERBOSITY",
@@ -365,6 +381,18 @@ class Settings:
             subprocess_poll_interval_seconds=positive_float(
                 "SUBPROCESS_POLL_INTERVAL_SECONDS"
             ),
+            cli_result_preview_chars=positive_int("CLI_RESULT_PREVIEW_CHARS"),
+            cli_argument_preview_chars=positive_int("CLI_ARGUMENT_PREVIEW_CHARS"),
+            session_preview_chars=positive_int("SESSION_PREVIEW_CHARS"),
+            workspace_read_default_limit=positive_int("WORKSPACE_READ_DEFAULT_LIMIT"),
+            workspace_search_max_matches=positive_int("WORKSPACE_SEARCH_MAX_MATCHES"),
+            workspace_file_search_max_results=positive_int(
+                "WORKSPACE_FILE_SEARCH_MAX_RESULTS"
+            ),
+            customer_file_read_default_limit=positive_int(
+                "CUSTOMER_FILE_READ_DEFAULT_LIMIT"
+            ),
+            retrieval_default_top_k=positive_int("RETRIEVAL_DEFAULT_TOP_K"),
             hf_hub_disable_progress_bars=boolean("HF_HUB_DISABLE_PROGRESS_BARS"),
             tqdm_disable=boolean("TQDM_DISABLE"),
             transformers_verbosity=transformers_verbosity,

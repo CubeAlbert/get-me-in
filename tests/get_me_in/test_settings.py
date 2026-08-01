@@ -55,6 +55,14 @@ _BASE_ENV = {
     "LOG_BACKUP_COUNT": "5",
     "CLI_WORKER_POLL_INTERVAL_SECONDS": "0.1",
     "SUBPROCESS_POLL_INTERVAL_SECONDS": "0.05",
+    "CLI_RESULT_PREVIEW_CHARS": "500",
+    "CLI_ARGUMENT_PREVIEW_CHARS": "160",
+    "SESSION_PREVIEW_CHARS": "80",
+    "WORKSPACE_READ_DEFAULT_LIMIT": "100",
+    "WORKSPACE_SEARCH_MAX_MATCHES": "50",
+    "WORKSPACE_FILE_SEARCH_MAX_RESULTS": "50",
+    "CUSTOMER_FILE_READ_DEFAULT_LIMIT": "100",
+    "RETRIEVAL_DEFAULT_TOP_K": "5",
     "HF_HUB_DISABLE_PROGRESS_BARS": "1",
     "TQDM_DISABLE": "1",
     "TRANSFORMERS_VERBOSITY": "error",
@@ -111,6 +119,14 @@ class SettingsTests(unittest.TestCase):
             "LOG_BACKUP_COUNT",
             "CLI_WORKER_POLL_INTERVAL_SECONDS",
             "SUBPROCESS_POLL_INTERVAL_SECONDS",
+            "CLI_RESULT_PREVIEW_CHARS",
+            "CLI_ARGUMENT_PREVIEW_CHARS",
+            "SESSION_PREVIEW_CHARS",
+            "WORKSPACE_READ_DEFAULT_LIMIT",
+            "WORKSPACE_SEARCH_MAX_MATCHES",
+            "WORKSPACE_FILE_SEARCH_MAX_RESULTS",
+            "CUSTOMER_FILE_READ_DEFAULT_LIMIT",
+            "RETRIEVAL_DEFAULT_TOP_K",
             "HF_HUB_DISABLE_PROGRESS_BARS",
             "TQDM_DISABLE",
             "TRANSFORMERS_VERBOSITY",
@@ -156,6 +172,14 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(5, settings.log_backup_count)
         self.assertEqual(0.1, settings.cli_worker_poll_interval_seconds)
         self.assertEqual(0.05, settings.subprocess_poll_interval_seconds)
+        self.assertEqual(500, settings.cli_result_preview_chars)
+        self.assertEqual(160, settings.cli_argument_preview_chars)
+        self.assertEqual(80, settings.session_preview_chars)
+        self.assertEqual(100, settings.workspace_read_default_limit)
+        self.assertEqual(50, settings.workspace_search_max_matches)
+        self.assertEqual(50, settings.workspace_file_search_max_results)
+        self.assertEqual(100, settings.customer_file_read_default_limit)
+        self.assertEqual(5, settings.retrieval_default_top_k)
         self.assertTrue(settings.llm_thinking_enabled)
         self.assertFalse(settings.show_thinking)
         self.assertEqual(Path("project/data/prompts"), settings.prompts_dir)
@@ -191,6 +215,9 @@ class SettingsTests(unittest.TestCase):
             ("LOG_FILE_NAME", "nested/app.log"),
             ("LOG_BACKUP_COUNT", "-1"),
             ("CLI_WORKER_POLL_INTERVAL_SECONDS", "0"),
+            ("CLI_RESULT_PREVIEW_CHARS", "0"),
+            ("SESSION_PREVIEW_CHARS", "0"),
+            ("RETRIEVAL_DEFAULT_TOP_K", "0"),
             ("TRANSFORMERS_VERBOSITY", "verbose"),
         )
         for name, value in invalid_values:

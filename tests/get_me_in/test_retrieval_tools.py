@@ -15,7 +15,7 @@ class RetrievalToolTests(unittest.TestCase):
     def setUp(self) -> None:
         self.adapter = _Retrieval()
         self.executor = ToolExecutor(
-            ToolCatalog(build_retrieval_tools("custom-runtime.log"))
+            ToolCatalog(build_retrieval_tools("custom-runtime.log", 5))
         )
         self.context = ToolContext("session", AgentKey.MAIN, CancellationToken(), retrieval=self.adapter)
 
@@ -25,6 +25,7 @@ class RetrievalToolTests(unittest.TestCase):
         self.assertIsInstance(outcome, ToolSuccess)
         self.assertEqual("memories", self.adapter.collection)
         self.assertEqual("preference", self.adapter.category)
+        self.assertEqual(5, self.adapter.top_k)
         self.assertEqual({"source": "test"}, outcome.output["results"][0]["metadata"])
 
     def test_reference_query_rejects_unknown_category(self) -> None:
@@ -82,10 +83,12 @@ class RetrievalToolTests(unittest.TestCase):
 class _Retrieval:
     collection: str | None = None
     category: str | None = None
+    top_k: int | None = None
 
     def search(self, query: str, *, collection: str, category: str | None, top_k: int, cancellation: CancellationToken) -> tuple[RetrievalResult, ...]:
         self.collection = collection
         self.category = category
+        self.top_k = top_k
         return (RetrievalResult("命中", {"source": "test", "rerank_score": 0.9}),)
 
 

@@ -25,15 +25,36 @@ class WorkspaceToolContext(ToolHandlerContext, Protocol):
     workspace_access: object | None
 
 
-def build_workspace_tools() -> tuple[ToolDefinition, ...]:
+def build_workspace_tools(
+    read_default_limit: int,
+    search_max_matches: int,
+    file_search_max_results: int,
+) -> tuple[ToolDefinition, ...]:
     """Build the capability-scoped v2 workspace tools."""
+    def workspace_read(
+        arguments: Mapping[str, object], context: WorkspaceToolContext
+    ) -> ToolSuccess | ToolFailure:
+        return _read(arguments, context, default_limit=read_default_limit)
+
+    def workspace_grep(
+        arguments: Mapping[str, object], context: WorkspaceToolContext
+    ) -> ToolSuccess | ToolFailure:
+        return _grep(arguments, context, default_max_matches=search_max_matches)
+
+    def workspace_search_file(
+        arguments: Mapping[str, object], context: WorkspaceToolContext
+    ) -> ToolSuccess | ToolFailure:
+        return _search_file(
+            arguments, context, default_max_results=file_search_max_results
+        )
+
     return (
         ToolDefinition(
             name="workspace_read",
             purpose="读取工作区内的文本文件，返回带行号的结构化内容和 revision。行号、内容与 revision 可用于 workspace_edit 精确修改。",
             use_when="需要查看工作区内某个文件的内容时",
             do_not_use_when="文件不存在或 path 是目录时",
-            expected_output='{"path": "...", "revision": "...", "total_lines": N, "offset": 1, "limit": 100, "truncated": false, "lines": [[1, "..."], ...]}',
+            expected_output=f'{{"path": "...", "revision": "...", "total_lines": N, "offset": 1, "limit": {read_default_limit}, "truncated": false, "lines": [[1, "..."], ...]}}',
             schema=ToolSchema(
                 {
                     "path": ToolParameter(
@@ -47,14 +68,14 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
                     ),
                     "limit": ToolParameter(
                         int,
-                        "最多返回的行数，默认 100 行",
-                        default=100,
+                        f"最多返回的行数，默认 {read_default_limit} 行",
+                        default=read_default_limit,
                     ),
                 },
                 frozenset({"path"}),
             ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
-            handler=_read,
+            handler=workspace_read,
         ),
         ToolDefinition(
             name="workspace_list",
@@ -104,14 +125,14 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
                     ),
                     "max_matches": ToolParameter(
                         int,
-                        "匹配结果上限，达到后截断，默认 50",
-                        default=50,
+                        f"匹配结果上限，达到后截断，默认 {search_max_matches}",
+                        default=search_max_matches,
                     ),
                 },
                 frozenset({"pattern"}),
             ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
-            handler=_grep,
+            handler=workspace_grep,
         ),
         ToolDefinition(
             name="workspace_search_file",
@@ -132,14 +153,14 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
                     ),
                     "max_results": ToolParameter(
                         int,
-                        "结果上限，达到后截断，默认 50",
-                        default=50,
+                        f"结果上限，达到后截断，默认 {file_search_max_results}",
+                        default=file_search_max_results,
                     ),
                 },
                 frozenset({"pattern"}),
             ),
             policy=ToolPolicy(frozenset({Capability.WORKSPACE_READ})),
-            handler=_search_file,
+            handler=workspace_search_file,
         ),
         ToolDefinition(
             name="workspace_replace",
@@ -269,13 +290,18 @@ def build_workspace_tools() -> tuple[ToolDefinition, ...]:
     )
 
 
-def _read(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+def _read(
+    arguments: Mapping[str, object],
+    context: WorkspaceToolContext,
+    *,
+    default_limit: int,
+) -> ToolSuccess | ToolFailure:
     workspace = _workspace(context)
     if isinstance(workspace, ToolFailure):
         return workspace
     path = Path(arguments["path"])
     offset = arguments.get("offset", 1)
-    limit = arguments.get("limit", 100)
+    limit = arguments.get("limit", default_limit)
     if offset < 1 or limit < 1:
         return ToolFailure("invalid_range", "offset and limit must be positive")
     try:
@@ -326,11 +352,16 @@ def _list(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
     )
 
 
-def _grep(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+def _grep(
+    arguments: Mapping[str, object],
+    context: WorkspaceToolContext,
+    *,
+    default_max_matches: int,
+) -> ToolSuccess | ToolFailure:
     workspace = _workspace(context)
     if isinstance(workspace, ToolFailure):
         return workspace
-    max_matches = arguments.get("max_matches", 50)
+    max_matches = arguments.get("max_matches", default_max_matches)
     try:
         matches = workspace.search(
             arguments["pattern"], path=Path(arguments.get("path", ".")),
@@ -345,11 +376,16 @@ def _grep(arguments: Mapping[str, object], context: WorkspaceToolContext) -> Too
                         "truncated": len(matches) >= max_matches})
 
 
-def _search_file(arguments: Mapping[str, object], context: WorkspaceToolContext) -> ToolSuccess | ToolFailure:
+def _search_file(
+    arguments: Mapping[str, object],
+    context: WorkspaceToolContext,
+    *,
+    default_max_results: int,
+) -> ToolSuccess | ToolFailure:
     workspace = _workspace(context)
     if isinstance(workspace, ToolFailure):
         return workspace
-    max_results = arguments.get("max_results", 50)
+    max_results = arguments.get("max_results", default_max_results)
     try:
         files = workspace.find_files(arguments["pattern"], path=Path(arguments.get("path", ".")), max_results=max_results)
     except (OSError, ValueError, WorkspaceError) as error:

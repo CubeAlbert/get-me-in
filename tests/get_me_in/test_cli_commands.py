@@ -89,6 +89,20 @@ class CoreCommandTests(unittest.TestCase):
         self.assertEqual(("1. first", "2. second", "❌ 取消"), self.input_controller.selection_choices)
         self.assertEqual([RewindSession("turn-2")], self.application.commands)
 
+    def test_rewind_preview_uses_injected_session_limit(self) -> None:
+        self.input_controller.selected = "1. fir…"
+        registry = build_command_registry(
+            self.application,
+            self.input_controller,
+            self.renderer,
+            session_preview_chars=4,
+        )
+
+        rewound = registry.dispatch("/rewind")
+
+        self.assertEqual(CommandResult(CommandAction.PREFILL, "first"), rewound)
+        self.assertEqual(("1. fir…", "2. sec…", "❌ 取消"), self.input_controller.selection_choices)
+
     def test_interactive_restore_and_rewind_cancel_without_calling_application(self) -> None:
         self.input_controller.selected = "❌ 取消"
 
@@ -214,6 +228,28 @@ class InputControllerTests(unittest.TestCase):
 
 
 class RendererTests(unittest.TestCase):
+    def test_preview_limits_are_injected_for_results_and_arguments(self) -> None:
+        output = StringIO()
+        renderer = Renderer(
+            console=_console(output),
+            result_preview_chars=4,
+            argument_preview_chars=3,
+        )
+
+        renderer.render_event(
+            ToolStarted(
+                call_id="call",
+                tool_name="search",
+                message="running",
+                arguments={"query": "abcdef"},
+            )
+        )
+        renderer.render_event(ToolFinished("call", "search", "abcdef"))
+
+        text = output.getvalue()
+        self.assertIn("query=ab…", text)
+        self.assertIn("abc…", text)
+
     def test_renders_stable_welcome_banner(self) -> None:
         output = StringIO()
         renderer = Renderer(console=_console(output))

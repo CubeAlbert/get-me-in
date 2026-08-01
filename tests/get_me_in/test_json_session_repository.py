@@ -11,9 +11,18 @@ from tests.get_me_in.test_session_codec import _snapshot
 
 
 class JsonSessionRepositoryTests(unittest.TestCase):
+    def test_list_uses_injected_preview_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = JsonSessionRepository(
+                Path(temporary), codec=SessionSnapshotCodec(), session_preview_chars=3
+            )
+            repository.save(_snapshot())
+
+            self.assertEqual("he…", repository.list()[0].preview)
+
     def test_save_load_and_list_snapshots(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            repository = JsonSessionRepository(Path(temporary), codec=SessionSnapshotCodec())
+            repository = JsonSessionRepository(Path(temporary), codec=SessionSnapshotCodec(), session_preview_chars=80)
             repository.save(_snapshot())
 
             loaded = repository.load("session-1")
@@ -26,7 +35,7 @@ class JsonSessionRepositoryTests(unittest.TestCase):
     def test_dump_uses_separate_directory_and_list_ignores_legacy_root_dumps(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            repository = JsonSessionRepository(root, codec=SessionSnapshotCodec())
+            repository = JsonSessionRepository(root, codec=SessionSnapshotCodec(), session_preview_chars=80)
             snapshot = _snapshot()
             repository.save(snapshot)
             legacy_dump = root / "old-session.dump.json"
@@ -42,13 +51,13 @@ class JsonSessionRepositoryTests(unittest.TestCase):
 
     def test_rejects_path_like_session_ids(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            repository = JsonSessionRepository(Path(temporary), codec=SessionSnapshotCodec())
+            repository = JsonSessionRepository(Path(temporary), codec=SessionSnapshotCodec(), session_preview_chars=80)
             with self.assertRaises(ValueError):
                 repository.load("../not-a-session")
 
     def test_failed_replace_preserves_existing_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            repository = JsonSessionRepository(Path(temporary), codec=SessionSnapshotCodec())
+            repository = JsonSessionRepository(Path(temporary), codec=SessionSnapshotCodec(), session_preview_chars=80)
             repository.save(_snapshot())
             with patch.object(Path, "replace", side_effect=OSError("disk failure")):
                 with self.assertRaises(OSError):

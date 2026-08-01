@@ -14,11 +14,31 @@ from src.get_me_in.tools.customer_file import build_customer_file_tools
 
 
 class CustomerFileToolTests(unittest.TestCase):
+    def test_schema_and_handler_share_injected_default(self) -> None:
+        definition = build_customer_file_tools(2)[0]
+        self.assertEqual(2, definition.schema.properties["limit"].default)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resume.txt"
+            path.write_text("one\ntwo\nthree", encoding="utf-8")
+            executor = ToolExecutor(ToolCatalog((definition,)))
+            context = ToolContext(
+                "session",
+                AgentKey.MAIN,
+                CancellationToken(),
+                external_files=AuthorizedFileReader(),
+                approved=True,
+            )
+            outcome = executor.execute("call", "read_customer_file", {"path": str(path)}, context)
+
+        self.assertEqual(2, outcome.output["limit"])
+        self.assertTrue(outcome.output["truncated"])
+
     def test_approval_allows_supported_absolute_file_without_path_allowlist(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "resume.txt"
             path.write_text("one\ntwo", encoding="utf-8")
-            executor = ToolExecutor(ToolCatalog(build_customer_file_tools()))
+            executor = ToolExecutor(ToolCatalog(build_customer_file_tools(100)))
             context = ToolContext("session", AgentKey.MAIN, CancellationToken(), external_files=AuthorizedFileReader(), approved=True)
             outcome = executor.execute("call", "read_customer_file", {"path": str(path), "offset": 2}, context)
             self.assertIsInstance(outcome, ToolSuccess)
@@ -28,13 +48,13 @@ class CustomerFileToolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "resume.txt"
             path.write_text("text", encoding="utf-8")
-            executor = ToolExecutor(ToolCatalog(build_customer_file_tools()))
+            executor = ToolExecutor(ToolCatalog(build_customer_file_tools(100)))
             context = ToolContext("session", AgentKey.MAIN, CancellationToken(), external_files=AuthorizedFileReader())
             outcome = executor.execute("call", "read_customer_file", {"path": str(path)}, context)
             self.assertIsInstance(outcome, ToolApproval)
 
     def test_relative_and_unsupported_paths_still_fail_after_approval(self) -> None:
-        executor = ToolExecutor(ToolCatalog(build_customer_file_tools()))
+        executor = ToolExecutor(ToolCatalog(build_customer_file_tools(100)))
         context = ToolContext("session", AgentKey.MAIN, CancellationToken(), external_files=AuthorizedFileReader(), approved=True)
 
         relative = executor.execute("call", "read_customer_file", {"path": "resume.txt"}, context)

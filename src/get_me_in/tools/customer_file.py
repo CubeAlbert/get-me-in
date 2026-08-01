@@ -13,7 +13,12 @@ class CustomerFileContext(ToolHandlerContext, Protocol):
     external_files: ExternalFileReaderPort | None
 
 
-def build_customer_file_tools() -> tuple[ToolDefinition, ...]:
+def build_customer_file_tools(default_limit: int) -> tuple[ToolDefinition, ...]:
+    def read_customer_file(
+        arguments: Mapping[str, object], context: CustomerFileContext
+    ) -> ToolSuccess | ToolFailure:
+        return _read(arguments, context, default_limit=default_limit)
+
     return (
         ToolDefinition(
             name="read_customer_file",
@@ -34,8 +39,8 @@ def build_customer_file_tools() -> tuple[ToolDefinition, ...]:
                     ),
                     "limit": ToolParameter(
                         int,
-                        "最多返回的行数，默认 100",
-                        default=100,
+                        f"最多返回的行数，默认 {default_limit}",
+                        default=default_limit,
                     ),
                 },
                 frozenset({"path"}),
@@ -44,18 +49,23 @@ def build_customer_file_tools() -> tuple[ToolDefinition, ...]:
                 frozenset({Capability.EXTERNAL_FILE_READ}),
                 ConfirmationMode.ALWAYS,
             ),
-            handler=_read,
+            handler=read_customer_file,
         ),
     )
 
 
-def _read(arguments: Mapping[str, object], context: CustomerFileContext) -> ToolSuccess | ToolFailure:
+def _read(
+    arguments: Mapping[str, object],
+    context: CustomerFileContext,
+    *,
+    default_limit: int,
+) -> ToolSuccess | ToolFailure:
     if context.external_files is None:
         return ToolFailure("external_files_unavailable", "No user-authorized file reader is configured")
     path = Path(arguments["path"])
     if not path.is_absolute():
         return ToolFailure("external_path_not_absolute", "Customer file path must be absolute")
-    offset, limit = arguments.get("offset", 1), arguments.get("limit", 100)
+    offset, limit = arguments.get("offset", 1), arguments.get("limit", default_limit)
     if offset < 1 or limit < 1:
         return ToolFailure("invalid_range", "offset and limit must be positive")
     try:

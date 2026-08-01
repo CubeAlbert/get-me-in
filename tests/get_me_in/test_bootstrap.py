@@ -65,6 +65,14 @@ def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
         log_backup_count=5,
         cli_worker_poll_interval_seconds=0.1,
         subprocess_poll_interval_seconds=0.05,
+        cli_result_preview_chars=500,
+        cli_argument_preview_chars=160,
+        session_preview_chars=80,
+        workspace_read_default_limit=100,
+        workspace_search_max_matches=50,
+        workspace_file_search_max_results=50,
+        customer_file_read_default_limit=100,
+        retrieval_default_top_k=5,
         hf_hub_disable_progress_bars=True,
         tqdm_disable=True,
         transformers_verbosity="error",
@@ -102,7 +110,16 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual({AgentKey.MAIN, AgentKey.RESUME}, {item.key for item in second.catalog.list_descriptors()})
 
     def test_bootstrap_injects_the_configured_log_file_name(self) -> None:
-        settings = replace(_settings(), log_file_name="custom-runtime.log")
+        settings = replace(
+            _settings(),
+            log_file_name="custom-runtime.log",
+            session_preview_chars=7,
+            workspace_read_default_limit=11,
+            workspace_search_max_matches=13,
+            workspace_file_search_max_results=17,
+            customer_file_read_default_limit=19,
+            retrieval_default_top_k=23,
+        )
         with (
             patch(
                 "src.get_me_in.bootstrap.build_retrieval_tools",
@@ -115,8 +132,23 @@ class BootstrapTests(unittest.TestCase):
         ):
             application = self._build_application(settings, llm=_FakeLlm("done"))
 
-        retrieval_builder.assert_called_once_with("custom-runtime.log")
+        retrieval_builder.assert_called_once_with("custom-runtime.log", 23)
         self.assertEqual("custom-runtime.log", memory_type.call_args.args[-1])
+        self.assertEqual(
+            11, application.tool_catalog.get("workspace_read").schema.properties["limit"].default
+        )
+        self.assertEqual(
+            13, application.tool_catalog.get("workspace_grep").schema.properties["max_matches"].default
+        )
+        self.assertEqual(
+            17, application.tool_catalog.get("workspace_search_file").schema.properties["max_results"].default
+        )
+        self.assertEqual(
+            19, application.tool_catalog.get("read_customer_file").schema.properties["limit"].default
+        )
+        self.assertEqual(
+            23, application.tool_catalog.get("query_memory").schema.properties["top_k"].default
+        )
 
     def test_application_handles_one_no_tool_conversation(self) -> None:
         llm = _FakeLlm("completed")
