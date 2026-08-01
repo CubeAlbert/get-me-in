@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 276 — 完成运行配置外置 E0～E5 并等待用户审查](#决策-276--完成运行配置外置-e0e5-并等待用户审查)
 - [决策 275 — 完成运行配置外置 E2 并订正 production 白名单](#决策-275--完成运行配置外置-e2-并订正-production-白名单)
 - [决策 274 — 建立运行配置硬编码外置专项计划并留待新会话实施](#决策-274--建立运行配置硬编码外置专项计划并留待新会话实施)
 - [决策 273 — 移除旧 RAG 环境变量兼容别名](#决策-273--移除旧-rag-环境变量兼容别名)
@@ -6549,3 +6550,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 直接保留 `app.log` —— 与可配置日志文件名不一致，拒绝。
 - 让 Memory／Retrieval 模块直接读取环境变量 —— 破坏 Settings／composition root 注入边界，拒绝。
 - 修改 file-only 日志路由或 Tool schema —— 与本次提示文字修正无关，拒绝。
+
+---
+
+### 决策 276 —— 完成运行配置外置 E0～E5 并等待用户审查
+
+**背景：** E3 需要把 CLI result／argument／session preview 与 workspace、customer file、retrieval 五个 Tool default 从生产字面量统一收敛到 Settings，并保持 schema 文案、参数 default、handler fallback 和 bootstrap 注入一致。E4 随后需要完成完整工程门禁，同时不重复真实 provider 下载或进入 R9。
+
+**决定：**
+
+- `Settings` 新增八个 preview／Tool default canonical key；`.env.example` 与本地 `.env` 的 key/shape 保持 57/57 一致，应用配置继续 fail-fast，缺失／非法新增配置由根入口返回 2 且无 traceback。
+- `Renderer`、`JsonSessionRepository`、rewind choice builder 与五个 Tool builder 只接受 composition 注入值；显式 Tool 参数优先，Tool 名称、schema 结构、错误码、Memory／Knowledge 行为和数据边界不变。
+- `bootstrap.py` 是唯一装配路径；不新增 production module、依赖、CLI command、port、domain type、RuntimeEvent、持久化字段或 R9 能力。
+- E3 代码／测试 checkpoint 为 `154ff4f`；定向测试 114/114、完整 unittest 318/318、compileall、diff-check、旧硬编码静态检查通过。
+- E4 的 legacy refusal、persistent／memory 组件 smoke 和 headless 根入口 smoke 通过；有效入口测试使用现有本地模型快照及注入 `/exit` 解决自动化环境无 Windows 控制台问题，不改项目配置。E0～E5 文档已收口，等待用户审查；R9 仍未授权。
+
+**理由：**
+
+- 将 schema、handler 和 CLI 投影统一到 Settings 注入值，消除第二套运行默认值，同时保留协议、安全、持久化和数据路径不变量。
+- 将 headless 限制与业务验证分离，避免为自动化 smoke 引入新的 CLI 行为或网络依赖；已有用户 TTY／provider smoke 不被本次工程验证冒充。
+
+**曾考虑的替代方案：**
+
+- 在 builder 或 handler 保留 100／50／5 等 fallback —— 会恢复配置漂移，拒绝。
+- 为 headless smoke 修改 InputController 或增加测试入口 —— 超出专项范围，拒绝。
+- 以本次专项完成为由自动进入 R9 —— R9 仍需独立授权，拒绝。

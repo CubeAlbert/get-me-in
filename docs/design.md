@@ -766,6 +766,14 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 - **失败分流：** Settings 测试断言和 Windows SubprocessRunner 缺陷分别按决策 234～237 停止、授权、独立修复并提交；该流程继续作为未来文档验收发现产品缺陷时的稳定边界。
 - **提交与停止：** 决策 239 完成 R8-G/G8，决策 240 完成最终用户审查；当前仍不得自动进入 R9。
 
+#### 6.11.6 当前运行配置外置事实（E0～E5）
+
+- `.env.example` 是当前运行默认值清单；`Settings.from_env()` 对新增 preview／Tool default 键执行必填、正整数校验，缺失或非法配置由根入口返回退出码 2。
+- `bootstrap.py` 显式装配 CLI result／argument preview、Session／rewind preview，以及 workspace read／grep／file search、customer file read、retrieval 五个 Tool default。Tool schema 文案、参数 default 和 handler fallback 使用同一 builder 注入值；显式调用参数优先。
+- `Renderer`、`JsonSessionRepository`、command choice builder 与五个 Tool builder 不读取环境变量；配置只从 `Settings` 经 composition root 传入。已有编辑器选择仍是 CLI 的系统环境适配，不属于本专项业务运行配置。
+- 本专项未改变 Tool 名称、schema 结构、错误码、Memory／Knowledge 行为、Session 持久化字段、数据目录或 legacy refusal；E3 代码／测试 checkpoint 为 `154ff4f`，完整 unittest 318/318。
+- E4 的 key/shape、配置错误退出码、legacy refusal、persistent／memory 组件和 headless 根入口 smoke 已通过；专项 E5 文档已收口，当前等待用户审查，R9 仍未授权。
+
 ### 6.12 InterviewAgent Workflow 前置备忘（R9，非确认清单）
 
 本节只记录 R9 未来设计时不得遗忘的兼容性结论、阻塞点和优化方向，不构成 InterviewAgent 的实现授权，也不构成新文件、类或公开方法清单。R9 启动时仍须基于 R8 后的实际代码重新 Review，并由用户确认具体边界。

@@ -778,12 +778,14 @@
 - ✅ 代码／测试 checkpoint 为 `df01327`；当前事实、任务与决策由独立文档 checkpoint 收口。
 - ⛔ 本清理不进入 R9；`docs/task.md` 与 `docs/decision.md` 中既有旧名称只作为历史记录保留，不代表当前支持。
 
-## R8 完成态配置治理 —— 运行配置硬编码外置（实施中，E2 已完成）
+## R8 完成态配置治理 —— 运行配置硬编码外置（E0～E5 已完成，等待用户审查）
 
 - ✅ 完成只读盘点，区分部署／运行可调参数与协议、持久化、安全不变量。
 - ✅ 建立专项计划 [`docs/runtime-config-externalization.md`](runtime-config-externalization.md) 与决策 274，固定新增变量、默认值、验证规则、legacy 路径拒绝、文件白名单、E0～E5 切片和验收门禁。
 - ✅ E0～E2 已完成；E2 定向测试 60/60、完整 unittest 313/313、compileall、diff-check 与旧硬编码静态扫描通过，代码／测试 checkpoint 为 `b424b62`。E2 checkpoint 订正 production 白名单：`retrieval.py` 沿用原白名单，新增 `application/memory_service.py`，仅接收注入的 `settings.log_file_name`。
-- 📌 新会话必须先执行 `/project-bootstrap` 并从 E0 基线开始；计划文件存在不构成 R9 授权。
+- ✅ E3 已完成：CLI result／argument／session preview 与 workspace/customer/retrieval 五个 Tool default 均由 Settings 解析并由 bootstrap 显式注入；Tool schema 文案、default、handler fallback 同源，显式调用参数优先；定向 114/114、完整 unittest 318/318、compileall、diff-check 通过，代码／测试 checkpoint 为 `154ff4f`。
+- ✅ E4 已完成：57/57 `.env` key/shape、一致配置构造、缺失／非法配置退出码 2 无 traceback、legacy refusal、persistent／memory 组件 smoke 通过；有效根入口在本地模型快照与注入 `/exit` 的 headless smoke 下退出 0。
+- ✅ E5 已完成：专项计划、当前状态、设计事实、任务状态与决策记录已同步；文档独立 checkpoint 后等待用户审查，计划不构成 R9 授权。
 - ⛔ 若实施需要超出白名单、新增 production module／依赖／公开协议、改变持久化 schema 或访问四个 legacy 数据目录，立即停止并重新审查。
 
 ## R9 —— 重构后功能（不在当前执行范围）

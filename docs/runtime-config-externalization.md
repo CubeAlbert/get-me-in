@@ -2,8 +2,8 @@
 
 ## 1. 状态与授权门禁
 
-- **当前状态：** 方案已整理，尚未实施。
-- **实施会话：** 用户明确要求不在当前会话实施，留待新会话执行。
+- **当前状态：** E0～E5 已完成，等待用户审查。
+- **实施会话：** 已按 E0～E5 分片实施并完成代码／测试与文档 checkpoint。
 - **阶段边界：** 本专项是 R8 完成态后的独立配置治理，不进入 R9，不检查、设计或实施 InterviewAgent、Workflow、Job Search、LearningAgent 或 Sticky Plan。
 - **数据边界：** 不读取、迁移、改写或删除 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/`；本地 `.env` 中的密钥和值不得写入日志、测试输出、diff 或文档。
 - **停止规则：** 新会话开始前必须执行 `/project-bootstrap`，复核 `docs/current.md`、本文件和决策 274；若实际实现需要超出本文件白名单、新增 production module、依赖、公开协议或数据迁移，立即停止并提交最小扩展清单。
@@ -257,7 +257,7 @@ MODEL_LIBRARY_LOG_LEVEL=ERROR
 
 - 注入 result／argument／session preview 与五个 Tool default。
 - Tool schema 文案、default 和 handler 使用同一来源，不得形成三份值。
-- 更新 ToolCatalog 快照／行为测试；独立代码／测试 checkpoint。
+- 更新 ToolCatalog 快照／行为测试；定向测试 114/114、完整 unittest 318/318、`compileall` 与 `git diff --check` 通过；代码／测试 checkpoint 为 `154ff4f`。
 
 ### E4 —— 完整门禁
 
@@ -276,6 +276,7 @@ git diff --check
 - `.env`／`.env.example` key/shape 一致检查，任何输出只包含键名。
 - persistent／memory composition component smoke：自定义新路径正确注入，memory 不触碰磁盘路径；不需要重新下载模型或重复真实 provider smoke。
 - legacy refusal smoke：四个旧目录继续不可接入。
+- E4 已完成：完整测试、compileall、diff-check、57/57 `.env` key/shape、缺失／非法新增配置退出码 2 无 traceback、legacy refusal 与双模式组件测试通过；自动化环境的有效根入口使用本地模型快照和注入 `/exit` 绕过无 Windows 控制台限制后退出码 0。
 
 ### E5 —— 文档收口
 
@@ -284,6 +285,7 @@ git diff --check
 - 在 `docs/decision.md` 追加完成决策并同步 TOC。
 - 更新 `docs/current.md`，保留最近 10 条摘要并继续关闭 R9 门禁。
 - 文档独立 checkpoint；等待用户审查。
+- E5 已完成：当前配置事实、任务状态、决策摘要与本专项状态已同步；不进入 R9，等待用户审查。
 
 ## 11. 验收标准
 
