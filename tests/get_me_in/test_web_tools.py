@@ -35,7 +35,8 @@ class OpenAIWebSearchAdapterTests(unittest.TestCase):
             _Response(SimpleNamespace(content="source: https://example.test", tool_calls=None)),
         )
         adapter = OpenAIWebSearchAdapter(
-            api_key="key", base_url="https://api.deepseek.com", model="deepseek-v4-pro", client_factory=lambda: client,
+            api_key="key", base_url="https://api.deepseek.com", model="deepseek-v4-pro",
+            max_tokens=1234, client_factory=lambda: client,
         )
 
         result = adapter.search("latest", CancellationToken())
@@ -43,13 +44,13 @@ class OpenAIWebSearchAdapterTests(unittest.TestCase):
         self.assertEqual("source: https://example.test", result)
         self.assertEqual(2, len(client.requests))
         first, second = client.requests
-        self.assertEqual(4096, first["max_tokens"])
+        self.assertEqual(1234, first["max_tokens"])
         self.assertEqual(
             "Perform a web search for the query: latest",
             first["messages"][1]["content"],
         )
         self.assertEqual(first["messages"][:2], second["messages"][:2])
-        self.assertEqual(4096, second["max_tokens"])
+        self.assertEqual(1234, second["max_tokens"])
         self.assertEqual("Provide the result", second["messages"][3]["content"])
 
     def test_rejects_an_unexecuted_dsml_web_search_call(self) -> None:
@@ -57,7 +58,8 @@ class OpenAIWebSearchAdapterTests(unittest.TestCase):
             _Response(SimpleNamespace(content='<｜｜DSML｜｜tool_calls>\n<｜｜DSML｜｜invoke name="web_search">', tool_calls=None)),
         )
         adapter = OpenAIWebSearchAdapter(
-            api_key="key", base_url="https://api.deepseek.com", model="deepseek-v4-pro", client_factory=lambda: client,
+            api_key="key", base_url="https://api.deepseek.com", model="deepseek-v4-pro",
+            max_tokens=4096, client_factory=lambda: client,
         )
 
         with self.assertRaisesRegex(RuntimeError, "unexecuted web_search"):

@@ -131,6 +131,30 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("invalid_model_reply", events[-1].code)
         self.assertEqual(4, len(llm.requests))
 
+    def test_format_repair_limit_zero_pauses_without_repair(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            ["bad response"], format_repair_limit=0
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("question"))
+
+        self.assertIsInstance(events[-1], Paused)
+        self.assertEqual(1, len(llm.requests))
+        self.assertIn("0 repair attempts", events[-1].message)
+
+    def test_format_repair_limit_one_pauses_after_one_repair(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            ["bad response 1", "bad response 2"], format_repair_limit=1
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("question"))
+
+        self.assertIsInstance(events[-1], Paused)
+        self.assertEqual(2, len(llm.requests))
+        self.assertIn("1 repair attempts", events[-1].message)
+
     def test_new_user_message_clears_format_repair_budget(self) -> None:
         runtime, llm, temporary_dir = _runtime(
             [
@@ -564,6 +588,7 @@ def _runtime(
     *,
     max_model_calls: int = 100,
     timeout_seconds: float = 60,
+    format_repair_limit: int = 3,
     definitions: tuple[ToolDefinition, ...] = (),
 ) -> tuple["_RuntimeDriver", "_FakeLlm", tempfile.TemporaryDirectory[str]]:
     temporary_dir = tempfile.TemporaryDirectory()
@@ -606,6 +631,7 @@ def _runtime(
         tool_catalog=catalog,
         max_model_calls=max_model_calls,
         model_timeout_seconds=timeout_seconds,
+        format_repair_limit=format_repair_limit,
         tool_executor=ToolExecutor(catalog),
         tool_context=ToolContext("session", AgentKey.MAIN, cancellation, plan=plan_service),
     )

@@ -80,7 +80,7 @@ class ProductionToolMetadataTests(unittest.TestCase):
             *build_web_tools(),
             *build_switch_tools(),
             *build_customer_file_tools(),
-            *build_retrieval_tools(),
+            *build_retrieval_tools("app.log"),
             *build_resume_tools(),
         )
         self.by_name = {

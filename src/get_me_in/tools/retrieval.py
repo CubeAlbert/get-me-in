@@ -33,7 +33,17 @@ logger = logging.getLogger(__name__)
 _FILE_ONLY_LOG = {"_get_me_in_file_only": True}
 
 
-def build_retrieval_tools() -> tuple[ToolDefinition, ...]:
+def build_retrieval_tools(log_file_name: str) -> tuple[ToolDefinition, ...]:
+    def query_memory(
+        arguments: Mapping[str, object], context: RetrievalToolContext
+    ) -> ToolSuccess | ToolFailure:
+        return _query_memory(arguments, context, log_file_name=log_file_name)
+
+    def query_reference_data(
+        arguments: Mapping[str, object], context: RetrievalToolContext
+    ) -> ToolSuccess | ToolFailure:
+        return _query_reference_data(arguments, context, log_file_name=log_file_name)
+
     return (
         ToolDefinition(
             name="query_memory",
@@ -76,7 +86,7 @@ def build_retrieval_tools() -> tuple[ToolDefinition, ...]:
                 frozenset({Capability.MEMORY_QUERY}),
                 ConfirmationMode.NEVER,
             ),
-            handler=_query_memory,
+            handler=query_memory,
         ),
         ToolDefinition(
             name="query_reference_data",
@@ -111,27 +121,54 @@ def build_retrieval_tools() -> tuple[ToolDefinition, ...]:
                 frozenset({Capability.KNOWLEDGE_QUERY}),
                 ConfirmationMode.NEVER,
             ),
-            handler=_query_reference_data,
+            handler=query_reference_data,
         ),
     )
 
 
-def _query_memory(arguments: Mapping[str, object], context: RetrievalToolContext) -> ToolSuccess | ToolFailure:
+def _query_memory(
+    arguments: Mapping[str, object],
+    context: RetrievalToolContext,
+    *,
+    log_file_name: str,
+) -> ToolSuccess | ToolFailure:
     category = arguments.get("memory_type")
     if category is not None and category not in MemoryType:
         return ToolFailure("invalid_memory_type", f"Unsupported memory type: {category}")
-    return _search(arguments, context, collection="memories", category=category)
+    return _search(
+        arguments,
+        context,
+        collection="memories",
+        category=category,
+        log_file_name=log_file_name,
+    )
 
 
-def _query_reference_data(arguments: Mapping[str, object], context: RetrievalToolContext) -> ToolSuccess | ToolFailure:
+def _query_reference_data(
+    arguments: Mapping[str, object],
+    context: RetrievalToolContext,
+    *,
+    log_file_name: str,
+) -> ToolSuccess | ToolFailure:
     category = arguments.get("category")
     if category is not None and category not in ReferenceCategory:
         return ToolFailure("invalid_reference_category", f"Unsupported reference category: {category}")
-    return _search(arguments, context, collection="references", category=category)
+    return _search(
+        arguments,
+        context,
+        collection="references",
+        category=category,
+        log_file_name=log_file_name,
+    )
 
 
 def _search(
-    arguments: Mapping[str, object], context: RetrievalToolContext, *, collection: str, category: object | None,
+    arguments: Mapping[str, object],
+    context: RetrievalToolContext,
+    *,
+    collection: str,
+    category: object | None,
+    log_file_name: str,
 ) -> ToolSuccess | ToolFailure:
     if context.retrieval is None:
         return ToolFailure("retrieval_unavailable", "This application has no retrieval adapter")
@@ -154,9 +191,10 @@ def _search(
             extra=_FILE_ONLY_LOG,
         )
         logger.error(
-            "Error: retrieval unavailable; collection=%s category=%s; details were written to app.log",
+            "Error: retrieval unavailable; collection=%s category=%s; details were written to %s",
             collection,
             category,
+            log_file_name,
         )
         return ToolFailure("retrieval_unavailable", str(error))
     items = tuple(

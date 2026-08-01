@@ -19,17 +19,11 @@ from src.get_me_in.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
 _FILE_ONLY_LOG = {"_get_me_in_file_only": True}
-_MODEL_LOADING_ENV = {
-    "HF_HUB_DISABLE_PROGRESS_BARS": "1",
-    "TQDM_DISABLE": "1",
-    "TRANSFORMERS_VERBOSITY": "error",
-}
 
 
 def main() -> int:
     """Build, run, and close the v2 CLI for the production entry point."""
     _ensure_utf8()
-    _configure_quiet_model_loading()
     project_root = Path(__file__).resolve().parents[3]
     load_dotenv(project_root / ".env")
     renderer = Renderer()
@@ -38,6 +32,7 @@ def main() -> int:
     except SettingsValidationError as error:
         renderer.render_error(str(error))
         return 2
+    _configure_model_loading(settings)
 
     application = None
     worker = None
@@ -45,14 +40,24 @@ def main() -> int:
     logging_ready = False
     try:
         renderer = Renderer(show_thinking=settings.show_thinking)
-        log_path = configure_logging(settings.log_dir, settings.log_level)
+        log_path = configure_logging(
+            settings.log_dir,
+            settings.log_level,
+            settings.log_file_name,
+            settings.log_max_bytes,
+            settings.log_backup_count,
+        )
         logging_ready = True
         logger.info("v2 CLI starting; log=%s level=%s", log_path, settings.log_level)
         application = build_application(settings)
         input_controller = InputController()
         commands = build_command_registry(application, input_controller, renderer)
         input_controller.set_completions(commands.completions)
-        worker = WorkerRunner(application, renderer)
+        worker = WorkerRunner(
+            application,
+            renderer,
+            poll_interval_seconds=settings.cli_worker_poll_interval_seconds,
+        )
         app = CliApp(application, commands, input_controller, renderer, worker)
         exit_code = app.run()
     except Exception:
@@ -112,8 +117,17 @@ def _ensure_utf8() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
 
 
-def _configure_quiet_model_loading() -> None:
-    """Disable third-party model download and inference progress on the CLI."""
-    os.environ.update(_MODEL_LOADING_ENV)
+def _configure_model_loading(settings: Settings) -> None:
+    """Project typed model-loading settings into native library environment keys."""
+    os.environ.update(
+        {
+            "HF_HUB_DISABLE_PROGRESS_BARS": "1"
+            if settings.hf_hub_disable_progress_bars
+            else "0",
+            "TQDM_DISABLE": "1" if settings.tqdm_disable else "0",
+            "TRANSFORMERS_VERBOSITY": settings.transformers_verbosity,
+        }
+    )
+    configured_level = logging.getLevelNamesMapping()[settings.model_library_log_level]
     for logger_name in ("huggingface_hub", "transformers", "sentence_transformers"):
-        logging.getLogger(logger_name).setLevel(logging.ERROR)
+        logging.getLogger(logger_name).setLevel(configured_level)

@@ -16,8 +16,8 @@ class LoggingSetupTests(unittest.TestCase):
     def test_writes_v2_logs_and_replaces_existing_handlers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             log_dir = Path(temporary_dir)
-            first_path = configure_logging(log_dir, "INFO")
-            second_path = configure_logging(log_dir, "INFO")
+            first_path = configure_logging(log_dir, "INFO", "app.log", 10485760, 5)
+            second_path = configure_logging(log_dir, "INFO", "app.log", 10485760, 5)
 
             logging.getLogger("src.get_me_in.application.runtime").info("runtime ready")
             package_logger = logging.getLogger("src.get_me_in")
@@ -36,4 +36,4 @@ class LoggingSetupTests(unittest.TestCase):
     def test_rejects_unknown_level(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             with self.assertRaisesRegex(ValueError, "Unsupported log level"):
-                configure_logging(Path(temporary_dir), "VERBOSE")
+                configure_logging(Path(temporary_dir), "VERBOSE", "app.log", 1, 0)

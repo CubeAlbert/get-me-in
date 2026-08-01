@@ -9,12 +9,22 @@ from src.get_me_in.ports.llm import CancellationSignal
 logger = logging.getLogger(__name__)
 _MEMORY_JOB_PREFIX = "memory-build"
 _FILE_ONLY_LOG = {"_get_me_in_file_only": True}
-_USER_ERROR = "Error: memory build failed; details were written to app.log"
 
 
 class MemoryService:
-    def __init__(self, repository: object, extractor: object, knowledge: object, worker: object) -> None:
+    def __init__(
+        self,
+        repository: object,
+        extractor: object,
+        knowledge: object,
+        worker: object,
+        log_file_name: str,
+    ) -> None:
         self._repository, self._extractor, self._knowledge, self._worker = repository, extractor, knowledge, worker
+        self._user_error = (
+            "Error: memory build failed; details were written to "
+            f"{log_file_name}"
+        )
 
     def build_async(self, source: MemoryBuildSource) -> MemoryBuildReceipt:
         receipt = self._worker.submit(
@@ -126,5 +136,9 @@ class MemoryService:
                 len(created),
                 extra=_FILE_ONLY_LOG,
             )
-            logger.error(_USER_ERROR)
-            return MemoryBuildReport(source.session_id, tuple(created), error=_USER_ERROR)
+            logger.error(self._user_error)
+            return MemoryBuildReport(
+                source.session_id,
+                tuple(created),
+                error=self._user_error,
+            )

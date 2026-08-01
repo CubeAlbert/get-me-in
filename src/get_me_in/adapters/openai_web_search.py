@@ -33,7 +33,6 @@ _WEB_SEARCH_SYSTEM = (
     "Just return the search results directly."
 )
 
-_MAX_TOKENS = 4096
 _DSML_TOOL_CALL_MARKER = "<｜｜DSML｜｜tool_calls>"
 
 
@@ -44,12 +43,16 @@ class OpenAIWebSearchAdapter:
         api_key: str,
         base_url: str,
         model: str,
+        max_tokens: int,
         client_factory: Callable[[], OpenAI] | None = None,
     ) -> None:
+        if max_tokens < 1:
+            raise ValueError("max_tokens must be positive")
         self._client_factory = client_factory or (
             lambda: OpenAI(api_key=api_key, base_url=base_url)
         )
         self._model = model
+        self._max_tokens = max_tokens
         self._closed = False
 
     def search(self, query: str, cancellation: CancellationSignal) -> str:
@@ -62,7 +65,7 @@ class OpenAIWebSearchAdapter:
         try:
             response = client.chat.completions.create(
                 model=self._model,
-                max_tokens=_MAX_TOKENS,
+                max_tokens=self._max_tokens,
                 messages=[
                     {"role": "system", "content": _WEB_SEARCH_SYSTEM},
                     {"role": "user", "content": f"Perform a web search for the query: {query}"},
@@ -82,7 +85,7 @@ class OpenAIWebSearchAdapter:
             call = message.tool_calls[0]
             response = client.chat.completions.create(
                 model=self._model,
-                max_tokens=_MAX_TOKENS,
+                max_tokens=self._max_tokens,
                 messages=[
                     {"role": "system", "content": _WEB_SEARCH_SYSTEM},
                     {"role": "user", "content": f"Perform a web search for the query: {query}"},

@@ -3,7 +3,7 @@
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 
 
-def build_resume_spec() -> AgentSpec:
+def build_resume_spec(model_profile: str, temperature: float) -> AgentSpec:
     """Build the declared Resume capability without a stateful metadata agent."""
     return AgentSpec(
         key=AgentKey.RESUME,
@@ -64,8 +64,8 @@ def build_resume_spec() -> AgentSpec:
                 "- 避免替用户编造经历、技能等信息。",
             ),
         ),
-        model_profile="pro",
-        temperature=0.2,
+        model_profile=model_profile,
+        temperature=temperature,
         capabilities=frozenset({
             Capability.CURRENT_DATETIME,
             Capability.PLAN,

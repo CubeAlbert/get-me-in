@@ -16,6 +16,7 @@ from src.get_me_in.application.settings import (
     Settings,
     SettingsValidationError,
 )
+from src.get_me_in.ports.llm import ModelProfile
 from src.get_me_in.cli import main as cli_main
 
 
@@ -29,6 +30,13 @@ def _settings(
         openai_base_url="https://example.test",
         llm_pro_model="pro",
         llm_flash_model="flash",
+        main_model_profile=ModelProfile.PRO,
+        resume_model_profile=ModelProfile.PRO,
+        memory_model_profile=ModelProfile.FLASH,
+        web_search_model_profile=ModelProfile.PRO,
+        main_temperature=0.1,
+        resume_temperature=0.2,
+        memory_temperature=0.0,
         llm_timeout_seconds=60,
         llm_thinking_enabled=True,
         hf_endpoint=None,
@@ -56,6 +64,17 @@ def _settings(
         artifacts_dir=Path("data/v2/artifacts"),
         pdf_build_timeout_seconds=60.0,
         artifact_log_max_bytes=65536,
+        model_format_repair_limit=3,
+        web_search_max_tokens=4096,
+        log_file_name="app.log",
+        log_max_bytes=10485760,
+        log_backup_count=5,
+        cli_worker_poll_interval_seconds=0.1,
+        subprocess_poll_interval_seconds=0.05,
+        hf_hub_disable_progress_bars=True,
+        tqdm_disable=True,
+        transformers_verbosity="error",
+        model_library_log_level="ERROR",
     )
 
 
@@ -72,7 +91,7 @@ class RootEntryTests(unittest.TestCase):
 class CliMainTests(unittest.TestCase):
     def test_model_loading_progress_is_disabled_for_the_cli_process(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            cli_main._configure_quiet_model_loading()
+            cli_main._configure_model_loading(_settings())
 
             observed = {
                 name: os.environ.get(name)

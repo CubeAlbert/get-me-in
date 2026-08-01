@@ -14,7 +14,9 @@ from src.get_me_in.tools.retrieval import build_retrieval_tools
 class RetrievalToolTests(unittest.TestCase):
     def setUp(self) -> None:
         self.adapter = _Retrieval()
-        self.executor = ToolExecutor(ToolCatalog(build_retrieval_tools()))
+        self.executor = ToolExecutor(
+            ToolCatalog(build_retrieval_tools("custom-runtime.log"))
+        )
         self.context = ToolContext("session", AgentKey.MAIN, CancellationToken(), retrieval=self.adapter)
 
     def test_memory_query_filters_category_and_hides_rerank_score(self) -> None:
@@ -74,6 +76,7 @@ class RetrievalToolTests(unittest.TestCase):
 
         self.assertEqual(ToolFailure("retrieval_unavailable", "backend unavailable"), outcome)
         self.assertIn("retrieval failed: collection=memories", captured.output[0])
+        self.assertIn("details were written to custom-runtime.log", captured.output[-1])
 
 
 class _Retrieval:

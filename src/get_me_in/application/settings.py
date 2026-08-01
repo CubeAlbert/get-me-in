@@ -2,9 +2,12 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+import math
 import os
 from pathlib import Path
 from typing import Mapping
+
+from src.get_me_in.ports.llm import ModelProfile
 
 
 class SettingsValidationError(ValueError):
@@ -26,6 +29,13 @@ class Settings:
     openai_base_url: str
     llm_pro_model: str
     llm_flash_model: str
+    main_model_profile: ModelProfile
+    resume_model_profile: ModelProfile
+    memory_model_profile: ModelProfile
+    web_search_model_profile: ModelProfile
+    main_temperature: float
+    resume_temperature: float
+    memory_temperature: float
     llm_timeout_seconds: float
     llm_thinking_enabled: bool
     hf_endpoint: str | None
@@ -53,6 +63,17 @@ class Settings:
     artifacts_dir: Path
     pdf_build_timeout_seconds: float
     artifact_log_max_bytes: int
+    model_format_repair_limit: int
+    web_search_max_tokens: int
+    log_file_name: str
+    log_max_bytes: int
+    log_backup_count: int
+    cli_worker_poll_interval_seconds: float
+    subprocess_poll_interval_seconds: float
+    hf_hub_disable_progress_bars: bool
+    tqdm_disable: bool
+    transformers_verbosity: str
+    model_library_log_level: str
 
     @classmethod
     def from_env(cls, env: Mapping[str, str], *, project_root: Path) -> "Settings":
@@ -61,6 +82,13 @@ class Settings:
             "OPENAI_BASE_URL",
             "LLM_PRO_MODEL",
             "LLM_FLASH_MODEL",
+            "MAIN_MODEL_PROFILE",
+            "RESUME_MODEL_PROFILE",
+            "MEMORY_MODEL_PROFILE",
+            "WEB_SEARCH_MODEL_PROFILE",
+            "MAIN_TEMPERATURE",
+            "RESUME_TEMPERATURE",
+            "MEMORY_TEMPERATURE",
             "LLM_TIMEOUT",
             "LLM_THINKING_ENABLED",
             "SHOW_THINKING",
@@ -88,6 +116,17 @@ class Settings:
             "HF_ENDPOINT",
             "PDF_BUILD_TIMEOUT_SECONDS",
             "ARTIFACT_LOG_MAX_BYTES",
+            "MODEL_FORMAT_REPAIR_LIMIT",
+            "WEB_SEARCH_MAX_TOKENS",
+            "LOG_FILE_NAME",
+            "LOG_MAX_BYTES",
+            "LOG_BACKUP_COUNT",
+            "CLI_WORKER_POLL_INTERVAL_SECONDS",
+            "SUBPROCESS_POLL_INTERVAL_SECONDS",
+            "HF_HUB_DISABLE_PROGRESS_BARS",
+            "TQDM_DISABLE",
+            "TRANSFORMERS_VERBOSITY",
+            "MODEL_LIBRARY_LOG_LEVEL",
         )
         missing = [
             name
@@ -99,6 +138,31 @@ class Settings:
             raise SettingsValidationError(
                 f"Missing required settings: {', '.join(missing)}"
             )
+
+        def model_profile(name: str) -> ModelProfile:
+            try:
+                return ModelProfile(env[name].strip().lower())
+            except ValueError as error:
+                raise SettingsValidationError(
+                    f"{name} must be pro or flash"
+                ) from error
+
+        def temperature(name: str) -> float:
+            try:
+                value = float(env[name])
+            except ValueError as error:
+                raise SettingsValidationError(f"{name} must be a number") from error
+            if not math.isfinite(value) or not 0 <= value <= 2:
+                raise SettingsValidationError(f"{name} must be between 0 and 2")
+            return value
+
+        main_model_profile = model_profile("MAIN_MODEL_PROFILE")
+        resume_model_profile = model_profile("RESUME_MODEL_PROFILE")
+        memory_model_profile = model_profile("MEMORY_MODEL_PROFILE")
+        web_search_model_profile = model_profile("WEB_SEARCH_MODEL_PROFILE")
+        main_temperature = temperature("MAIN_TEMPERATURE")
+        resume_temperature = temperature("RESUME_TEMPERATURE")
+        memory_temperature = temperature("MEMORY_TEMPERATURE")
 
         timeout_raw = env["LLM_TIMEOUT"]
         try:
@@ -147,6 +211,15 @@ class Settings:
 
         thinking_raw = env["LLM_THINKING_ENABLED"].strip().lower()
         boolean_values = {"true": True, "1": True, "false": False, "0": False}
+
+        def boolean(name: str) -> bool:
+            raw = env[name].strip().lower()
+            if raw not in boolean_values:
+                raise SettingsValidationError(
+                    f"{name} must be true, false, 1, or 0"
+                )
+            return boolean_values[raw]
+
         if thinking_raw not in boolean_values:
             raise SettingsValidationError(
                 "LLM_THINKING_ENABLED must be true, false, 1, or 0"
@@ -174,6 +247,16 @@ class Settings:
                 raise SettingsValidationError(f"{name} must be at least one")
             return value
 
+        def non_negative_int(name: str) -> int:
+            raw = env[name]
+            try:
+                value = int(raw)
+            except ValueError as error:
+                raise SettingsValidationError(f"{name} must be an integer") from error
+            if value < 0:
+                raise SettingsValidationError(f"{name} must not be negative")
+            return value
+
         def positive_float(name: str) -> float:
             raw = env[name]
             try:
@@ -198,11 +281,52 @@ class Settings:
                 "AUTO_MEMORY_ON_EXIT must be true, false, 1, or 0"
             )
 
+        transformers_verbosity = env["TRANSFORMERS_VERBOSITY"].strip().lower()
+        if transformers_verbosity not in {
+            "debug",
+            "info",
+            "warning",
+            "error",
+            "critical",
+        }:
+            raise SettingsValidationError(
+                "TRANSFORMERS_VERBOSITY must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
+            )
+        model_library_log_level = env["MODEL_LIBRARY_LOG_LEVEL"].strip().upper()
+        if model_library_log_level not in {
+            "DEBUG",
+            "INFO",
+            "WARNING",
+            "ERROR",
+            "CRITICAL",
+        }:
+            raise SettingsValidationError(
+                "MODEL_LIBRARY_LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
+            )
+        log_file_name = env["LOG_FILE_NAME"].strip()
+        log_file_path = Path(log_file_name)
+        if (
+            not log_file_name
+            or log_file_name in {".", ".."}
+            or log_file_path.is_absolute()
+            or log_file_path.name != log_file_name
+        ):
+            raise SettingsValidationError(
+                "LOG_FILE_NAME must be a single ordinary file name"
+            )
+
         return cls(
             openai_api_key=env["OPENAI_API_KEY"],
             openai_base_url=env["OPENAI_BASE_URL"],
             llm_pro_model=env["LLM_PRO_MODEL"],
             llm_flash_model=env["LLM_FLASH_MODEL"],
+            main_model_profile=main_model_profile,
+            resume_model_profile=resume_model_profile,
+            memory_model_profile=memory_model_profile,
+            web_search_model_profile=web_search_model_profile,
+            main_temperature=main_temperature,
+            resume_temperature=resume_temperature,
+            memory_temperature=memory_temperature,
             llm_timeout_seconds=timeout,
             llm_thinking_enabled=boolean_values[thinking_raw],
             hf_endpoint=env.get("HF_ENDPOINT") or None,
@@ -230,6 +354,21 @@ class Settings:
             artifacts_dir=path_values["ARTIFACTS_DIR"],
             pdf_build_timeout_seconds=positive_float("PDF_BUILD_TIMEOUT_SECONDS"),
             artifact_log_max_bytes=positive_int("ARTIFACT_LOG_MAX_BYTES"),
+            model_format_repair_limit=non_negative_int("MODEL_FORMAT_REPAIR_LIMIT"),
+            web_search_max_tokens=positive_int("WEB_SEARCH_MAX_TOKENS"),
+            log_file_name=log_file_name,
+            log_max_bytes=positive_int("LOG_MAX_BYTES"),
+            log_backup_count=non_negative_int("LOG_BACKUP_COUNT"),
+            cli_worker_poll_interval_seconds=positive_float(
+                "CLI_WORKER_POLL_INTERVAL_SECONDS"
+            ),
+            subprocess_poll_interval_seconds=positive_float(
+                "SUBPROCESS_POLL_INTERVAL_SECONDS"
+            ),
+            hf_hub_disable_progress_bars=boolean("HF_HUB_DISABLE_PROGRESS_BARS"),
+            tqdm_disable=boolean("TQDM_DISABLE"),
+            transformers_verbosity=transformers_verbosity,
+            model_library_log_level=model_library_log_level,
         )
 
 

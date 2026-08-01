@@ -14,14 +14,14 @@ class SubprocessRunnerTests(unittest.TestCase):
         token = CancellationToken()
         token.cancel()
 
-        result = SubprocessRunner().run(
+        result = SubprocessRunner(cancel_grace_seconds=2, poll_interval_seconds=0.05).run(
             ("unused",), cwd=Path.cwd(), timeout_seconds=1, cancellation=token
         )
 
         self.assertTrue(result.cancelled)
 
     def test_returns_stdout_and_exit_code(self) -> None:
-        result = SubprocessRunner().run(
+        result = SubprocessRunner(cancel_grace_seconds=2, poll_interval_seconds=0.05).run(
             (sys.executable, "-c", "print('ok')"),
             cwd=Path.cwd(),
             timeout_seconds=2,
@@ -32,7 +32,7 @@ class SubprocessRunnerTests(unittest.TestCase):
         self.assertEqual("ok", result.stdout.strip())
 
     def test_replaces_invalid_output_without_returning_none(self) -> None:
-        result = SubprocessRunner().run(
+        result = SubprocessRunner(cancel_grace_seconds=2, poll_interval_seconds=0.05).run(
             (
                 sys.executable,
                 "-c",
@@ -55,7 +55,7 @@ class SubprocessRunnerTests(unittest.TestCase):
         results: list[object] = []
         worker = threading.Thread(
             target=lambda: results.append(
-                SubprocessRunner(cancel_grace_seconds=0.1).run(
+                SubprocessRunner(cancel_grace_seconds=0.1, poll_interval_seconds=0.05).run(
                     (sys.executable, "-c", "import time; time.sleep(10)"),
                     cwd=Path.cwd(),
                     timeout_seconds=20,

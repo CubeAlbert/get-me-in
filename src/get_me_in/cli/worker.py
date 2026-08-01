@@ -16,7 +16,7 @@ from src.get_me_in.application.events import RuntimeEvent
 class WorkerRunner:
     """Serializes blocking Application calls and forwards cancellation publicly."""
 
-    def __init__(self, application: object, renderer: object, poll_interval_seconds: float = 0.1) -> None:
+    def __init__(self, application: object, renderer: object, *, poll_interval_seconds: float) -> None:
         if poll_interval_seconds <= 0:
             raise ValueError("poll_interval_seconds must be positive")
         self._application = application

@@ -65,7 +65,6 @@ from src.get_me_in.ports.llm import LLMPort, LLMRequest, ModelProfile
 
 
 logger = logging.getLogger(__name__)
-_MAX_FORMAT_REPAIRS = 3
 
 
 @dataclass(frozen=True)
@@ -91,6 +90,7 @@ class AgentRuntime:
         conversation_codec: ModelMessageCodec | None = None,
         max_model_calls: int = 100,
         model_timeout_seconds: float = 60,
+        format_repair_limit: int,
         tool_executor: ToolExecutor | None = None,
         tool_context: ToolContext | None = None,
     ) -> None:
@@ -98,6 +98,8 @@ class AgentRuntime:
             raise ValueError("max_model_calls must be at least one")
         if model_timeout_seconds <= 0:
             raise ValueError("model_timeout_seconds must be positive")
+        if format_repair_limit < 0:
+            raise ValueError("format_repair_limit must not be negative")
         self._spec = spec
         self._prompt_renderer = prompt_renderer
         self._llm = llm
@@ -109,6 +111,7 @@ class AgentRuntime:
         self._conversation_codec = conversation_codec or ModelMessageCodec()
         self._max_model_calls = max_model_calls
         self._model_timeout_seconds = model_timeout_seconds
+        self._format_repair_limit = format_repair_limit
         self._tool_executor = tool_executor
         self._tool_context = tool_context
         self._state: AgentSessionState | None = None
@@ -289,11 +292,12 @@ class AgentRuntime:
                 len(result.content),
                 result.content,
             )
-            if self._state.format_repairs_used >= _MAX_FORMAT_REPAIRS:
+            if self._state.format_repairs_used >= self._format_repair_limit:
                 self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_USER)
                 return Paused(
                     "invalid_model_reply",
-                    f"Model response remained invalid after {_MAX_FORMAT_REPAIRS} repair attempts",
+                    "Model response remained invalid after "
+                    f"{self._format_repair_limit} repair attempts",
                 )
             repair = self._message(
                 Role.SYSTEM,

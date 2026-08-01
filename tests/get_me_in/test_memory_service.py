@@ -15,7 +15,7 @@ from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.memories import MemoryBuildSource, MemoryCategory, MemoryRecord
 from src.get_me_in.domain.messages import MessageRecord, Role
-from src.get_me_in.ports.llm import LLMResult
+from src.get_me_in.ports.llm import LLMResult, ModelProfile
 
 
 class MemoryRepositoryTests(unittest.TestCase):
@@ -35,7 +35,7 @@ class MemoryServiceTests(unittest.TestCase):
     def test_build_queues_copied_source_then_writes_and_indexes(self) -> None:
         worker = BackgroundWorker("memory-test", 1)
         repository, extractor, knowledge = _Repository(), _Extractor(), _Knowledge()
-        service = MemoryService(repository, extractor, knowledge, worker)
+        service = MemoryService(repository, extractor, knowledge, worker, "app.log")
         source = MemoryBuildSource("session", AgentKey.MAIN, ())
         try:
             receipt = service.build_async(source)
@@ -54,7 +54,9 @@ class MemoryServiceTests(unittest.TestCase):
     def test_build_retains_typed_partial_failure_after_repository_write(self) -> None:
         worker = BackgroundWorker("memory-partial-test", 1)
         repository = _Repository()
-        service = MemoryService(repository, _Extractor(), _Knowledge(fail_index=True), worker)
+        service = MemoryService(
+            repository, _Extractor(), _Knowledge(fail_index=True), worker, "app.log"
+        )
         source = MemoryBuildSource("session", AgentKey.MAIN, ())
         try:
             receipt = service.build_async(source)
@@ -66,10 +68,32 @@ class MemoryServiceTests(unittest.TestCase):
         self.assertEqual(("id",), result.value.created_memory_ids)
         self.assertEqual("index failed", result.value.error)
 
+    def test_build_error_uses_injected_log_file_name(self) -> None:
+        worker = BackgroundWorker("memory-error-test", 1)
+        service = MemoryService(
+            _Repository(),
+            _Extractor(fail=True),
+            _Knowledge(),
+            worker,
+            "custom-runtime.log",
+        )
+        source = MemoryBuildSource("session", AgentKey.MAIN, ())
+        try:
+            receipt = service.build_async(source)
+            result = _wait_for_job(worker, receipt.job_id)
+        finally:
+            worker.close()
+
+        self.assertEqual(BackgroundJobState.FAILED, result.state)
+        self.assertEqual(
+            "Error: memory build failed; details were written to custom-runtime.log",
+            result.value.error,
+        )
+
     def test_delete_coordinates_index_before_removing_repository_record(self) -> None:
         worker = BackgroundWorker("memory-delete-test", 1)
         repository, knowledge = _Repository(), _Knowledge()
-        service = MemoryService(repository, _Extractor(), knowledge, worker)
+        service = MemoryService(repository, _Extractor(), knowledge, worker, "app.log")
         try:
             report = service.delete("memory-1")
         finally:
@@ -83,7 +107,7 @@ class MemoryServiceTests(unittest.TestCase):
         worker = BackgroundWorker("memory-close-test", 1)
         repository = _Repository(fail_close=True)
         extractor = _Extractor(fail_close=True)
-        service = MemoryService(repository, extractor, _Knowledge(), worker)
+        service = MemoryService(repository, extractor, _Knowledge(), worker, "app.log")
 
         report = service.close()
         worker.close()
@@ -98,17 +122,22 @@ class MemoryServiceTests(unittest.TestCase):
 class MemoryExtractorTests(unittest.TestCase):
     def test_extractor_uses_explicit_zero_temperature(self) -> None:
         llm = _RecordingLlm()
-        extractor = MemoryExtractor(llm, "extract", _Clock(), _Ids(), 1)
+        extractor = MemoryExtractor(
+            llm, "extract", _Clock(), _Ids(), 1, ModelProfile.PRO, 0.0
+        )
         source = MemoryBuildSource("session", AgentKey.MAIN, ())
 
         extractor.extract(source, CancellationToken())
 
         self.assertEqual(0.0, llm.request.temperature)
+        self.assertEqual(ModelProfile.PRO, llm.request.profile)
 
     def test_extractor_parses_category_content_array(self) -> None:
         llm = _RecordingLlm('[{"category":"fact","content":"uses Python"},'
                             '{"category":"preference","content":"prefers remote work"}]')
-        extractor = MemoryExtractor(llm, "extract", _Clock(), _Ids(), 1)
+        extractor = MemoryExtractor(
+            llm, "extract", _Clock(), _Ids(), 1, ModelProfile.FLASH, 0.0
+        )
         source = MemoryBuildSource("session", AgentKey.MAIN, ())
 
         records = extractor.extract(source, CancellationToken())
@@ -130,8 +159,12 @@ class _Repository:
 
 
 class _Extractor:
-    def __init__(self, *, fail_close=False): self.fail_close = fail_close
-    def extract(self, source, cancellation): return (MemoryRecord(1, "id", AgentKey.MAIN, MemoryCategory.FACT, "fact", _now()),)
+    def __init__(self, *, fail_close=False, fail=False):
+        self.fail_close = fail_close
+        self.fail = fail
+    def extract(self, source, cancellation):
+        if self.fail: raise RuntimeError("extract failed")
+        return (MemoryRecord(1, "id", AgentKey.MAIN, MemoryCategory.FACT, "fact", _now()),)
     def close(self):
         if self.fail_close: raise RuntimeError("extractor close failed")
 

@@ -9,10 +9,13 @@ from src.get_me_in.ports.process import ProcessResult
 
 
 class SubprocessRunner:
-    def __init__(self, *, cancel_grace_seconds: float = 2.0) -> None:
+    def __init__(self, *, cancel_grace_seconds: float, poll_interval_seconds: float) -> None:
         if cancel_grace_seconds < 0:
             raise ValueError("cancel_grace_seconds must not be negative")
+        if poll_interval_seconds <= 0:
+            raise ValueError("poll_interval_seconds must be positive")
         self._cancel_grace_seconds = cancel_grace_seconds
+        self._poll_interval_seconds = poll_interval_seconds
 
     def run(
         self,
@@ -36,7 +39,7 @@ class SubprocessRunner:
         started = time.monotonic()
         while True:
             try:
-                stdout, stderr = process.communicate(timeout=0.05)
+                stdout, stderr = process.communicate(timeout=self._poll_interval_seconds)
                 return ProcessResult(process.returncode, stdout, stderr)
             except subprocess.TimeoutExpired:
                 if cancellation.is_cancelled:

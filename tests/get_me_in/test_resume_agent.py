@@ -8,9 +8,10 @@ from src.get_me_in.domain.agents import Capability
 
 class ResumeAgentSpecTests(unittest.TestCase):
     def test_resume_spec_preserves_capabilities_and_temperature(self) -> None:
-        spec = build_resume_spec()
+        spec = build_resume_spec("flash", 0.7)
 
-        self.assertEqual(0.2, spec.temperature)
+        self.assertEqual("flash", spec.model_profile)
+        self.assertEqual(0.7, spec.temperature)
         self.assertNotIn(Capability.ROUTE, spec.capabilities)
         self.assertTrue({
             Capability.CURRENT_DATETIME, Capability.PLAN, Capability.INTERACTION,

@@ -15,7 +15,7 @@ from src.get_me_in.cli.worker import WorkerRunner
 class WorkerRunnerTests(unittest.TestCase):
     def test_runs_one_application_command_and_returns_event(self) -> None:
         application = _Application(Progress("done"))
-        runner = WorkerRunner(application, _Renderer())
+        runner = WorkerRunner(application, _Renderer(), poll_interval_seconds=0.1)
 
         event = runner.run(Continue())
 
@@ -33,7 +33,7 @@ class WorkerRunnerTests(unittest.TestCase):
 
     def test_runs_application_command_and_returns_typed_result(self) -> None:
         application = _Application(_Result())
-        runner = WorkerRunner(application, _Renderer())
+        runner = WorkerRunner(application, _Renderer(), poll_interval_seconds=0.1)
 
         result = runner.run(ReloadKnowledge("references"))
 

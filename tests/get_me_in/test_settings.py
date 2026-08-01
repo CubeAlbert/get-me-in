@@ -6,6 +6,7 @@ from src.get_me_in.application.settings import (
     Settings,
     SettingsValidationError,
 )
+from src.get_me_in.ports.llm import ModelProfile
 
 
 _BASE_ENV = {
@@ -13,6 +14,13 @@ _BASE_ENV = {
     "OPENAI_BASE_URL": "https://example.test",
     "LLM_PRO_MODEL": "pro",
     "LLM_FLASH_MODEL": "flash",
+    "MAIN_MODEL_PROFILE": "pro",
+    "RESUME_MODEL_PROFILE": "pro",
+    "MEMORY_MODEL_PROFILE": "flash",
+    "WEB_SEARCH_MODEL_PROFILE": "pro",
+    "MAIN_TEMPERATURE": "0.1",
+    "RESUME_TEMPERATURE": "0.2",
+    "MEMORY_TEMPERATURE": "0.0",
     "LLM_TIMEOUT": "60",
     "LLM_THINKING_ENABLED": "true",
     "SHOW_THINKING": "false",
@@ -40,6 +48,17 @@ _BASE_ENV = {
     "HF_ENDPOINT": "https://hf-mirror.com",
     "PDF_BUILD_TIMEOUT_SECONDS": "60",
     "ARTIFACT_LOG_MAX_BYTES": "65536",
+    "MODEL_FORMAT_REPAIR_LIMIT": "3",
+    "WEB_SEARCH_MAX_TOKENS": "4096",
+    "LOG_FILE_NAME": "app.log",
+    "LOG_MAX_BYTES": "10485760",
+    "LOG_BACKUP_COUNT": "5",
+    "CLI_WORKER_POLL_INTERVAL_SECONDS": "0.1",
+    "SUBPROCESS_POLL_INTERVAL_SECONDS": "0.05",
+    "HF_HUB_DISABLE_PROGRESS_BARS": "1",
+    "TQDM_DISABLE": "1",
+    "TRANSFORMERS_VERBOSITY": "error",
+    "MODEL_LIBRARY_LOG_LEVEL": "ERROR",
 }
 
 
@@ -60,6 +79,13 @@ class SettingsTests(unittest.TestCase):
             "OPENAI_BASE_URL",
             "LLM_PRO_MODEL",
             "LLM_FLASH_MODEL",
+            "MAIN_MODEL_PROFILE",
+            "RESUME_MODEL_PROFILE",
+            "MEMORY_MODEL_PROFILE",
+            "WEB_SEARCH_MODEL_PROFILE",
+            "MAIN_TEMPERATURE",
+            "RESUME_TEMPERATURE",
+            "MEMORY_TEMPERATURE",
             "LLM_TIMEOUT",
             "AGENT_MAX_MODEL_CALLS",
             "REFERENCE_DIR",
@@ -78,6 +104,17 @@ class SettingsTests(unittest.TestCase):
             "PDF_BUILD_TIMEOUT_SECONDS",
             "ARTIFACT_LOG_MAX_BYTES",
             "SHUTDOWN_TIMEOUT_SECONDS",
+            "MODEL_FORMAT_REPAIR_LIMIT",
+            "WEB_SEARCH_MAX_TOKENS",
+            "LOG_FILE_NAME",
+            "LOG_MAX_BYTES",
+            "LOG_BACKUP_COUNT",
+            "CLI_WORKER_POLL_INTERVAL_SECONDS",
+            "SUBPROCESS_POLL_INTERVAL_SECONDS",
+            "HF_HUB_DISABLE_PROGRESS_BARS",
+            "TQDM_DISABLE",
+            "TRANSFORMERS_VERBOSITY",
+            "MODEL_LIBRARY_LOG_LEVEL",
         ):
             self.assertIn(name, example)
         self.assertNotIn("legacy rollback only", example)
@@ -106,6 +143,19 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(12.5, settings.llm_timeout_seconds)
         self.assertEqual(9, settings.max_model_calls_per_run)
         self.assertEqual(1.5, settings.cancel_grace_seconds)
+        self.assertIs(ModelProfile.PRO, settings.main_model_profile)
+        self.assertIs(ModelProfile.PRO, settings.resume_model_profile)
+        self.assertIs(ModelProfile.FLASH, settings.memory_model_profile)
+        self.assertEqual(0.1, settings.main_temperature)
+        self.assertEqual(0.2, settings.resume_temperature)
+        self.assertEqual(0.0, settings.memory_temperature)
+        self.assertEqual(3, settings.model_format_repair_limit)
+        self.assertEqual(4096, settings.web_search_max_tokens)
+        self.assertEqual("app.log", settings.log_file_name)
+        self.assertEqual(10485760, settings.log_max_bytes)
+        self.assertEqual(5, settings.log_backup_count)
+        self.assertEqual(0.1, settings.cli_worker_poll_interval_seconds)
+        self.assertEqual(0.05, settings.subprocess_poll_interval_seconds)
         self.assertTrue(settings.llm_thinking_enabled)
         self.assertFalse(settings.show_thinking)
         self.assertEqual(Path("project/data/prompts"), settings.prompts_dir)
@@ -131,6 +181,22 @@ class SettingsTests(unittest.TestCase):
         del missing["REFERENCE_DIR"]
         with self.assertRaisesRegex(SettingsValidationError, "REFERENCE_DIR"):
             Settings.from_env(missing, project_root=Path("project"))
+
+    def test_from_env_rejects_invalid_model_and_logging_runtime_values(self) -> None:
+        invalid_values = (
+            ("MAIN_MODEL_PROFILE", "balanced"),
+            ("MAIN_TEMPERATURE", "2.1"),
+            ("MODEL_FORMAT_REPAIR_LIMIT", "-1"),
+            ("WEB_SEARCH_MAX_TOKENS", "0"),
+            ("LOG_FILE_NAME", "nested/app.log"),
+            ("LOG_BACKUP_COUNT", "-1"),
+            ("CLI_WORKER_POLL_INTERVAL_SECONDS", "0"),
+            ("TRANSFORMERS_VERBOSITY", "verbose"),
+        )
+        for name, value in invalid_values:
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(SettingsValidationError, name):
+                    Settings.from_env(_env({name: value}), project_root=Path("project"))
 
     def test_from_env_validates_artifact_settings(self) -> None:
         env = _env({

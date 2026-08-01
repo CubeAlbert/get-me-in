@@ -22,7 +22,13 @@ class _StderrFormatter(logging.Formatter):
         return message
 
 
-def configure_logging(log_dir: Path, level: str) -> Path:
+def configure_logging(
+    log_dir: Path,
+    level: str,
+    file_name: str,
+    max_bytes: int,
+    backup_count: int,
+) -> Path:
     """Configure rotating file and stderr handlers for v2 and return the log path."""
     normalized_level = level.strip().upper()
     configured_level = logging.getLevelNamesMapping().get(normalized_level)
@@ -31,7 +37,13 @@ def configure_logging(log_dir: Path, level: str) -> Path:
 
     target_dir = Path(log_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    log_path = target_dir / "app.log"
+    if not file_name or Path(file_name).name != file_name or file_name in {".", ".."}:
+        raise ValueError("file_name must be a single ordinary file name")
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+    if backup_count < 0:
+        raise ValueError("backup_count must not be negative")
+    log_path = target_dir / file_name
 
     package_logger = logging.getLogger(_LOGGER_NAME)
     package_logger.setLevel(logging.DEBUG)
@@ -40,8 +52,8 @@ def configure_logging(log_dir: Path, level: str) -> Path:
 
     file_handler = RotatingFileHandler(
         log_path,
-        maxBytes=10 * 1024 * 1024,
-        backupCount=5,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
         encoding="utf-8",
     )
     file_handler.setLevel(configured_level)

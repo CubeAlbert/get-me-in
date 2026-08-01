@@ -149,8 +149,8 @@ def _build_application(
                 "- 避免讨论Agent、工具、路由机制。",
             ),
         ),
-        model_profile="pro",
-        temperature=0.1,
+        model_profile=settings.main_model_profile.value,
+        temperature=settings.main_temperature,
         capabilities=frozenset(
             {
                 Capability.CURRENT_DATETIME,
@@ -169,7 +169,10 @@ def _build_application(
             "5. 减少不必要的问题询问并保持自然交互。",
         ),
     )
-    resume_spec = build_resume_spec()
+    resume_spec = build_resume_spec(
+        settings.resume_model_profile.value,
+        settings.resume_temperature,
+    )
     catalog = AgentCatalog((main_spec, resume_spec))
     if runtime_llms is not None:
         if set(runtime_llms) != {AgentKey.MAIN, AgentKey.RESUME}:
@@ -183,7 +186,16 @@ def _build_application(
     resume_cancellation = CancellationToken()
     workspace = LocalWorkspace(settings.workspace_dir)
     frontend = OSFrontend()
-    web_search = OpenAIWebSearchAdapter(api_key=settings.openai_api_key, base_url=settings.openai_base_url, model=settings.llm_pro_model)
+    web_search_models = {
+        ModelProfile.PRO: settings.llm_pro_model,
+        ModelProfile.FLASH: settings.llm_flash_model,
+    }
+    web_search = OpenAIWebSearchAdapter(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        model=web_search_models[settings.web_search_model_profile],
+        max_tokens=settings.web_search_max_tokens,
+    )
     construction.callback(web_search.close)
     external_files = AuthorizedFileReader()
     worker = BackgroundWorker("knowledge-memory", settings.shutdown_timeout_seconds)
@@ -218,7 +230,10 @@ def _build_application(
     construction.callback(knowledge.close)
     resume_artifacts = LocalResumeArtifacts(
         settings.resume_template_dir,
-        SubprocessRunner(cancel_grace_seconds=settings.cancel_grace_seconds),
+        SubprocessRunner(
+            cancel_grace_seconds=settings.cancel_grace_seconds,
+            poll_interval_seconds=settings.subprocess_poll_interval_seconds,
+        ),
         settings.pdf_build_timeout_seconds,
     )
     artifacts = ArtifactService(
@@ -234,7 +249,16 @@ def _build_application(
     resume_plan = PlanService(id_generator)
     session_id = id_generator.new_id()
     tool_catalog = ToolCatalog(
-        (*build_system_tools(clock), *build_plan_tools(), *build_workspace_tools(), *build_web_tools(), *build_switch_tools(), *build_customer_file_tools(), *build_retrieval_tools(), *build_resume_tools())
+        (
+            *build_system_tools(clock),
+            *build_plan_tools(),
+            *build_workspace_tools(),
+            *build_web_tools(),
+            *build_switch_tools(),
+            *build_customer_file_tools(),
+            *build_retrieval_tools(settings.log_file_name),
+            *build_resume_tools(),
+        )
     )
     tool_executor = ToolExecutor(tool_catalog)
     runtime_construction = ExitStack()
@@ -268,9 +292,12 @@ def _build_application(
             clock,
             id_generator,
             settings.llm_timeout_seconds,
+            settings.memory_model_profile,
+            settings.memory_temperature,
         ),
         knowledge,
         worker,
+        settings.log_file_name,
     )
     memory_construction.pop_all()
     construction.callback(memory.close)
@@ -286,6 +313,7 @@ def _build_application(
         conversation_codec=ModelMessageCodec(),
         max_model_calls=settings.max_model_calls_per_run,
         model_timeout_seconds=settings.llm_timeout_seconds,
+        format_repair_limit=settings.model_format_repair_limit,
         tool_executor=tool_executor,
         tool_context=ToolContext(
             session_id=session_id,
@@ -305,7 +333,9 @@ def _build_application(
         spec=resume_spec, prompt_renderer=prompt_renderer, llm=runtime_llms[AgentKey.RESUME],
         clock=clock, id_generator=id_generator, cancellation=resume_cancellation,
         agent_catalog=catalog, tool_catalog=tool_catalog, conversation_codec=ModelMessageCodec(),
-        max_model_calls=settings.max_model_calls_per_run, model_timeout_seconds=settings.llm_timeout_seconds,
+        max_model_calls=settings.max_model_calls_per_run,
+        model_timeout_seconds=settings.llm_timeout_seconds,
+        format_repair_limit=settings.model_format_repair_limit,
         tool_executor=tool_executor,
         tool_context=ToolContext(
             session_id=session_id, agent_key=AgentKey.RESUME, cancellation=resume_cancellation,

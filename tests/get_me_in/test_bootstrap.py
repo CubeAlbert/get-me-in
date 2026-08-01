@@ -11,9 +11,11 @@ from src.get_me_in.application.commands import Approve, Continue, Reject, UserMe
 from src.get_me_in.application.app_commands import DumpSession, RestoreSession, RewindSession
 from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Paused, Progress, ToolFinished, ToolStarted
 from src.get_me_in.application.settings import KnowledgeIndexMode, Settings
+from src.get_me_in.application.memory_service import MemoryService
 from src.get_me_in.domain.agents import AgentKey, AgentStyle
 from src.get_me_in.domain.sessions import RuntimePhase
-from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult
+from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
+from src.get_me_in.tools.retrieval import build_retrieval_tools
 
 
 def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
@@ -22,6 +24,13 @@ def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
         openai_base_url="https://example.test",
         llm_pro_model="pro",
         llm_flash_model="flash",
+        main_model_profile=ModelProfile.PRO,
+        resume_model_profile=ModelProfile.PRO,
+        memory_model_profile=ModelProfile.FLASH,
+        web_search_model_profile=ModelProfile.PRO,
+        main_temperature=0.1,
+        resume_temperature=0.2,
+        memory_temperature=0.0,
         llm_timeout_seconds=60,
         llm_thinking_enabled=True,
         hf_endpoint=None,
@@ -49,6 +58,17 @@ def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
         artifacts_dir=Path("data/v2/artifacts"),
         pdf_build_timeout_seconds=60.0,
         artifact_log_max_bytes=65536,
+        model_format_repair_limit=3,
+        web_search_max_tokens=4096,
+        log_file_name="app.log",
+        log_max_bytes=10485760,
+        log_backup_count=5,
+        cli_worker_poll_interval_seconds=0.1,
+        subprocess_poll_interval_seconds=0.05,
+        hf_hub_disable_progress_bars=True,
+        tqdm_disable=True,
+        transformers_verbosity="error",
+        model_library_log_level="ERROR",
     )
 
 
@@ -80,6 +100,23 @@ class BootstrapTests(unittest.TestCase):
         self.assertIsNot(first.clock, second.clock)
         self.assertIsNot(first.id_generator, second.id_generator)
         self.assertEqual({AgentKey.MAIN, AgentKey.RESUME}, {item.key for item in second.catalog.list_descriptors()})
+
+    def test_bootstrap_injects_the_configured_log_file_name(self) -> None:
+        settings = replace(_settings(), log_file_name="custom-runtime.log")
+        with (
+            patch(
+                "src.get_me_in.bootstrap.build_retrieval_tools",
+                wraps=build_retrieval_tools,
+            ) as retrieval_builder,
+            patch(
+                "src.get_me_in.bootstrap.MemoryService",
+                wraps=MemoryService,
+            ) as memory_type,
+        ):
+            application = self._build_application(settings, llm=_FakeLlm("done"))
+
+        retrieval_builder.assert_called_once_with("custom-runtime.log")
+        self.assertEqual("custom-runtime.log", memory_type.call_args.args[-1])
 
     def test_application_handles_one_no_tool_conversation(self) -> None:
         llm = _FakeLlm("completed")
