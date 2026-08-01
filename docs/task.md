@@ -769,6 +769,15 @@
 - ✅ 真实 Chroma 双模式 smoke 使用项目 BAAI embedding／reranker 和显式 embeddings：persistent 重启命中 1，memory 重启命中 0。
 - ✅ 计划 checkpoint 为 `e23aa4a`，代码／测试 checkpoint 为 `a5df705`；最终文档独立收口，R9 仍未授权。
 
+## R8 完成态配置清理 —— 移除旧 RAG 环境变量别名（已完成）
+
+- ✅ 从 `.env.example` 删除 `BI_ENCODER_MODEL`、`CROSS_ENCODER_MODEL`、`EMBED_BATCH_SIZE` 兼容说明；正式配置继续使用 `EMBEDDING_MODEL`、`RERANKER_MODEL`、`EMBEDDING_BATCH_SIZE`。
+- ✅ `Settings.from_env()` 删除三个旧名称的回退解析并简化 `positive_int()`；旧名称按未知环境变量忽略，未提供正式变量时继续使用既有 BAAI 模型与 batch size 32 默认值。
+- ✅ Settings 回归同时锁定正式名称可自定义和旧名称不再生效；未修改 Settings 字段、Chroma 存储模式、Embedder／Reranker adapter、依赖或运行数据。
+- ✅ Settings 定向测试 15/15、Bootstrap 定向测试 25/25、完整 unittest 306/306、`compileall`、`git diff --check` 与静态引用扫描均通过。
+- ✅ 代码／测试 checkpoint 为 `df01327`；当前事实、任务与决策由独立文档 checkpoint 收口。
+- ⛔ 本清理不进入 R9；`docs/task.md` 与 `docs/decision.md` 中既有旧名称只作为历史记录保留，不代表当前支持。
+
 ## R9 —— 重构后功能（不在当前执行范围）
 
 ### 1. InterviewAgent Workflow 前置 Review

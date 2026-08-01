@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 273 — 移除旧 RAG 环境变量兼容别名](#决策-273--移除旧-rag-环境变量兼容别名)
 - [决策 272 — 完成 Chroma memory／persistent 模式订正](#决策-272--完成-chroma-memorypersistent-模式订正)
 - [决策 271 — 确认并授权 Chroma memory／persistent 模式订正](#决策-271--确认并授权-chroma-memorypersistent-模式订正)
 - [决策 270 — 完成 tool call message 修正的真实 provider smoke 与最终收口](#决策-270--完成-tool-call-message-修正的真实-provider-smoke-与最终收口)
@@ -6468,3 +6469,29 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 为模式选择修改 `KnowledgeService.reload()` —— 现有 port 注入已经足够，增加 service 分支会扩大业务层复杂度，未采用。
 - 把真实 smoke 改为 Chroma documents-only `collection.add()` —— 会绕过项目 Embedder 并可能下载默认 ONNX 模型，不能证明 production 链路，拒绝。
 - 因 memory mode 可用而更改默认值 —— 会让现有用户在未配置时失去磁盘索引复用，拒绝。
+
+---
+
+### 决策 273 —— 移除旧 RAG 环境变量兼容别名
+
+**背景：** R8-G 曾把 `BI_ENCODER_MODEL`、`CROSS_ENCODER_MODEL`、`EMBED_BATCH_SIZE` 保留为 v2 兼容别名，`.env.example`、`Settings.from_env()` 与测试共同维持该行为。用户确认当前不再需要这部分向前兼容，不能只删除示例注释而让生产解析继续静默接受旧名称。
+
+**决定：**
+
+- `.env.example` 删除三个旧名称及兼容说明；正式配置只使用 `EMBEDDING_MODEL`、`RERANKER_MODEL`、`EMBEDDING_BATCH_SIZE`。
+- `Settings.from_env()` 删除模型名称的旧变量回退和 `positive_int()` 的 `fallback_name`；旧名称与其他未知环境变量一致，被忽略而不触发专门错误。
+- 未提供正式变量时仍使用 `BAAI/bge-base-zh-v1.5`、`BAAI/bge-reranker-v2-m3` 与 embedding batch size 32；`RERANK_BATCH_SIZE`、`RETRIEVAL_TOP_K`、Chroma 模式及 adapter 装配不变。
+- 回归测试分别证明正式名称可配置、旧名称单独存在时不再生效，并确认 `.env.example` 不再暴露旧名称。Settings 定向 15/15、Bootstrap 定向 25/25、完整 unittest 306/306、`compileall`、`git diff --check` 与静态扫描均通过。
+- 代码／测试 checkpoint 为 `df01327`；当前事实、任务状态与本决策由独立文档 checkpoint 收口。
+- 既有 R6／R8 任务与决策中的旧名称保留为历史事实；当前设计说明改为只支持正式名称。本清理不进入 R9，不读取、迁移、改写或删除运行数据。
+
+**理由：**
+
+- 示例、生产解析与测试必须表达同一配置契约；只改 `.env.example` 会留下不可见的兼容行为。
+- 沿用 Settings 对未知环境变量的统一处理方式，避免为三个已删除名称增加特殊失败分支，同时由负向回归防止兼容逻辑意外恢复。
+- 默认模型与正式变量不变，因此本次只收紧配置入口，不改变正常配置下的 embedding／reranking 行为。
+
+**曾考虑的替代方案：**
+
+- 只删除 `.env.example` 的兼容段 —— 生产代码仍接受旧名称，未真正取消兼容，拒绝。
+- 检测到旧名称时启动失败 —— 会为少数未知变量引入特殊负向校验，与当前忽略未知环境变量的整体契约不一致，未采用。
