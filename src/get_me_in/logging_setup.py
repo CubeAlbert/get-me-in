@@ -37,7 +37,13 @@ def configure_logging(
 
     target_dir = Path(log_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    if not file_name or Path(file_name).name != file_name or file_name in {".", ".."}:
+    if (
+        not file_name
+        or file_name in {".", ".."}
+        or "/" in file_name
+        or "\\" in file_name
+        or Path(file_name).name != file_name
+    ):
         raise ValueError("file_name must be a single ordinary file name")
     if max_bytes < 1:
         raise ValueError("max_bytes must be positive")

@@ -213,6 +213,9 @@ class SettingsTests(unittest.TestCase):
             ("MODEL_FORMAT_REPAIR_LIMIT", "-1"),
             ("WEB_SEARCH_MAX_TOKENS", "0"),
             ("LOG_FILE_NAME", "nested/app.log"),
+            ("LOG_FILE_NAME", "nested\\\\app.log"),
+            ("LOG_FILE_NAME", "C:\\\\app.log"),
+            ("LOG_FILE_NAME", "/tmp/app.log"),
             ("LOG_BACKUP_COUNT", "-1"),
             ("CLI_WORKER_POLL_INTERVAL_SECONDS", "0"),
             ("CLI_RESULT_PREVIEW_CHARS", "0"),
@@ -224,6 +227,21 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(name=name):
                 with self.assertRaisesRegex(SettingsValidationError, name):
                     Settings.from_env(_env({name: value}), project_root=Path("project"))
+
+    def test_from_env_rejects_non_finite_duration_and_poll_values(self) -> None:
+        names = (
+            "LLM_TIMEOUT",
+            "CANCEL_GRACE_SECONDS",
+            "SHUTDOWN_TIMEOUT_SECONDS",
+            "PDF_BUILD_TIMEOUT_SECONDS",
+            "CLI_WORKER_POLL_INTERVAL_SECONDS",
+            "SUBPROCESS_POLL_INTERVAL_SECONDS",
+        )
+        for name in names:
+            for value in ("nan", "inf", "-inf"):
+                with self.subTest(name=name, value=value):
+                    with self.assertRaisesRegex(SettingsValidationError, name):
+                        Settings.from_env(_env({name: value}), project_root=Path("project"))
 
     def test_from_env_validates_artifact_settings(self) -> None:
         env = _env({

@@ -37,3 +37,11 @@ class LoggingSetupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_dir:
             with self.assertRaisesRegex(ValueError, "Unsupported log level"):
                 configure_logging(Path(temporary_dir), "VERBOSE", "app.log", 1, 0)
+
+    def test_rejects_platform_specific_path_separators_in_file_name(self) -> None:
+        invalid_names = ("nested/app.log", "nested\\app.log", "C:\\app.log")
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            for file_name in invalid_names:
+                with self.subTest(file_name=file_name):
+                    with self.assertRaisesRegex(ValueError, "single ordinary file name"):
+                        configure_logging(Path(temporary_dir), "INFO", file_name, 1, 0)

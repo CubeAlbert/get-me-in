@@ -172,6 +172,26 @@ class Settings:
                 raise SettingsValidationError(f"{name} must be between 0 and 2")
             return value
 
+        def positive_float(name: str) -> float:
+            raw = env[name]
+            try:
+                value = float(raw)
+            except ValueError as error:
+                raise SettingsValidationError(f"{name} must be a number") from error
+            if not math.isfinite(value) or value <= 0:
+                raise SettingsValidationError(f"{name} must be greater than zero")
+            return value
+
+        def non_negative_float(name: str) -> float:
+            raw = env[name]
+            try:
+                value = float(raw)
+            except ValueError as error:
+                raise SettingsValidationError(f"{name} must be a number") from error
+            if not math.isfinite(value) or value < 0:
+                raise SettingsValidationError(f"{name} must not be negative")
+            return value
+
         main_model_profile = model_profile("MAIN_MODEL_PROFILE")
         resume_model_profile = model_profile("RESUME_MODEL_PROFILE")
         memory_model_profile = model_profile("MEMORY_MODEL_PROFILE")
@@ -180,13 +200,7 @@ class Settings:
         resume_temperature = temperature("RESUME_TEMPERATURE")
         memory_temperature = temperature("MEMORY_TEMPERATURE")
 
-        timeout_raw = env["LLM_TIMEOUT"]
-        try:
-            timeout = float(timeout_raw)
-        except ValueError as error:
-            raise SettingsValidationError("LLM_TIMEOUT must be a number") from error
-        if timeout <= 0:
-            raise SettingsValidationError("LLM_TIMEOUT must be greater than zero")
+        timeout = positive_float("LLM_TIMEOUT")
 
         max_calls_raw = env["AGENT_MAX_MODEL_CALLS"]
         try:
@@ -196,13 +210,7 @@ class Settings:
         if max_calls < 1:
             raise SettingsValidationError("AGENT_MAX_MODEL_CALLS must be at least one")
 
-        cancel_grace_raw = env["CANCEL_GRACE_SECONDS"]
-        try:
-            cancel_grace = float(cancel_grace_raw)
-        except ValueError as error:
-            raise SettingsValidationError("CANCEL_GRACE_SECONDS must be a number") from error
-        if cancel_grace < 0:
-            raise SettingsValidationError("CANCEL_GRACE_SECONDS must not be negative")
+        cancel_grace = non_negative_float("CANCEL_GRACE_SECONDS")
 
         log_level = env["LOG_LEVEL"].strip().upper()
         if log_level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
@@ -273,23 +281,7 @@ class Settings:
                 raise SettingsValidationError(f"{name} must not be negative")
             return value
 
-        def positive_float(name: str) -> float:
-            raw = env[name]
-            try:
-                value = float(raw)
-            except ValueError as error:
-                raise SettingsValidationError(f"{name} must be a number") from error
-            if value <= 0:
-                raise SettingsValidationError(f"{name} must be greater than zero")
-            return value
-
-        shutdown_raw = env["SHUTDOWN_TIMEOUT_SECONDS"]
-        try:
-            shutdown_timeout = float(shutdown_raw)
-        except ValueError as error:
-            raise SettingsValidationError("SHUTDOWN_TIMEOUT_SECONDS must be a number") from error
-        if shutdown_timeout <= 0:
-            raise SettingsValidationError("SHUTDOWN_TIMEOUT_SECONDS must be greater than zero")
+        shutdown_timeout = positive_float("SHUTDOWN_TIMEOUT_SECONDS")
 
         auto_memory_raw = env["AUTO_MEMORY_ON_EXIT"].strip().lower()
         if auto_memory_raw not in boolean_values:
@@ -324,6 +316,8 @@ class Settings:
         if (
             not log_file_name
             or log_file_name in {".", ".."}
+            or "/" in log_file_name
+            or "\\" in log_file_name
             or log_file_path.is_absolute()
             or log_file_path.name != log_file_name
         ):
