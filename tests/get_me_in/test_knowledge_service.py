@@ -1,6 +1,9 @@
 """R6 manifest-diff domain tests; KnowledgeService follows in a later slice."""
 
 from datetime import datetime, timezone
+from hashlib import sha256
+from pathlib import Path
+import tempfile
 from threading import Event, Thread
 from time import monotonic, sleep
 import unittest
@@ -15,6 +18,10 @@ from src.get_me_in.domain.knowledge import (
 )
 from src.get_me_in.application.background_worker import BackgroundWorker
 from src.get_me_in.application.knowledge_service import KnowledgeService
+from src.get_me_in.adapters.chroma_knowledge_index import ChromaKnowledgeIndex
+from src.get_me_in.adapters.in_memory_manifest_repository import InMemoryManifestRepository
+from src.get_me_in.adapters.json_manifest_repository import JsonManifestRepository
+from src.get_me_in.adapters.markdown_chunker import MarkdownChunker
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.domain.knowledge import IndexHit, KnowledgeDocument, KnowledgeState
 
@@ -128,6 +135,23 @@ class KnowledgeServiceTests(unittest.TestCase):
 
         self.assertEqual(1, self.index.prepare_calls)
         self.assertEqual([], self.index.replaced)
+
+    def test_fresh_in_memory_manifest_forces_full_rebuild(self) -> None:
+        manifests = InMemoryManifestRepository()
+        service = KnowledgeService(
+            (_Sources((self.source,)),),
+            _Chunker(),
+            self.index,
+            manifests,
+            self.worker,
+        )
+
+        report = service.reload()
+
+        self.assertEqual(("references/a.md",), report.added)
+        self.assertEqual(("references/a.md",), tuple(self.index.replaced))
+        self.assertEqual("hash", manifests.load().entries[0].indexed_hash)
+        service.close()
 
     def test_prepare_failure_keeps_service_unavailable_and_can_be_retried(self) -> None:
         self.index.prepare_error = RuntimeError("model load failed")
@@ -313,11 +337,132 @@ class KnowledgeServiceTests(unittest.TestCase):
         self.assertEqual((), self.manifests.value.entries)
         service.close()
 
+    def test_real_chroma_modes_are_isolated_and_persistent_mode_reconciles(self) -> None:
+        from chromadb import EphemeralClient, PersistentClient
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            chroma_dir = root / "chroma"
+            manifest_path = root / "manifest.json"
+            sources = _MutableSources(
+                {
+                    "references/a.md": ("hash-a1", "alpha one"),
+                }
+            )
+
+            persistent = _real_knowledge_service(
+                PersistentClient(path=chroma_dir),
+                JsonManifestRepository(manifest_path),
+                sources,
+                self.worker,
+            )
+            initial = persistent.reload()
+            self.assertEqual(("references/a.md",), initial.added)
+            self.assertEqual(
+                ("alpha one",),
+                tuple(
+                    item.content
+                    for item in persistent.search(
+                        "alpha",
+                        collection="references",
+                        category=None,
+                        top_k=5,
+                        cancellation=CancellationToken(),
+                    )
+                ),
+            )
+            persistent.close()
+            persistent_snapshot = _tree_snapshot(root)
+
+            sources.values = {
+                "references/a.md": ("hash-a2", "alpha two"),
+                "references/b.md": ("hash-b1", "beta one"),
+            }
+            memory = _real_knowledge_service(
+                EphemeralClient(),
+                InMemoryManifestRepository(),
+                sources,
+                self.worker,
+            )
+            memory_report = memory.reload()
+            self.assertEqual(
+                ("references/a.md", "references/b.md"), memory_report.added
+            )
+            self.assertEqual(
+                {"alpha two", "beta one"},
+                {
+                    item.content
+                    for item in memory.search(
+                        "query",
+                        collection="references",
+                        category=None,
+                        top_k=5,
+                        cancellation=CancellationToken(),
+                    )
+                },
+            )
+            memory.close()
+            self.assertEqual(persistent_snapshot, _tree_snapshot(root))
+
+            empty_memory = ChromaKnowledgeIndex(
+                EphemeralClient(), _RealEmbedder(), _RealReranker()
+            )
+            self.assertEqual(
+                (),
+                empty_memory.search(
+                    "query",
+                    collection="references",
+                    category=None,
+                    top_k=5,
+                    cancellation=CancellationToken(),
+                ),
+            )
+            empty_memory.close()
+
+            persistent = _real_knowledge_service(
+                PersistentClient(path=chroma_dir),
+                JsonManifestRepository(manifest_path),
+                sources,
+                self.worker,
+            )
+            reconciled = persistent.reload()
+            self.assertEqual(("references/b.md",), reconciled.added)
+            self.assertEqual(("references/a.md",), reconciled.updated)
+            persistent.close()
+
+            sources.values = {
+                "references/b.md": ("hash-b1", "beta one"),
+            }
+            persistent = _real_knowledge_service(
+                PersistentClient(path=chroma_dir),
+                JsonManifestRepository(manifest_path),
+                sources,
+                self.worker,
+            )
+            deleted = persistent.reload()
+            self.assertEqual(("references/a.md",), deleted.deleted)
+            persistent.close()
+
 
 class _Sources:
     def __init__(self, sources): self.sources = sources
     def scan(self, target=None): return self.sources
     def read(self, source): return KnowledgeDocument(source, "content")
+
+
+class _MutableSources:
+    def __init__(self, values):
+        self.values = values
+
+    def scan(self, target=None):
+        del target
+        return tuple(
+            _source(source_key, content_hash)
+            for source_key, (content_hash, _) in sorted(self.values.items())
+        )
+
+    def read(self, source):
+        return KnowledgeDocument(source, self.values[source.source_key][1])
 
 
 class _Chunker:
@@ -340,6 +485,23 @@ class _Index:
     def delete_source(self, source_key, *, cancellation): pass
     def search(self, query, *, collection, category, top_k, cancellation): return (IndexHit("chunk", "found", {}, 1.0),)
     def close(self): pass
+
+
+class _RealEmbedder:
+    def prepare(self, cancellation):
+        del cancellation
+
+    def embed(self, texts):
+        return tuple([float(len(text)), 1.0] for text in texts)
+
+
+class _RealReranker:
+    def prepare(self, cancellation):
+        del cancellation
+
+    def rerank(self, query, hits):
+        del query
+        return hits
 
 
 class _BlockingIndex(_Index):
@@ -418,3 +580,20 @@ def _wait_for_state(service: KnowledgeService, expected: KnowledgeState) -> None
 
 def _raise_finalize_error() -> None:
     raise RuntimeError("repository failed")
+
+
+def _real_knowledge_service(client, manifests, sources, worker) -> KnowledgeService:
+    return KnowledgeService(
+        (sources,),
+        MarkdownChunker(),
+        ChromaKnowledgeIndex(client, _RealEmbedder(), _RealReranker()),
+        manifests,
+        worker,
+    )
+
+
+def _tree_snapshot(root: Path) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (path.relative_to(root).as_posix(), sha256(path.read_bytes()).hexdigest())
+        for path in sorted(path for path in root.rglob("*") if path.is_file())
+    )

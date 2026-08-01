@@ -1,12 +1,20 @@
 """Typed, non-terminating configuration for the v2 composition root."""
 
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Mapping
 
 
 class SettingsValidationError(ValueError):
     """Raised when required v2 configuration is absent or invalid."""
+
+
+class KnowledgeIndexMode(StrEnum):
+    """Storage lifetime for the local embedded Chroma knowledge index."""
+
+    PERSISTENT = "persistent"
+    MEMORY = "memory"
 
 
 @dataclass(frozen=True)
@@ -30,6 +38,7 @@ class Settings:
     max_model_calls_per_run: int = 100
     cancel_grace_seconds: float = 2.0
     show_thinking: bool = False
+    knowledge_index_mode: KnowledgeIndexMode = KnowledgeIndexMode.PERSISTENT
     knowledge_manifest_path: Path = Path("data/v2/knowledge/manifest.json")
     knowledge_chroma_dir: Path = Path("data/v2/knowledge/chroma")
     memories_dir: Path = Path("data/v2/memories")
@@ -108,6 +117,15 @@ class Settings:
             raise SettingsValidationError(
                 "SHOW_THINKING must be true, false, 1, or 0"
             )
+        knowledge_index_mode_raw = env.get(
+            "KNOWLEDGE_INDEX_MODE", KnowledgeIndexMode.PERSISTENT.value
+        ).strip().lower()
+        try:
+            knowledge_index_mode = KnowledgeIndexMode(knowledge_index_mode_raw)
+        except ValueError as error:
+            raise SettingsValidationError(
+                "KNOWLEDGE_INDEX_MODE must be persistent or memory"
+            ) from error
 
         def positive_int(
             name: str, default: int, *, fallback_name: str | None = None
@@ -166,6 +184,7 @@ class Settings:
             max_model_calls_per_run=max_calls,
             cancel_grace_seconds=cancel_grace,
             show_thinking=boolean_values[show_thinking_raw],
+            knowledge_index_mode=knowledge_index_mode,
             knowledge_manifest_path=project_root / "data" / "v2" / "knowledge" / "manifest.json",
             knowledge_chroma_dir=project_root / "data" / "v2" / "knowledge" / "chroma",
             memories_dir=project_root / "data" / "v2" / "memories",

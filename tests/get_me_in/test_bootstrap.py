@@ -10,7 +10,7 @@ from src.get_me_in.bootstrap import build_application
 from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
 from src.get_me_in.application.app_commands import DumpSession, RestoreSession, RewindSession
 from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Paused, Progress, ToolFinished, ToolStarted
-from src.get_me_in.application.settings import Settings
+from src.get_me_in.application.settings import KnowledgeIndexMode, Settings
 from src.get_me_in.domain.agents import AgentKey, AgentStyle
 from src.get_me_in.domain.sessions import RuntimePhase
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult
@@ -634,6 +634,92 @@ class BootstrapTests(unittest.TestCase):
             if id(thread) not in before and thread.name == "knowledge-memory"
         ]
         self.assertEqual([], leaked)
+
+    def test_memory_index_mode_pairs_ephemeral_client_with_in_memory_manifest(self) -> None:
+        settings = replace(
+            _settings(), knowledge_index_mode=KnowledgeIndexMode.MEMORY
+        )
+        with (
+            patch("chromadb.PersistentClient") as persistent_client,
+            patch("chromadb.EphemeralClient") as ephemeral_client,
+            patch(
+                "src.get_me_in.bootstrap.JsonManifestRepository"
+            ) as json_manifests,
+            patch(
+                "src.get_me_in.bootstrap.InMemoryManifestRepository"
+            ) as memory_manifests,
+        ):
+            self._build_application(settings, llm=_FakeLlm("unused"))
+
+        persistent_client.assert_not_called()
+        ephemeral_client.assert_called_once_with()
+        json_manifests.assert_not_called()
+        memory_manifests.assert_called_once_with()
+
+    def test_default_index_mode_pairs_persistent_client_with_json_manifest(self) -> None:
+        settings = _settings()
+        with (
+            patch("chromadb.PersistentClient") as persistent_client,
+            patch("chromadb.EphemeralClient") as ephemeral_client,
+            patch(
+                "src.get_me_in.bootstrap.JsonManifestRepository"
+            ) as json_manifests,
+            patch(
+                "src.get_me_in.bootstrap.InMemoryManifestRepository"
+            ) as memory_manifests,
+        ):
+            self._build_application(settings, llm=_FakeLlm("unused"))
+
+        persistent_client.assert_called_once_with(
+            path=str(settings.knowledge_chroma_dir)
+        )
+        ephemeral_client.assert_not_called()
+        json_manifests.assert_called_once_with(settings.knowledge_manifest_path)
+        memory_manifests.assert_not_called()
+
+    def test_memory_client_failure_does_not_leave_background_thread(self) -> None:
+        before = {id(thread) for thread in enumerate_threads()}
+        settings = replace(
+            _settings(), knowledge_index_mode=KnowledgeIndexMode.MEMORY
+        )
+
+        with patch(
+            "chromadb.EphemeralClient", side_effect=RuntimeError("chroma failed")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "chroma failed"):
+                build_application(
+                    settings,
+                    runtime_llms={
+                        AgentKey.MAIN: _FakeLlm("unused"),
+                        AgentKey.RESUME: _FakeLlm("resume"),
+                    },
+                )
+
+        leaked = [
+            thread
+            for thread in enumerate_threads()
+            if id(thread) not in before and thread.name == "knowledge-memory"
+        ]
+        self.assertEqual([], leaked)
+
+    def test_composition_rejects_untyped_knowledge_index_mode_before_client_creation(self) -> None:
+        settings = replace(_settings(), knowledge_index_mode="invalid")  # type: ignore[arg-type]
+
+        with (
+            patch("chromadb.PersistentClient") as persistent_client,
+            patch("chromadb.EphemeralClient") as ephemeral_client,
+        ):
+            with self.assertRaisesRegex(ValueError, "knowledge index mode"):
+                build_application(
+                    settings,
+                    runtime_llms={
+                        AgentKey.MAIN: _FakeLlm("unused"),
+                        AgentKey.RESUME: _FakeLlm("resume"),
+                    },
+                )
+
+        persistent_client.assert_not_called()
+        ephemeral_client.assert_not_called()
 
     def test_invalid_runtime_llms_fail_before_resource_construction(self) -> None:
         with patch("chromadb.PersistentClient") as persistent_client:

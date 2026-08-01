@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from src.get_me_in.adapters.json_manifest_repository import JsonManifestRepository
+from src.get_me_in.adapters.in_memory_manifest_repository import InMemoryManifestRepository
 from src.get_me_in.adapters.local_knowledge_sources import LocalKnowledgeSourceRepository
 from src.get_me_in.adapters.markdown_chunker import MarkdownChunker
 from src.get_me_in.adapters.chroma_knowledge_index import ChromaKnowledgeIndex
@@ -46,6 +47,18 @@ class KnowledgeAdapterTests(unittest.TestCase):
             path.write_text('{"schema_version": 9}', encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "schema"):
                 repository.load()
+
+    def test_in_memory_manifests_are_process_local_and_start_empty(self) -> None:
+        first = InMemoryManifestRepository()
+        second = InMemoryManifestRepository()
+        manifest = IndexManifest(1, (ManifestEntry("references/a.md", KnowledgeCollection.REFERENCES, "seen", "indexed", _now()),))
+
+        first.save(manifest)
+
+        self.assertEqual(manifest, first.load())
+        self.assertEqual(IndexManifest(1), second.load())
+        with self.assertRaisesRegex(ValueError, "schema"):
+            first.save(IndexManifest(2))
 
     def test_chroma_index_uses_injected_client_and_reranker(self) -> None:
         client = _Client()

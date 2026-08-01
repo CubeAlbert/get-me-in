@@ -16,6 +16,7 @@ from src.get_me_in.adapters.chroma_knowledge_index import (
     SentenceTransformerEmbedder,
 )
 from src.get_me_in.adapters.json_manifest_repository import JsonManifestRepository
+from src.get_me_in.adapters.in_memory_manifest_repository import InMemoryManifestRepository
 from src.get_me_in.adapters.json_memory_repository import JsonMemoryRepository
 from src.get_me_in.adapters.local_knowledge_sources import LocalKnowledgeSourceRepository
 from src.get_me_in.adapters.markdown_chunker import MarkdownChunker
@@ -38,7 +39,7 @@ from src.get_me_in.application.knowledge_service import KnowledgeService
 from src.get_me_in.application.memory_extractor import MemoryExtractor
 from src.get_me_in.application.memory_service import MemoryService
 from src.get_me_in.application.artifact_service import ArtifactService
-from src.get_me_in.application.settings import Settings
+from src.get_me_in.application.settings import KnowledgeIndexMode, Settings
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
@@ -187,11 +188,21 @@ def _build_application(
     external_files = AuthorizedFileReader()
     worker = BackgroundWorker("knowledge-memory", settings.shutdown_timeout_seconds)
     construction.callback(worker.close)
-    from chromadb import PersistentClient
+    from chromadb import EphemeralClient, PersistentClient
     knowledge_construction = ExitStack()
     construction.callback(knowledge_construction.close)
+    if settings.knowledge_index_mode is KnowledgeIndexMode.PERSISTENT:
+        chroma_client = PersistentClient(path=str(settings.knowledge_chroma_dir))
+        manifest_repository = JsonManifestRepository(settings.knowledge_manifest_path)
+    elif settings.knowledge_index_mode is KnowledgeIndexMode.MEMORY:
+        chroma_client = EphemeralClient()
+        manifest_repository = InMemoryManifestRepository()
+    else:
+        raise ValueError(
+            f"unsupported knowledge index mode: {settings.knowledge_index_mode!r}"
+        )
     knowledge_index = ChromaKnowledgeIndex(
-        PersistentClient(path=str(settings.knowledge_chroma_dir)),
+        chroma_client,
         SentenceTransformerEmbedder(settings.embedding_model, settings.embedding_batch_size),
         CrossEncoderReranker(settings.reranker_model, settings.rerank_batch_size, settings.retrieval_top_k),
     )
@@ -200,7 +211,7 @@ def _build_application(
         (LocalKnowledgeSourceRepository(settings.reference_dir), JsonMemoryRepository(settings.memories_dir, clock)),
         MarkdownChunker(),
         knowledge_index,
-        JsonManifestRepository(settings.knowledge_manifest_path),
+        manifest_repository,
         worker,
     )
     knowledge_construction.pop_all()

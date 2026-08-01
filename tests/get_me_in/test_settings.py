@@ -1,7 +1,11 @@
 import unittest
 from pathlib import Path
 
-from src.get_me_in.application.settings import Settings, SettingsValidationError
+from src.get_me_in.application.settings import (
+    KnowledgeIndexMode,
+    Settings,
+    SettingsValidationError,
+)
 
 
 class SettingsTests(unittest.TestCase):
@@ -20,6 +24,7 @@ class SettingsTests(unittest.TestCase):
             "WORKSPACE_DIR",
             "SESSIONS_DIR",
             "ARTIFACTS_DIR",
+            "KNOWLEDGE_INDEX_MODE",
             "EMBEDDING_MODEL",
             "RERANKER_MODEL",
             "PDF_BUILD_TIMEOUT_SECONDS",
@@ -30,6 +35,7 @@ class SettingsTests(unittest.TestCase):
         self.assertNotIn("legacy rollback only", example)
         self.assertIn("AGENT_MAX_MODEL_CALLS=100", example)
         self.assertIn("SHUTDOWN_TIMEOUT_SECONDS=60", example)
+        self.assertIn("KNOWLEDGE_INDEX_MODE=persistent", example)
         self.assertNotIn("AGENT_MAX_ROUNDS", example)
         self.assertIn("BI_ENCODER_MODEL", example)
         self.assertIn("CROSS_ENCODER_MODEL", example)
@@ -60,6 +66,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual("INFO", settings.log_level)
         self.assertEqual("BAAI/bge-base-zh-v1.5", settings.embedding_model)
         self.assertEqual("BAAI/bge-reranker-v2-m3", settings.reranker_model)
+        self.assertIs(KnowledgeIndexMode.PERSISTENT, settings.knowledge_index_mode)
         self.assertEqual(Path("project/data/v2/artifacts"), settings.artifacts_dir)
         self.assertEqual(60.0, settings.pdf_build_timeout_seconds)
         self.assertEqual(65536, settings.artifact_log_max_bytes)
@@ -143,8 +150,36 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(root / "data" / "workspace", settings.workspace_dir)
         self.assertEqual(root / "data" / "v2" / "sessions", settings.sessions_dir)
         self.assertEqual(root / "data" / "v2" / "knowledge" / "chroma", settings.knowledge_chroma_dir)
+        self.assertIs(KnowledgeIndexMode.PERSISTENT, settings.knowledge_index_mode)
         self.assertEqual(root / "data" / "v2" / "memories", settings.memories_dir)
         self.assertEqual(root / "data" / "v2" / "artifacts", settings.artifacts_dir)
+
+    def test_from_env_accepts_explicit_memory_index_mode(self) -> None:
+        settings = Settings.from_env(
+            {
+                "OPENAI_API_KEY": "key",
+                "OPENAI_BASE_URL": "https://example.test",
+                "LLM_PRO_MODEL": "pro",
+                "LLM_FLASH_MODEL": "flash",
+                "KNOWLEDGE_INDEX_MODE": "MeMoRy",
+            },
+            project_root=Path("project"),
+        )
+
+        self.assertIs(KnowledgeIndexMode.MEMORY, settings.knowledge_index_mode)
+
+    def test_from_env_rejects_invalid_knowledge_index_mode(self) -> None:
+        with self.assertRaisesRegex(SettingsValidationError, "KNOWLEDGE_INDEX_MODE"):
+            Settings.from_env(
+                {
+                    "OPENAI_API_KEY": "key",
+                    "OPENAI_BASE_URL": "https://example.test",
+                    "LLM_PRO_MODEL": "pro",
+                    "LLM_FLASH_MODEL": "flash",
+                    "KNOWLEDGE_INDEX_MODE": "sometimes",
+                },
+                project_root=Path("project"),
+            )
 
     def test_from_env_parses_thinking_setting(self) -> None:
         settings = Settings.from_env(
