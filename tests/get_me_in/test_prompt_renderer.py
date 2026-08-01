@@ -257,14 +257,22 @@ class PromptRendererTests(unittest.TestCase):
             ["event_type", "message"],
             schema["required"],
         )
+        self.assertEqual(1, schema["properties"]["message"]["minLength"])
+        self.assertIn("可以使用 Markdown", schema["properties"]["message"]["description"])
+        self.assertEqual("string", schema["properties"]["thinking"]["type"])
+        self.assertIn("纯文本", schema["properties"]["thinking"]["description"])
+        self.assertIn("不使用 Markdown", schema["properties"]["thinking"]["description"])
         payload_description = schema["properties"]["event_payload"]["description"]
         self.assertIn("tool_call 时为工具参数对象", payload_description)
         self.assertIn("参数名和类型必须匹配对应 Tool 的 Arguments", payload_description)
-        self.assertIn(
-            "InputFormat> 和 <OutputFormat> 是同一个 ModelMessageEntity 的不同方向投影",
-            rendered,
-        )
-        self.assertIn("省略、null 或空白字符串仍合法，不能因此触发 repair", rendered)
+        self.assertNotIn("<InputOutputDistinction>", rendered)
+        self.assertIn("无论 event_type 为 finish 还是 tool_call，都必须提供 message", rendered)
+        self.assertIn("message 必须是非空、非纯空白字符串", rendered)
+        self.assertIn("event_type=finish 时，必须提供 thinking", rendered)
+        self.assertIn("thinking 必须是纯文本字符串，不使用 Markdown", rendered)
+        self.assertNotIn("省略、null 或空白字符串仍合法", rendered)
+        self.assertNotIn("Runtime 生成或重新投影", rendered)
+        self.assertIn("无需提供 id、role、timestamp、tool_call_id 或 plan_status", rendered)
         self.assertIn("参数必须直接放入 event_payload", rendered)
 
     def test_renders_sub_agents_as_xml_only_for_routing_agent(self) -> None:

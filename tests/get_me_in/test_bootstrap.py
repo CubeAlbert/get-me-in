@@ -744,7 +744,7 @@ def _tool_call(
 ) -> str:
     payload: dict[str, object] = {
         "event_type": "tool_call",
-        "message": "",
+        "message": f"Calling tool {name}",
         "tool": name,
         "event_payload": arguments or {},
     }

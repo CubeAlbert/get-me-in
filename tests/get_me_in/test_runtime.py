@@ -182,6 +182,30 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(2, len(llm.requests))
         self.assertEqual("repaired", events[-1].message.content)
 
+    def test_empty_tool_message_repairs_before_executing_the_tool(self) -> None:
+        executions: list[str] = []
+        runtime, llm, temporary_dir = _runtime(
+            [
+                _tool_call("inspect", message=""),
+                _tool_call("inspect", message="**Inspecting**"),
+                _finish("done", "summary"),
+            ],
+            definitions=(
+                _tool(
+                    "inspect",
+                    handler=lambda arguments, context: executions.append("inspect") or ToolSuccess("ok"),
+                ),
+            ),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        events = _pump(runtime, UserMessage("inspect"))
+
+        self.assertEqual(["inspect"], executions)
+        self.assertEqual(1, sum(isinstance(event, ToolStarted) for event in events))
+        self.assertEqual(3, len(llm.requests))
+        self.assertIsInstance(events[-1], Completed)
+
     def test_unknown_tool_returns_structured_result_to_model(self) -> None:
         runtime, _, temporary_dir = _runtime(
             [_tool_call("missing"), _finish("recovered", "fixed")],
@@ -640,10 +664,11 @@ def _tool_call(
     arguments: dict[str, object] | None = None,
     *,
     thinking: str | None = None,
+    message: str | None = None,
 ) -> str:
     payload: dict[str, object] = {
         "event_type": "tool_call",
-        "message": "",
+        "message": message if message is not None else f"Calling tool {name}",
         "tool": name,
         "event_payload": arguments or {},
     }

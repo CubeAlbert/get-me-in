@@ -104,7 +104,10 @@ class ModelMessageCodecTests(unittest.TestCase):
             ('{"message":"answer"}', "event_type"),
             ('{"event_type":"user_input","message":"answer"}', "finish or tool_call"),
             ('{"event_type":"finish","message":""}', "non-empty"),
+            ('{"event_type":"finish","message":"  \\n\\t"}', "non-empty"),
             ('{"event_type":"finish","message":"answer","tool":"search"}', "tool"),
+            ('{"event_type":"tool_call","message":"","tool":"search","event_payload":{}}', "non-empty"),
+            ('{"event_type":"tool_call","message":"  \\n\\t","tool":"search","event_payload":{}}', "non-empty"),
             ('{"event_type":"tool_call","message":"run","tool":"search"}', "event_payload"),
             ('{"event_type":"tool_call","message":"run","tool":"search","event_payload":[]}', "event_payload"),
         )
@@ -112,13 +115,14 @@ class ModelMessageCodecTests(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaisesRegex(ModelMessageParseError, error):
                 self.codec.parse(raw)
 
-    def test_allows_optional_thinking_and_empty_tool_message(self) -> None:
+    def test_allows_optional_thinking_with_non_empty_messages(self) -> None:
         finish = self.codec.parse('{"event_type":"finish","message":"answer","thinking":null}')
         tool_call = self.codec.parse(
-            '{"event_type":"tool_call","message":"","thinking":"",'
+            '{"event_type":"tool_call","message":"**Searching**","thinking":"",'
             '"tool":"search","event_payload":{}}'
         )
 
         self.assertIsNone(finish.thinking)
+        self.assertEqual("**Searching**", tool_call.message)
         self.assertEqual("", tool_call.thinking)
         self.assertEqual({}, dict(tool_call.event_payload or {}))

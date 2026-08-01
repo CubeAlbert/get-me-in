@@ -150,14 +150,14 @@ class ModelMessageCodec:
         message = payload.get("message")
         if not isinstance(message, str):
             raise ModelMessageParseError("message must be a string")
+        if not message.strip():
+            raise ModelMessageParseError("message must be non-empty")
 
         thinking = payload.get("thinking")
         if thinking is not None and not isinstance(thinking, str):
             raise ModelMessageParseError("thinking must be a string")
 
         if event is ModelMessageEventType.FINISH:
-            if not message.strip():
-                raise ModelMessageParseError("finish message must be non-empty")
             if payload.get("tool") is not None:
                 raise ModelMessageParseError("finish tool must be null or omitted")
             if payload.get("event_payload") is not None:
