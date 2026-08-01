@@ -342,10 +342,11 @@ class AgentRuntime:
                 pending_tool=PendingToolCall(call_id, reply.tool, arguments),
             )
             return ToolStarted(
-                call_id,
-                reply.tool,
-                arguments,
-                reply.thinking,
+                call_id=call_id,
+                tool_name=reply.tool,
+                message=reply.message,
+                arguments=arguments,
+                thinking=reply.thinking,
             )
 
         assistant = self._message(

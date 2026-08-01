@@ -244,11 +244,20 @@ class RendererTests(unittest.TestCase):
         renderer = Renderer(console=_console(output))
         plan = Plan("plan", (PlanItem("item", "查询广州 Java 薪资", PlanStatus.IN_PROGRESS),))
 
-        renderer.render_event(ToolStarted("call", "web_search", {"query": "广州 Java 薪资", "api_key": "secret"}))
+        renderer.render_event(
+            ToolStarted(
+                call_id="call",
+                tool_name="web_search",
+                message="正在查询 **广州 Java 薪资**。",
+                arguments={"query": "广州 Java 薪资", "api_key": "secret"},
+            )
+        )
         renderer.render_event(ToolFinished("call", "web_search", "搜索结果 " * 200))
         renderer.render_event(ToolFinished("plan", "create_plan", "ignored", plan))
 
         text = output.getvalue()
+        self.assertIn("正在查询 广州 Java 薪资。", text)
+        self.assertNotIn("**广州 Java 薪资**", text)
         self.assertIn("query=广州 Java 薪资", text)
         self.assertIn("api_key=***", text)
         self.assertNotIn("secret", text)
@@ -261,14 +270,41 @@ class RendererTests(unittest.TestCase):
         shown_output = StringIO()
         message = MessageRecord("event", Role.ASSISTANT, "done", _now(), "turn", "final summary")
 
+        Renderer(console=_console(hidden_output)).render_event(
+            ToolStarted(
+                call_id="call",
+                tool_name="search",
+                message="**hidden tool message**",
+                thinking="hidden tool thinking",
+            )
+        )
         Renderer(console=_console(hidden_output)).render_event(Completed(message))
-        Renderer(console=_console(shown_output), show_thinking=True).render_event(ToolStarted("call", "search", thinking="tool summary"))
+        Renderer(console=_console(shown_output), show_thinking=True).render_event(
+            ToolStarted(
+                call_id="call",
+                tool_name="search",
+                message="**tool message**",
+                thinking="**tool summary**",
+            )
+        )
         Renderer(console=_console(shown_output), show_thinking=True).render_event(Completed(message))
 
+        self.assertIn("hidden tool message", hidden_output.getvalue())
+        self.assertNotIn("hidden tool thinking", hidden_output.getvalue())
         self.assertNotIn("final summary", hidden_output.getvalue())
         self.assertIn("思考摘要", shown_output.getvalue())
-        self.assertIn("tool summary", shown_output.getvalue())
+        self.assertIn("**tool summary**", shown_output.getvalue())
+        self.assertIn("tool message", shown_output.getvalue())
+        self.assertNotIn("**tool message**", shown_output.getvalue())
         self.assertIn("final summary", shown_output.getvalue())
+        self.assertLess(
+            shown_output.getvalue().index("**tool summary**"),
+            shown_output.getvalue().index("tool message"),
+        )
+        self.assertLess(
+            shown_output.getvalue().index("tool message"),
+            shown_output.getvalue().index("正在执行工具"),
+        )
         self.assertLess(
             shown_output.getvalue().index("final summary"),
             shown_output.getvalue().index("done"),
@@ -289,7 +325,15 @@ class RendererTests(unittest.TestCase):
         plan = Plan("plan", (PlanItem(payload, payload, PlanStatus.IN_PROGRESS),))
 
         renderer.render_event(Progress(payload))
-        renderer.render_event(ToolStarted(payload, payload, {payload: payload}, thinking=payload))
+        renderer.render_event(
+            ToolStarted(
+                call_id=payload,
+                tool_name=payload,
+                message=payload,
+                arguments={payload: payload},
+                thinking=payload,
+            )
+        )
         renderer.render_event(ToolFinished(payload, payload, payload))
         renderer.render_event(ApprovalRequested(payload, payload))
         renderer.render_event(SelectionRequested(payload, payload, (payload,)))

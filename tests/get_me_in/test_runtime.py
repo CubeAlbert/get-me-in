@@ -254,6 +254,7 @@ class RuntimeTests(unittest.TestCase):
         finished = next(event for event in events if isinstance(event, ToolFinished))
 
         self.assertEqual({"items": ["查询广州", "查询杭州"]}, started.arguments)
+        self.assertEqual("Calling tool create_plan", started.message)
         self.assertEqual("planning", started.thinking)
         self.assertIsNotNone(finished.plan)
         self.assertEqual("查询广州", finished.plan.items[0].description)

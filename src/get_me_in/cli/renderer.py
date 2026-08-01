@@ -51,8 +51,9 @@ class Renderer:
         if isinstance(event, Progress):
             self._console.print(f"[dim]🔄 {escape(event.message)}[/]")
         elif isinstance(event, ToolStarted):
-            self._console.print(f"[dim]正在执行工具：{escape(event.tool_name)}{self._arguments_summary(event.arguments)}[/]")
             self._render_thinking(event.thinking)
+            self._console.print(Markdown(event.message))
+            self._console.print(f"[dim]正在执行工具：{escape(event.tool_name)}{self._arguments_summary(event.arguments)}[/]")
         elif isinstance(event, ToolFinished):
             self._console.print(f"[dim]工具完成：{escape(event.tool_name)}[/]")
             if event.plan is not None:
