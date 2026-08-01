@@ -1,16 +1,16 @@
 # 当前状态
 
-**当前阶段：** R8 已完成并通过最终用户审查；运行配置硬编码外置专项已规划但未实施，不进入 R9；R9 仍未授权
+**当前阶段：** R8 已完成并通过最终用户审查；运行配置硬编码外置专项实施中，E1 已完成、当前进入 E2，不进入 R9；R9 仍未授权
 
-**当前任务：** 整理运行配置硬编码外置方案，留待新会话实施
+**当前任务：** 外置模型、Runtime、日志与 adapter 运行参数
 
-**当前子任务：** 方案已写入 [`docs/runtime-config-externalization.md`](runtime-config-externalization.md)；当前会话不实施。
+**当前子任务：** E1 canonical Settings 与路径切片已完成并提交 `41fda99`；当前执行 E2 模型、Runtime、日志与 adapter 参数注入。
 
 **当前阻塞：** 无；新会话必须先执行 `/project-bootstrap`，从专项计划 E0 基线开始。R9 独立授权门禁仍保持关闭。
 
-**会话交接说明：** 决策 274 固定“运行参数外置、协议／安全不变量留在代码”的范围；新增变量、默认值、Settings 契约、production／test 白名单、E0～E5 checkpoint 与 smoke 门禁均记录在专项计划。当前会话未修改 `.env`、生产代码或测试；新会话不得输出 `.env` 值、接入四个 legacy 数据目录或进入 R9。
+**会话交接说明：** 决策 274 固定“运行参数外置、协议／安全不变量留在代码”的范围；新增变量、默认值、Settings 契约、production／test 白名单、E0～E5 checkpoint 与 smoke 门禁均记录在专项计划。E0 基线与 E1 canonical Settings／路径已完成；当前继续执行 E2，不输出 `.env` 值、不接入四个 legacy 数据目录或进入 R9。
 
-**下一步：** 新会话执行 `/project-bootstrap`，读取专项计划与决策 274，确认基线后从 E1 canonical Settings 与路径切片开始。
+**下一步：** 完成 E2 的模型 profile／temperature、format repair、Web Search token、日志轮转、模型加载 logger 与 poll interval 注入，并运行对应定向测试。
 
 **决策记录说明：** `current.md` 仅保留最近 10 条决策摘要；更早决策及完整正文请查阅 [`docs/decision.md`](decision.md)。以下按编号从新到旧排列。
 

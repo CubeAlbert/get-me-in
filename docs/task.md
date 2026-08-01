@@ -778,11 +778,11 @@
 - ✅ 代码／测试 checkpoint 为 `df01327`；当前事实、任务与决策由独立文档 checkpoint 收口。
 - ⛔ 本清理不进入 R9；`docs/task.md` 与 `docs/decision.md` 中既有旧名称只作为历史记录保留，不代表当前支持。
 
-## R8 完成态配置治理 —— 运行配置硬编码外置（已规划，待新会话实施）
+## R8 完成态配置治理 —— 运行配置硬编码外置（实施中，E1 已完成）
 
 - ✅ 完成只读盘点，区分部署／运行可调参数与协议、持久化、安全不变量。
 - ✅ 建立专项计划 [`docs/runtime-config-externalization.md`](runtime-config-externalization.md) 与决策 274，固定新增变量、默认值、验证规则、legacy 路径拒绝、文件白名单、E0～E5 切片和验收门禁。
-- ⏸️ 用户明确要求当前会话只整理方案，不修改 `.env`、生产代码或测试；实施留待新会话执行。
+- ✅ E0 基线与 E1 canonical Settings／路径切片已完成；定向 Settings 17/17、Settings／Bootstrap／CLI 50/50、compileall 与 diff-check 通过，代码／测试 checkpoint 为 `41fda99`；当前进入 E2。
 - 📌 新会话必须先执行 `/project-bootstrap` 并从 E0 基线开始；计划文件存在不构成 R9 授权。
 - ⛔ 若实施需要超出白名单、新增 production module／依赖／公开协议、改变持久化 schema 或访问四个 legacy 数据目录，立即停止并重新审查。
 
