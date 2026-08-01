@@ -6352,3 +6352,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 只让 CLI 显示 message，继续允许空 tool-call message —— 模型仍可合法返回无说明工具调用，拒绝。
 - 用 `Text(tool_call.message)` 展示 —— 会使 finish 与 tool call 的同一 message 字段具有不同 Markdown 能力，拒绝。
 - 代码强制 finish thinking 必填 —— 会把非业务摘要缺失升级为格式 repair，与既有宽容边界冲突，拒绝。
+
+---
+
+### 决策 269 —— 完成 tool call message 修正的工程实现并保留真实 provider 门禁
+
+**背景：** 决策 268 已确认 Prompt、parser、typed RuntimeEvent 与 CLI 展示方案。实现需要分离确定性工程证据与真实模型／终端体验：fake LLM 和 Renderer component smoke 可以证明校验、事件投影与渲染顺序，但不能证明真实 provider 会稳定遵从 finish thinking 提示，也不能替代用户对真实 TTY Markdown 展示的确认。
+
+**决定：**
+
+- 设计与白名单 checkpoint 为 `b190a06`；OutputFormat／codec checkpoint 为 `0694c2b`；ToolStarted／Runtime／Renderer checkpoint 为 `5a43fda`，三类提交保持分离。
+- Prompt/codec/Runtime/bootstrap 定向测试 65/65 通过；Runtime/CLI/app/bootstrap 定向测试 84/84 通过；完整 unittest 296/296、`compileall` 与 `git diff --check` 通过。
+- `07_input_format.md` blob 保持 `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4`；静态检查确认所有 `ToolStarted` 构造点已迁移；production-component smoke 输出 `TOOL_MESSAGE_SMOKE_OK schema=1 markdown=1 thinking_order=1`。
+- 首次 production-component smoke 仅因 PowerShell 内联 JSON 转义破坏输入而失败；改用 `json.dumps()` 构造等价输入后通过，不属于代码或契约缺陷。
+- 工程实现与自动化门禁标记完成；真实 provider／TTY smoke 保持开放，用户需分别在 `SHOW_THINKING=false` 与 `true` 下触发工具调用，确认 message 始终以 Markdown 显示，thinking 仅在开启时以纯文本 Panel 显示且位于 message 上方。
+- 真实 smoke 通过前不宣称 provider 行为已验收；通过后只更新五份活跃文档最终完成态并独立 checkpoint。R9 仍未授权。
+
+**理由：**
+
+- 分片提交使 Prompt/codec 与 RuntimeEvent/CLI 可以独立审查和回退，避免文档、代码与最终状态混合。
+- 完整自动化与 production-component smoke 已覆盖确定性边界；保留真实 provider/TTY 门禁可以避免夸大测试证据。
+- InputFormat blob 和旧数据边界未改变，证明本修正没有扩展为历史协议或数据迁移。
+
+**曾考虑的替代方案：**
+
+- 用完整 unittest 代替真实 provider smoke —— 无法证明模型遵从提示词或真实终端体验，拒绝。
+- 在没有用户 TTY 确认时直接记录最终完成 —— 会夸大验收状态，拒绝。
+- 为完成 smoke 修改 provider、CLI harness 或交互边界 —— 超出已确认白名单且无必要，拒绝。

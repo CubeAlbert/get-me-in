@@ -731,7 +731,7 @@
 - ✅ 增加多行插入／删除导致行号漂移、授权消费和失败重试回归；定向测试 54/54、完整 unittest 295/295、`compileall` 与 `git diff --check` 通过。
 - ⛔ 本修正独立于 R9，不修改 `LocalWorkspace` revision 算法、WorkspacePort、workspace_replace、旧运行数据或 R9 文件。
 
-## R8 后续独立修正 —— tool call message 非空契约与 CLI 展示（进行中）
+## R8 后续独立修正 —— tool call message 非空契约与 CLI 展示（工程完成，等待真实 provider smoke）
 
 ### 1. 设计与文档门禁
 
@@ -741,21 +741,22 @@
 
 ### 2. OutputFormat 与模型回复校验
 
-- ⬜ 删除 `<InputOutputDistinction>`，收敛单一 Schema/Requirements，明确 message Markdown 与 thinking 纯文本边界。
-- ⬜ `ModelMessageCodec.parse()` 对 finish/tool_call 统一强制非空、非纯空白 message，保持 finish thinking 解析宽容和既有 repair 预算。
-- ⬜ 更新 Prompt／codec／Runtime/bootstrap fixture 回归并完成定向验证、diff-check 与独立提交。
+- ✅ 删除 `<InputOutputDistinction>`，收敛单一 Schema/Requirements，明确 message Markdown 与 thinking 纯文本边界。
+- ✅ `ModelMessageCodec.parse()` 对 finish/tool_call 统一强制非空、非纯空白 message，保持 finish thinking 解析宽容和既有 repair 预算。
+- ✅ 更新 Prompt／codec／Runtime/bootstrap fixture 回归；定向测试 65/65、diff-check 通过，checkpoint 为 `0694c2b`。
 
 ### 3. RuntimeEvent 与 CLI 展示
 
-- ⬜ `ToolStarted` 增加必填 message，Runtime 使用关键字参数投影 message、thinking、tool 和 arguments。
-- ⬜ Renderer 按 thinking Panel（开启时）→ Markdown message → 脱敏工具状态展示，保持 Completed 的一致能力。
-- ⬜ 更新 Runtime／CLI 回归，覆盖 Markdown 一致性、thinking 纯文本／开关／顺序、Rich markup 边界和参数脱敏，并独立提交。
+- ✅ `ToolStarted` 增加必填 message，Runtime 使用关键字参数投影 message、thinking、tool 和 arguments。
+- ✅ Renderer 按 thinking Panel（开启时）→ Markdown message → 脱敏工具状态展示，保持 Completed 的一致能力。
+- ✅ 更新 Runtime／CLI 回归，覆盖 Markdown 一致性、thinking 纯文本／开关／顺序、Rich markup 边界和参数脱敏；定向测试 84/84 通过，checkpoint 为 `5a43fda`。
 
 ### 4. 完整验证与完成态
 
-- ⬜ 运行完整 unittest、`compileall`、`git diff --check` 与白名单审查。
-- ⬜ 完成静态／composition 检查，确认 Prompt repair、snapshot/history 与 R9／旧数据边界未漂移。
-- ⬜ 更新五份活跃文档完成态并建立独立 checkpoint。
+- ✅ 运行完整 unittest 296/296、`compileall`、`git diff --check` 与白名单审查。
+- ✅ 完成 InputFormat blob、全部 ToolStarted 调用点与 production-component smoke，确认 Prompt repair、snapshot/history 与 R9／旧数据边界未漂移。
+- ⏸️ 真实 provider／TTY smoke —— 等待用户分别以 `SHOW_THINKING=false` 与 `true` 验证工具调用 message、thinking 和展示顺序。
+- ⬜ 用户 smoke 通过后更新五份活跃文档最终完成态并建立独立 checkpoint。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 

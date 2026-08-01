@@ -439,6 +439,8 @@ OutputFormat 删除 `<InputOutputDistinction>`，只在 Requirements 中说明�
 
 本修正只允许修改 `data/prompts/general_agent/08_output_format.md`、`application/model_message.py`、`application/events.py`、`application/runtime.py`、`cli/renderer.py` 及对应 `test_model_message.py`、`test_prompt_renderer.py`、`test_runtime.py`、`test_cli_commands.py`、`test_bootstrap.py`。回归必须覆盖两种事件的空白 message 拒绝、repair 不执行工具、ToolStarted 双字段投影、finish/tool-call Markdown 一致性、thinking 纯文本与开关／顺序、Rich markup 边界和参数脱敏。本修正独立于 R9。
 
+工程实现已由 `0694c2b` 与 `5a43fda` 分片提交；定向测试分别为 65/65、84/84，完整 unittest 296/296、`compileall`、`git diff --check`、InputFormat blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4` 和 production-component smoke 均通过。真实 provider 对 Prompt 的遵从性与真实终端 Markdown／thinking 开关体验仍须在用户环境完成，不能由 fake LLM 或 production-component smoke 代替。
+
 ### 6.7 CLI
 
 CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触 AgentRuntime、PlanService、CancellationToken 实例、完整 SessionSnapshot 或任何私有 history。拆分职责如下：
