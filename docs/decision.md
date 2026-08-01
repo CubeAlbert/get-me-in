@@ -6323,3 +6323,32 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 仅返回新 revision —— 不能提供新的行号和内容，无法解决模型上下文过时，拒绝。
 - 仅返回完整行号映射 —— 增加输出复杂度，仍不能替代模型重新读取，拒绝。
 - 继续自动授权 edit 返回的新 revision —— 会保留本次已发现的行号漂移风险，拒绝。
+
+---
+
+### 决策 268 —— 收紧 tool call message 契约并统一 CLI Markdown 展示
+
+**背景：** 真实模型工具调用在 CLI 中只显示工具名和参数，没有显示模型回复的 `message`。只读检查确认这是两个同时存在的缺口：`08_output_format.md` 与 `ModelMessageCodec.parse()` 只要求 `tool_call.message` 是 string，显式允许空字符串；即使模型返回非空 message，Runtime 只把它保存到 `ToolCallRecord.content`，`ToolStarted` 没有 message 字段，Renderer 因而无法展示。进一步核对确认 `finish.message` 当前使用 Rich `Markdown(...)`，thinking 使用 `Panel(Text(...))`，两者具有明确不同的格式边界。
+
+**决定：**
+
+- 删除 OutputFormat 的 `<InputOutputDistinction>`；保持一个 flat `<Schema>`，只在 Requirements 说明模型无需提供 `id`、`role`、`timestamp`、`tool_call_id`、`plan_status`，不解释 Runtime 重建细节。
+- `message` 对 finish 和 tool_call 都是必填的非空、非纯空白 string；Schema 使用 `minLength=1`，`ModelMessageCodec.parse()` 在事件分支前执行统一 `strip()` 非空校验。非法回复进入既有三次 model repair／第四次暂停流程，不得生成 `ToolStarted` 或执行工具。
+- `finish` 在 Prompt 中必须提供简短、用户可见的 string thinking；thinking 明确为纯文本、不使用 Markdown。Parser 不新增 finish-specific presence/non-empty 校验，继续宽容缺失、`null` 和空白值，非 null 值仍必须是 string。
+- `message` 可以包含 Markdown；最外层模型回复仍必须是合法 JSON object。finish 与 tool-call message 都使用 Rich `Markdown(...)` 展示；thinking 继续通过 `Panel(Text(...))` 只在 `SHOW_THINKING=true` 且非空时显示，并位于 message 上方。
+- `ToolStarted` 增加必填 message；Runtime 使用关键字参数投影 message、thinking、tool name 与 arguments。`ToolCallRecord`、snapshot schema、history thinking 剥离、Memory、provider、ToolExecutor、审批、handoff、Plan 与 `CliApp` 推进均不改变。
+- 只修改已确认的 Prompt／生产／测试白名单，按 OutputFormat/codec、RuntimeEvent/CLI、完成态文档三个独立 checkpoint 推进；完整 unittest、`compileall`、`git diff --check`、静态/composition 边界与真实 provider smoke 分层验证。本修正不进入 R9，不读取、迁移、改写或删除旧运行数据。
+
+**理由：**
+
+- 工具调用步骤说明是用户可见业务信息，不能只保存在 history 而丢失于 typed UI event；统一非空校验同时消除模型可以合法返回空步骤说明的协议缺口。
+- finish 与 tool_call 使用同一个 `message` 字段，共享 Markdown 展示能力可以避免同一字段因事件类型不同产生 UI 语义漂移。
+- thinking 是可选展示摘要而非业务完成条件；Prompt 强指导而 parser 防御性宽容可以减少无价值 repair，同时保留真实模型输出的容错性。
+- `ToolStarted` 是瞬时 typed event，不参与 snapshot；新增字段不需要数据迁移。旧历史中的空 tool-call content 仍可恢复，只有新的模型输出被收紧。
+
+**曾考虑的替代方案：**
+
+- 只收紧 Prompt／parser，不修改 UI event —— 非空 message 仍不会在工具开始时显示，不能解决用户体验问题，拒绝。
+- 只让 CLI 显示 message，继续允许空 tool-call message —— 模型仍可合法返回无说明工具调用，拒绝。
+- 用 `Text(tool_call.message)` 展示 —— 会使 finish 与 tool call 的同一 message 字段具有不同 Markdown 能力，拒绝。
+- 代码强制 finish thinking 必填 —— 会把非业务摘要缺失升级为格式 repair，与既有宽容边界冲突，拒绝。

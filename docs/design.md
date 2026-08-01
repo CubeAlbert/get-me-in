@@ -429,6 +429,16 @@ event_payload | thinking | plan_status
 
 现有有界 repair 计数继续保留：本地 `json_repair` 成功不计数；每个 Agent 用户 turn 最多 3 次模型 repair；合法回复和工具执行不清零；第四次失败进入 `Paused("invalid_model_reply")`／`WAITING_FOR_USER` 并保留 handoff；下一条 `UserMessage` 清零。回归必须证明 InputFormat 内容未漂移、双文件都存在且顺序正确、两个方向都映射同一 Entity、工具参数进入 event_payload、Plan 进入输入侧 plan_status、finish thinking 被鼓励但可缺省、repair 只注入 OutputFormat，以及既有 Runtime/snapshot 行为未回退。工程 checkpoint 后才交由用户执行真实 provider smoke。本修正不进入、检查或设计 R9。
 
+#### 6.6.3 tool call message 非空契约与 CLI 展示修正（R8 后续，已确认）
+
+模型输出方向的 `message` 是所有事件共同的用户可见内容。`finish` 与 `tool_call` 都必须提供非空、非纯空白 string；`ModelMessageCodec.parse()` 在区分事件前执行统一校验，任何缺失、错误类型、空字符串或纯空白值都进入既有有界格式 repair，不得生成 `ToolStarted` 或执行工具。`08_output_format.md` 的单一 `<Schema>` 使用 `minLength=1` 表达基础非空约束，Requirements 补充非纯空白语义；`07_input_format.md` 保持只读，旧 snapshot 中已经存在的空 `ToolCallRecord.content` 仍可恢复，不迁移数据。
+
+OutputFormat 删除 `<InputOutputDistinction>`，只在 Requirements 中说明模型无需提供 `id`、`role`、`timestamp`、`tool_call_id`、`plan_status`，不暴露 Runtime 如何重建内部字段。`finish` 在 Prompt 中必须提供简短、用户可见的 string `thinking`，但 parser 不新增 finish-specific presence/non-empty 校验；缺失、`null` 或空白 thinking 继续作为防御性宽容输入，非 null 值仍必须是 string。该不对称是明确边界：`message` 是代码强制的业务展示字段，`thinking` 的 finish 必填仅是模型提示约束。
+
+`message` 可以包含 Markdown；“模型回复必须是合法 JSON object”只约束最外层 envelope，不禁止 JSON string 内的 Markdown。`thinking` 是纯文本，不使用 Markdown。`ToolCallRecord` 继续保存 `content=message` 与可选 thinking；`ToolStarted` 新增必填 `message`，Runtime 使用关键字参数同时投影 message、thinking、tool name 与 arguments。Renderer 对 `Completed` 和 `ToolStarted` 使用一致的展示顺序：先在 `SHOW_THINKING=true` 且摘要非空时通过 `Panel(Text(thinking))` 显示 thinking，再通过 `Markdown(message)` 始终显示模型消息；tool call 随后显示脱敏、截断后的工具名与参数摘要。`CliApp` 的事件推进、ToolFinished、审批、handoff、Plan、snapshot schema、provider 和 Memory 边界均不改变。
+
+本修正只允许修改 `data/prompts/general_agent/08_output_format.md`、`application/model_message.py`、`application/events.py`、`application/runtime.py`、`cli/renderer.py` 及对应 `test_model_message.py`、`test_prompt_renderer.py`、`test_runtime.py`、`test_cli_commands.py`、`test_bootstrap.py`。回归必须覆盖两种事件的空白 message 拒绝、repair 不执行工具、ToolStarted 双字段投影、finish/tool-call Markdown 一致性、thinking 纯文本与开关／顺序、Rich markup 边界和参数脱敏。本修正独立于 R9。
+
 ### 6.7 CLI
 
 CLI 只依赖 `Application` 的公开命令、事件与 Session view，不接触 AgentRuntime、PlanService、CancellationToken 实例、完整 SessionSnapshot 或任何私有 history。拆分职责如下：

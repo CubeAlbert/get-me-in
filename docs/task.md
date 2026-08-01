@@ -731,6 +731,32 @@
 - ✅ 增加多行插入／删除导致行号漂移、授权消费和失败重试回归；定向测试 54/54、完整 unittest 295/295、`compileall` 与 `git diff --check` 通过。
 - ⛔ 本修正独立于 R9，不修改 `LocalWorkspace` revision 算法、WorkspacePort、workspace_replace、旧运行数据或 R9 文件。
 
+## R8 后续独立修正 —— tool call message 非空契约与 CLI 展示（进行中）
+
+### 1. 设计与文档门禁
+
+- ✅ 只读确认当前同时存在两个缺口：parser 允许 `tool_call.message=""`，且 `ToolStarted`／Renderer 不携带或展示非空 message。
+- ✅ 用户确认 OutputFormat 精简、所有事件 message 代码强制非空、finish thinking Prompt-only 必填、message 使用 Markdown、thinking 使用纯文本 Panel 的完整方案。
+- ✅ 确认生产／Prompt、测试与五份活跃文档白名单；本修正独立于 R9，不修改 `07_input_format.md`、snapshot schema、provider、工具或旧数据。
+
+### 2. OutputFormat 与模型回复校验
+
+- ⬜ 删除 `<InputOutputDistinction>`，收敛单一 Schema/Requirements，明确 message Markdown 与 thinking 纯文本边界。
+- ⬜ `ModelMessageCodec.parse()` 对 finish/tool_call 统一强制非空、非纯空白 message，保持 finish thinking 解析宽容和既有 repair 预算。
+- ⬜ 更新 Prompt／codec／Runtime/bootstrap fixture 回归并完成定向验证、diff-check 与独立提交。
+
+### 3. RuntimeEvent 与 CLI 展示
+
+- ⬜ `ToolStarted` 增加必填 message，Runtime 使用关键字参数投影 message、thinking、tool 和 arguments。
+- ⬜ Renderer 按 thinking Panel（开启时）→ Markdown message → 脱敏工具状态展示，保持 Completed 的一致能力。
+- ⬜ 更新 Runtime／CLI 回归，覆盖 Markdown 一致性、thinking 纯文本／开关／顺序、Rich markup 边界和参数脱敏，并独立提交。
+
+### 4. 完整验证与完成态
+
+- ⬜ 运行完整 unittest、`compileall`、`git diff --check` 与白名单审查。
+- ⬜ 完成静态／composition 检查，确认 Prompt repair、snapshot/history 与 R9／旧数据边界未漂移。
+- ⬜ 更新五份活跃文档完成态并建立独立 checkpoint。
+
 ## R9 —— 重构后功能（不在当前执行范围）
 
 ### 1. InterviewAgent Workflow 前置 Review

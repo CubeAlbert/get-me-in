@@ -314,6 +314,32 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **实施顺序：** 新会话 `/project-bootstrap` → 确认决策 249／干净工作区 → 锁定 InputFormat 与双文件顺序 → 新 Entity／codec contract → flat OutputFormat 与 reply decode → Runtime/bootstrap 接入 → 定向及完整自动化 → 独立代码 checkpoint → 用户真实 smoke → 文档 checkpoint。本会话只纠正文档，不修改代码或测试。
 
+### R8 后续修正 —— tool call message 非空契约与 CLI 展示
+
+**目标：** 修复 `tool_call.message` 允许空字符串且未进入 `ToolStarted`／CLI 的双重缺口；所有模型输出都由代码强制非空 message，finish 与 tool call 的 message 均保留 Markdown 展示能力，thinking 继续作为受 `SHOW_THINKING` 控制的纯文本摘要。
+
+**产出：**
+
+- 删除 OutputFormat 的 `<InputOutputDistinction>`，保留一个 `<Schema>`；message 使用 `minLength=1` 并允许 Markdown，finish thinking 在 Prompt 中要求为简短、用户可见纯文本，内部字段只说明无需提供。
+- `ModelMessageCodec.parse()` 在事件分支前统一拒绝缺失、错误类型、空或纯空白 message；finish thinking 不新增 presence/non-empty 校验，既有三次 repair／第四次暂停边界不变。
+- `ToolStarted` 增加必填 message；Runtime 使用关键字参数传递 message、thinking、tool 与 arguments，既有 `ToolCallRecord`／snapshot 无 schema 变化。
+- Renderer 对 tool call 按 thinking Panel（开关开启时）→ Markdown message → 脱敏工具状态的顺序展示；Completed 的既有 thinking → Markdown message 顺序不变。
+
+**范围：**
+
+- Prompt／生产：`data/prompts/general_agent/08_output_format.md`、`src/get_me_in/application/model_message.py`、`src/get_me_in/application/events.py`、`src/get_me_in/application/runtime.py`、`src/get_me_in/cli/renderer.py`。
+- 测试：`tests/get_me_in/test_model_message.py`、`tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_cli_commands.py`、`tests/get_me_in/test_bootstrap.py`。
+- checkpoint：五份活跃文档；`07_input_format.md`、domain messages、session codec/state、provider、ToolDefinition／ToolExecutor、审批、handoff、Plan、Memory、数据与 R9 不在范围。
+
+**验收门禁：**
+
+- Prompt 回归证明无 `<InputOutputDistinction>`、仍只有一个 `<Schema>`、所有事件 message 非空、finish thinking 为纯文本提示约束且不暴露 Runtime 重建细节。
+- Codec／Runtime 回归证明空白 tool-call message 进入 repair 且不执行工具，合法 ToolStarted 同时携带 message 与 thinking。
+- CLI 回归证明 finish/tool-call message 均使用 Markdown；thinking 只按纯文本、受开关控制且显示在 message 上方；工具参数继续脱敏。
+- 定向测试、完整 unittest、`compileall`、`git diff --check` 与白名单审查通过；Prompt/codec 与 RuntimeEvent/CLI 分别建立代码 checkpoint，完成态文档独立 checkpoint。
+
+**实施顺序：** 设计文档 checkpoint → OutputFormat/codec 与定向测试 → 独立提交 → ToolStarted/Runtime/Renderer 与定向测试 → 独立提交 → 完整验证 → 完成态文档 checkpoint。任何必须扩展白名单的情况先停止确认；不得进入 R9。
+
 ### R9 —— 新功能恢复
 
 **目标：** 在稳定架构上重新启动产品功能开发。
