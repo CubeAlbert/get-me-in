@@ -8,6 +8,10 @@
 
 ## 目录
 
+- [决策 271 — 确认并授权 Chroma memory／persistent 模式订正](#决策-271--确认并授权-chroma-memorypersistent-模式订正)
+- [决策 270 — 完成 tool call message 修正的真实 provider smoke 与最终收口](#决策-270--完成-tool-call-message-修正的真实-provider-smoke-与最终收口)
+- [决策 269 — 完成 tool call message 修正的工程实现并保留真实 provider 门禁](#决策-269--完成-tool-call-message-修正的工程实现并保留真实-provider-门禁)
+- [决策 268 — 收紧 tool call message 契约并统一 CLI Markdown 展示](#决策-268--收紧-tool-call-message-契约并统一-cli-markdown-展示)
 - [决策 267 — 修复 workspace_edit 多行修改后的 read-before-edit 行号漂移回归](#决策-267--修复-workspace_edit-多行修改后的-read-before-edit-行号漂移回归)
 - [决策 266 — 确认 Windows/Linux Resume XeLaTeX 真实 smoke 已完成](#决策-266--确认-windowslinux-resume-xelatex-真实-smoke-已完成)
 - [决策 265 — 统一 Resume 跨平台编译引擎为 XeLaTeX](#决策-265--统一-resume-跨平台编译引擎为-xelatex)
@@ -6404,3 +6408,35 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 因 tool call 未返回 thinking 判定 smoke 失败 —— 与 tool-call thinking 可选契约冲突，拒绝。
 - 只记录 `SHOW_THINKING=true` 结果 —— 无法证明关闭开关时 message 仍独立展示，拒绝。
 - smoke 通过后进入 R9 —— 本修正不构成 R9 授权，拒绝。
+
+---
+
+### 决策 271 —— 确认并授权 Chroma memory／persistent 模式订正
+
+**背景：** 用户复核 v1 行为后指出，旧 `ChromaStore` 在存在 `CHROMA_PERSIST_DIR` 时使用 `PersistentClient`，未配置时使用内存 client；v2 重构把 `knowledge_chroma_dir` 固定为 `data/v2/knowledge/chroma/`，composition root 无条件创建 `PersistentClient`，模式选择能力未迁移。进一步只读审查确认，不能只把 client 改为 ephemeral：`KnowledgeService.reload()` 会依据 manifest 把 hash 一致的 source 判定为 `unchanged`，若空内存 Chroma 复用磁盘 manifest，会错误进入 `READY` 且没有 collection。当前 Chroma 1.5.9 已验证提供 `EphemeralClient()` 和幂等 `close()`；同进程 clients 共享 ephemeral system，最后一个 client 关闭后重新创建为空。
+
+**决定：**
+
+- 新增 typed `KnowledgeIndexMode.PERSISTENT/MEMORY` 与 `KNOWLEDGE_INDEX_MODE`；默认 `persistent`，保持当前用户行为与数据不变，非法值启动失败。
+- 不恢复旧 `CHROMA_PERSIST_DIR` 的隐式路径存在语义，不新增自定义持久化路径；旧变量与 `data/chroma/` 继续隔离。
+- persistent 模式保持 `PersistentClient + JsonManifestRepository`；memory 模式使用 `EphemeralClient + InMemoryManifestRepository`。内存 manifest 从 `IndexManifest(1)` 开始，使每个新进程从 v2 source repositories 全量重建索引。
+- Memory JSON 继续持久化在 `data/v2/memories/`；memory mode 只影响 Chroma 向量索引与 index manifest。memory 模式不得创建、读取、改写或删除 persistent Chroma／manifest，切回 persistent 后由现有 source hash diff 追平变化。
+- 不修改 `KnowledgeService`、Knowledge port/domain、Runtime、Session、Tool、CLI command 或公开检索协议；若实施发现必须扩大这些边界，立即停止并重新审查。
+- production 继续采用一进程一个 `Application`；自动化不得重叠持有多个 memory-mode application。两种模式都只使用嵌入式本地 client，不引入 Chroma Server、`HttpClient`、远程 API、依赖或异步框架。
+- 真实 Chroma 测试必须通过项目 `ChromaKnowledgeIndex` 显式传入 embeddings，不得用 documents-only `collection.add()` 触发 Chroma 默认 embedding 下载。验证覆盖默认 persistent、memory 全量重建、最后 client close、磁盘不写、模式切换追平、失败清理、完整测试与 legacy refusal。
+- 实施清单与精确白名单记录在 `docs/chroma-memory-mode-restoration.md`；按计划 C1～C4 推进并分离代码／测试与最终文档 checkpoint。本授权不进入 R9。
+
+**理由：**
+
+- Chroma index 与 manifest 共同描述同一份索引提交状态，必须具有相同生命周期；ephemeral index 配 persistent manifest 会产生不可查询却标记 READY 的假成功。
+- 显式 mode 比“路径为空即内存”更安全，避免环境变量缺失、空值或拼写错误静默关闭持久化；默认 persistent 又能保持当前升级兼容。
+- 使用现有 `ManifestRepository` port 增加 process-local adapter 即可恢复能力，无需在 `KnowledgeService` 内增加存储模式分支或改变公开协议。
+- 保留 persistent 数据并依赖 source diff 追平，使模式切换可逆且不会把测试／开发选择升级为数据迁移或清理操作。
+
+**曾考虑的替代方案：**
+
+- 只把 `PersistentClient` 换成 `EphemeralClient` —— 会复用磁盘 manifest 并跳过全量重建，产生空索引假 READY，拒绝。
+- memory 模式继续使用 JSON manifest但启动时强制忽略 —— 会把存储模式分支泄漏进 `KnowledgeService`，且仍可能改写 persistent 状态，拒绝。
+- 为 memory manifest 使用临时文件 —— 不是真正内存模式，还引入临时目录创建、清理和失败残留，拒绝。
+- 重新启用 `CHROMA_PERSIST_DIR` —— 可能接入受保护的 legacy `data/chroma/`，违反 v2 数据隔离，拒绝。
+- 选择 memory 时删除现有 persistent 数据 —— 模式选择不构成删除授权，会破坏可逆切换，拒绝。
