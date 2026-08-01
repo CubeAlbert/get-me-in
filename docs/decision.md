@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 274 — 建立运行配置硬编码外置专项计划并留待新会话实施](#决策-274--建立运行配置硬编码外置专项计划并留待新会话实施)
 - [决策 273 — 移除旧 RAG 环境变量兼容别名](#决策-273--移除旧-rag-环境变量兼容别名)
 - [决策 272 — 完成 Chroma memory／persistent 模式订正](#决策-272--完成-chroma-memorypersistent-模式订正)
 - [决策 271 — 确认并授权 Chroma memory／persistent 模式订正](#决策-271--确认并授权-chroma-memorypersistent-模式订正)
@@ -6495,3 +6496,31 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 只删除 `.env.example` 的兼容段 —— 生产代码仍接受旧名称，未真正取消兼容，拒绝。
 - 检测到旧名称时启动失败 —— 会为少数未知变量引入特殊负向校验，与当前忽略未知环境变量的整体契约不一致，未采用。
+
+---
+
+### 决策 274 —— 建立运行配置硬编码外置专项计划并留待新会话实施
+
+**背景：** `.env` 与 `.env.example` 已完成现有 25 个变量的同步，三个旧 RAG 别名也已从示例、Settings 和正向契约中移除。继续审查发现，Settings 内仍固定六个路径，模型 profile／temperature、格式修复上限、Web Search token、日志轮转、轮询周期、CLI 预览和 Tool 默认值仍散落在 production 调用点。用户要求整理完整方案，但明确不在当前会话实施，将由新会话接手。
+
+**决定：**
+
+- 建立 [`docs/runtime-config-externalization.md`](runtime-config-externalization.md)，把部署／运行可调参数外置到 `.env`／`.env.example`，并保留 schema version、Agent／Tool identity、模型输出协议、Web Search function-call、Memory／Web Search thinking 禁用、XeLaTeX 安全参数、UTF-8、脱敏、原子写入和生命周期一致性为代码不变量。
+- 新增路径、model profile／temperature、format repair、Web Search token、日志轮转、CLI／子进程轮询、CLI／Session preview、Tool 默认值和第三方模型加载显示配置；默认值逐项等于当前生产字面量，不改变当前默认行为。
+- `.env.example` 成为唯一运行默认值清单；Settings 的运行字段移除代码默认值并对缺失／非法配置 fail-fast。相对路径统一按 `project_root` 解析，所有配置路径继续拒绝项目内 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 及其子路径。
+- 专项按 E0 基线、E1 canonical Settings／路径、E2 模型／Runtime／日志／adapter、E3 CLI／Tool default、E4 完整门禁、E5 文档收口分片执行并 checkpoint；文件白名单、测试矩阵和 smoke 记录在专项计划。
+- 当前会话只允许新增计划和更新当前状态／任务／决策，不修改 `.env`、`.env.example`、生产代码或测试。新会话必须先 `/project-bootstrap` 并读取本决策和专项计划；计划不构成 R9 授权。
+
+**理由：**
+
+- 仅把现有 Settings 字段加入 `.env` 仍会留下 Runtime、adapter、CLI 和 Tool 的第二批隐藏默认值，不能达到“运行配置全部外置”。
+- 把所有字面量都环境变量化会让配置破坏持久化兼容、模型输出、工具安全和生命周期，因此必须以“部署可调”而非“是否为 literal”划分边界。
+- `.env.example` 单一默认值来源加 Settings fail-fast 可以直接阻止示例与代码默认值再次漂移；typed validation 和显式 composition 注入保持现有分层。
+- 分片 checkpoint 可把配置 schema、核心运行参数和 Tool／CLI 投影分别审查，避免一次横跨全部层级且无法定位回归。
+
+**曾考虑的替代方案：**
+
+- 只外置 Settings 中六个路径 —— 无法消除 temperature、repair、日志、轮询、preview 和 Tool default 的隐藏配置，拒绝。
+- 保留代码 fallback 并仅扩充 `.env.example` —— 会继续维护两份默认值真相，拒绝。
+- 环境变量化 schema version、Agent key、collection、XeLaTeX 安全参数等全部 literal —— 会把协议与安全不变量变成部署选择，拒绝。
+- 当前会话直接开始 coding —— 用户明确要求留待新会话执行，拒绝。
