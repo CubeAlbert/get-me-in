@@ -37,9 +37,9 @@ class SettingsTests(unittest.TestCase):
         self.assertIn("SHUTDOWN_TIMEOUT_SECONDS=60", example)
         self.assertIn("KNOWLEDGE_INDEX_MODE=persistent", example)
         self.assertNotIn("AGENT_MAX_ROUNDS", example)
-        self.assertIn("BI_ENCODER_MODEL", example)
-        self.assertIn("CROSS_ENCODER_MODEL", example)
-        self.assertIn("EMBED_BATCH_SIZE", example)
+        self.assertNotIn("BI_ENCODER_MODEL", example)
+        self.assertNotIn("CROSS_ENCODER_MODEL", example)
+        self.assertNotIn("EMBED_BATCH_SIZE", example)
 
     def test_from_env_builds_typed_static_asset_paths(self) -> None:
         settings = Settings.from_env(
@@ -99,7 +99,25 @@ class SettingsTests(unittest.TestCase):
             with self.assertRaises(SettingsValidationError):
                 Settings.from_env(invalid, project_root=Path("project"))
 
-    def test_from_env_accepts_legacy_rag_model_names_through_typed_settings(self) -> None:
+    def test_from_env_accepts_current_rag_setting_names(self) -> None:
+        settings = Settings.from_env(
+            {
+                "OPENAI_API_KEY": "key",
+                "OPENAI_BASE_URL": "https://example.test",
+                "LLM_PRO_MODEL": "pro",
+                "LLM_FLASH_MODEL": "flash",
+                "EMBEDDING_MODEL": "current-embedder",
+                "RERANKER_MODEL": "current-reranker",
+                "EMBEDDING_BATCH_SIZE": "11",
+            },
+            project_root=Path("project"),
+        )
+
+        self.assertEqual("current-embedder", settings.embedding_model)
+        self.assertEqual("current-reranker", settings.reranker_model)
+        self.assertEqual(11, settings.embedding_batch_size)
+
+    def test_from_env_ignores_removed_legacy_rag_setting_names(self) -> None:
         settings = Settings.from_env(
             {
                 "OPENAI_API_KEY": "key",
@@ -113,9 +131,9 @@ class SettingsTests(unittest.TestCase):
             project_root=Path("project"),
         )
 
-        self.assertEqual("legacy-embedder", settings.embedding_model)
-        self.assertEqual("legacy-reranker", settings.reranker_model)
-        self.assertEqual(7, settings.embedding_batch_size)
+        self.assertEqual("BAAI/bge-base-zh-v1.5", settings.embedding_model)
+        self.assertEqual("BAAI/bge-reranker-v2-m3", settings.reranker_model)
+        self.assertEqual(32, settings.embedding_batch_size)
 
     def test_from_env_accepts_a_workspace_override(self) -> None:
         settings = Settings.from_env(
