@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 275 — 完成运行配置外置 E2 并订正 production 白名单](#决策-275--完成运行配置外置-e2-并订正-production-白名单)
 - [决策 274 — 建立运行配置硬编码外置专项计划并留待新会话实施](#决策-274--建立运行配置硬编码外置专项计划并留待新会话实施)
 - [决策 273 — 移除旧 RAG 环境变量兼容别名](#决策-273--移除旧-rag-环境变量兼容别名)
 - [决策 272 — 完成 Chroma memory／persistent 模式订正](#决策-272--完成-chroma-memorypersistent-模式订正)
@@ -6524,3 +6525,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保留代码 fallback 并仅扩充 `.env.example` —— 会继续维护两份默认值真相，拒绝。
 - 环境变量化 schema version、Agent key、collection、XeLaTeX 安全参数等全部 literal —— 会把协议与安全不变量变成部署选择，拒绝。
 - 当前会话直接开始 coding —— 用户明确要求留待新会话执行，拒绝。
+
+---
+
+### 决策 275 —— 完成运行配置外置 E2 并订正 production 白名单
+
+**背景：** E2 已完成模型 profile／temperature、format repair、Web Search token、日志轮转、模型加载显示、CLI／子进程轮询和日志文件名的 Settings 解析与显式注入。完整静态扫描随后发现 `MemoryService` 与 Retrieval Tool 的用户错误提示仍使用 `app.log`；其中 Retrieval Tool 已在专项 production 白名单中，而 `application/memory_service.py` 未列入。用户批准仅扩展该文件并限定注入边界。
+
+**决定：**
+
+- 保持 `src/get_me_in/tools/retrieval.py` 在原有白名单位置，不重复追加；将 `src/get_me_in/application/memory_service.py` 加入 E2 production 白名单。
+- `MemoryService` 通过构造参数接收日志文件名；Retrieval Tool builder 接收同一日志文件名，二者均由 `bootstrap.py` 显式注入 `settings.log_file_name`，不使用全局变量或直接读取环境变量。
+- 仅更新既有 `test_memory_service.py`、`test_retrieval_tools.py`、`test_tool_catalog.py` 和 `test_bootstrap.py` 的相关断言；不改变 file-only 日志路由、Memory／Knowledge 行为、Tool schema、错误码或数据边界。
+- 定向测试 60/60、完整 unittest 313/313、`compileall`、`git diff --check` 与旧运行硬编码静态扫描通过；代码／测试 checkpoint 为 `b424b62`。E2 完成后继续执行 E3，不进入 R9。
+
+**理由：**
+
+- 用户提示必须与实际配置的日志文件名一致；显式构造注入可以消除硬编码，同时保持现有日志 handler 路由和业务错误映射不变。
+- 仅扩展实际消费该配置的 `memory_service.py`，避免借日志提示修正扩大 production 白名单或引入环境读取。
+
+**曾考虑的替代方案：**
+
+- 直接保留 `app.log` —— 与可配置日志文件名不一致，拒绝。
+- 让 Memory／Retrieval 模块直接读取环境变量 —— 破坏 Settings／composition root 注入边界，拒绝。
+- 修改 file-only 日志路由或 Tool schema —— 与本次提示文字修正无关，拒绝。

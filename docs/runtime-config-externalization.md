@@ -182,6 +182,7 @@ MODEL_LIBRARY_LOG_LEVEL=ERROR
 - `src/get_me_in/logging_setup.py`
 - `src/get_me_in/application/runtime.py`
 - `src/get_me_in/application/memory_extractor.py`
+- `src/get_me_in/application/memory_service.py`（E2 白名单订正）
 - `src/get_me_in/agents/resume.py`
 - `src/get_me_in/adapters/openai_web_search.py`
 - `src/get_me_in/adapters/subprocess_runner.py`
@@ -249,6 +250,7 @@ MODEL_LIBRARY_LOG_LEVEL=ERROR
 
 - 注入 profile、temperature、repair limit、Web Search token、日志轮转、model logger 和两类 poll interval。
 - 更新对应构造与测试，证明当前默认行为逐项不变。
+- E2 checkpoint 白名单订正：`src/get_me_in/tools/retrieval.py` 原已在本节白名单中；经用户批准新增 `src/get_me_in/application/memory_service.py`，仅用于通过构造参数接收 `settings.log_file_name`。两者均由 `bootstrap.py` 显式注入同一日志文件名，不改变 file-only 日志路由、Tool schema、错误码或数据边界。
 - 独立代码／测试 checkpoint；未通过不得进入 E3。
 
 ### E3 —— CLI 预览与 Tool 默认值
