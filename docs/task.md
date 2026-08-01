@@ -758,6 +758,17 @@
 - ✅ 真实 provider／TTY smoke —— 用户分别以 `SHOW_THINKING=false` 与 `true` 验证工具调用：message 两次均显示；关闭时无思考摘要；开启时 tool call 未返回可选 thinking，finish thinking 以纯文本 Panel 显示在最终 Markdown message 上方，符合契约。
 - ✅ 用户 smoke 通过后更新五份活跃文档最终完成态并建立独立 checkpoint。
 
+## R8 完成态回归订正 —— Chroma memory／persistent 模式
+
+- ✅ 只读确认 v1 的 `CHROMA_PERSIST_DIR` 存在／缺失曾切换 persistent／memory，v2 无条件 persistent，属于未显式确认的能力遗漏。
+- ✅ 建立专项计划与决策 271；默认保持 persistent，新增显式 `KNOWLEDGE_INDEX_MODE=persistent|memory`，旧 `CHROMA_PERSIST_DIR` 继续隔离。
+- ✅ 新增 `InMemoryManifestRepository`，memory mode 使用 `EphemeralClient` 与空 process-local manifest 成对装配，每个进程全量重建。
+- ✅ 保持 `KnowledgeService`、port/domain、Runtime、Tool、Session、CLI command 与公开检索协议不变；未知 mode 在 Settings 和 composition 两层拒绝。
+- ✅ 自动化覆盖默认／显式／非法 mode、成对装配、构造失败清理、全量重建、磁盘不变、最后 client close，以及 persistent → memory → persistent 新增／修改／删除追平。
+- ✅ 定向测试 72/72、完整 unittest 305/305、`compileall`、`git diff --check`、无 legacy path／Server／HttpClient 静态门禁通过。
+- ✅ 真实 Chroma 双模式 smoke 使用项目 BAAI embedding／reranker 和显式 embeddings：persistent 重启命中 1，memory 重启命中 0。
+- ✅ 计划 checkpoint 为 `e23aa4a`，代码／测试 checkpoint 为 `a5df705`；最终文档独立收口，R9 仍未授权。
+
 ## R9 —— 重构后功能（不在当前执行范围）
 
 ### 1. InterviewAgent Workflow 前置 Review

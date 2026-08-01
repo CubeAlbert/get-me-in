@@ -204,7 +204,7 @@
 ### D5 —— ChromaDB 公告无可升级版本
 
 - **现状：** `chromadb 1.5.9` 命中 Chroma Server 预认证代码注入公告，当前索引没有更高版本。
-- **接受边界：** production 只使用嵌入式 `PersistentClient`，不得暴露受影响 Server/API 路径。
+- **接受边界：** production 只使用嵌入式本地 `PersistentClient`／`EphemeralClient`，不得暴露受影响 Server/API 路径。决策 271～272 只恢复本地 memory index，不改变该网络不可达边界。
 - **重启条件：** 上游发布修复、架构考虑远程 Chroma，或 dependency audit 信息变化时。
 
 ### D6 —— 原始模型回复日志

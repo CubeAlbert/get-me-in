@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 272 — 完成 Chroma memory／persistent 模式订正](#决策-272--完成-chroma-memorypersistent-模式订正)
 - [决策 271 — 确认并授权 Chroma memory／persistent 模式订正](#决策-271--确认并授权-chroma-memorypersistent-模式订正)
 - [决策 270 — 完成 tool call message 修正的真实 provider smoke 与最终收口](#决策-270--完成-tool-call-message-修正的真实-provider-smoke-与最终收口)
 - [决策 269 — 完成 tool call message 修正的工程实现并保留真实 provider 门禁](#决策-269--完成-tool-call-message-修正的工程实现并保留真实-provider-门禁)
@@ -6440,3 +6441,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 为 memory manifest 使用临时文件 —— 不是真正内存模式，还引入临时目录创建、清理和失败残留，拒绝。
 - 重新启用 `CHROMA_PERSIST_DIR` —— 可能接入受保护的 legacy `data/chroma/`，违反 v2 数据隔离，拒绝。
 - 选择 memory 时删除现有 persistent 数据 —— 模式选择不构成删除授权，会破坏可逆切换，拒绝。
+
+---
+
+### 决策 272 —— 完成 Chroma memory／persistent 模式订正
+
+**背景：** 决策 271 已确认 Chroma 模式恢复必须成对切换 client 与 manifest，并授权按 `docs/chroma-memory-mode-restoration.md` 的 C1～C4 实施。代码需要证明默认行为不变、memory 每进程全量重建、persistent 数据不受 memory 运行影响、模式切换可追平，并避免测试误触 Chroma 默认 embedding。
+
+**决定：**
+
+- 新增 `KnowledgeIndexMode.PERSISTENT/MEMORY` 与 `KNOWLEDGE_INDEX_MODE`，默认 persistent；非法环境值由 `Settings.from_env()` 拒绝，绕过 Settings 直接构造的未知值也由 composition root 拒绝。
+- 新增 `InMemoryManifestRepository`；composition root 将 persistent 固定装配为 `PersistentClient + JsonManifestRepository`，memory 固定装配为 `EphemeralClient + InMemoryManifestRepository`。`KnowledgeService`、port/domain、Memory JSON、Runtime、Tool、Session、CLI command 与公开检索协议未修改。
+- memory 运行不创建或修改 persistent Chroma／manifest；最后一个 ephemeral client 关闭后重新创建为空。切回 persistent 后，现有 source hash／manifest diff 已验证能追平新增、修改和删除。
+- 自动化使用显式测试 embeddings；真实 smoke 使用项目 `BAAI/bge-base-zh-v1.5` 与 `BAAI/bge-reranker-v2-m3`，由 `ChromaKnowledgeIndex` 显式向 Chroma 传入 embeddings，没有调用 Chroma documents-only 默认 embedding。
+- 定向 Settings／Knowledge adapter/service／Bootstrap 测试 72/72 通过；完整 unittest 305/305、`compileall`、`git diff --check` 通过。真实双模式 smoke 输出 `CHROMA_STORAGE_MODE_SMOKE_OK persistent_restart=1 memory_restart=0 explicit_project_embeddings=1`。
+- 静态检查确认 production 不引用 `CHROMA_PERSIST_DIR` 或四个 legacy runtime data path，不装配 Chroma Server／`HttpClient`。计划 checkpoint 为 `e23aa4a`，代码／测试 checkpoint 为 `a5df705`，最终文档独立 checkpoint；R9 仍未授权。
+
+**理由：**
+
+- 成对生命周期消除了空 ephemeral index 复用 persistent manifest 导致的假 READY，同时保留了 v2 manifest 的恢复、失败重试和模式切换一致性。
+- 默认 persistent 与显式 memory 避免升级后行为突变；两层非法值拒绝避免直接构造 Settings 时把未知值静默解释为 memory。
+- 真实模型 smoke 与显式 embeddings 自动化共同证明恢复的是项目索引模式，而不是 Chroma 自带默认 embedding 路径。
+
+**曾考虑的替代方案：**
+
+- 为模式选择修改 `KnowledgeService.reload()` —— 现有 port 注入已经足够，增加 service 分支会扩大业务层复杂度，未采用。
+- 把真实 smoke 改为 Chroma documents-only `collection.add()` —— 会绕过项目 Embedder 并可能下载默认 ONNX 模型，不能证明 production 链路，拒绝。
+- 因 memory mode 可用而更改默认值 —— 会让现有用户在未配置时失去磁盘索引复用，拒绝。

@@ -57,6 +57,8 @@ v2 复用的静态输入只有：
 - `data/workspace/`：工作区文件和会话可见的用户工作内容
 - `data/v2/`：session、Knowledge、Memory、Artifact 等 v2 持久化数据
 
+Knowledge index 默认使用 `KNOWLEDGE_INDEX_MODE=persistent`，把 Chroma 与 manifest 持久化在 `data/v2/knowledge/`。显式设置为 `memory` 时，Chroma 与 manifest 只保留在当前进程，并在每次启动时从 `data/reference/` 与 `data/v2/memories/` 全量重建；Memory JSON 等业务源数据仍按原路径持久化。旧 `CHROMA_PERSIST_DIR` 不控制 v2。
+
 诊断日志默认写入 `data/logs/`，由 `LOG_DIR` 和 `LOG_LEVEL` 控制。旧的 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 是保留的历史用户数据；production v2 不读取、不改写、不迁移、不删除这些目录。
 
 ## 回退边界

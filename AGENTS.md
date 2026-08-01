@@ -152,6 +152,7 @@ main.py
 
 - 静态输入只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`。
 - v2 业务运行数据只写 `data/workspace/` 与 `data/v2/`；诊断日志默认写入 `data/logs/`，由 `LOG_DIR` 控制。
+- `KNOWLEDGE_INDEX_MODE` 只接受 `persistent`／`memory`，默认 persistent。persistent 使用 `PersistentClient + JsonManifestRepository`；memory 使用 `EphemeralClient + InMemoryManifestRepository` 并在每个进程全量重建。两种模式均不得读取旧 `data/chroma/`，也不得暴露 Chroma Server／HTTP API。
 - 环境由 `src/get_me_in/cli/main.py` 加载 `.env`，再由 `Settings.from_env()` 解析；v2 代码不得 import legacy `src.config`。
 - `pyproject.toml` 只配置清华 TUNA 为默认 PyPI 镜像，不设置 `[tool.uv].environments`，保持 Windows 与 Ubuntu/Linux universal lock。
 - 新增依赖先执行 `uv add <package> --no-sync`，再单独 `uv sync`；运行 `uv lock`／`uv add` 前先确认没有并发 uv 锁定操作。

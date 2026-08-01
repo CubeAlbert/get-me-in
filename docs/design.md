@@ -511,7 +511,7 @@ Resume 的模板复制、LaTeX 编译和 PDF 产物记录属于 ArtifactService�
 
 - 增加通用的前台 `ApplicationCommand` 执行路径。`CommandAction.RUN` 携带 application command，`WorkerRunner` 串行执行并返回强类型 `ApplicationResult`；`CliApp` 只负责调用 Renderer，不识别 Knowledge/Memory 私有状态。`/ragreload` 在 worker 中同步执行、可通过 `Application.request_cancel()` 取消；`/build-memory` 只排入受控后台队列并立即返回 receipt。
 - 增加 `MemoryBuildSource`。`SessionService` 在 application 层复制当前 Agent 的 provider-neutral `ConversationRecord`，并把 assistant message/tool call 的 thinking 规范化为 `None`；CLI 和 Memory 后台任务均不得持有 `SessionState`、读取私有 history 或把展示摘要交给 MemoryExtractor。
-- 增加 schema-versioned `IndexManifest` 和全新 v2 Memory repository。默认路径分别位于 `data/v2/knowledge/manifest.json`、`data/v2/knowledge/chroma/` 与 `data/v2/memories/`；不得读取旧 `data/chroma/` 或 `data/memories/`。
+- 增加 schema-versioned `IndexManifest` 和全新 v2 Memory repository。默认路径分别位于 `data/v2/knowledge/manifest.json`、`data/v2/knowledge/chroma/` 与 `data/v2/memories/`；不得读取旧 `data/chroma/` 或 `data/memories/`。`KNOWLEDGE_INDEX_MODE` 默认 `persistent`，使用 `PersistentClient + JsonManifestRepository`；显式 `memory` 使用 `EphemeralClient + InMemoryManifestRepository`，空 process-local manifest 驱动每个进程全量重建。Memory JSON 继续持久化，模式切换只改变 Chroma 与 index manifest 生命周期。
 - 增加一个 Application-owned、非 daemon 的 `BackgroundWorker`，串行处理启动加载和 Memory 构建。KnowledgeService/MemoryService 只借用该 worker，不拥有或关闭它；后台任务使用自己的 cancellation，不与前台 Runtime command 共用可变 token。ResourceStack 必须先关闭 worker、等待或取消任务，再关闭 MemoryService/KnowledgeService 持有的 repository/index/model。
 - 增加逆序、幂等、失败隔离的 `ResourceStack`。只注册顶层 owner，嵌套资源只由其直接 owner 关闭，禁止 LLM/index/repository 被重复注册和重复关闭。
 - 增加 `Application.finalize_turn()`：终态依次尝试 snapshot 和按 `AUTO_MEMORY_ON_EXIT` 的 v2 typed setting 可选排入 Memory 构建；两项结果独立记录，snapshot 失败仍按旧行为继续尝试 auto-memory，任一失败都不得覆盖另一项结果或原 RuntimeEvent。
@@ -529,7 +529,7 @@ Resume 的模板复制、LaTeX 编译和 PDF 产物记录属于 ArtifactService�
 - `KnowledgeService` 直接实现 `RetrievalPort.search()`，并显式依赖一组 source repositories、document chunker、index port、manifest repository 与 cancellation；启动/全量 reload 同时扫描只读 reference repository 和全新 v2 memory repository。ToolDefinition、RetrievalPort 签名和 Runtime tool closure 不变。
 - `MemoryExtractor` 使用专用 `LLMPort` 和静态 memory prompt；不创建旧 PromptLoader/LLMClient，不与活动 AgentRuntime 共享 cancellation。MemoryService 显式执行 `extract → repository.write → KnowledgeService.index_document`。
 - `Application.close()` 改为只关闭 `ResourceStack` 并返回 `CloseReport`；CLI 在退出时显示 close error/timeout，但所有资源仍必须继续逆序关闭。
-- `Settings` 增加 v2 index/memory 路径、embedding/rerank batch/top-k、shutdown timeout 与 auto-memory typed 配置；禁止 adapter 读取旧全局 config 或自行读取环境变量。
+- `Settings` 增加 `KnowledgeIndexMode`、v2 index/memory 路径、embedding/rerank batch/top-k、shutdown timeout 与 auto-memory typed 配置；禁止 adapter 读取旧全局 config 或自行读取环境变量。未知 index mode 在 Settings 与 composition 两层均被拒绝，旧 `CHROMA_PERSIST_DIR` 不生效。
 - 决策 149/153 中允许 R6/R7 并行的部分由决策 169 取代。R6 coding、G6、文档 checkpoint 全部完成后强制终止，不得创建、修改或确认任何 R7 文件、类、公开方法或代码。
 
 #### 6.9.2 状态与一致性

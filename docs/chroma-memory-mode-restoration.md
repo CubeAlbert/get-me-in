@@ -80,33 +80,33 @@ v1 的 `ChromaStore` 根据 `CHROMA_PERSIST_DIR` 在内存 client 与 `Persisten
 
 ### C1 —— 配置与 adapter
 
-- [ ] 增加 `KnowledgeIndexMode` 与 `knowledge_index_mode`，默认 persistent。
-- [ ] 严格解析 `KNOWLEDGE_INDEX_MODE`；保持旧 runtime data path sentinel。
-- [ ] 新增 process-local `InMemoryManifestRepository`，初始 `IndexManifest(1)`，`save()` 只更新内存状态。
-- [ ] 增加 Settings／manifest adapter 定向测试。
+- [x] 增加 `KnowledgeIndexMode` 与 `knowledge_index_mode`，默认 persistent。
+- [x] 严格解析 `KNOWLEDGE_INDEX_MODE`；保持旧 runtime data path sentinel。
+- [x] 新增 process-local `InMemoryManifestRepository`，初始 `IndexManifest(1)`，`save()` 只更新内存状态。
+- [x] 增加 Settings／manifest adapter 定向测试。
 
 ### C2 —— Composition 与生命周期
 
-- [ ] 在唯一 composition root 中按 mode 成对选择 Chroma client 与 manifest repository。
-- [ ] 保持当前 `ExitStack` ownership、构造失败清理、Knowledge close 顺序和后台 worker 关闭契约。
-- [ ] 增加默认 persistent、显式 memory、非法配置、错误 client 未构造、构造失败无泄漏测试。
+- [x] 在唯一 composition root 中按 mode 成对选择 Chroma client 与 manifest repository。
+- [x] 保持当前 `ExitStack` ownership、构造失败清理、Knowledge close 顺序和后台 worker 关闭契约。
+- [x] 增加默认 persistent、显式 memory、非法配置、错误 client 未构造、构造失败无泄漏测试。
 
 ### C3 —— 一致性与隔离
 
-- [ ] 覆盖“磁盘 manifest 全 READY + 空 ephemeral store”仍全量建立索引。
-- [ ] 覆盖 memory 模式不创建／不修改 Chroma 目录与 JSON manifest。
-- [ ] 覆盖 persistent → memory → persistent 切换后由 source diff 追平新增、修改和删除。
-- [ ] 覆盖最后一个 ephemeral client 关闭后重新创建为空；测试显式提供 embeddings，不调用 Chroma 默认 embedding function。
-- [ ] 继续证明四个 legacy 数据目录不会被访问。
+- [x] 覆盖“磁盘 manifest 全 READY + 空 ephemeral store”仍全量建立索引。
+- [x] 覆盖 memory 模式不创建／不修改 Chroma 目录与 JSON manifest。
+- [x] 覆盖 persistent → memory → persistent 切换后由 source diff 追平新增、修改和删除。
+- [x] 覆盖最后一个 ephemeral client 关闭后重新创建为空；测试显式提供 embeddings，不调用 Chroma 默认 embedding function。
+- [x] 继续证明四个 legacy 数据目录不会被访问。
 
 ### C4 —— 验证与收口
 
-- [ ] 运行 Settings、Knowledge adapter/service、Bootstrap 定向测试。
-- [ ] 运行完整 unittest、`compileall`、`git diff --check`。
-- [ ] 运行真实 Chroma 双模式 smoke：persistent 重启保留、memory 重启清空；索引写入只经项目 Embedder 的显式 embeddings 路径。
-- [ ] 静态确认没有 `HttpClient`／Server composition，没有 legacy data path 读取。
-- [ ] 更新配置和当前事实文档；`docs/decision.md` 只追加新决策并同步 TOC。
-- [ ] 分离代码／测试 checkpoint 与最终文档 checkpoint；R9 继续保持未授权。
+- [x] 运行 Settings、Knowledge adapter/service、Bootstrap 定向测试；72/72 通过。
+- [x] 运行完整 unittest、`compileall`、`git diff --check`；305/305 unittest 通过。
+- [x] 运行真实 Chroma 双模式 smoke：persistent 重启保留、memory 重启清空；项目 BAAI Embedder／Reranker 与显式 embeddings 路径通过。
+- [x] 静态确认没有 `HttpClient`／Server composition，没有 legacy data path 读取。
+- [x] 更新配置和当前事实文档；`docs/decision.md` 只追加新决策并同步 TOC。
+- [x] 分离计划 checkpoint `e23aa4a`、代码／测试 checkpoint `a5df705` 与最终文档 checkpoint；R9 继续保持未授权。
 
 ## 5. 停止门禁
 
