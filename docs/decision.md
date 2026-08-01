@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 277 — 完成运行配置审查 P1/P2 修复](#决策-277--完成运行配置审查-p1p2-修复)
 - [决策 276 — 完成运行配置外置 E0～E5 并等待用户审查](#决策-276--完成运行配置外置-e0e5-并等待用户审查)
 - [决策 275 — 完成运行配置外置 E2 并订正 production 白名单](#决策-275--完成运行配置外置-e2-并订正-production-白名单)
 - [决策 274 — 建立运行配置硬编码外置专项计划并留待新会话实施](#决策-274--建立运行配置硬编码外置专项计划并留待新会话实施)
@@ -6575,3 +6576,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 在 builder 或 handler 保留 100／50／5 等 fallback —— 会恢复配置漂移，拒绝。
 - 为 headless smoke 修改 InputController 或增加测试入口 —— 超出专项范围，拒绝。
 - 以本次专项完成为由自动进入 R9 —— R9 仍需独立授权，拒绝。
+
+---
+
+### 决策 277 —— 完成运行配置审查 P1/P2 修复
+
+**背景：** 用户审查发现 `Settings.from_env()` 的时长／轮询浮点校验只判断大小，导致 `nan`、`inf`、`-inf` 可绕过 fail-fast；同时 `LOG_FILE_NAME` 与 logging setup 使用当前平台的 `Path.name` 判断，反斜杠路径在 Linux 上可能被接受。
+
+**决定：**
+
+- `LLM_TIMEOUT`、`CANCEL_GRACE_SECONDS`、`SHUTDOWN_TIMEOUT_SECONDS`、`PDF_BUILD_TIMEOUT_SECONDS`、`CLI_WORKER_POLL_INTERVAL_SECONDS`、`SUBPROCESS_POLL_INTERVAL_SECONDS` 统一执行 `math.isfinite()` 校验；正数／非负数原有边界保持不变。
+- Settings 与 `configure_logging()` 均显式拒绝 `/`、`\\`、`.`、`..` 和绝对路径，保持跨平台日志文件名契约一致。
+- 只修改 `settings.py`、`logging_setup.py` 及既有 `test_settings.py`、`test_logging_setup.py`；不改变 file-only 日志路由、配置默认值、Tool／Memory／Knowledge 行为、数据边界或 R9 门禁。
+- 新增六个变量各自 `nan`、`inf`、`-inf` 覆盖和跨平台分隔符覆盖；定向测试 22/22、完整 unittest 320/320、compileall、diff-check 通过；代码／测试 checkpoint 为 `459b1cf`。
+
+**理由：**
+
+- 非有限浮点数不是可执行的有效时长，必须在 Settings 启动阶段拒绝，避免运行期轮询或超时机制收到不可比较／不可等待的值。
+- 日志文件名是跨平台配置契约，不能依赖宿主系统对另一平台分隔符的解释。
+
+**曾考虑的替代方案：**
+
+- 仅在 Windows 拒绝反斜杠 —— 会导致相同配置在 Linux/Windows 行为不同，拒绝。
+- 只修 Settings、不修 logging setup —— 直接调用 logging setup 仍可绕过契约，拒绝。

@@ -768,11 +768,11 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 
 #### 6.11.6 当前运行配置外置事实（E0～E5）
 
-- `.env.example` 是当前运行默认值清单；`Settings.from_env()` 对新增 preview／Tool default 键执行必填、正整数校验，缺失或非法配置由根入口返回退出码 2。
+- `.env.example` 是当前运行默认值清单；`Settings.from_env()` 对新增 preview／Tool default 键执行必填、正整数校验，对 timeout／poll interval 等时长值执行有限数校验，缺失或非法配置由根入口返回退出码 2。
 - `bootstrap.py` 显式装配 CLI result／argument preview、Session／rewind preview，以及 workspace read／grep／file search、customer file read、retrieval 五个 Tool default。Tool schema 文案、参数 default 和 handler fallback 使用同一 builder 注入值；显式调用参数优先。
 - `Renderer`、`JsonSessionRepository`、command choice builder 与五个 Tool builder 不读取环境变量；配置只从 `Settings` 经 composition root 传入。已有编辑器选择仍是 CLI 的系统环境适配，不属于本专项业务运行配置。
 - 本专项未改变 Tool 名称、schema 结构、错误码、Memory／Knowledge 行为、Session 持久化字段、数据目录或 legacy refusal；E3 代码／测试 checkpoint 为 `154ff4f`，完整 unittest 318/318。
-- E4 的 key/shape、配置错误退出码、legacy refusal、persistent／memory 组件和 headless 根入口 smoke 已通过；专项 E5 文档已收口，当前等待用户审查，R9 仍未授权。
+- `LOG_FILE_NAME` 在 Settings 与 logging setup 中都显式拒绝 `/`、`\\`、`.`、`..` 和绝对路径，避免 Windows/Linux 配置语义漂移。E4 的 key/shape、配置错误退出码、legacy refusal、persistent／memory 组件和 headless 根入口 smoke 已通过；P1/P2 修复 checkpoint 为 `459b1cf`，当前等待用户复核，R9 仍未授权。
 
 ### 6.12 InterviewAgent Workflow 前置备忘（R9，非确认清单）
 

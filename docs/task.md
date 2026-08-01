@@ -786,6 +786,7 @@
 - ✅ E3 已完成：CLI result／argument／session preview 与 workspace/customer/retrieval 五个 Tool default 均由 Settings 解析并由 bootstrap 显式注入；Tool schema 文案、default、handler fallback 同源，显式调用参数优先；定向 114/114、完整 unittest 318/318、compileall、diff-check 通过，代码／测试 checkpoint 为 `154ff4f`。
 - ✅ E4 已完成：57/57 `.env` key/shape、一致配置构造、缺失／非法配置退出码 2 无 traceback、legacy refusal、persistent／memory 组件 smoke 通过；有效根入口在本地模型快照与注入 `/exit` 的 headless smoke 下退出 0。
 - ✅ E5 已完成：专项计划、当前状态、设计事实、任务状态与决策记录已同步；文档独立 checkpoint 后等待用户审查，计划不构成 R9 授权。
+- ✅ 用户审查 P1/P2 已修复：六个时长／轮询变量统一拒绝 `nan`、`inf`、`-inf`；Settings 与 `logging_setup.py` 均显式拒绝 `/` 和 `\\`，新增 18 项非有限值断言并补充路径分隔符覆盖，完整 unittest 320/320、compileall、diff-check 通过；代码／测试 checkpoint 为 `459b1cf`。
 - ⛔ 若实施需要超出白名单、新增 production module／依赖／公开协议、改变持久化 schema 或访问四个 legacy 数据目录，立即停止并重新审查。
 
 ## R9 —— 重构后功能（不在当前执行范围）
