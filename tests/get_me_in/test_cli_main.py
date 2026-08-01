@@ -11,7 +11,11 @@ import unittest
 from unittest.mock import Mock, call, patch
 
 from src.get_me_in.application.app_results import CloseIssue, CloseReport
-from src.get_me_in.application.settings import Settings, SettingsValidationError
+from src.get_me_in.application.settings import (
+    KnowledgeIndexMode,
+    Settings,
+    SettingsValidationError,
+)
 from src.get_me_in.cli import main as cli_main
 
 
@@ -35,6 +39,23 @@ def _settings(
         sessions_dir=Path("data/v2/sessions"),
         log_dir=log_dir,
         log_level=log_level,
+        max_model_calls_per_run=100,
+        cancel_grace_seconds=2.0,
+        show_thinking=False,
+        knowledge_index_mode=KnowledgeIndexMode.PERSISTENT,
+        knowledge_manifest_path=Path("data/v2/knowledge/manifest.json"),
+        knowledge_chroma_dir=Path("data/v2/knowledge/chroma"),
+        memories_dir=Path("data/v2/memories"),
+        embedding_model="BAAI/bge-base-zh-v1.5",
+        reranker_model="BAAI/bge-reranker-v2-m3",
+        embedding_batch_size=32,
+        rerank_batch_size=32,
+        retrieval_top_k=8,
+        shutdown_timeout_seconds=60.0,
+        auto_memory_on_exit=False,
+        artifacts_dir=Path("data/v2/artifacts"),
+        pdf_build_timeout_seconds=60.0,
+        artifact_log_max_bytes=65536,
     )
 
 
