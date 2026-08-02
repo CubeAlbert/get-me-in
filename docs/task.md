@@ -778,16 +778,69 @@
 - ✅ 代码／测试 checkpoint 为 `df01327`；当前事实、任务与决策由独立文档 checkpoint 收口。
 - ⛔ 本清理不进入 R9；`docs/task.md` 与 `docs/decision.md` 中既有旧名称只作为历史记录保留，不代表当前支持。
 
-## R8 完成态配置治理 —— 运行配置硬编码外置（E0～E5 已完成，等待用户审查）
+## R8 完成态配置治理 —— 运行配置硬编码外置（已完成并通过用户审查）
 
 - ✅ 完成只读盘点，区分部署／运行可调参数与协议、持久化、安全不变量。
-- ✅ 建立专项计划 [`docs/runtime-config-externalization.md`](runtime-config-externalization.md) 与决策 274，固定新增变量、默认值、验证规则、legacy 路径拒绝、文件白名单、E0～E5 切片和验收门禁。
+- ✅ 建立专项计划与决策 274，固定新增变量、默认值、验证规则、legacy 路径拒绝、文件白名单、E0～E5 切片和验收门禁；完成后的专项原文由 Git 历史保存。
 - ✅ E0～E2 已完成；E2 定向测试 60/60、完整 unittest 313/313、compileall、diff-check 与旧硬编码静态扫描通过，代码／测试 checkpoint 为 `b424b62`。E2 checkpoint 订正 production 白名单：`retrieval.py` 沿用原白名单，新增 `application/memory_service.py`，仅接收注入的 `settings.log_file_name`。
 - ✅ E3 已完成：CLI result／argument／session preview 与 workspace/customer/retrieval 五个 Tool default 均由 Settings 解析并由 bootstrap 显式注入；Tool schema 文案、default、handler fallback 同源，显式调用参数优先；定向 114/114、完整 unittest 318/318、compileall、diff-check 通过，代码／测试 checkpoint 为 `154ff4f`。
 - ✅ E4 已完成：57/57 `.env` key/shape、一致配置构造、缺失／非法配置退出码 2 无 traceback、legacy refusal、persistent／memory 组件 smoke 通过；有效根入口在本地模型快照与注入 `/exit` 的 headless smoke 下退出 0。
-- ✅ E5 已完成：专项计划、当前状态、设计事实、任务状态与决策记录已同步；文档独立 checkpoint 后等待用户审查，计划不构成 R9 授权。
+- ✅ E5 已完成：专项计划、当前状态、设计事实、任务状态与决策记录已同步；文档独立 checkpoint 完成，计划不构成 R9 授权。
 - ✅ 用户审查 P1/P2 已修复：六个时长／轮询变量统一拒绝 `nan`、`inf`、`-inf`；Settings 与 `logging_setup.py` 均显式拒绝 `/` 和 `\\`，新增 18 项非有限值断言并补充路径分隔符覆盖，完整 unittest 320/320、compileall、diff-check 通过；代码／测试 checkpoint 为 `459b1cf`。
-- ⛔ 若实施需要超出白名单、新增 production module／依赖／公开协议、改变持久化 schema 或访问四个 legacy 数据目录，立即停止并重新审查。
+- ✅ 用户确认运行配置专项完成，并授权将本专项、Chroma 模式订正和 R9 前质量加固三份已完成执行文档收敛；决策 278 记录删除与台账迁移，R9 仍未授权。
+
+## R8 完成态已知暂缓维护事项（D1～D7）
+
+以下事项由 R9 前质量加固审查确认，但不属于已完成的 Q1～Q7 实现范围。它们不得被解释为 R9 授权；只有满足对应重启条件并取得单独授权后才可实施。
+
+### D1 —— Artifact committed replay 的文件验证
+
+- ⏸️ **现状：** committed copy/build/merge replay 直接返回已记录结果，不验证输出仍存在或仍匹配原 hash。
+- **暂缓原因：** 当前尚未维护 Artifact 版本／reconcile 生命周期，单独增加验证会引出缺失文件、内容漂移、重建和版本推进语义。
+- **重启条件：** 开始 Artifact 版本维护、外部修改协调或 committed reconcile 设计时。
+
+### D2 —— 完整 TeX 文件系统沙箱
+
+- ⏸️ **现状：** 当前只禁用 shell escape，不保证 TeX 不能读取工作区外的本地文件。
+- **暂缓原因：** 当前是本机、显式审批的简历编译流程；完整限制需要 TeX distribution 配置、受限进程或容器。
+- **重启条件：** 接受不可信第三方 `.tex`、服务化、多用户部署，或要求严格文件机密边界时。
+
+### D3 —— Rewind 同时间戳碰撞
+
+- ⏸️ **现状：** rewind 使用时间戳确定 turn 边界。
+- **接受原因：** 当前单 session、单 worker 顺序执行，用户接受现有时间精度风险。
+- **重启条件：** 多进程写 session、导入外部 snapshot、批量重放或观察到真实碰撞时。
+
+### D4 —— `AgentRuntime` 整体拆分与 `_complete_model()` 重构
+
+- ⏸️ **现状：** Runtime 较长，但仍围绕单 Agent typed transition 内聚；`_complete_model()` 包含连续的 provider／parse／repair／state 流程。
+- **暂缓原因：** 机械拆分会增加隐式状态同步和联合返回；已完成的质量加固只移除 interaction／Plan 局部硬编码。
+- **重启条件：** 新增第二类 runtime executor、方法复杂度继续增长，或可以提取真正纯逻辑时。
+
+### D5 —— ChromaDB 公告无可升级版本
+
+- ⏸️ **现状：** 当前锁定 `chromadb 1.5.9`；质量加固依赖审查记录的 Chroma Server 预认证代码注入公告当时没有更高可用修复版本。
+- **接受边界：** production 只使用嵌入式本地 `PersistentClient`／`EphemeralClient`，不得暴露受影响 Server／API 路径；memory index 订正不改变该网络不可达边界。
+- **重启条件：** 上游发布修复、架构考虑远程 Chroma，或 dependency audit 信息变化时。
+
+### D6 —— 原始模型回复日志
+
+- ⏸️ **现状：** 格式解析失败时以 WARNING 保存完整 `raw_reply`。
+- **接受原因：** 用户明确要求保留完整响应以定位 JSON 解析和 provider 输出问题。
+- **重启条件：** 多用户／服务化部署、日志集中上传、日志访问边界变化或需要自动脱敏时。
+
+### D7 —— 其余可读性与维护性审查
+
+以下项目尚未达成具体改造方案，必须单独审查，不得顺手混入其他阶段：
+
+- ⏸️ application／CLI 多处依赖标注为 `object`，现有 Port／Protocol 未贯穿所有边界。
+- ⏸️ `bootstrap.py` 内嵌 Main AgentSpec、重复构造 Main／Resume Runtime，以及进程级环境变量副作用。
+- ⏸️ `KnowledgeService.reload()` 的重复线性查找和逐 source 整体 manifest 写入。
+- ⏸️ `JsonArtifactRepository.next_version()` 每次扫描完整历史。
+- ⏸️ `BackgroundWorker._results` 终态结果不淘汰。
+- ⏸️ Memory JSON 写入原子性、损坏记录隔离和仓库错误一致性。
+- ⏸️ Ruff、静态类型检查、安全扫描、复杂度／覆盖率门禁是否纳入项目。
+- ⏸️ 大量压缩为单行的 handler／service 代码是否统一格式化。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 
