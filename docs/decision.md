@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 285 — 完成多语言专项 L1 并进入 L2](#决策-285--完成多语言专项-l1-并进入-l2)
 - [决策 284 — 建立多语言 UI 与模型回复语言专项计划并留待新会话实施](#决策-284--建立多语言-ui-与模型回复语言专项计划并留待新会话实施)
 - [决策 283 — 完成 Knowledge 取消作用域修复 K5 最终收口](#决策-283--完成-knowledge-取消作用域修复-k5-最终收口)
 - [决策 282 — 完成 Knowledge 取消作用域修复 K4 验证并等待用户审查](#决策-282--完成-knowledge-取消作用域修复-k4-验证并等待用户审查)
@@ -6805,3 +6806,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 在 ModelMessageCodec 中检测输出语言并触发 format repair —— 语言识别对代码、专有名词和混合文本不确定，也会混淆结构错误与行为质量，拒绝。
 - 因默认 embedding 名称偏中文而立即更换模型／重建索引 —— 当前真实英文查询已通过，且更换会扩大持久化与真实数据风险，拒绝。
 - 同时改造 Memory build 统一语言 —— 用户不频繁切换语言，当前需求只涉及 UI 和回复语言；会无必要扩大后台 LLM 与数据边界，拒绝。
+
+---
+
+### 决策 285 —— 完成多语言专项 L1 并进入 L2
+
+**背景：** 用户批准开始实施多语言专项后，L1 完成了 Locale 类型、严格 catalog loader、双语 catalog、Settings 语言配置和 Settings 解析前的 bootstrap catalog 诊断。新增 Settings 必填字段使 `tests/get_me_in/test_bootstrap.py` 的直接构造 fixture 需要同步迁移；用户复核 diff 后批准将该文件纳入 L1 测试白名单。
+
+**决定：**
+
+- L1 代码／测试 checkpoint 使用提交 `21ccef3 feat: add multilingual locale foundation`；提交包含 `.env.example`、locale 类型与 loader、双语 catalog、Settings、CLI bootstrap 和 L1 回归测试。
+- `tests/get_me_in/test_bootstrap.py` 的变更仅增加 `Locale` 导入及 `ui_locale`、`response_locale`、`locales_dir` fixture 字段，不改变测试逻辑、断言或生产行为；该白名单扩展只记录在本次文档 checkpoint，不混入代码／测试提交边界说明之外的改动。
+- L1 验证证据为完整 unittest `333/333`、`compileall`、`git diff --check` 和白名单审查通过；当前进入 L2 CLI-owned UI 本地化，L2 继续独立代码／测试 checkpoint。
+- 本决定不修改 `design.md`／`plan.md`，不进入 L3/L4，不读取、改写、迁移或删除四个 legacy 数据目录，也不构成 R9 授权。
+
+**理由：**
+
+- 直接构造 `Settings` 的既有 bootstrap fixture 必须提供新增必填字段；只同步 fixture 是保持 Settings typed contract 与现有测试可执行性的最小范围。
+- 代码／测试提交与状态文档 checkpoint 分离，能够保留可回退的实现提交并单独记录白名单例外和阶段迁移。
+
+**曾考虑的替代方案：**
+
+- 为新增 Settings 字段增加隐式 dataclass 默认值以避免修改 fixture —— 会削弱配置 fail-fast 语义，拒绝。
+- 将状态文档修改混入 L1 代码／测试提交 —— 会混淆实现 checkpoint 与项目状态 checkpoint，拒绝。
