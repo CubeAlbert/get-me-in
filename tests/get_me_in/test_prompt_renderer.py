@@ -51,9 +51,9 @@ class PromptRendererTests(unittest.TestCase):
             root.mkdir()
             (root / "02.md").write_text("{{AGENT_NAME}}", encoding="utf-8")
             (root / "01.md").write_text("{{PRIMARY_GOAL}}", encoding="utf-8")
-            (root / "07_input_format.md").write_text("input", encoding="utf-8")
-            (root / "08_output_format.md").write_text("output", encoding="utf-8")
-            (root / "09_reserved.md").write_text("reserved", encoding="utf-8")
+            (root / "08_input_format.md").write_text("input", encoding="utf-8")
+            (root / "09_output_format.md").write_text("output", encoding="utf-8")
+            (root / "10_reserved.md").write_text("reserved", encoding="utf-8")
 
             rendered = PromptRenderer(root.parent).render(_spec())
 
@@ -61,6 +61,25 @@ class PromptRendererTests(unittest.TestCase):
 
     def test_production_templates_follow_their_numeric_filenames(self) -> None:
         rendered = PromptRenderer(Path("data/prompts")).render(_spec())
+
+        self.assertEqual(
+            (
+                "01_role.md",
+                "02_mission.md",
+                "03_constraint.md",
+                "04_tools.md",
+                "05_sub_agents.md",
+                "06_communtion_style.md",
+                "07_response_language.md",
+                "08_input_format.md",
+                "09_output_format.md",
+                "10_reserved.md",
+            ),
+            tuple(
+                path.name
+                for path in sorted(Path("data/prompts/general_agent").glob("*.md"))
+            ),
+        )
 
         sections = (
             "<Role>",
@@ -126,7 +145,7 @@ class PromptRendererTests(unittest.TestCase):
         self.assertIn('kind="return" 时，只向用户汇报', rendered)
 
     def test_input_format_is_the_locked_history_projection(self) -> None:
-        input_format = Path("data/prompts/general_agent/07_input_format.md")
+        input_format = Path("data/prompts/general_agent/08_input_format.md")
 
         self.assertEqual(
             "0917629fa08e67910501debccda4747706ace7c8e6ea7e6ee08804aa94e01d81",

@@ -601,7 +601,7 @@ def _runtime(
         "You are {{AGENT_NAME}}. <Tools>{{ADDITION_TOOLS}}</Tools> <Agents>{{SUB_AGENTS_LIST}}</Agents>",
         encoding="utf-8",
     )
-    (root / "08_output_format.md").write_text(
+    (root / "09_output_format.md").write_text(
         "<OutputFormat>canonical contract</OutputFormat>", encoding="utf-8"
     )
     llm = _FakeLlm(responses)

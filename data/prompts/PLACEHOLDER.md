@@ -48,15 +48,21 @@
 | `{{STYLE_RULES}}` | 偏好行为 |
 | `{{STYLE_AVOIDS}}` | 应避免的行为 |
 
-## 07_input_format.md
+## 07_response_language.md
+
+| 占位符 | 用途 |
+|--------|------|
+| `{{RESPONSE_LANGUAGE}}` | 模型面向用户内容的回复语言 |
+
+## 08_input_format.md
 
 无占位符（固定内容，所有 Agent 统一）。
 
-## 08_output_format.md
+## 09_output_format.md
 
 无占位符（固定内容，所有 Agent 统一）。
 
-## 09_reserved.md
+## 10_reserved.md
 
 无占位符（固定内容）。
 
