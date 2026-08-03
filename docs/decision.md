@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 280 — 建立 Knowledge 命令作用域取消修复计划](#决策-280--建立-knowledge-命令作用域取消修复计划)
 - [决策 279 — 迁移当前运行数据目录并移除版本路径标识](#决策-279--迁移当前运行数据目录并移除版本路径标识)
 - [决策 278 — 收敛三份已完成专项文档并迁移 D1～D7 台账](#决策-278--收敛三份已完成专项文档并迁移-d1d7-台账)
 - [决策 277 — 完成运行配置审查 P1/P2 修复](#决策-277--完成运行配置审查-p1p2-修复)
@@ -6666,3 +6667,33 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 保留 `data/v2/`，只修改文档称呼 —— 活动配置和磁盘路径仍会暴露版本身份，拒绝。
 - 把 sessions、Knowledge、Memory、Artifact 分散到多个 `data/` 一级目录 —— 会扩大持久化边界并增加忽略规则和运维复杂度，拒绝。
 - 同时兼容 `data/v2/` 与 `data/runtime/` —— 会形成双路径探测和迁移歧义，也可能意外重新接入旧数据，拒绝。
+
+---
+
+### 决策 280 —— 建立 Knowledge 命令作用域取消修复计划
+
+**背景：** 2026-08-03 真实运行中，后台 Knowledge startup reload 正在加载 embedding 模型时，一条普通前台 Runtime 调用被取消。当前 `Application.request_cancel()` 同时调用 Session 与 Knowledge 的取消入口，使 `_reload_cancellation` 在 model prepare 完成后触发 `InterruptedError`。`KnowledgeService.reload()` 把取消当作普通异常进入 `ERROR` 并返回 failure，而 BackgroundWorker 自己的 job token 未被取消，因此 job 被记录为 `FAILED`。日志和代码顺序证明异常发生在 manifest load 前，`data/v2/` → `data/runtime/` 迁移不是原因。
+
+**决定：**
+
+- 新增 [`docs/knowledge-cancellation-scope-fix.md`](knowledge-cancellation-scope-fix.md)，由新会话按 K1～K4 实施并验证；该专项是当前基线维护，独立于 R9。
+- `Application.handle()` 使用实例级、锁保护的私有 active cancellation target：`RuntimeCommand` 只取消 Session，`ReloadKnowledge` 只取消 Knowledge，其他 ApplicationCommand 不广播取消；后台 startup 不成为前台取消目标。
+- 保持 `Application.request_cancel(reason)`、WorkerRunner、KnowledgeService、command/event、Settings、持久化和 adapter 的公开签名不变，不新增 production module、依赖、命令或数据迁移。
+- `KnowledgeService.reload()` 单独处理 cancellation：首次 startup 取消保持可重试，已有 READY／DEGRADED index 的显式 reload 取消保留原可查询状态；worker-owned token 取消映射为 `CANCELLED`，真实 prepare／adapter failure 才进入 `ERROR`／`FAILED`。
+- 代码／测试白名单固定为 `application.py`、`knowledge_service.py`、`test_bootstrap.py`、`test_knowledge_service.py`，仅在补充 job-state 断言确有需要时允许 `test_resources.py`；扩展 WorkerRunner、Chroma adapter、公开 API、bootstrap、依赖或数据路径前必须停止确认。
+- 自动化必须覆盖取消路由、target 清理、prepare 阶段取消、状态保留、重试和 job state；完整验证后再执行 cold-start 普通对话取消、`/ragreload` 取消／重试及 prepare 中 `/exit` 的真实行为 smoke。
+- 本计划不读取、改写、迁移或删除四个 legacy 数据目录；实现完成和用户审查都不自动授权 R9。
+
+**理由：**
+
+- Esc／Ctrl+C 的语义是取消当前前台操作，不应广播到无关的后台 startup；按 command 建立 cancellation target 可以保留 `/ragreload` 可取消，同时不让 CLI 识别 Knowledge 私有状态。
+- 把 cooperative cancellation 记为 ERROR／FAILED 会误导用户、使 Knowledge 在当前进程永久不可用，并掩盖真正的 adapter failure；保留取消前可用状态和显式重试符合现有 typed lifecycle。
+- 私有 target 与现有公开入口即可表达修复，不需要新增 command/event、全局 token 或第二个 WorkerRunner。
+- 专项计划、白名单和真实 cold-start smoke 能覆盖现有单元测试遗漏的 prepare 时间窗口，并防止修复扩展到 R9 或持久化边界。
+
+**曾考虑的替代方案：**
+
+- 仅把 `InterruptedError` 从 ERROR 改为 CANCELLED —— 仍会让普通 Runtime 取消误伤后台 startup，只是降低日志级别，拒绝。
+- 从 `Application.request_cancel()` 完全移除 Knowledge 取消 —— 会使 `/ragreload` 无法通过 Esc／Ctrl+C 取消，拒绝。
+- 让 WorkerRunner 根据具体 command 直接调用 Session／Knowledge —— 会把 application 业务路由泄漏到 CLI，并需要扩大公开接口，拒绝。
+- 把所有取消共用一个全局 token —— 会扩大跨任务串扰并破坏实例隔离，拒绝。
