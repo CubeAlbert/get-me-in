@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 282 — 完成 Knowledge 取消作用域修复 K4 验证并等待用户审查](#决策-282--完成-knowledge-取消作用域修复-k4-验证并等待用户审查)
 - [决策 281 — 完成 Knowledge 取消作用域修复 K1～K3](#决策-281--完成-knowledge-取消作用域修复-k1k3)
 - [决策 280 — 建立 Knowledge 命令作用域取消修复计划](#决策-280--建立-knowledge-命令作用域取消修复计划)
 - [决策 279 — 迁移当前运行数据目录并移除版本路径标识](#决策-279--迁移当前运行数据目录并移除版本路径标识)
@@ -6721,3 +6722,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 仅调整 Knowledge 的错误日志而保留 Application 的取消广播 —— 仍会误伤后台 startup，拒绝。
 - 扩展 WorkerRunner、command/event 或公开 API 表达取消作用域 —— 现有 Application 私有 target 已足够，且会扩大专项白名单，拒绝。
+
+---
+
+### 决策 282 —— 完成 Knowledge 取消作用域修复 K4 验证并等待用户审查
+
+**背景：** K1～K3 代码／测试 checkpoint 后执行 K4。完整 unittest 为 325/325，`compileall` 与 `git diff --check` 通过；真实模型 Chroma smoke 通过 `R6_SMOKE_OK`。随后在当前 production composition、当前 `data/runtime/` 与模型缓存上验证取消生命周期。
+
+**决定：**
+
+- 普通 Runtime 按真实 `Progress → Continue` 驱动链在模型调用期间取消，前台结果为 `Cancelled`，后台 Knowledge 为 `ready`、startup job 为 `succeeded` 且无 failure。
+- `/ragreload` 通过真实 `WorkerRunner` 与公开 `Application.request_cancel()` 在 prepare 窗口取消，报告为 `knowledge index operation cancelled`，状态保留 `ready`；移除控制窗口后再次 reload 成功。
+- startup prepare 未完成时执行与 `/exit` 等价的 worker/application teardown，job 为 `CANCELLED`，关闭无 issue、耗时在 shutdown timeout 内且 worker 已停止。
+- 以上 smoke 使用可控 prepare 窗口确定取消时序；物理 TTY Esc／Ctrl+C 仍由用户环境复核。用户审查前不删除专项计划、不收口五份核心文档，本修复不构成 R9 授权。
+
+**理由：**
+
+- production composition smoke 已覆盖真实 Knowledge adapter、BackgroundWorker、Application cancel routing、reload state restoration 和 resource close；可控窗口避免模型缓存命中后无法稳定命中 prepare 时间窗。
+- 物理终端按键依赖本机 TTY，不能由当前非交互执行环境冒充已验证；保留用户审查门禁可以区分公开取消 API 的工程证据与终端体验证据。
+
+**曾考虑的替代方案：**
+
+- 把 fake/unit 或 composition smoke 直接记录为真实 TTY Esc 通过 —— 证据类型不等价，拒绝。
+- 因无法在当前执行环境独立按下物理 Esc 而否定已通过的 production composition smoke —— 会丢失已验证的应用层生命周期证据，拒绝。
