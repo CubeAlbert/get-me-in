@@ -3,16 +3,17 @@ from dataclasses import replace
 import json
 from pathlib import Path
 import tempfile
-from threading import enumerate as enumerate_threads
+from threading import Event, Thread, enumerate as enumerate_threads
 from unittest.mock import patch
 
 from src.get_me_in.bootstrap import build_application
 from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
-from src.get_me_in.application.app_commands import DumpSession, RestoreSession, RewindSession
+from src.get_me_in.application.app_commands import DumpSession, ReloadKnowledge, RestoreSession, RewindSession
 from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Paused, Progress, ToolFinished, ToolStarted
 from src.get_me_in.application.settings import KnowledgeIndexMode, Settings
 from src.get_me_in.application.memory_service import MemoryService
 from src.get_me_in.domain.agents import AgentKey, AgentStyle
+from src.get_me_in.domain.knowledge import ReloadReport
 from src.get_me_in.domain.sessions import RuntimePhase
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
 from src.get_me_in.tools.retrieval import build_retrieval_tools
@@ -102,7 +103,7 @@ class BootstrapTests(unittest.TestCase):
 
         first.request_cancel()
 
-        self.assertTrue(first._sessions._orchestrator._runtimes[AgentKey.MAIN]._cancellation.is_cancelled)
+        self.assertFalse(first._sessions._orchestrator._runtimes[AgentKey.MAIN]._cancellation.is_cancelled)
         self.assertFalse(second._sessions._orchestrator._runtimes[AgentKey.MAIN]._cancellation.is_cancelled)
         self.assertIsNot(first.catalog, second.catalog)
         self.assertIsNot(first.clock, second.clock)
@@ -508,14 +509,81 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(RuntimePhase.READY, rewound.phase)
             self.assertEqual(RuntimePhase.COMPLETED, restored.phase)
 
-    def test_composition_starts_knowledge_and_cancel_reaches_it(self) -> None:
+    def test_idle_cancel_does_not_reach_startup_knowledge(self) -> None:
         application = self._build_application(_settings(), llm=_FakeLlm("unused"))
 
         self.knowledge_start.assert_called()
         with patch.object(application._knowledge, "request_cancel") as cancel_knowledge:
-            application.request_cancel("stop reload")
+            application.request_cancel("stop foreground runtime")
 
-        cancel_knowledge.assert_called_once_with("stop reload")
+        cancel_knowledge.assert_not_called()
+
+    def test_runtime_and_reload_cancellation_targets_are_command_scoped(self) -> None:
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
+        runtime_started = Event()
+        runtime_cancelled = Event()
+        reload_started = Event()
+        reload_cancelled = Event()
+
+        def block_runtime(command: object) -> Progress:
+            del command
+            runtime_started.set()
+            runtime_cancelled.wait(timeout=1)
+            return Progress("runtime stopped")
+
+        def cancel_runtime(reason: str) -> None:
+            del reason
+            runtime_cancelled.set()
+
+        def block_reload(target: str | None) -> ReloadReport:
+            del target
+            reload_started.set()
+            reload_cancelled.wait(timeout=1)
+            return ReloadReport()
+
+        def cancel_reload(reason: str) -> None:
+            del reason
+            reload_cancelled.set()
+
+        with (
+            patch.object(application._sessions, "handle", side_effect=block_runtime),
+            patch.object(application._sessions, "request_cancel", side_effect=cancel_runtime) as session_cancel,
+            patch.object(application._knowledge, "reload", side_effect=block_reload),
+            patch.object(application._knowledge, "request_cancel", side_effect=cancel_reload) as knowledge_cancel,
+        ):
+            runtime_thread = Thread(target=lambda: application.handle(UserMessage("runtime")))
+            runtime_thread.start()
+            self.assertTrue(runtime_started.wait(timeout=1))
+            application.request_cancel("stop runtime")
+            runtime_thread.join(timeout=1)
+            self.assertFalse(runtime_thread.is_alive())
+            session_cancel.assert_called_once_with("stop runtime")
+            knowledge_cancel.assert_not_called()
+
+            reload_thread = Thread(target=lambda: application.handle(ReloadKnowledge()))
+            reload_thread.start()
+            self.assertTrue(reload_started.wait(timeout=1))
+            application.request_cancel("stop reload")
+            reload_thread.join(timeout=1)
+            self.assertFalse(reload_thread.is_alive())
+            knowledge_cancel.assert_called_once_with("stop reload")
+            self.assertEqual(1, session_cancel.call_count)
+
+    def test_application_clears_active_cancellation_target_after_return_and_error(self) -> None:
+        application = self._build_application(_settings(), llm=_FakeLlm("unused"))
+
+        with patch.object(application._sessions, "handle", return_value=Progress("done")):
+            application.handle(UserMessage("done"))
+        with patch.object(application._sessions, "request_cancel") as cancel_session:
+            application.request_cancel()
+        cancel_session.assert_not_called()
+
+        with patch.object(application._sessions, "handle", side_effect=RuntimeError("runtime failed")):
+            with self.assertRaisesRegex(RuntimeError, "runtime failed"):
+                application.handle(UserMessage("fail"))
+        with patch.object(application._sessions, "request_cancel") as cancel_session:
+            application.request_cancel()
+        cancel_session.assert_not_called()
 
     def test_composition_uses_static_memory_prompt(self) -> None:
         application = self._build_application(_settings(), llm=_FakeLlm("unused"))

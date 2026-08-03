@@ -17,6 +17,7 @@ from src.get_me_in.domain.knowledge import (
     PendingIndexOperation,
 )
 from src.get_me_in.application.background_worker import BackgroundWorker
+from src.get_me_in.application.app_results import BackgroundJobState
 from src.get_me_in.application.knowledge_service import KnowledgeService
 from src.get_me_in.adapters.chroma_knowledge_index import ChromaKnowledgeIndex
 from src.get_me_in.adapters.in_memory_manifest_repository import InMemoryManifestRepository
@@ -281,6 +282,81 @@ class KnowledgeServiceTests(unittest.TestCase):
         self.assertEqual(KnowledgeState.DEGRADED, service.state)
         service.close()
 
+    def test_prepare_cancellation_restores_ready_state_and_allows_retry(self) -> None:
+        worker = BackgroundWorker("knowledge-ready-test", 1)
+        index = _BlockingPrepareIndex()
+        service = KnowledgeService(
+            (_Sources((self.source,)),), _Chunker(), index, self.manifests, worker
+        )
+        self.addCleanup(service.close)
+        self.addCleanup(worker.close)
+        self.assertEqual((), service.reload().failures)
+        index.block_prepare = True
+
+        with self.assertLogs(
+            "src.get_me_in.application.knowledge_service", level="INFO"
+        ) as captured:
+            report = _cancel_reload_during_prepare(service, index)
+
+        self.assertEqual(KnowledgeState.READY, service.state)
+        self.assertEqual(("knowledge index operation cancelled",), report.failures)
+        self.assertTrue(any("knowledge reload cancelled" in line for line in captured.output))
+        self.assertFalse(any("knowledge reload failed" in line for line in captured.output))
+        index.block_prepare = False
+        self.assertEqual((), service.reload().failures)
+        self.assertEqual(KnowledgeState.READY, service.state)
+        service.close()
+        worker.close()
+
+    def test_prepare_cancellation_restores_degraded_state_and_allows_retry(self) -> None:
+        worker = BackgroundWorker("knowledge-degraded-test", 1)
+        index = _BlockingPrepareIndex()
+        manifests = _Manifests()
+        service = KnowledgeService(
+            (_Sources((self.source,)),), _Chunker(), index, manifests, worker
+        )
+        self.addCleanup(service.close)
+        self.addCleanup(worker.close)
+        self.assertEqual((), service.reload().failures)
+        manifests.value = _manifest(
+            _entry("references/a.md", "old-hash", indexed_hash="old-hash")
+        )
+        index.replace_error = RuntimeError("index failed")
+        self.assertTrue(service.reload().failures)
+        self.assertEqual(KnowledgeState.DEGRADED, service.state)
+
+        index.replace_error = None
+        index.block_prepare = True
+        report = _cancel_reload_during_prepare(service, index)
+
+        self.assertEqual(KnowledgeState.DEGRADED, service.state)
+        self.assertEqual(("knowledge index operation cancelled",), report.failures)
+        index.block_prepare = False
+        self.assertEqual((), service.reload().failures)
+        self.assertEqual(KnowledgeState.READY, service.state)
+        service.close()
+        worker.close()
+
+    def test_worker_prepare_cancellation_is_cancelled_not_failed(self) -> None:
+        worker = BackgroundWorker("knowledge-worker-test", 1)
+        index = _BlockingPrepareIndex()
+        service = KnowledgeService(
+            (_Sources((self.source,)),), _Chunker(), index, self.manifests, worker
+        )
+        self.addCleanup(service.close)
+        self.addCleanup(worker.close)
+        index.block_prepare = True
+        service.start()
+        self.assertTrue(index.prepare_started.wait(timeout=1))
+        worker._tokens["knowledge-worker-test-1"].cancel()
+
+        result = _wait_for_job(worker, "knowledge-worker-test-1")
+
+        self.assertEqual(BackgroundJobState.CANCELLED, result.state)
+        self.assertEqual(KnowledgeState.IDLE, service.state)
+        service.close()
+        worker.close()
+
     def test_search_returns_busy_while_index_mutation_holds_serial_boundary(self) -> None:
         blocking_index = _BlockingIndex()
         service = KnowledgeService(
@@ -476,12 +552,16 @@ class _Index:
         self.prepared_event = Event()
         self.prepare_calls = 0
         self.prepare_error = None
+        self.replace_error = None
     def prepare(self, cancellation):
         self.prepare_calls += 1
         self.prepared_event.set()
         if self.prepare_error is not None:
             raise self.prepare_error
-    def replace_source(self, source, chunks, cancellation): self.replaced.append(source.source_key); self.replaced_event.set()
+    def replace_source(self, source, chunks, cancellation):
+        if self.replace_error is not None:
+            raise self.replace_error
+        self.replaced.append(source.source_key); self.replaced_event.set()
     def delete_source(self, source_key, *, cancellation): pass
     def search(self, query, *, collection, category, top_k, cancellation): return (IndexHit("chunk", "found", {}, 1.0),)
     def close(self): pass
@@ -524,6 +604,26 @@ class _BlockingIndex(_Index):
             self.started.clear()
             raise InterruptedError("cancelled")
         super().replace_source(source, chunks, cancellation)
+
+
+class _BlockingPrepareIndex(_Index):
+    def __init__(self):
+        super().__init__()
+        self.prepare_started = Event()
+        self.prepare_cancelled = Event()
+        self.block_prepare = False
+
+    def prepare(self, cancellation):
+        super().prepare(cancellation)
+        if not self.block_prepare:
+            return
+        self.prepare_started.set()
+        deadline = monotonic() + 1
+        while not cancellation.is_cancelled and monotonic() < deadline:
+            sleep(0.001)
+        if cancellation.is_cancelled:
+            self.prepare_cancelled.set()
+            raise InterruptedError("knowledge index operation cancelled")
 
 
 class _QueuedWorker:
@@ -576,6 +676,35 @@ def _wait_for_state(service: KnowledgeService, expected: KnowledgeState) -> None
         sleep(0.001)
     if service.state is not expected:
         raise AssertionError(f"expected {expected}, got {service.state}")
+
+
+def _cancel_reload_during_prepare(service: KnowledgeService, index: _BlockingPrepareIndex):
+    reports = []
+    thread = Thread(target=lambda: reports.append(service.reload()))
+    thread.start()
+    if not index.prepare_started.wait(timeout=1):
+        raise AssertionError("reload did not enter prepare")
+    service.request_cancel()
+    if not index.prepare_cancelled.wait(timeout=1):
+        raise AssertionError("prepare was not cancelled")
+    thread.join(timeout=1)
+    if thread.is_alive():
+        raise AssertionError("reload did not finish after cancellation")
+    return reports[0]
+
+
+def _wait_for_job(worker: BackgroundWorker, job_id: str):
+    deadline = monotonic() + 1
+    while monotonic() < deadline:
+        result = worker.result(job_id)
+        if result is not None and result.state in {
+            BackgroundJobState.SUCCEEDED,
+            BackgroundJobState.FAILED,
+            BackgroundJobState.CANCELLED,
+        }:
+            return result
+        sleep(0.001)
+    raise AssertionError(f"background job did not finish: {job_id}")
 
 
 def _raise_finalize_error() -> None:

@@ -45,6 +45,8 @@ class KnowledgeService:
         self._worker = worker
         self._state = KnowledgeState.IDLE
         self._reload_cancellation = CancellationToken()
+        self._reload_previous_state: KnowledgeState | None = None
+        self._startup_reload_pending = False
         self._lock = Lock()
         self._closed = False
 
@@ -58,6 +60,9 @@ class KnowledgeService:
             self._ensure_open()
             if self._state is not KnowledgeState.IDLE:
                 return
+            self._reload_cancellation.reset()
+            self._reload_previous_state = KnowledgeState.IDLE
+            self._startup_reload_pending = True
             self._state = KnowledgeState.LOADING
         try:
             receipt = self._worker.submit("load-knowledge", self._run_startup_reload)
@@ -67,6 +72,8 @@ class KnowledgeService:
             )
         except Exception:
             with self._lock:
+                self._reload_previous_state = None
+                self._startup_reload_pending = False
                 self._state = KnowledgeState.ERROR
             raise
 
@@ -98,7 +105,12 @@ class KnowledgeService:
             return ReloadReport(busy=True)
         try:
             self._ensure_open()
-            starting = self._state is KnowledgeState.LOADING
+            starting = self._startup_reload_pending
+            previous_state = (
+                self._reload_previous_state if starting else self._state
+            )
+            self._reload_previous_state = None
+            self._startup_reload_pending = False
             logger.info("knowledge reload started: target=%s startup=%s", target, starting)
             self._state = KnowledgeState.LOADING
             if not starting:
@@ -180,6 +192,17 @@ class KnowledgeService:
                 len(result.failures),
             )
             return result
+        except InterruptedError as error:
+            self._state = previous_state
+            message = str(error) or "knowledge index operation cancelled"
+            logger.info(
+                "knowledge reload cancelled: target=%s startup=%s restored_state=%s reason=%s",
+                target,
+                starting,
+                self._state,
+                message,
+            )
+            return ReloadReport(failures=(message,))
         except Exception as error:
             self._state = KnowledgeState.ERROR
             logger.exception(

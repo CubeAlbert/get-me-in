@@ -1,6 +1,8 @@
 """Application container exposing the typed runtime boundary."""
 
+from collections.abc import Callable
 from pathlib import Path
+from threading import Lock
 
 from src.get_me_in.application.agent_catalog import AgentCatalog
 from src.get_me_in.application.app_commands import (
@@ -32,6 +34,9 @@ from src.get_me_in.ports.web_search import WebSearchPort
 from src.get_me_in.domain.sessions import SessionPreview, SessionView
 
 
+_CancellationTarget = Callable[[str], None]
+
+
 class Application:
     """Owns R1 dependencies without exposing a temporary conversation API."""
 
@@ -61,28 +66,39 @@ class Application:
         self._memory = memory
         self._closed = False
         self._close_report: CloseReport | None = None
+        self._cancellation_lock = Lock()
+        self._active_cancellation_target: tuple[object, _CancellationTarget | None] | None = None
 
     def handle(self, command: RuntimeCommand | ApplicationCommand) -> RuntimeEvent | SessionView | Path | ApplicationResult:
         """Run one typed command without exposing runtime internals."""
         if self._closed:
             raise RuntimeError("Application is closed")
-        if isinstance(command, RestoreSession):
-            return self.restore(command.session_id)
-        if isinstance(command, RewindSession):
-            return self.rewind(command.turn_id)
-        if isinstance(command, ExitSubAgent):
-            return self.exit_subagent(command.summarize)
-        if isinstance(command, DumpSession):
-            return self.dump()
-        if isinstance(command, ReloadKnowledge):
-            if self._knowledge is None:
-                raise RuntimeError("knowledge service is unavailable")
-            return KnowledgeReloaded(self._knowledge.reload(command.target))
-        if isinstance(command, BuildMemory):
-            if self._memory is None:
-                raise RuntimeError("memory service is unavailable")
-            return MemoryBuildScheduled(self._memory.build_async(self._sessions.memory_source()))
-        return self._sessions.handle(command)
+        marker = object()
+        with self._cancellation_lock:
+            self._active_cancellation_target = (marker, self._cancellation_target(command))
+        try:
+            if isinstance(command, RestoreSession):
+                return self.restore(command.session_id)
+            if isinstance(command, RewindSession):
+                return self.rewind(command.turn_id)
+            if isinstance(command, ExitSubAgent):
+                return self.exit_subagent(command.summarize)
+            if isinstance(command, DumpSession):
+                return self.dump()
+            if isinstance(command, ReloadKnowledge):
+                if self._knowledge is None:
+                    raise RuntimeError("knowledge service is unavailable")
+                return KnowledgeReloaded(self._knowledge.reload(command.target))
+            if isinstance(command, BuildMemory):
+                if self._memory is None:
+                    raise RuntimeError("memory service is unavailable")
+                return MemoryBuildScheduled(self._memory.build_async(self._sessions.memory_source()))
+            return self._sessions.handle(command)
+        finally:
+            with self._cancellation_lock:
+                active = self._active_cancellation_target
+                if active is not None and active[0] is marker:
+                    self._active_cancellation_target = None
 
     def view(self) -> SessionView:
         return self._sessions.view()
@@ -109,9 +125,18 @@ class Application:
         """Cancel an active blocking call without mutating Runtime state cross-thread."""
         if self._closed:
             raise RuntimeError("Application is closed")
-        self._sessions.request_cancel(reason)
-        if self._knowledge is not None:
-            self._knowledge.request_cancel(reason)
+        with self._cancellation_lock:
+            active = self._active_cancellation_target
+            target = active[1] if active is not None else None
+        if target is not None:
+            target(reason)
+
+    def _cancellation_target(self, command: RuntimeCommand | ApplicationCommand) -> _CancellationTarget | None:
+        if isinstance(command, RuntimeCommand):
+            return self._sessions.request_cancel
+        if isinstance(command, ReloadKnowledge) and self._knowledge is not None:
+            return self._knowledge.request_cancel
+        return None
 
     def finalize_turn(self) -> TurnFinalizationResult:
         """Persist a terminal session and independently schedule optional memory work."""
