@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 291 — 重排 general_agent Prompt 文件编号](#决策-291--重排-general_agent-prompt-文件编号)
 - [决策 290 — 补充多语言 Settings 中文默认值](#决策-290--补充多语言-settings-中文默认值)
 - [决策 289 — 完成多语言专项 L5 工程验证并等待真实 provider／TTY smoke](#决策-289--完成多语言专项-l5-工程验证并等待真实-providertty-smoke)
 - [决策 288 — 完成多语言专项 L4 ResponseLanguage Prompt 注入](#决策-288--完成多语言专项-l4-responselanguage-prompt-注入)
@@ -6955,3 +6956,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 将缺失值继续视为配置错误 —— 会使新增语言配置破坏未更新 `.env` 的现有启动路径，拒绝。
 - 将 `MODEL_RESPONSE_LANGUAGE` 缺省固定为 `zh-CN` —— 会破坏 `ui` 的跟随语义，拒绝。
+
+---
+
+### 决策 291 —— 重排 general_agent Prompt 文件编号
+
+**背景：** `data/prompts/general_agent/` 中同时存在 `06_communtion_style.md` 与 `06_response_language.md`；用户要求消除重复编号，并让后续 Prompt 文件保持连续编号。
+
+**决定：**
+
+- `06_response_language.md` 重命名为 `07_response_language.md`。
+- `07_input_format.md`、`08_output_format.md`、`09_reserved.md` 依次重命名为 `08_input_format.md`、`09_output_format.md`、`10_reserved.md`。
+- PromptRenderer 继续按文件名的字典序拼接完整 system prompt；`render_output_format()` 继续通过唯一 `*_output_format.md` suffix 发现 `09_output_format.md`，不增加数字硬编码。
+- InputFormat、OutputFormat 和 Reserved 文件内容不变；同步更新测试、占位符清单和当前活跃设计／计划文档。历史决策中的旧文件名保留为当时的事实记录，不回写历史。
+- 代码／测试 checkpoint 为 `c4ac8dd refactor: renumber general agent prompts`；PromptRenderer／Runtime 定向测试 `41/41`、完整 unittest `341/341`、compileall 与 diff-check 通过。本决定不进入 R9。
+
+**理由：**
+
+- 连续编号消除 Prompt 目录歧义，并使 `ResponseLanguage → InputFormat → OutputFormat → Reserved` 的实际顺序直接反映在文件名中。
+- 通过 suffix 发现 OutputFormat 保持 repair 入口与现有 filename-driven 设计，不引入额外运行时协议或数据迁移。
+- 只重命名文件并同步引用，保留 Input／Output 内容 hash 和既有测试边界，风险最小。
+
+**曾考虑的替代方案：**
+
+- 仅把新文件改为 `07` 而不顺延其余文件 —— 会使 `InputFormat`、`OutputFormat`、`Reserved` 的编号继续断档，拒绝。
+- 修改 PromptRenderer 为显式文件名列表 —— 会破坏现有字典序装配约定，拒绝。

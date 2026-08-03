@@ -168,7 +168,7 @@
 - Session snapshot 对 assistant message/tool call 的 thinking 做可选字段 round-trip；缺失字段按 `None` 兼容当时的 snapshot，不迁移 legacy 数据，不重放活动副作用。
 - Settings 增加独立 `show_thinking`，从 `SHOW_THINKING` 读取；Renderer 只在该值为 true 且摘要非空时展示“思考摘要”。`LLM_THINKING_ENABLED` 仍只控制 provider 端 thinking 模式。
 - ConversationCodec 对所有发往 LLM 的历史记录显式排除 thinking；不得把前轮摘要写入 JSON message，也不得读取 provider 原生 `reasoning_content`。
-- 仅修改既有 OutputFormat 模板（当前文件名为 `data/prompts/general_agent/08_output_format.md`）、`domain/messages.py`、`application/model_reply.py`、`application/runtime.py`、`application/events.py`、`application/conversation_codec.py`、`application/session_codec.py`、`application/settings.py`、`cli/renderer.py`、`cli/main.py` 与对应既有测试；不创建新代码文件，不修改 R6/R7 service。
+- 仅修改既有 OutputFormat 模板（当前文件名为 `data/prompts/general_agent/09_output_format.md`）、`domain/messages.py`、`application/model_reply.py`、`application/runtime.py`、`application/events.py`、`application/conversation_codec.py`、`application/session_codec.py`、`application/settings.py`、`cli/renderer.py`、`cli/main.py` 与对应既有测试；不创建新代码文件，不修改 R6/R7 service。
 
 **验收门禁 G5-F：**
 
@@ -285,13 +285,13 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 ### R8-F-C —— 单一模型消息 Entity 与双格式投影修正（R8 后续，独立于 R9）
 
-**目标：** 保留当前 `07_input_format.md` 和独立 `08_output_format.md`，让 history input 与 model output 成为同一个 `ModelMessageEntity` 的方向性投影；模型只提供输出方向所需字段，Runtime 补齐可信内部字段。既有三次 repair 与 snapshot 兼容继续保留。
+**目标：** 保留当前 `08_input_format.md` 和独立 `09_output_format.md`，让 history input 与 model output 成为同一个 `ModelMessageEntity` 的方向性投影；模型只提供输出方向所需字段，Runtime 补齐可信内部字段。既有三次 repair 与 snapshot 兼容继续保留。
 
 **产出：**
 
 - 新增 `ModelMessageEventType`、immutable `ModelMessageEntity` 与 `ModelMessageParseError`；Entity 的模型字段集合为 `id/role/timestamp/event_type/message/tool/tool_call_id/event_payload/thinking/plan_status`，并可携带不序列化的本地 repair 诊断。它是唯一 LLM-facing Entity，但各方向 required 字段不同。
 - 新增 `ModelMessageCodec.encode(system_prompt, records)` 与 `parse(raw)`：history encode 将现有 ConversationRecord 投影为完整输入 Entity；reply decode 将 flat OutputFormat 投影为同一 Entity，再由 Runtime 生成 domain record。删除独立 `ModelReply` DTO。
-- `07_input_format.md` 内容不修改；`08_output_format.md` 恢复 flat `event_type/message/thinking/tool/event_payload`，明确 tool_call 的工具名与参数，finish thinking 默认尽量提供但解析允许缺省。
+- `08_input_format.md` 内容不修改；`09_output_format.md` 恢复 flat `event_type/message/thinking/tool/event_payload`，明确 tool_call 的工具名与参数，finish thinking 默认尽量提供但解析允许缺省。
 - Runtime 生成／覆盖 id、role、timestamp、tool_call_id、plan_status；Plan 只从 Session canonical state 投影到下一轮输入 Entity，不接受模型回写。
 - 保留 PromptRenderer 的文件名排序与 `render_output_format()`；full prompt 同时包含 InputFormat 和 OutputFormat，repair 只注入 OutputFormat。
 - 保留 `format_repairs_used`、每 turn 3 次模型 repair、本地 JSON repair 不计数、第四次暂停、新 UserMessage 清零与旧 snapshot bool 兼容。
@@ -299,16 +299,16 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 **范围：**
 
 - 生产新增：`src/get_me_in/application/model_message.py`。
-- 生产修改：`data/prompts/general_agent/08_output_format.md`、`src/get_me_in/application/runtime.py`、`src/get_me_in/bootstrap.py`。`PromptRenderer.render()`／`render_output_format()` 行为保持不变。
-- 生产替换／删除：把 `src/get_me_in/application/conversation_codec.py` 与 `src/get_me_in/application/model_reply.py` 的有效逻辑迁入 `ModelMessageCodec` 后删除旧模块；不得删除或修改 `data/prompts/general_agent/07_input_format.md`。
+- 生产修改：`data/prompts/general_agent/09_output_format.md`、`src/get_me_in/application/runtime.py`、`src/get_me_in/bootstrap.py`。`PromptRenderer.render()`／`render_output_format()` 行为保持不变。
+- 生产替换／删除：把 `src/get_me_in/application/conversation_codec.py` 与 `src/get_me_in/application/model_reply.py` 的有效逻辑迁入 `ModelMessageCodec` 后删除旧模块；不得删除或修改 `data/prompts/general_agent/08_input_format.md`。
 - 测试新增／修改：`tests/get_me_in/test_model_message.py`、`tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_bootstrap.py`；迁移有效断言后删除 `test_conversation_codec.py`、`test_model_reply.py`。
 - checkpoint：五份活跃文档。`domain/messages.py`、`ports/llm.py`、session codec/state、provider adapter、Settings、RuntimeEvent、工具、CLI、依赖和数据不在范围；确需改变时停止并提交最小扩展清单。
 
 **验收门禁：**
 
-- 实施前先锁定当前 `07_input_format.md` Git blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4` 不变，并断言 `07_input_format.md`、`08_output_format.md`、`09_reserved.md` 均存在且顺序正确。
+- 实施前先锁定当前 `08_input_format.md` Git blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4` 不变，并断言 `08_input_format.md`、`09_output_format.md`、`10_reserved.md` 均存在且顺序正确。
 - Entity／codec 回归覆盖五类 input event、finish output、tool_call output、event_payload 参数、tool result correlation、plan_status 输入投影、Runtime-owned 字段重建和 thinking 输出保留／历史剥离。
-- Prompt 回归必须证明 ToolCallFormat 明确展示 `tool` 与 `event_payload` 参数 object，finish 提示模型通常尽量提供 thinking，且 repair 仍只读取 `08_output_format.md`。
+- Prompt 回归必须证明 ToolCallFormat 明确展示 `tool` 与 `event_payload` 参数 object，finish 提示模型通常尽量提供 thinking，且 repair 仍只读取 `09_output_format.md`。
 - 完整 unittest、`compileall`、`git diff --check` 与 diff 白名单审查通过后建立独立代码 checkpoint；实现会话负责回归，随后由用户执行真实 provider smoke。
 - 本任务不构成 R9 授权；smoke 通过后才记录 R8-F-C 完成态。
 
@@ -327,9 +327,9 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **范围：**
 
-- Prompt／生产：`data/prompts/general_agent/08_output_format.md`、`src/get_me_in/application/model_message.py`、`src/get_me_in/application/events.py`、`src/get_me_in/application/runtime.py`、`src/get_me_in/cli/renderer.py`。
+- Prompt／生产：`data/prompts/general_agent/09_output_format.md`、`src/get_me_in/application/model_message.py`、`src/get_me_in/application/events.py`、`src/get_me_in/application/runtime.py`、`src/get_me_in/cli/renderer.py`。
 - 测试：`tests/get_me_in/test_model_message.py`、`tests/get_me_in/test_prompt_renderer.py`、`tests/get_me_in/test_runtime.py`、`tests/get_me_in/test_cli_commands.py`、`tests/get_me_in/test_bootstrap.py`。
-- checkpoint：五份活跃文档；`07_input_format.md`、domain messages、session codec/state、provider、ToolDefinition／ToolExecutor、审批、handoff、Plan、Memory、数据与 R9 不在范围。
+- checkpoint：五份活跃文档；`08_input_format.md`、domain messages、session codec/state、provider、ToolDefinition／ToolExecutor、审批、handoff、Plan、Memory、数据与 R9 不在范围。
 
 **验收门禁：**
 
@@ -360,7 +360,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **目标：** 首版支持 `zh-CN`／`en-US`。CLI 自有文本由 strict locale catalog loader 和命名占位符生成；Main／Resume system prompt 注入统一 ResponseLanguage。UI、对话回复和 Resume artifact language 保持三个独立语义，不复制完整 system prompt，不改变模型消息 schema。
 
-**范围：** 新增进程级 `UI_LOCALE`、`MODEL_RESPONSE_LANGUAGE`、`LOCALES_DIR`；新增 typed Locale、CLI Translator、两份 locale catalog 和 `06_response_language.md`；本地化 CLI-owned 文案，并将固定 Progress／审批展示语义改为 typed code／canonical tool name 后由前端翻译。完整新类型、文件白名单和禁止清单以 [`docs/multilingual-support.md`](multilingual-support.md) 为准。
+**范围：** 新增进程级 `UI_LOCALE`、`MODEL_RESPONSE_LANGUAGE`、`LOCALES_DIR`；新增 typed Locale、CLI Translator、两份 locale catalog 和 `07_response_language.md`；本地化 CLI-owned 文案，并将固定 Progress／审批展示语义改为 typed code／canonical tool name 后由前端翻译。完整新类型、文件白名单和禁止清单以 [`docs/multilingual-support.md`](multilingual-support.md) 为准。
 
 **实施顺序：** L0 文档计划（本会话完成）→ L1 Locale／loader／Settings → L2 CLI-owned UI → L3 typed 固定事件文案与审批 → L4 ResponseLanguage Prompt → L5 完整验证与真实 provider／TTY smoke → L6 用户审查与文档收口。L1～L4 各自形成独立代码／测试 checkpoint；L5 原则上不修改 production；L6 文档独立 checkpoint。
 

@@ -391,15 +391,15 @@ R4 新增文件、类和公开方法清单如下，编码前仍需用户确认�
 
 #### 6.6.1 JSON `thinking` 契约（R6 前置修复）
 
-静态 `08_output_format.md` 中的 `thinking` 是模型生成、允许向用户展示的推理摘要，与 provider 原生 `reasoning_content` 和 `LLM_THINKING_ENABLED` 完全分离。finish 回复默认应尽量提供简短、非空、用户可见的 thinking 摘要；但为避免仅因摘要缺失触发格式 repair，解析契约继续允许省略、`null`、空字符串或空白字符串。tool_call 的 thinking 同样可选。其他非空值必须是 string。该规则保留决策 219 对决策 212 的取代关系；当前架构继续执行决策 136，不读取、保存或展示 provider 原生 reasoning_content。
+静态 `09_output_format.md` 中的 `thinking` 是模型生成、允许向用户展示的推理摘要，与 provider 原生 `reasoning_content` 和 `LLM_THINKING_ENABLED` 完全分离。finish 回复默认应尽量提供简短、非空、用户可见的 thinking 摘要；但为避免仅因摘要缺失触发格式 repair，解析契约继续允许省略、`null`、空字符串或空白字符串。tool_call 的 thinking 同样可选。其他非空值必须是 string。该规则保留决策 219 对决策 212 的取代关系；当前架构继续执行决策 136，不读取、保存或展示 provider 原生 reasoning_content。
 
 `MessageRecord` 和 `ToolCallRecord` 保存可选 thinking；R8-F-C 完成后 Runtime 必须把 `ModelMessageCodec` 解码得到的 `ModelMessageEntity` 投影到 Completed/ToolStarted，使 Renderer 可在独立 `SHOW_THINKING` setting 开启时显示“思考摘要”。Session snapshot 对 assistant message/tool call 的 thinking 做可选 round-trip，缺失字段兼容为 `None`。thinking 不参与业务状态转换、tool closure、handoff、rewind 边界或 Plan。
 
-“保留”不等于“回放”。R8-F-C 完成后由 `ModelMessageCodec` 编码下一轮 LLMRequest，并必须对所有历史记录剥离 thinking；因此 `07_input_format.md` 不声明 thinking。R6 的 `SessionService.memory_source()` 同样必须复制出 thinking 为 `None` 的 provider-neutral 记录，MemoryExtractor 不得接收展示摘要。这样修复只为 R6 增加 G5-F 前置依赖和一条 MemoryBuildSource 投影约束，不改变 R6 的总体架构、已确认文件清单或第一切片。
+“保留”不等于“回放”。R8-F-C 完成后由 `ModelMessageCodec` 编码下一轮 LLMRequest，并必须对所有历史记录剥离 thinking；因此 `08_input_format.md` 不声明 thinking。R6 的 `SessionService.memory_source()` 同样必须复制出 thinking 为 `None` 的 provider-neutral 记录，MemoryExtractor 不得接收展示摘要。这样修复只为 R6 增加 G5-F 前置依赖和一条 MemoryBuildSource 投影约束，不改变 R6 的总体架构、已确认文件清单或第一切片。
 
 #### 6.6.2 单一模型消息 Entity、双方向格式投影与有界修复（R8-F-C，已确认）
 
-删除前 v1 的真实实现证明了稳定基线：`07_input_format.md` 与 `08_output_format.md` 是两份独立 Prompt 文档，但 history serialize 与 LLM reply parse 都承载在同一个 `Message` 上。代码结构可以重做，方向边界必须保留。决策 248 错把“一个 Entity”扩大成“一份 Prompt 文件”，又另造 `tool_result/context` 字段；决策 249 完全取代这些内容。当前 `07_input_format.md` 的字段、事件说明、tool result error payload 与 Plan 描述均保持不变。
+删除前 v1 的真实实现证明了稳定基线：`07_input_format.md` 与 `08_output_format.md` 是两份独立 Prompt 文档，但 history serialize 与 LLM reply parse 都承载在同一个 `Message` 上。代码结构可以重做，方向边界必须保留。决策 248 错把“一个 Entity”扩大成“一份 Prompt 文件”，又另造 `tool_result/context` 字段；决策 249 完全取代这些内容。当前 `08_input_format.md` 的字段、事件说明、tool result error payload 与 Plan 描述均保持不变。
 
 新的 immutable `ModelMessageEntity` 是唯一 LLM-facing 承载对象，字段与当前 InputFormat 对齐：
 
@@ -418,12 +418,12 @@ event_payload | thinking | plan_status
 
 一个 Entity 不表示每个方向都必须提供全部字段。`ModelMessageCodec` 按方向执行不同的 required/owned 规则：
 
-- **history input：** `ConversationRecord → ModelMessageEntity → LLMMessage`。Runtime／codec 提供 `id`、`role`、`timestamp`、`event_type`、`message`，按记录类型提供 `tool`、`tool_call_id`、`event_payload`，并把当前 Plan 投影到 `plan_status={current, completed, remaining}`。assistant history 的 thinking 必须剥离。此路径严格保持现有 `07_input_format.md`。
+- **history input：** `ConversationRecord → ModelMessageEntity → LLMMessage`。Runtime／codec 提供 `id`、`role`、`timestamp`、`event_type`、`message`，按记录类型提供 `tool`、`tool_call_id`、`event_payload`，并把当前 Plan 投影到 `plan_status={current, completed, remaining}`。assistant history 的 thinking 必须剥离。此路径严格保持现有 `08_input_format.md`。
 - **model output：** 原始 JSON → 同一个 `ModelMessageEntity` → Runtime/domain。模型只需提供当前方向所需字段：`event_type`、`message`、可选 `thinking`；`tool_call` 时还必须提供非空 `tool` 与 object `event_payload`，参数名和值直接放在 `event_payload`。`finish` 时 `tool`／`event_payload` 省略或为 null。
 - **Runtime-owned 字段：** 模型无需提供 `id`、`role`、`timestamp`、`tool_call_id` 或 `plan_status`；即使提供也不作为可信值，Runtime 使用 IdGenerator、Clock、当前 Agent/turn、pending call 与当前 Plan 重建。模型输出的 Plan 不覆盖 Session canonical plan；新记录在下一轮 history encode 时才重新收到 `plan_status`。
 - **thinking：** Entity 可以承载模型输出 thinking，Runtime 继续投影到 MessageRecord／ToolCallRecord、RuntimeEvent、snapshot 与 Renderer；history encode 时剥离。OutputFormat 对 finish 明确写“通常应尽量提供简短、非空摘要”，但 parser 不把它设为必填；tool_call thinking 可选。
 
-`08_output_format.md` 必须继续单独存在，并使用与 InputFormat 相同的 flat 字段名：`event_type/message/thinking/tool/event_payload`。不得使用 nested `tool_call={"name","arguments"}`，不得把 InputFormat 与 OutputFormat 合并。完整 system prompt 继续按文件名拼接 `07_input_format.md` → `08_output_format.md` → `09_reserved.md`；格式 repair 只注入 `PromptRenderer.render_output_format()` 返回的 OutputFormat，因为 repair 的目标是模型回复而不是 history。
+`09_output_format.md` 必须继续单独存在，并使用与 InputFormat 相同的 flat 字段名：`event_type/message/thinking/tool/event_payload`。不得使用 nested `tool_call={"name","arguments"}`，不得把 InputFormat 与 OutputFormat 合并。完整 system prompt 继续按文件名拼接 `07_response_language.md` → `08_input_format.md` → `09_output_format.md` → `10_reserved.md`；格式 repair 只注入 `PromptRenderer.render_output_format()` 返回的 OutputFormat，因为 repair 的目标是模型回复而不是 history。
 
 `ModelReply` 不再作为第二个 reply Entity；`AgentRuntime` 消费 `ModelMessageEntity`。实现可以把 encode/decode 集中在 `ModelMessageCodec`，但“单一 codec”不允许改变两份 Prompt 的方向职责。`ConversationRecord` union 继续是 Session/domain canonical history；RuntimeCommand、RuntimeEvent、ToolDefinition、ToolExecutor、Capability、审批、handoff、CLI、provider `json_object` 与 snapshot conversation schema 均不变。
 
@@ -431,13 +431,13 @@ event_payload | thinking | plan_status
 
 #### 6.6.3 tool call message 非空契约与 CLI 展示修正（R8 后续，已确认）
 
-模型输出方向的 `message` 是所有事件共同的用户可见内容。`finish` 与 `tool_call` 都必须提供非空、非纯空白 string；`ModelMessageCodec.parse()` 在区分事件前执行统一校验，任何缺失、错误类型、空字符串或纯空白值都进入既有有界格式 repair，不得生成 `ToolStarted` 或执行工具。`08_output_format.md` 的单一 `<Schema>` 使用 `minLength=1` 表达基础非空约束，Requirements 补充非纯空白语义；`07_input_format.md` 保持只读，旧 snapshot 中已经存在的空 `ToolCallRecord.content` 仍可恢复，不迁移数据。
+模型输出方向的 `message` 是所有事件共同的用户可见内容。`finish` 与 `tool_call` 都必须提供非空、非纯空白 string；`ModelMessageCodec.parse()` 在区分事件前执行统一校验，任何缺失、错误类型、空字符串或纯空白值都进入既有有界格式 repair，不得生成 `ToolStarted` 或执行工具。`09_output_format.md` 的单一 `<Schema>` 使用 `minLength=1` 表达基础非空约束，Requirements 补充非纯空白语义；`08_input_format.md` 保持只读，旧 snapshot 中已经存在的空 `ToolCallRecord.content` 仍可恢复，不迁移数据。
 
 OutputFormat 删除 `<InputOutputDistinction>`，只在 Requirements 中说明模型无需提供 `id`、`role`、`timestamp`、`tool_call_id`、`plan_status`，不暴露 Runtime 如何重建内部字段。`finish` 在 Prompt 中必须提供简短、用户可见的 string `thinking`，但 parser 不新增 finish-specific presence/non-empty 校验；缺失、`null` 或空白 thinking 继续作为防御性宽容输入，非 null 值仍必须是 string。该不对称是明确边界：`message` 是代码强制的业务展示字段，`thinking` 的 finish 必填仅是模型提示约束。
 
 `message` 可以包含 Markdown；“模型回复必须是合法 JSON object”只约束最外层 envelope，不禁止 JSON string 内的 Markdown。`thinking` 是纯文本，不使用 Markdown。`ToolCallRecord` 继续保存 `content=message` 与可选 thinking；`ToolStarted` 新增必填 `message`，Runtime 使用关键字参数同时投影 message、thinking、tool name 与 arguments。Renderer 对 `Completed` 和 `ToolStarted` 使用一致的展示顺序：先在 `SHOW_THINKING=true` 且摘要非空时通过 `Panel(Text(thinking))` 显示 thinking，再通过 `Markdown(message)` 始终显示模型消息；tool call 随后显示脱敏、截断后的工具名与参数摘要。`CliApp` 的事件推进、ToolFinished、审批、handoff、Plan、snapshot schema、provider 和 Memory 边界均不改变。
 
-本修正只允许修改 `data/prompts/general_agent/08_output_format.md`、`application/model_message.py`、`application/events.py`、`application/runtime.py`、`cli/renderer.py` 及对应 `test_model_message.py`、`test_prompt_renderer.py`、`test_runtime.py`、`test_cli_commands.py`、`test_bootstrap.py`。回归必须覆盖两种事件的空白 message 拒绝、repair 不执行工具、ToolStarted 双字段投影、finish/tool-call Markdown 一致性、thinking 纯文本与开关／顺序、Rich markup 边界和参数脱敏。本修正独立于 R9。
+本修正只允许修改 `data/prompts/general_agent/09_output_format.md`、`application/model_message.py`、`application/events.py`、`application/runtime.py`、`cli/renderer.py` 及对应 `test_model_message.py`、`test_prompt_renderer.py`、`test_runtime.py`、`test_cli_commands.py`、`test_bootstrap.py`。回归必须覆盖两种事件的空白 message 拒绝、repair 不执行工具、ToolStarted 双字段投影、finish/tool-call Markdown 一致性、thinking 纯文本与开关／顺序、Rich markup 边界和参数脱敏。本修正独立于 R9。
 
 工程实现已由 `0694c2b` 与 `5a43fda` 分片提交；定向测试分别为 65/65、84/84，完整 unittest 296/296、`compileall`、`git diff --check`、InputFormat blob `50ee7a2a3c6cba3ea78d3f5efc5756f93d8199e4` 和 production-component smoke 均通过。真实 provider 对 Prompt 的遵从性与真实终端 Markdown／thinking 开关体验仍须在用户环境完成，不能由 fake LLM 或 production-component smoke 代替。
 
@@ -788,7 +788,7 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 
 UI 使用专用 locale loader 从 `data/locales/` 加载严格 key 对齐的 JSON catalog，通过稳定 message key 和命名占位符生成普通文本。Rich Panel、Markdown、escape、敏感参数脱敏和动态值格式继续由 Renderer 负责；slash command、Tool 名称／参数、AgentKey、Capability、error code、持久化枚举和 JSON 字段均保持 canonical。Application 不依赖 CLI Translator；固定 Progress／审批语义使用 typed code／canonical tool name 进入 RuntimeEvent，由前端翻译，模型生成的 message／thinking／question／choices／Plan description 不做二次翻译。
 
-模型侧新增独立 `06_response_language.md`，由 PromptRenderer 注入 resolved response locale，覆盖 `finish.message`、`tool_call.message`、可见 thinking、问题／选项和 Plan 描述，同时要求代码、路径、命令、标识符、专有名词和引用原文保持原样。Main 与 Resume 使用同一配置；`07_input_format.md`、`08_output_format.md`、`ModelMessageEntity`／`ModelMessageCodec`、format repair 和 provider JSON mode 均不改变，也不维护多份完整 system prompt。
+模型侧新增独立 `07_response_language.md`，由 PromptRenderer 注入 resolved response locale，覆盖 `finish.message`、`tool_call.message`、可见 thinking、问题／选项和 Plan 描述，同时要求代码、路径、命令、标识符、专有名词和引用原文保持原样。Main 与 Resume 使用同一配置；`08_input_format.md`、`09_output_format.md`、`ModelMessageEntity`／`ModelMessageCodec`、format repair 和 provider JSON mode 均不改变，也不维护多份完整 system prompt。
 
 Memory build、Memory repository、embedding／reranker、Chroma index 和 Knowledge lifecycle 不在本专项范围。当前生产索引已用英文技术栈查询和英文年龄查询对中文 Memory 完成真实 Top-1 验证；该证据只支持首版 zh-CN／en-US 方案，最终仍须由真实 provider／TTY smoke 证明模型会在英文回合正确调用一次 `query_memory` 并用英文回答。
 

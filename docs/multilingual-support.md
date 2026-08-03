@@ -14,7 +14,7 @@
 1. UI 文案由专用 locale loader 从语言资源加载，通过稳定 key 和命名占位符格式化；不得对最终输出做全局字符串替换。
 2. Rich 的 Panel、Markdown、颜色、转义和敏感参数脱敏继续由 Renderer 代码控制；语言资源只保存普通文本。
 3. 模型交互只新增一段独立 ResponseLanguage system prompt，运行时注入目标语言；不为每种语言复制整套 system prompt。
-4. `07_input_format.md`、`08_output_format.md`、JSON key、event type、Tool 名称／参数、AgentKey、Capability、命令名和 HandoffContext 标签均保持 canonical，不翻译。
+4. `08_input_format.md`、`09_output_format.md`、JSON key、event type、Tool 名称／参数、AgentKey、Capability、命令名和 HandoffContext 标签均保持 canonical，不翻译。
 5. 模型回复语言覆盖 `finish.message`、`tool_call.message`、可见 `thinking`、模型生成的问题／选项和 Plan 描述；代码、路径、命令、标识符、专有名词、引用原文保持原样。
 6. 简历中文／英文／双语是 artifact language，独立于 UI locale 和对话回复语言。
 7. 首版不增加运行时语言切换，因此不修改 `SessionState`、`SessionSnapshotCodec` 或 snapshot schema；恢复会话时使用当前进程配置的 UI／回复语言，历史消息原文不翻译。
@@ -36,7 +36,10 @@
           │
           └── resolved response locale
                 → PromptRenderer
-                → 06_response_language.md
+                → 07_response_language.md
+                → 08_input_format.md
+                → 09_output_format.md
+                → 10_reserved.md
                 → Main Runtime + Resume Runtime
 ```
 
@@ -152,7 +155,7 @@ bootstrap fallback 只用于报告配置错误，不得成为有效 production �
 
 ## 7. 模型回复语言 Prompt
 
-新增 `data/prompts/general_agent/06_response_language.md`。保留 filename-driven lexicographic renderer；新文件位于 CommunicationStyle 后、InputFormat 前，`render_output_format()` 仍只读取唯一 `*_output_format.md`。
+新增 `data/prompts/general_agent/07_response_language.md`。保留 filename-driven lexicographic renderer；新文件位于 CommunicationStyle 后、InputFormat 前，`render_output_format()` 仍只读取唯一 `*_output_format.md`。
 
 新增唯一 placeholder：`{{RESPONSE_LANGUAGE}}`。`PromptRenderer` 的允许变量、构造参数／render values 和测试同步更新。
 
@@ -169,7 +172,7 @@ Prompt 必须表达：
 
 - PromptRenderer 由 bootstrap 注入 resolved response locale；Main 和 Resume 使用同一个值。
 - 不修改 Main／Resume AgentSpec 和 ToolDefinition 的 canonical 中文元数据；先用真实 provider smoke 验证中文 system instruction 驱动英文回复的稳定性。
-- 不修改 `07_input_format.md`、`08_output_format.md`、`ModelMessageEntity`、`ModelMessageCodec`、repair budget 或 provider JSON mode。
+- 不修改 `08_input_format.md`、`09_output_format.md`、`ModelMessageEntity`、`ModelMessageCodec`、repair budget 或 provider JSON mode。
 - format repair 时完整 system prompt 仍在 request 中，因此 ResponseLanguage 自动保持；repair message 不重复一份语言协议。
 
 ## 8. 分阶段实施与 checkpoint
@@ -244,7 +247,7 @@ Prompt 必须表达：
 
 **生产／Prompt 白名单：**
 
-- 新增 `data/prompts/general_agent/06_response_language.md`。
+- 新增 `data/prompts/general_agent/07_response_language.md`。
 - `src/get_me_in/application/prompt_renderer.py`
 - `src/get_me_in/bootstrap.py`
 - 必要时只使用 L1 已新增的 `application/localization.py` 映射 prompt language name。
@@ -288,7 +291,7 @@ L5 不应修改 production；若验证发现白名单外缺陷，立即停止，
 - `src/get_me_in/cli/localization.py`
 - `data/locales/zh-CN.json`
 - `data/locales/en-US.json`
-- `data/prompts/general_agent/06_response_language.md`
+- `data/prompts/general_agent/07_response_language.md`
 - `tests/get_me_in/test_localization.py`
 
 ### 9.2 允许按切片修改
@@ -313,8 +316,8 @@ L5 不应修改 production；若验证发现白名单外缺陷，立即停止，
 
 ### 9.3 明确禁止修改
 
-- `data/prompts/general_agent/07_input_format.md`
-- `data/prompts/general_agent/08_output_format.md`
+- `data/prompts/general_agent/08_input_format.md`
+- `data/prompts/general_agent/09_output_format.md`
 - `src/get_me_in/application/model_message.py`
 - `src/get_me_in/domain/sessions.py`
 - `src/get_me_in/application/session_codec.py`
