@@ -1,1 +1,1 @@
-"""Concrete adapters selected only by the v2 composition root."""
+"""Concrete adapters selected only by the composition root."""

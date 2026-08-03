@@ -4,7 +4,7 @@
 
 ## 项目
 
-**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。生产入口已切换到 `src/get_me_in/` v2；R8-D 已删除 legacy production 源码，R8-G 文档归一化与 G8 已完成并通过最终用户审查，当前停在 R9 独立授权门禁前。
+**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。生产入口使用 `src/get_me_in/`；R8-D 已删除 legacy production 源码，R8-G 文档归一化与 G8 已完成并通过最终用户审查，当前停在 R9 独立授权门禁前。
 
 ## 新会话恢复顺序
 
@@ -15,7 +15,7 @@
    - `docs/task.md`
    - `docs/decision.md`
 3. 若 `docs/current.md` 明确路由专项执行文档，只额外加载其当前指定的文件；不得从历史决策中的专项文件名推断当前路由。
-4. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 已收敛为当前 v2 事实，不再存在并行的 `docs/refactor-*.md`。
+4. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 已收敛为当前基线事实，不再存在并行的 `docs/refactor-*.md`。
 5. 历史 baseline、audit、matrix 和 smoke 原文由 Git 保存；不要在 `docs/` 重新创建归档副本，也不得据此覆盖 `current.md` 的阶段与授权状态。
 
 ## R8 完成状态与 R9 授权门禁
@@ -46,8 +46,8 @@ R8-G 文档提交未修改 `main.py`、`src/`、`tests/`、`scripts/`、`data/`�
 
 文档归一化已完成：
 
-- 删除 `.env.example` 的 R8 观察期说明和 `legacy rollback only` 段，但保留 v2 正式变量及仍受支持的兼容别名。
-- 把 README 从迁移／观察期说明改为已落地 v2 事实，记录当前入口、Main／Resume 能力、10 个 CLI 命令、配置和数据边界。
+- 删除 `.env.example` 的 R8 观察期说明和 `legacy rollback only` 段，但保留当前正式变量及仍受支持的兼容别名。
+- 把 README 从迁移／观察期说明改为当前基线事实，记录当前入口、Main／Resume 能力、10 个 CLI 命令、配置和数据边界。
 - 更新活跃文档与本文件的当前态；历史阶段和决策只保留为明确历史，`docs/decision.md` 只追加、不改写。
 - Agent、Tool、命令和 Settings 数量／名称必须从实际 Catalog、Registry 与代码取证，不维护第二份运行时真相。
 
@@ -63,11 +63,11 @@ git diff --check
 
 完成内容还包括：
 
-- 扫描生产入口、v2 源码、测试和配置，确认无 legacy import、动态 import 字符串、旧模块路径或 import-time registration。
+- 扫描生产入口、当前源码、测试和配置，确认无 legacy import、动态 import 字符串、旧模块路径或 import-time registration。
 - 从 `AgentCatalog.list_descriptors()`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令。
 - 从真实根入口验证 Settings／启动退出码、基础对话、10 个 CLI 命令、handoff、审批／拒绝、Esc／选择取消、restore／rewind 和资源关闭。
 - 验证真实 Chroma／embedder／reranker、Knowledge、Memory，以及中文／英文／双语 Resume copy／edit／build／open 和 `merge_pdfs`。
-- 使用静态扫描、Settings sentinel 与拒绝访问 smoke 证明 production v2 不读取旧数据；mtime／hash 只能证明未改写。确认写入只落在 `data/workspace/` 与 `data/v2/`。
+- 使用静态扫描、Settings sentinel 与拒绝访问 smoke 证明 production 不读取旧数据；mtime／hash 只能证明未改写。确认写入只落在 `data/workspace/` 与 `data/runtime/`。
 - 已审查 `git diff --name-status` 与 staged diff；R8-G 文档变更只涉及上述 8 个文件，独立代码／测试修复保持分离，G8 通过后已完成 R8-G checkpoint。
 
 ### 数据与回退边界
@@ -110,7 +110,7 @@ CLI 当前有 10 个命令：
 
 旧 `/auto-approve-switch` 仅是历史 baseline，不是当前命令。
 
-## 当前 v2 架构
+## 当前架构
 
 生产入口：
 
@@ -151,9 +151,9 @@ main.py
 ## 数据与配置
 
 - 静态输入只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`。
-- v2 业务运行数据只写 `data/workspace/` 与 `data/v2/`；诊断日志默认写入 `data/logs/`，由 `LOG_DIR` 控制。
+- 业务运行数据只写 `data/workspace/` 与 `data/runtime/`；诊断日志默认写入 `data/logs/`，由 `LOG_DIR` 控制。
 - `KNOWLEDGE_INDEX_MODE` 只接受 `persistent`／`memory`，默认 persistent。persistent 使用 `PersistentClient + JsonManifestRepository`；memory 使用 `EphemeralClient + InMemoryManifestRepository` 并在每个进程全量重建。两种模式均不得读取旧 `data/chroma/`，也不得暴露 Chroma Server／HTTP API。
-- 环境由 `src/get_me_in/cli/main.py` 加载 `.env`，再由 `Settings.from_env()` 解析；v2 代码不得 import legacy `src.config`。
+- 环境由 `src/get_me_in/cli/main.py` 加载 `.env`，再由 `Settings.from_env()` 解析；当前代码不得 import legacy `src.config`。
 - `pyproject.toml` 只配置清华 TUNA 为默认 PyPI 镜像，不设置 `[tool.uv].environments`，保持 Windows 与 Ubuntu/Linux universal lock。
 - 新增依赖先执行 `uv add <package> --no-sync`，再单独 `uv sync`；运行 `uv lock`／`uv add` 前先确认没有并发 uv 锁定操作。
 
@@ -166,7 +166,7 @@ main.py
 - 核心自动化测试已获授权；纯 domain/application 逻辑必须有自动化保护，真实 LLM、Chroma、LaTeX 与 CLI 交互使用集成或 smoke 验证。
 - 不得通过删除测试、放宽 typed contract 或用 mock 掩盖真实 adapter 问题来获得绿灯。
 - Agent key、capability、状态和事件使用声明式常量／枚举，不写裸字符串控制协议。
-- v2 禁止 import legacy package；`tests/get_me_in/test_import_boundaries.py` 持续维护 forbidden module 防回归。
+- 当前代码禁止 import legacy package；`tests/get_me_in/test_import_boundaries.py` 持续维护 forbidden module 防回归。
 - 新模块、公开类或公开方法必须先确认设计和清单；R8-G 不允许创建或修改这些对象。
 - R0～R8 继续冻结 InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 和其他 R9 功能。
 - 保留用户已有工作树变更；删除或移动前必须解析并核对精确绝对路径。
@@ -179,7 +179,7 @@ main.py
 | 文件 | 用途 | 加载时机 |
 |---|---|---|
 | `docs/current.md` | 唯一当前状态快照：阶段、任务、阻塞、下一步和活跃文档路由 | 每次新会话必读 |
-| `docs/design.md` | 当前 v2 架构、迁移边界和未来设计备忘 | 涉及架构、边界或 R8 删除范围时 |
+| `docs/design.md` | 当前架构、迁移边界和未来设计备忘 | 涉及架构、边界或 R8 删除范围时 |
 | `docs/plan.md` | 里程碑、依赖、验收和停止门禁 | 排期、进入阶段或检查验收时 |
 | `docs/task.md` | R0～R8 主执行清单与状态标记 | 开始、完成或审查主任务时 |
 | `docs/decision.md` | 按编号追加的历史决策与理由 | 需要追溯边界或新增重要决定时 |

@@ -13,7 +13,7 @@ class LoggingSetupTests(unittest.TestCase):
             logger.removeHandler(handler)
             handler.close()
 
-    def test_writes_v2_logs_and_replaces_existing_handlers(self) -> None:
+    def test_writes_logs_and_replaces_existing_handlers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             log_dir = Path(temporary_dir)
             first_path = configure_logging(log_dir, "INFO", "app.log", 10485760, 5)

@@ -1,6 +1,6 @@
 # get-me-in
 
-面向程序员的 CLI AI 求职助手。生产运行使用 `src/get_me_in/` 下的 v2 架构，由 Main 路由 Agent 与 Resume 简历 Agent 协作完成当前已落地的求职能力。
+面向程序员的 CLI AI 求职助手。生产运行使用 `src/get_me_in/` 下的当前架构，由 Main 路由 Agent 与 Resume 简历 Agent 协作完成当前已落地的求职能力。
 
 ## 运行入口
 
@@ -10,13 +10,13 @@
 uv run python main.py
 ```
 
-诊断时也可以调用同一套 v2 CLI 模块入口：
+诊断时也可以调用同一套 CLI 模块入口：
 
 ```powershell
 uv run python -m src.get_me_in.cli
 ```
 
-启动前将 `.env.example` 复制为 `.env`，填写 OpenAI-compatible 服务地址、密钥和模型名称。配置由 `Settings.from_env()` 解析；静态输入目录由项目固定提供，运行目录由 v2 配置提供。
+启动前将 `.env.example` 复制为 `.env`，填写 OpenAI-compatible 服务地址、密钥和模型名称。配置由 `Settings.from_env()` 解析；静态输入目录由项目固定提供，运行目录由配置提供。
 
 ## 当前能力
 
@@ -46,7 +46,7 @@ CLI 命令由 `CommandRegistry` 注册并提供补全与帮助：
 
 ## 数据与配置边界
 
-v2 复用的静态输入只有：
+生产运行复用的静态输入只有：
 
 - `data/reference/`
 - `data/prompts/`
@@ -55,11 +55,11 @@ v2 复用的静态输入只有：
 业务运行数据只写入：
 
 - `data/workspace/`：工作区文件和会话可见的用户工作内容
-- `data/v2/`：session、Knowledge、Memory、Artifact 等 v2 持久化数据
+- `data/runtime/`：session、Knowledge、Memory、Artifact 等持久化数据
 
-Knowledge index 默认使用 `KNOWLEDGE_INDEX_MODE=persistent`，把 Chroma 与 manifest 持久化在 `data/v2/knowledge/`。显式设置为 `memory` 时，Chroma 与 manifest 只保留在当前进程，并在每次启动时从 `data/reference/` 与 `data/v2/memories/` 全量重建；Memory JSON 等业务源数据仍按原路径持久化。旧 `CHROMA_PERSIST_DIR` 不控制 v2。
+Knowledge index 默认使用 `KNOWLEDGE_INDEX_MODE=persistent`，把 Chroma 与 manifest 持久化在 `data/runtime/knowledge/`。显式设置为 `memory` 时，Chroma 与 manifest 只保留在当前进程，并在每次启动时从 `data/reference/` 与 `data/runtime/memories/` 全量重建；Memory JSON 等业务源数据仍按原路径持久化。旧 `CHROMA_PERSIST_DIR` 不再生效。
 
-诊断日志默认写入 `data/logs/`，由 `LOG_DIR` 和 `LOG_LEVEL` 控制。旧的 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 是保留的历史用户数据；production v2 不读取、不改写、不迁移、不删除这些目录。
+诊断日志默认写入 `data/logs/`，由 `LOG_DIR` 和 `LOG_LEVEL` 控制。旧的 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 是保留的历史用户数据；production 不读取、不改写、不迁移、不删除这些目录。
 
 ## 回退边界
 

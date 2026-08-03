@@ -1,4 +1,4 @@
-"""Immutable specification for the v2 Resume agent."""
+"""Immutable specification for the Resume agent."""
 
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 

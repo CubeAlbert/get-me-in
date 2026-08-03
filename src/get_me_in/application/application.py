@@ -1,4 +1,4 @@
-"""v2 application container exposing the typed runtime boundary."""
+"""Application container exposing the typed runtime boundary."""
 
 from pathlib import Path
 

@@ -18,7 +18,7 @@ from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, M
 from src.get_me_in.tools.retrieval import build_retrieval_tools
 
 
-def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
+def _settings(*, sessions_dir: Path = Path("data/runtime/sessions")) -> Settings:
     return Settings(
         openai_api_key="key",
         openai_base_url="https://example.test",
@@ -45,9 +45,9 @@ def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
         cancel_grace_seconds=2.0,
         show_thinking=False,
         knowledge_index_mode=KnowledgeIndexMode.PERSISTENT,
-        knowledge_manifest_path=Path("data/v2/knowledge/manifest.json"),
-        knowledge_chroma_dir=Path("data/v2/knowledge/chroma"),
-        memories_dir=Path("data/v2/memories"),
+        knowledge_manifest_path=Path("data/runtime/knowledge/manifest.json"),
+        knowledge_chroma_dir=Path("data/runtime/knowledge/chroma"),
+        memories_dir=Path("data/runtime/memories"),
         embedding_model="BAAI/bge-base-zh-v1.5",
         reranker_model="BAAI/bge-reranker-v2-m3",
         embedding_batch_size=32,
@@ -55,7 +55,7 @@ def _settings(*, sessions_dir: Path = Path("data/v2/sessions")) -> Settings:
         retrieval_top_k=8,
         shutdown_timeout_seconds=60.0,
         auto_memory_on_exit=False,
-        artifacts_dir=Path("data/v2/artifacts"),
+        artifacts_dir=Path("data/runtime/artifacts"),
         pdf_build_timeout_seconds=60.0,
         artifact_log_max_bytes=65536,
         model_format_repair_limit=3,

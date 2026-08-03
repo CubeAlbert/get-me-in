@@ -1,4 +1,4 @@
-"""Rich presentation for v2 CLI data; never chooses the next command."""
+"""Rich presentation for CLI data; never chooses the next command."""
 
 import json
 from contextlib import AbstractContextManager

@@ -19,7 +19,7 @@ from src.get_me_in.ports.llm import LLMResult, ModelProfile
 
 
 class MemoryRepositoryTests(unittest.TestCase):
-    def test_json_memory_is_v2_only_and_scannable_as_knowledge(self) -> None:
+    def test_json_memory_is_current_only_and_scannable_as_knowledge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = JsonMemoryRepository(Path(temporary), _Clock())
             record = MemoryRecord(1, "memory-1", AgentKey.MAIN, MemoryCategory.FACT, "prefers Python", _now())

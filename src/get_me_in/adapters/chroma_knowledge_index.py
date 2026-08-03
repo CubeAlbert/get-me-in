@@ -1,4 +1,4 @@
-"""Explicit v2 vector adapters; models and persistence are constructor-owned."""
+"""Explicit vector adapters; models and persistence are constructor-owned."""
 
 import logging
 

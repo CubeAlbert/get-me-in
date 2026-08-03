@@ -1,4 +1,4 @@
-"""Filesystem-backed v2 reference sources with a strict Markdown boundary."""
+"""Filesystem-backed reference sources with a strict Markdown boundary."""
 
 from hashlib import sha256
 from pathlib import Path

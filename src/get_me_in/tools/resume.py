@@ -1,4 +1,4 @@
-"""简历模板复制与 PDF 编译工具的 v2 定义。"""
+"""简历模板复制与 PDF 编译工具定义。"""
 
 from collections.abc import Mapping
 from pathlib import Path

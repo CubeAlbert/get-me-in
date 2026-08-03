@@ -1,4 +1,4 @@
-"""The sole v2 composition root."""
+"""The sole composition root."""
 
 import os
 from collections.abc import Mapping

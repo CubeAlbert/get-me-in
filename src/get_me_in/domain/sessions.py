@@ -1,4 +1,4 @@
-"""Immutable session aggregate models for the v2 application boundary."""
+"""Immutable session aggregate models for the application boundary."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

@@ -1,4 +1,4 @@
-"""Persistence boundary for versioned v2 session snapshots."""
+"""Persistence boundary for versioned session snapshots."""
 
 from typing import Protocol
 from pathlib import Path

@@ -1,4 +1,4 @@
-"""Composition for the standalone v2 CLI entry point."""
+"""Composition for the standalone CLI entry point."""
 
 import os
 from pathlib import Path
@@ -22,7 +22,7 @@ _FILE_ONLY_LOG = {"_get_me_in_file_only": True}
 
 
 def main() -> int:
-    """Build, run, and close the v2 CLI for the production entry point."""
+    """Build, run, and close the CLI for the production entry point."""
     _ensure_utf8()
     project_root = Path(__file__).resolve().parents[3]
     load_dotenv(project_root / ".env")
@@ -52,7 +52,7 @@ def main() -> int:
             settings.log_backup_count,
         )
         logging_ready = True
-        logger.info("v2 CLI starting; log=%s level=%s", log_path, settings.log_level)
+        logger.info("CLI starting; log=%s level=%s", log_path, settings.log_level)
         application = build_application(settings)
         input_controller = InputController()
         commands = build_command_registry(
@@ -72,7 +72,7 @@ def main() -> int:
     except Exception:
         if logging_ready:
             logger.critical(
-                "v2 CLI startup or execution failed",
+                "CLI startup or execution failed",
                 exc_info=True,
                 extra=_FILE_ONLY_LOG,
             )
@@ -85,7 +85,7 @@ def main() -> int:
                     worker.close()
                 except Exception:
                     logger.critical(
-                        "v2 CLI worker close failed",
+                        "CLI worker close failed",
                         exc_info=True,
                         extra=_FILE_ONLY_LOG,
                     )
@@ -97,7 +97,7 @@ def main() -> int:
                     close_report = application.close()
                 except Exception:
                     logger.critical(
-                        "v2 CLI application close failed",
+                        "CLI application close failed",
                         exc_info=True,
                         extra=_FILE_ONLY_LOG,
                     )
@@ -106,7 +106,7 @@ def main() -> int:
                 else:
                     for issue in close_report.issues:
                         logger.critical(
-                            "v2 CLI resource close issue: resource=%s timed_out=%s message=%s",
+                            "CLI resource close issue: resource=%s timed_out=%s message=%s",
                             issue.resource_name,
                             issue.timed_out,
                             issue.message,
@@ -117,7 +117,7 @@ def main() -> int:
                             f"{label}（{issue.resource_name}）：{issue.message}"
                         )
                         exit_code = 1
-            logger.info("v2 CLI stopped")
+            logger.info("CLI stopped")
     return exit_code
 
 

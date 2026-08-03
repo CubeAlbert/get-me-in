@@ -1,4 +1,4 @@
-"""Atomic JSON persistence for schema-versioned v2 index manifests."""
+"""Atomic JSON persistence for schema-versioned index manifests."""
 
 import json
 from os import replace

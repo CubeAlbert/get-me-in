@@ -4,16 +4,17 @@
 
 **当前任务：** 无；停在 R9 独立授权门禁前
 
-**当前子任务：** 已将质量加固 D1～D7 暂缓台账迁入 `docs/task.md`，删除三份已完成专项文档，并修正 `AGENTS.md` 的活跃文档路由。
+**当前子任务：** 已移除当前基线的版本身份标签，并将业务运行数据与配置迁移到 `data/runtime/`。
 
 **当前阻塞：** R9 尚未取得独立授权。
 
-**会话交接说明：** 决策 278 记录三份专项执行文档的完成态收敛：Chroma 与运行配置事实已由核心文档和代码／测试承接；质量加固 Q1～Q7 已完成，D1～D7 作为明确暂缓维护事项迁入 `docs/task.md`。历史专项计划由 Git 保存；不得重新创建归档副本、接入四个 legacy 数据目录或据此进入 R9。
+**会话交接说明：** 决策 279 记录当前基线版本标签与运行路径收口：用户可见文档、源码说明、日志和测试不再使用版本身份标签；运行数据、`.env`、`.env.example`、测试与活跃文档统一使用 `data/runtime/`。原版本目录内容已原位迁移，四个 legacy 数据目录仍不得读取、改写、迁移或删除；本次收口不授权进入 R9。
 
 **下一步：** 等待用户对 R9 的独立授权；授权前不得检查、设计或实施 R9。
 
 **决策记录说明：** `current.md` 仅保留最近 10 条决策摘要；更早决策及完整正文请查阅 [`docs/decision.md`](decision.md)。以下按编号从新到旧排列。
 
+279. **迁移当前运行数据目录并移除版本路径标识** — 当前生产基线不再使用版本身份标签；配置、测试、活跃文档和现有运行数据统一迁移到 `data/runtime/`，`.gitignore` 同步更新；四个 legacy 数据目录保持隔离，R9 仍未授权。
 278. **收敛三份已完成专项文档并迁移 D1～D7 台账** — 用户确认运行配置专项完成；删除 Chroma、质量加固与运行配置三份专项执行文档，将仍暂缓的 D1～D7 完整迁入 `docs/task.md`，修正 `AGENTS.md` 活跃文档路由；历史由 Git 与既有决策保存，R9 仍未授权。
 277. **完成运行配置审查 P1/P2 修复** — `459b1cf` 统一拒绝六个时长／轮询变量的非有限值，并让 Settings／logging setup 跨平台拒绝 `/`、`\\`；新增 18 项非有限值断言并补充路径分隔符覆盖，完整 unittest 320/320 通过，R9 仍未授权。
 276. **完成运行配置外置 E0～E5** — E3 代码／测试 checkpoint `154ff4f`；完整 unittest 318/318、compileall、diff-check、57/57 `.env` key/shape、退出码 2 配置错误、legacy refusal、persistent／memory 组件与 headless 根入口 smoke 通过；文档已收口，等待用户审查，R9 仍未授权。
@@ -23,4 +24,3 @@
 272. **完成 Chroma memory／persistent 模式订正** — 计划 `e23aa4a`、代码／测试 `a5df705` 已 checkpoint；定向 72/72、完整 305/305、compileall、diff-check、真实双模式 smoke 与数据边界门禁通过，R9 仍未授权。
 271. **确认并授权 Chroma memory／persistent 模式订正** — 默认保持 persistent；memory 使用 `EphemeralClient` 与 process-local manifest 成对装配并每次启动全量重建；旧 Chroma 路径继续隔离，按专项计划执行，不进入 R9。
 270. **完成 tool call message 修正的真实 provider／TTY smoke 与最终收口** — `SHOW_THINKING=false`／`true` 两组工具调用均显示 message；关闭时无摘要，开启时 finish thinking 以纯文本 Panel 位于最终 Markdown message 上方；本修正全部完成，R9 仍未授权。
-269. **完成 tool call message 修正的工程实现与自动化门禁** — `b190a06`、`0694c2b`、`5a43fda` 已提交；定向 65/65、84/84，完整 unittest 296/296、compileall、diff-check、InputFormat blob 与 production-component smoke 通过；等待真实 provider／TTY smoke，R9 仍未授权。

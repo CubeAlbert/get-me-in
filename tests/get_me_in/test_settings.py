@@ -32,14 +32,14 @@ _BASE_ENV = {
     "PROMPTS_DIR": "data/prompts",
     "RESUME_TEMPLATE_DIR": "data/resume/template",
     "WORKSPACE_DIR": "data/workspace",
-    "SESSIONS_DIR": "data/v2/sessions",
-    "ARTIFACTS_DIR": "data/v2/artifacts",
+    "SESSIONS_DIR": "data/runtime/sessions",
+    "ARTIFACTS_DIR": "data/runtime/artifacts",
     "LOG_DIR": "data/logs",
     "LOG_LEVEL": "INFO",
     "KNOWLEDGE_INDEX_MODE": "persistent",
-    "KNOWLEDGE_MANIFEST_PATH": "data/v2/knowledge/manifest.json",
-    "KNOWLEDGE_CHROMA_DIR": "data/v2/knowledge/chroma",
-    "MEMORIES_DIR": "data/v2/memories",
+    "KNOWLEDGE_MANIFEST_PATH": "data/runtime/knowledge/manifest.json",
+    "KNOWLEDGE_CHROMA_DIR": "data/runtime/knowledge/chroma",
+    "MEMORIES_DIR": "data/runtime/memories",
     "EMBEDDING_MODEL": "BAAI/bge-base-zh-v1.5",
     "RERANKER_MODEL": "BAAI/bge-reranker-v2-m3",
     "EMBEDDING_BATCH_SIZE": "32",
@@ -77,7 +77,7 @@ def _env(overrides: dict[str, str] | None = None) -> dict[str, str]:
 
 
 class SettingsTests(unittest.TestCase):
-    def test_example_configuration_documents_current_v2_settings(self) -> None:
+    def test_example_configuration_documents_current_settings(self) -> None:
         example = (Path(__file__).resolve().parents[2] / ".env.example").read_text(
             encoding="utf-8"
         )
@@ -189,7 +189,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual("BAAI/bge-base-zh-v1.5", settings.embedding_model)
         self.assertEqual("BAAI/bge-reranker-v2-m3", settings.reranker_model)
         self.assertIs(KnowledgeIndexMode.PERSISTENT, settings.knowledge_index_mode)
-        self.assertEqual(Path("project/data/v2/artifacts"), settings.artifacts_dir)
+        self.assertEqual(Path("project/data/runtime/artifacts"), settings.artifacts_dir)
         self.assertEqual(60.0, settings.pdf_build_timeout_seconds)
         self.assertEqual(65536, settings.artifact_log_max_bytes)
 
@@ -380,11 +380,11 @@ class SettingsTests(unittest.TestCase):
         )
 
         self.assertEqual(root / "data" / "workspace", settings.workspace_dir)
-        self.assertEqual(root / "data" / "v2" / "sessions", settings.sessions_dir)
-        self.assertEqual(root / "data" / "v2" / "knowledge" / "chroma", settings.knowledge_chroma_dir)
+        self.assertEqual(root / "data" / "runtime" / "sessions", settings.sessions_dir)
+        self.assertEqual(root / "data" / "runtime" / "knowledge" / "chroma", settings.knowledge_chroma_dir)
         self.assertIs(KnowledgeIndexMode.PERSISTENT, settings.knowledge_index_mode)
-        self.assertEqual(root / "data" / "v2" / "memories", settings.memories_dir)
-        self.assertEqual(root / "data" / "v2" / "artifacts", settings.artifacts_dir)
+        self.assertEqual(root / "data" / "runtime" / "memories", settings.memories_dir)
+        self.assertEqual(root / "data" / "runtime" / "artifacts", settings.artifacts_dir)
 
     def test_from_env_accepts_explicit_memory_index_mode(self) -> None:
         settings = Settings.from_env(

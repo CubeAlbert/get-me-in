@@ -1,4 +1,4 @@
-"""记忆与参考资料查询工具的 v2 定义。"""
+"""记忆与参考资料查询工具定义。"""
 
 from collections.abc import Mapping
 from enum import StrEnum

@@ -1,4 +1,4 @@
-"""Declarative agent metadata used by the v2 composition root."""
+"""Declarative agent metadata used by the composition root."""
 
 from dataclasses import dataclass
 from enum import StrEnum

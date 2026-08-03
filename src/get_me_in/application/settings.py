@@ -1,4 +1,4 @@
-"""Typed, non-terminating configuration for the v2 composition root."""
+"""Typed, non-terminating configuration for the composition root."""
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -11,7 +11,7 @@ from src.get_me_in.ports.llm import ModelProfile
 
 
 class SettingsValidationError(ValueError):
-    """Raised when required v2 configuration is absent or invalid."""
+    """Raised when required configuration is absent or invalid."""
 
 
 class KnowledgeIndexMode(StrEnum):

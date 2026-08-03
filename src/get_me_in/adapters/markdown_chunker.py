@@ -1,4 +1,4 @@
-"""Deterministic Markdown chunking for the v2 knowledge index."""
+"""Deterministic Markdown chunking for the knowledge index."""
 
 from hashlib import sha256
 

@@ -1,4 +1,4 @@
-"""Validation and execution boundary for explicit v2 tools."""
+"""Validation and execution boundary for explicit tools."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

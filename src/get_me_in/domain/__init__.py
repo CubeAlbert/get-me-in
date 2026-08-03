@@ -1,1 +1,1 @@
-"""Pure v2 domain models."""
+"""Pure domain models."""

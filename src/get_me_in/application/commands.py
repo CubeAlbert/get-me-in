@@ -1,4 +1,4 @@
-"""Typed input commands for the v2 runtime."""
+"""Typed input commands for the runtime."""
 
 from dataclasses import dataclass
 

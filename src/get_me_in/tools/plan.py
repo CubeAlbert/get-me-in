@@ -18,7 +18,7 @@ from src.get_me_in.domain.tools import (
 
 
 class PlanToolContext(ToolHandlerContext, Protocol):
-    """Context required by the v2 Plan tool handlers."""
+    """Context required by the Plan tool handlers."""
 
     plan: PlanService | None
 

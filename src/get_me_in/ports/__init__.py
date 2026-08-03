@@ -1,1 +1,1 @@
-"""Ports implemented by v2 adapters."""
+"""Ports implemented by concrete adapters."""

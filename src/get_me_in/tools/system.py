@@ -24,7 +24,7 @@ class SystemToolContext(ToolHandlerContext, Protocol):
 
 
 def build_system_tools(clock: Clock) -> tuple[ToolDefinition, ...]:
-    """Build v2 system tools without registration side effects."""
+    """Build system tools without registration side effects."""
     return (
         ToolDefinition(
             name="get_current_datetime",

@@ -1,4 +1,4 @@
-"""Tests for read-only v2 workspace tool definitions."""
+"""Tests for read-only workspace tool definitions."""
 
 from pathlib import Path
 import tempfile

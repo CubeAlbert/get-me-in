@@ -1,4 +1,4 @@
-"""Port for the versioned v2 memory repository."""
+"""Port for the versioned memory repository."""
 
 from typing import Protocol
 

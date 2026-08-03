@@ -1,4 +1,4 @@
-"""Disk-safe codec for v2 session snapshots, separate from model conversation codec."""
+"""Disk-safe codec for session snapshots, separate from model conversation codec."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -39,7 +39,7 @@ class SessionSnapshot:
 
 
 class SessionSnapshotCodec:
-    """Encode only stable v2 state and reject malformed or incompatible data."""
+    """Encode only stable state and reject malformed or incompatible data."""
 
     def encode(self, snapshot: SessionSnapshot) -> dict[str, object]:
         if snapshot.schema_version != SCHEMA_VERSION:

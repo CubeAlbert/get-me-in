@@ -1,1 +1,1 @@
-"""Declarative v2 agent specifications."""
+"""Declarative agent specifications."""

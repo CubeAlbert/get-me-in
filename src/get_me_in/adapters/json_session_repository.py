@@ -1,4 +1,4 @@
-"""Atomic JSON-file implementation of the v2 session repository."""
+"""Atomic JSON-file implementation of the session repository."""
 
 import json
 from pathlib import Path

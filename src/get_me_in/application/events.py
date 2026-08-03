@@ -1,4 +1,4 @@
-"""Typed output events emitted by the v2 runtime."""
+"""Typed output events emitted by the runtime."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field

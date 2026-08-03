@@ -30,7 +30,7 @@ def build_workspace_tools(
     search_max_matches: int,
     file_search_max_results: int,
 ) -> tuple[ToolDefinition, ...]:
-    """Build the capability-scoped v2 workspace tools."""
+    """Build the capability-scoped workspace tools."""
     def workspace_read(
         arguments: Mapping[str, object], context: WorkspaceToolContext
     ) -> ToolSuccess | ToolFailure:

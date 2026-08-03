@@ -1,4 +1,4 @@
-"""Versioned v2 JSON memory repository; never reads legacy Markdown memories."""
+"""Versioned JSON memory repository; never reads legacy Markdown memories."""
 
 import json
 from hashlib import sha256

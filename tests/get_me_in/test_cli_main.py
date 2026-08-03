@@ -1,4 +1,4 @@
-"""Root-entry and v2 CLI exit-code contracts for R8-E."""
+"""Root-entry and CLI exit-code contracts for R8-E."""
 
 import ast
 from contextlib import redirect_stderr
@@ -44,16 +44,16 @@ def _settings(
         prompts_dir=Path("data/prompts"),
         resume_template_dir=Path("data/resume/template"),
         workspace_dir=Path("data/workspace"),
-        sessions_dir=Path("data/v2/sessions"),
+        sessions_dir=Path("data/runtime/sessions"),
         log_dir=log_dir,
         log_level=log_level,
         max_model_calls_per_run=100,
         cancel_grace_seconds=2.0,
         show_thinking=False,
         knowledge_index_mode=KnowledgeIndexMode.PERSISTENT,
-        knowledge_manifest_path=Path("data/v2/knowledge/manifest.json"),
-        knowledge_chroma_dir=Path("data/v2/knowledge/chroma"),
-        memories_dir=Path("data/v2/memories"),
+        knowledge_manifest_path=Path("data/runtime/knowledge/manifest.json"),
+        knowledge_chroma_dir=Path("data/runtime/knowledge/chroma"),
+        memories_dir=Path("data/runtime/memories"),
         embedding_model="BAAI/bge-base-zh-v1.5",
         reranker_model="BAAI/bge-reranker-v2-m3",
         embedding_batch_size=32,
@@ -61,7 +61,7 @@ def _settings(
         retrieval_top_k=8,
         shutdown_timeout_seconds=60.0,
         auto_memory_on_exit=False,
-        artifacts_dir=Path("data/v2/artifacts"),
+        artifacts_dir=Path("data/runtime/artifacts"),
         pdf_build_timeout_seconds=60.0,
         artifact_log_max_bytes=65536,
         model_format_repair_limit=3,
@@ -87,7 +87,7 @@ def _settings(
 
 
 class RootEntryTests(unittest.TestCase):
-    def test_root_entry_only_delegates_to_v2_main(self) -> None:
+    def test_root_entry_only_delegates_to_package_main(self) -> None:
         root = Path(__file__).resolve().parents[2] / "main.py"
         tree = ast.parse(root.read_text(encoding="utf-8"), filename=str(root))
         imports = [node for node in tree.body if isinstance(node, ast.ImportFrom)]
@@ -154,7 +154,7 @@ class CliMainTests(unittest.TestCase):
                         self.assertEqual(1, cli_main.main())
                 log = (Path(temporary) / "app.log").read_text(encoding="utf-8")
             finally:
-                _close_v2_handlers()
+                _close_get_me_in_handlers()
 
         renderer.render_error.assert_called_once_with("启动失败；请检查配置或日志后重试。")
         self.assertNotIn("Traceback", stderr.getvalue())
@@ -292,7 +292,7 @@ class CliMainTests(unittest.TestCase):
         application.close.assert_called_once_with()
 
 
-def _close_v2_handlers() -> None:
+def _close_get_me_in_handlers() -> None:
     package_logger = logging.getLogger("src.get_me_in")
     for handler in tuple(package_logger.handlers):
         package_logger.removeHandler(handler)

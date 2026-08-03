@@ -7,7 +7,7 @@ from enum import StrEnum
 
 
 class KnowledgeCollection(StrEnum):
-    """The v2 collections exposed through the existing retrieval contract."""
+    """The collections exposed through the retrieval contract."""
 
     REFERENCES = "references"
     MEMORIES = "memories"

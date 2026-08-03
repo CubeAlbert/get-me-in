@@ -1,4 +1,4 @@
-"""Contract tests for lightweight v2 knowledge adapters."""
+"""Contract tests for lightweight knowledge adapters."""
 
 from datetime import datetime, timezone
 from pathlib import Path

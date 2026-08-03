@@ -1,4 +1,4 @@
-"""Explicit logging setup for the independent v2 package."""
+"""Explicit logging setup for the package."""
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -7,7 +7,7 @@ import sys
 
 
 _LOGGER_NAME = "src.get_me_in"
-_HANDLER_MARKER = "_get_me_in_v2_handler"
+_HANDLER_MARKER = "_get_me_in_handler"
 _FILE_ONLY_MARKER = "_get_me_in_file_only"
 
 
@@ -29,7 +29,7 @@ def configure_logging(
     max_bytes: int,
     backup_count: int,
 ) -> Path:
-    """Configure rotating file and stderr handlers for v2 and return the log path."""
+    """Configure rotating file and stderr handlers and return the log path."""
     normalized_level = level.strip().upper()
     configured_level = logging.getLevelNamesMapping().get(normalized_level)
     if not isinstance(configured_level, int):

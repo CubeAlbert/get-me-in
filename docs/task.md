@@ -27,7 +27,7 @@
 ### 2. 用户决策
 
 - ✅ 用户确认 R-D1：在 `src/get_me_in/` 受控重写。
-- ✅ 用户确认 R-D2：v2 禁止可变全局单例和 import-time 注册。
+- ✅ 用户确认 R-D2：当前架构禁止可变全局单例和 import-time 注册。
 - ✅ 用户确认 R-D3：采用 RuntimeCommand/RuntimeEvent 强类型协议。
 - ✅ 用户确认 R-D4：Resume 保留直接编辑 LaTeX，增加 Workspace/Artifact service。
 - ✅ 用户确认 R-D5：授权核心自动化测试。
@@ -39,20 +39,20 @@
 - ✅ 建立 capability parity matrix，逐项列出输入、输出、副作用和失败行为。
 - ⛔ 选取 v1 Session 样例用于 migration —— 不迁移旧会话，已由 R-D6 终止。
 - ⛔ 选取旧 Memory/Workspace 样例用于 migration —— 不迁移旧运行数据，已由 R-D6 终止。
-- ✅ 核对 `data/reference/`、`data/prompts/`、`data/resume/template/` 的 v2 输入边界。
+- ✅ 核对 `data/reference/`、`data/prompts/`、`data/resume/template/` 的新架构输入边界。
 - ✅ 建立 CLI smoke checklist。
 - ✅ 记录旧入口可运行的基线 commit。
-- ✅ 完成 G0 审查；未通过前不创建 v2 代码文件。
+- ✅ 完成 G0 审查；未通过前不创建新架构代码文件。
 
-## R1 —— v2 骨架与 Composition Root
+## R1 —— 架构骨架与 Composition Root
 
 > 开始前先向用户列出本阶段所有新文件、类和公开方法，确认后再创建。
 
 ### 1. 包结构与依赖规则
 
 - ✅ 创建 `src/get_me_in/` 分层目录。
-- ✅ 定义 v2 import 规则：domain → 无外部 adapter；application → domain/ports；adapter → ports；CLI → application。
-- ✅ 增加开发期依赖检查方式，确保 v2 不 import 旧 BaseAgent/App/UIBridge/Registry。
+- ✅ 定义新架构 import 规则：domain → 无外部 adapter；application → domain/ports；adapter → ports；CLI → application。
+- ✅ 增加开发期依赖检查方式，确保新架构不 import 旧 BaseAgent/App/UIBridge/Registry。
 - ✅ 清理源码树中的 `.ipynb_checkpoints` 方案，实际删除留到 R8。
 
 ### 2. Settings 与基础 ports
@@ -84,7 +84,7 @@
 - ✅ 定义 provider-neutral ConversationRecord union 与 Role；不再使用 ConversationEvent/EventKind。
 - ✅ 定义 RuntimeCommand：UserMessage/Continue/Approve/Reject/Selection/Cancel/ToolResult。
 - ✅ 定义 RuntimeEvent：Progress/Approval/Selection/ToolStarted/ToolFinished/Handoff/Completed/Failed/Cancelled。
-- ✅ 删除 v2 中对 `__switch__`、`__reject__`、`__cancelled__` 的需求。
+- ✅ 删除新架构中对 `__switch__`、`__reject__`、`__cancelled__` 的需求。
 
 ### 2. Agent state machine
 
@@ -107,7 +107,7 @@
 - ✅ 设计并实现活动调用 handle 的 cancel/close/reset 生命周期。
 - ✅ 使用真实阻塞 adapter 验证调用执行中可取消，且下一次调用仍可继续；Fake LLM 仅作 unit test。
 - ✅ 禁止 Runtime 访问 OpenAI SDK 私有 transport。
-- ✅ 重新完成 G2 验收；86 项核心自动化测试通过，临时 v2 Runtime Runner 已完成人工可用性验证。
+- ✅ 重新完成 G2 验收；86 项核心自动化测试通过，临时 Runtime Runner 已完成人工可用性验证。
 
 ## R3 —— Tool Runtime、Plan 与 Workspace
 
@@ -150,7 +150,7 @@
 - ✅ 暂以 port adapter 迁移 2 个 RAG query tools，R6 再替换实现。
 - ✅ 迁移 copy_template/build_pdf，R7 接入 ArtifactService。
 - ✅ 输出完整的 25 工具迁移矩阵。
-- ✅ 重新完成 G3 验收；86 项核心自动化测试通过，临时 v2 Runtime Runner 已完成人工可用性验证。
+- ✅ 重新完成 G3 验收；86 项核心自动化测试通过，临时 Runtime Runner 已完成人工可用性验证。
 
 ## R4 —— Session Aggregate 与编排
 
@@ -160,7 +160,7 @@
 - ✅ 将现有 RuntimeState 的 history/phase/pending/model-call/repair 状态并入 AgentSessionState，SessionState 成为唯一规范状态源。
 - ✅ AgentRuntime 改为 `advance(state, command) -> RuntimeTransition`，不得保留第二份长期状态；Application 对外仍一次返回一个 RuntimeEvent。
 - ✅ 每个 Application 同时只管理一个活动 Session；生成真实 session id，并按 session/agent 构造 ToolContext、CancellationToken、Plan 绑定与 WorkspaceAccessState。
-- ✅ Settings 增加 `sessions_dir`，默认使用全新 `data/v2/sessions/`，不得读取旧 `data/save/`。
+- ✅ Settings 增加 `sessions_dir`，默认使用全新 `data/runtime/sessions/`，不得读取旧 `data/save/`。
 - ✅ CLI input history 留在 R5 InputController，不进入 domain SessionState；R5 复审决定不增加独立持久化 schema，restore 后从 SessionView rewind_points 重建。
 - ✅ 提供公开 `view/snapshot/restore/rewind(turn_id)/list_sessions/dump` API。
 - ✅ 禁止 CLI 直接访问 `_history`、`_plan` 或 Agent 私有方法。
@@ -184,7 +184,7 @@
 - ✅ 分离 provider-facing ConversationCodec、磁盘 SessionSnapshotCodec 与 JSON file repository。
 - ✅ 明确定义可恢复稳定 phase；活动 LLM/Process 归一化为 interrupted/cancelled，禁止自动重放 TOOL_READY 副作用。
 - ✅ 原子写入并报告保存失败；保存失败不得触发旧 sub 数据清理。
-- ⛔ 实现 v1 session/meta/message/plan → v2 migration —— R-D6 明确不迁移。
+- ⛔ 实现 legacy session/meta/message/plan migration —— R-D6 明确不迁移。
 - ✅ 实现 list、preview、dump。
 - ✅ Restore/Rewind 同步修正 pending action、plan 和 handoff stack，并清除 WorkspaceAccessState，编辑前重新读取。
 - ✅ Restore 在替换当前 Session 前拒绝未装配 Agent；snapshot 校验 handoff frame 与 active agent、源 pending call 和 turn id 一致。
@@ -204,7 +204,7 @@
 
 ### 1. CLI shell
 
-- ✅ 第一实施切片：创建 `commands.py` 与 `test_cli_commands.py`，固定强类型 command spec/result、解析、alias、replace 和核心 command handlers；110 项 v2 核心自动化测试通过，独立提交 `151b04a`。
+- ✅ 第一实施切片：创建 `commands.py` 与 `test_cli_commands.py`，固定强类型 command spec/result、解析、alias、replace 和核心 command handlers；110 项核心自动化测试通过，独立提交 `151b04a`。
 - ✅ 创建 CliApp，仅保留输入循环和 application command/event 转发；覆盖 handoff continue、审批、终态自动 snapshot 与保存失败提示。
 - ✅ 创建 CommandRegistry，命令帮助与 handler 同源。
 - ✅ 创建 InputController，管理 autocomplete/history/prefill/editor；使用 `set_completions(CompletionProvider)` 动态读取 CommandRegistry 的最新补全。
@@ -229,7 +229,7 @@
 
 - ✅ ApprovalRequested → questionary 选项列表“✅ 执行 / ❌ 取消” → Approve/Reject command；不得使用 `y/N` 确认框。`Reject` 写入拒绝结果闭合 call 后以 `Cancelled` 结束当前内层循环并归还输入框，实际工具失败仍交回模型；代码、自动化验证与人工 smoke 已完成。
 - ✅ SelectionRequested → 选择/自定义输入 → SubmitSelection command；代码、自动化验证与人工 smoke 已完成。
-- ✅ 删除 UIBridge 和模块级 current bridge 的 v2 依赖。
+- ✅ 删除 UIBridge 和模块级 current bridge 的新架构依赖。
 - ✅ Windows UTF-8、Esc、Ctrl+C、EOF 和 editor-not-found 行为验证。
 - ✅ Input history 使用进程内 CLI-owned state；restore 后从 `SessionView.rewind_points` 重建，不增加独立持久化 schema；人工 smoke 已通过。
 - ✅ Completed/Failed/Cancelled 后自动 snapshot；保存失败单独渲染且不得覆盖原终态。
@@ -253,13 +253,13 @@
 
 - ✅ ConversationCodec 对所有历史记录剥离 thinking，补齐多轮 finish/tool call 不回放测试。
 - ✅ SessionSnapshotCodec 对 assistant message/tool call thinking 做可选 round-trip；缺失字段兼容为 `None`，不迁移 v1 Session。
-- ✅ v2 Settings 增加 `show_thinking` 并读取 `SHOW_THINKING`；不得与只控制 provider 的 `llm_thinking_enabled` 混用。
+- ✅ Settings 增加 `show_thinking` 并读取 `SHOW_THINKING`；不得与只控制 provider 的 `llm_thinking_enabled` 混用。
 - ✅ Renderer 在 show_thinking=true 且摘要非空时展示“思考摘要”，覆盖 Completed 与 ToolStarted；关闭时不展示但保留记录；最终回复先显示摘要再显示 LLM message。
 
 ### 3. 范围与 G5-F
 
-- ✅ 初始 G5-F 只修改既有协议、Runtime、snapshot、Settings、Renderer 与测试；真实 CLI 复验后以独立 follow-up 新增 `logging_setup.py`，恢复 v2 显式日志装配与格式失败诊断，未进入 R6 范围。
-- ✅ 运行完整核心自动化测试、CLI 编译与 SHOW_THINKING 开／关 smoke，独立提交修复证据：`da530dc`、`937c4ea`、`123281d`、`abae597`；最终 146 项核心测试通过，真实 v2 CLI 启停日志 smoke 通过。
+- ✅ 初始 G5-F 只修改既有协议、Runtime、snapshot、Settings、Renderer 与测试；真实 CLI 复验后以独立 follow-up 新增 `logging_setup.py`，恢复显式日志装配与格式失败诊断，未进入 R6 范围。
+- ✅ 运行完整核心自动化测试、CLI 编译与 SHOW_THINKING 开／关 smoke，独立提交修复证据：`da530dc`、`937c4ea`、`123281d`、`abae597`；最终 146 项核心测试通过，真实 CLI 启停日志 smoke 通过。
 - ✅ 已执行 `/project-checkpoint` 保存 G5-F 及 follow-up 结论；R6 coding 现可按已确认清单启动。
 
 ## R6 —— Knowledge/RAG 与 Memory
@@ -280,7 +280,7 @@
 - ✅ 保留 R3 tool-facing RetrievalPort/RetrievalResult；仅增加 index 内部 IndexHit，未建立第二套公开搜索 DTO。
 - ✅ 定义 manifest schema_version、source key、observed/indexed hash、mtime、chunk ids、status、pending operation 与 error。
 - ✅ 实现纯逻辑 scan diff：新增、修改、删除、同 hash 重命名、失败后重试和幂等 no-op。
-- ✅ 固定 v2 路径：`data/v2/knowledge/manifest.json`、`data/v2/knowledge/chroma/`、`data/v2/memories/`；未读取旧 Chroma/Memory 数据。
+- ✅ 固定当前路径：`data/runtime/knowledge/manifest.json`、`data/runtime/knowledge/chroma/`、`data/runtime/memories/`；未读取旧 Chroma/Memory 数据。
 
 ### 2. Application command 与资源生命周期
 
@@ -297,12 +297,12 @@
 - ✅ 状态使用 IDLE/LOADING/READY/DEGRADED/ERROR/CLOSING/CLOSED；首次 loading/error 明确 unavailable，degraded 保留已提交 index 查询。
 - ✅ 实现 LocalKnowledgeSourceRepository、MarkdownChunker、JsonManifestRepository；路径受限、chunk id 确定、manifest 原子写入。
 - ✅ 实现显式注入模型、batch/top-k 和 persist path 的 SentenceTransformerEmbedder/CrossEncoderReranker/ChromaKnowledgeIndex。
-- ✅ Settings/bootstrap 显式装配 v2 路径、模型参数和生命周期；adapter 不读取旧全局 config。
+- ✅ Settings/bootstrap 显式装配当前路径、模型参数和生命周期；adapter 不读取旧全局 config。
 - ✅ KnowledgeService 实现现有 RetrievalPort；ToolDefinition、RuntimeCommand/RuntimeEvent 与 tool closure 不变。
 
 ### 4. MemoryService 与一致性
 
-- ✅ 实现 versioned JsonMemoryRepository；一条 Memory 一个新 v2 JSON 文件，不兼容读取旧 Markdown；同时实现 KnowledgeSourceRepository.scan/read，供应用重启或 index 重建时恢复 memories collection。
+- ✅ 实现 versioned JsonMemoryRepository；一条 Memory 一个新 JSON 文件，不兼容读取旧 Markdown；同时实现 KnowledgeSourceRepository.scan/read，供应用重启或 index 重建时恢复 memories collection。
 - ✅ MemoryExtractor 依赖专用 LLMPort、静态 prompt、Clock/IdGenerator 与 operation cancellation，不直接创建旧客户端/loader。
 - ✅ MemoryService 显式执行 extract → write → index；只接受 fact/preference，typed parse/extraction failure 不写 repository。
 - ✅ repository 写成功而 index 失败保留 manifest observed/indexed 差异；删除使用 delete intent 并支持中断重试。
@@ -340,11 +340,11 @@
 ### 0. R7 启动前 Review 门禁
 
 - ✅ 复核 R6-T checkpoint、四个 R6-F 提交和干净工作区；重新运行 187 项核心自动化测试并正常退出。
-- ✅ 对照实际 v2 代码复核 R7 旧任务：当前生产 composition root 只装配 Main Runtime；Resume 工具仍使用临时 `ResumeArtifactPort`／`LocalResumeArtifacts`，尚无 Artifact schema 或 repository。
+- ✅ 对照实际代码复核 R7 旧任务：当前生产 composition root 只装配 Main Runtime；Resume 工具仍使用临时 `ResumeArtifactPort`／`LocalResumeArtifacts`，尚无 Artifact schema 或 repository。
 - ✅ 用户确认 R7-P dynamic session identity、Resume capability parity 与 agent-scoped Runtime/LLM ownership、独立 Artifact repository、ArtifactService/build-attempt 语义及 typed partial-failure/retry 五项总体边界。
 - ✅ 闭合 R7-P：`Orchestrator` 在每次 Runtime transition 传入 `SessionState.session_id`，Runtime 仅在该 transition 内替换 immutable ToolContext scope；restore／rewind 清理真实 session 的 workspace grant，不引入第二份长期 Session 状态。
 - ✅ Resume 保留除 `route` 外的 v1 capability parity；Main/Resume 分别拥有 Runtime、CancellationToken、PlanService、ToolContext 和 LLM 生命周期。
-- ✅ Artifact 使用全新 `data/v2/artifacts/` 独立 repository，不写入 Memory、不加入 SessionSnapshot，也不随 rewind 回滚。
+- ✅ Artifact 使用全新 `data/runtime/artifacts/` 独立 repository，不写入 Memory、不加入 SessionSnapshot，也不随 rewind 回滚。
 - ✅ Artifact operation 采用 pending → side effect → commit；PENDING PDF retry 重新执行构建，不凭同名旧文件合成成功；成功且 PDF 存在才登记可用产物，metadata partial failure 可观察且可重试。
 - ✅ 用户确认活跃设计中的 R7 新文件、类、构造依赖、公开方法、允许修改文件和七个实施切片清单。
 - ✅ 恢复显式 temperature 契约：Main 为 `0.1`、Resume 为 `0.2`、MemoryExtractor 为 `0.0`；先以独立 R7-P0 切片闭合。
@@ -376,7 +376,7 @@
 ### 4. Artifact domain、repository 与 service
 
 - ✅ 定义 `schema_version=1` 的 typed Artifact、build-attempt 与 aggregate ArtifactOperation schema；Artifact 保存 `content_hash` 与 `template_name`，无开放 metadata dict。
-- ✅ repository 使用全新 `data/v2/artifacts/` 边界；路径契约为 workspace-relative，不读取或迁移旧运行数据。
+- ✅ repository 使用全新 `data/runtime/artifacts/` 边界；路径契约为 workspace-relative，不读取或迁移旧运行数据。
 - ✅ 定义 ArtifactRepository 的原子 aggregate 持久化、列举／查询与幂等 close；JSON 语法、顶层／nested schema、字段、枚举、时间与 aggregate 不变量损坏统一返回 typed repository failure。
 - ✅ operation key 使用 canonical JSON 的 SHA-256；每条 JSON 记录为 PENDING 或携带结果的 COMMITTED，单次 replace 原子切换。
 - ✅ ArtifactService 直接满足 ResumeArtifactPort provenance 契约，并借用 LocalResumeArtifacts backend；保持 LLM 参数 schema 与 ToolOutcome 闭合协议不变。
@@ -441,17 +441,17 @@
 
 - ✅ 确认 R7-T2 已完成且 G6、G7 均有效；切换前工作区干净，旧 `main.py` 未改动。
 - ✅ 复核实际 Catalog：2 个 Agent（Main／Resume）、25 个 ToolDefinition、10 个 CLI 命令；分别从 `AgentCatalog`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 取证，并与 capability 文档一致。
-- ✅ 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可直接作为 v2 静态输入。
+- ✅ 验证 `data/reference/`、`data/prompts/`、`data/resume/template/` 可直接作为当前静态输入。
 - ✅ 对旧 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 建立组合证据：静态扫描禁用路径／legacy-only 环境变量、sentinel project root 的 Settings 路径断言；R8-O 继续执行拒绝访问启动／smoke 边界，mtime／hash 前后证据只用于确认未改写。
 - ✅ 将 `.env.example` 补齐为 `Settings.from_env()` 的实际变量、默认值与兼容别名；v1-only 变量暂放在“legacy rollback only”段，R8-O 前不得删除。
-- ✅ 为当前空的 README 写过渡说明：同时记录旧生产根入口与 v2 预览入口、静态资产、新旧运行数据和回退边界；不提前宣称根入口已切换。
-- ✅ 运行 v2→legacy import scan、入口前完整自动化测试、`compileall` 与 `git diff --check`；R8-P 已独立提交 `d91e37c`。
+- ✅ 为当前空的 README 写过渡说明：同时记录旧生产根入口与新架构预览入口、静态资产、新旧运行数据和回退边界；不提前宣称根入口已切换。
+- ✅ 运行当前架构→legacy import scan、入口前完整自动化测试、`compileall` 与 `git diff --check`；R8-P 已独立提交 `d91e37c`。
 
 ### 2. R8-E —— 根入口切换
 
 - ✅ `main.py` 只 import `src.get_me_in.cli.main.main` 并 `raise SystemExit(main())`；已删除 legacy composition 与 import-time registration。
 - ✅ `src/get_me_in/cli/main.py` 已修正过时说明；Settings 错误继续渲染并返回 `2`，composition／CLI 构造或启动的 `Exception` 以不受 `LOG_LEVEL` 高阈值过滤的 file-only 诊断记录完整 traceback、终端仅渲染简短错误并返回 `1`；正常关闭返回 `0`，关闭异常或 `CloseReport.issues` 对用户可见并返回 `1`。不捕获 `KeyboardInterrupt`／`SystemExit`，未新增第二入口或公开 API。
-- ✅ `test_import_boundaries.py`、`test_settings.py`、既有 CLI/bootstrap 测试与 `test_cli_main.py` 覆盖根入口只依赖 v2、示例配置一致性、Settings 错误 `2`、启动错误 `1` 且无 traceback、`LOG_LEVEL=ERROR` 文件诊断、正常关闭 `0`、关闭异常隔离与 typed close issue 可见性。
+- ✅ `test_import_boundaries.py`、`test_settings.py`、既有 CLI/bootstrap 测试与 `test_cli_main.py` 覆盖根入口只依赖当前包、示例配置一致性、Settings 错误 `2`、启动错误 `1` 且无 traceback、`LOG_LEVEL=ERROR` 文件诊断、正常关闭 `0`、关闭异常隔离与 typed close issue 可见性。
 - ✅ 未新增 `[project.scripts]` 或其他生产入口。
 - ✅ R8-E 已独立提交 `9fbeabc`；该提交是遗留删除前的明确回退点。
 
@@ -459,10 +459,10 @@
 
 - ✅ 从 `uv run python main.py` 验证缺少／非法配置时可读错误退出且无 traceback，正常 `/exit` 返回成功退出码。
 - ✅ 修复根入口切换后欢迎 banner 丢失的观察期回归：`Renderer.render_welcome()` 在首次输入前只渲染一次固定产品标识与 `/help` 提示；不扩展 `Settings` 或引入新依赖。
-- ✅ 确认 v2 `ToolDefinition`／`PromptRenderer` 只保留 `name/description/type/required`，实际生产 system prompt 已丢失旧版 `purpose/use_when/do_not_use_when/expected_output`、参数说明与默认值；该问题不是 Notebook 导出遗漏。
-- ✅ 核对 legacy Tool 基线仍在 `src/tools/`：9 个工具定义文件保留上述元数据，当前未被 v2 重构修改；逐项迁移审计若发现缺失或历史改写，再由用户提供原始定义。
-- ✅ Tool 提示词语义修复清单已确认并实施：`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，`ToolSchema` 使用强类型 `ToolParameter` 表达 description/default/items/allowed_values/nullable；PromptRenderer 恢复 legacy `<Tool>` XML 外层与固定语义顺序，`Arguments` 内由强类型 schema 生成有序 JSON；保持 v2 capability、审批、handler 与 ToolOutcome 边界。
-- ✅ 全部 25 个工具已与 9 个 legacy 定义文件一一对应并完成迁移；`workspace_edit.revision` 等 v2 已确认接口差异保留并补充准确说明，没有工具缺失，无需用户另行提供原始定义。
+- ✅ 确认新架构 `ToolDefinition`／`PromptRenderer` 只保留 `name/description/type/required`，实际生产 system prompt 已丢失旧版 `purpose/use_when/do_not_use_when/expected_output`、参数说明与默认值；该问题不是 Notebook 导出遗漏。
+- ✅ 核对 legacy Tool 基线仍在 `src/tools/`：9 个工具定义文件保留上述元数据，当前未被重构修改；逐项迁移审计若发现缺失或历史改写，再由用户提供原始定义。
+- ✅ Tool 提示词语义修复清单已确认并实施：`ToolDefinition` 恢复 purpose/use_when/do_not_use_when/expected_output，`ToolSchema` 使用强类型 `ToolParameter` 表达 description/default/items/allowed_values/nullable；PromptRenderer 恢复 legacy `<Tool>` XML 外层与固定语义顺序，`Arguments` 内由强类型 schema 生成有序 JSON；保持当前 capability、审批、handler 与 ToolOutcome 边界。
+- ✅ 全部 25 个工具已与 9 个 legacy 定义文件一一对应并完成迁移；`workspace_edit.revision` 等已确认接口差异保留并补充准确说明，没有工具缺失，无需用户另行提供原始定义。
 - ✅ 修复 Tool prompt 字段被 `sort_keys=True` 重排为字母顺序的问题；模型固定先看到用途和使用边界，再看到参数及预期输出。恢复 XML 仅影响 LLM-facing 序列化，不恢复 legacy import-time Registry。
 - ✅ 相邻 `<Tool>` 块使用 `\n\n` 分隔，在模型可见 prompt 中保留一个空行；回归测试锁定 `</Tool>\n\n<Tool ...>` 格式。
 - ✅ 核对 production Catalog 只有 Main／Resume 是既定范围而非迁移遗漏：legacy JobSearchAgent 仅为 M4 测试壳，完整 Job Search 在 R0～R8 冻结，保留 `AgentKey.JOB_SEARCH` 与通用 handoff 测试作为未来扩展点，本次不新增 Agent。
@@ -473,7 +473,7 @@
 - ✅ CommunicationStyle 修复的 26 项 bootstrap/Prompt/Catalog 回归、完整 236 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `COMMUNICATION_STYLE_SMOKE_OK main_chars=12111 resume_chars=20104 agents=2 tools=25`，确认五个区块均非空且包含原始中文内容。
 - ✅ 排除 Tool、SubAgent、InputFormat、OutputFormat 后继续审计完整 system prompt：静态模板、Role／Constraints 的固定 Must、Reserved 与已修复 CommunicationStyle 均无差异；剩余差异全部来自 Main／Resume `AgentSpec` 中 Role、Mission、Constraints 动态元数据被大幅压缩和改写。
 - ✅ Main 的 Name、Description、7 条 Responsibilities、PrimaryGoal、5 条 SuccessCriteria、5 条 Priorities、10 条 HardConstraints、4 条 SoftConstraints 按 legacy 原始语义和列表前缀恢复；过时的 `switch_agent` 标识符适配为当前真实工具名 `switch_to_subagent`。
-- ✅ Resume 的 Name、Description、5 条 Responsibilities、PrimaryGoal、4 条 SuccessCriteria、5 条 Priorities、7 条 legacy HardConstraints、4 条 SoftConstraints 恢复；额外保留“不得编造/夸大经历”和“不得调度其他子 Agent”两项 v2 强化硬约束，共 9 条。
+- ✅ Resume 的 Name、Description、5 条 Responsibilities、PrimaryGoal、4 条 SuccessCriteria、5 条 Priorities、7 条 legacy HardConstraints、4 条 SoftConstraints 恢复；额外保留“不得编造/夸大经历”和“不得调度其他子 Agent”两项强化硬约束，共 9 条。
 - ✅ Agent metadata 修复的 32 项 bootstrap/Prompt/Catalog/orchestration 回归、完整 237 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `AGENT_METADATA_SMOKE_OK main_chars=13159 resume_chars=20806 agents=2 tools=25`，确认恢复内容实际进入 Main／Resume system prompt，且未重新引入旧 `switch_agent` 标识符。
 - ✅ 定位偶发 model reply warning：模型返回了 InputFormat 风格的完整历史消息 envelope，在 `event_type=finish` 时遗漏 OutputFormat 必填的字符串 `thinking`；一次格式修复虽能恢复，但增加模型调用和延迟。
 - ✅ 模型输出协议收敛为 `event_type/message/thinking/tool/event_payload` 五类业务字段；`id/role/timestamp/tool_call_id/plan_status` 明确由 Runtime 生成。解析器移除 `content + nested tool_call` 隐式兼容，按事件类型严格验证必需业务字段、类型和 finish/tool_call 条件组合。
@@ -482,11 +482,11 @@
 - ✅ 修正 conversation tool-call correlation：tool_call 历史使用 `id=event_id`、`tool_call_id=call_id`，对应 tool result 复用相同 `tool_call_id`；Runtime 生成的 record 保存当时 Plan 快照，ConversationCodec 投影 `{current, completed, remaining}`，SessionSnapshotCodec 对缺失 record plan 保持向后兼容。
 - ✅ 用户复审后将多余字段策略改为允许列表投影：`id/role/timestamp/tool_call_id/plan_status` 和任意未知顶层字段均直接忽略，Runtime 重新生成可信内部值，不为可安全丢弃的信息消耗 repair 调用；业务字段错误仍沿用一次修复边界。
 - ✅ 调整后的 62 项 Parser/Prompt/Conversation/Session/Runtime/bootstrap 定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 composition 输出 `OUTPUT_PROJECTION_SMOKE_OK chars=12825 tools=25`，确认末尾 OutputFormat 与忽略／重建规则可见。
-- ✅ 定位工具结果后偶发纯文本回复：09:39:42 Resume call 3 完全未输出 JSON，Runtime 正确 repair 并在 call 4 恢复，但增加一次 provider 调用和约 45 秒延迟；v2 OpenAILLMAdapter 相比 legacy 丢失 `response_format={"type":"json_object"}` 是直接回归。
+- ✅ 定位工具结果后偶发纯文本回复：09:39:42 Resume call 3 完全未输出 JSON，Runtime 正确 repair 并在 call 4 恢复，但增加一次 provider 调用和约 45 秒延迟；新架构 OpenAILLMAdapter 相比 legacy 丢失 `response_format={"type":"json_object"}` 是直接回归。
 - ✅ OpenAILLMAdapter 对所有 completion 恢复 provider JSON object mode；当前调用方只有要求 JSON 对象的 AgentRuntime 与 MemoryExtractor，OpenAIWebSearchAdapter 保持独立协议。保留 Prompt OutputFormat、内部 Parser 和一次 repair 三层边界。
 - ✅ provider JSON mode 的 49 项 OpenAI adapter/Runtime/Memory/bootstrap 定向测试、完整 240 项自动化测试、`compileall` 与 `git diff --check` 通过；真实 Pro 模型输出 `PROVIDER_JSON_MODE_SMOKE_OK keys=['ok']`，确认当前 provider 接受 json_object 并返回可解析对象。
-- ✅ 确认 v2 ModelReplyParser 曾只使用 `json.loads`，`json-repair` 虽仍在依赖中但仅被 legacy `src/message.py` 使用；任何 JSON 语法错误都会触发额外模型调用，属于迁移遗漏。
-- ✅ v2 在既有模型修复前增加本地 JSON 语法修复：标准 `json.loads` 失败后调用 `json_repair.loads`；尾逗号、物理换行等修复结果仍须为 object 并继续完整业务校验，成功时不增加模型调用。
+- ✅ 确认新架构 ModelReplyParser 曾只使用 `json.loads`，`json-repair` 虽仍在依赖中但仅被 legacy `src/message.py` 使用；任何 JSON 语法错误都会触发额外模型调用，属于迁移遗漏。
+- ✅ 新架构在既有模型修复前增加本地 JSON 语法修复：标准 `json.loads` 失败后调用 `json_repair.loads`；尾逗号、物理换行等修复结果仍须为 object 并继续完整业务校验，成功时不增加模型调用。
 - ✅ 保持严格输出契约：纯文本、JSON string／array、缺少 finish message、错误业务字段类型或 finish/tool 冲突均不得归一化；finish thinking 可省略但若提供必须是 string。本地 repair 失败或语义校验失败时，AgentRuntime 注入具体错误与 canonical OutputFormat 并只允许模型自修一次，第二次仍失败返回 `invalid_model_reply`。`repair_attempted` 继续承担运行时重试边界和 snapshot 持久化职责。
 - ✅ 本地 repair／单次模型自修边界的 61 项 Parser/Runtime/provider/bootstrap/snapshot 定向测试与完整 244 项自动化测试通过；`compileall` 与 `git diff --check` 通过。
 - ✅ R8-O 真实 Main 回复发现 `finish.thinking=""` 会合法通过且不显示摘要；决策 212 曾将 finish thinking 收紧为非空，现由决策 219 推翻，恢复 finish thinking 可省略或为空字符串的语义，tool_call thinking 规则不变。完整自动化测试、`compileall` 与 `git diff --check` 通过。
@@ -500,8 +500,8 @@
 - ✅ 真实 production composition 的 Main／Resume system prompt smoke 通过：Catalog 仍为 25 个 Tool，完整元数据、参数约束、XML 语义顺序、Tool 块空行和 capability 隔离均可见；最新输出为 `PROMPT_XML_SPACING_SMOKE_OK main_chars=11733 resume_chars=19880 tools=25`。相关 23 项回归、完整 234 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - ✅ 修复空 Memory collection 查询语义：`ChromaKnowledgeIndex.search()` 仅将明确的 collection-not-found 归一化为空结果；连接、查询、embedding、rerank 等其他异常继续上抛并由 Tool 映射为 typed `retrieval_unavailable`。
 - ✅ 增加 adapter 与 retrieval Tool 回归，覆盖未创建 `memories` collection 时返回零命中，以及非 collection-not-found 异常不得被吞掉。
-- ✅ 在真实 Memory smoke 前执行一次性受控迁移：把当前 `data/memories/resume/` 下两份 legacy Markdown 记忆转换为 2 条 v2 `MemoryRecord` JSON 并通过既有 KnowledgeService 建立 `memories` 索引；原文件 hash／mtime／长度不变，production v2 未增加 legacy 路径扫描或常驻兼容层。
-- ✅ 迁移后验证 v2 repository、manifest、Chroma `memories` collection 与 `query_memory` 的真实命中；smoke 另发现 targeted reload 会误删非目标 manifest entries，已恢复 reference 索引并将 diff 限制到同一 target 范围，同时回归目标范围内真实缺失仍会删除。最终真实 `/ragreload memories` 只报告两条 memory unchanged；Chroma 为 `memories=36`、`references=34` chunks，manifest 为 2 条 memory 与 6 条 reference source，全部 `ready`。30 项定向测试、完整 249 项自动化测试、`compileall` 与 `git diff --check` 通过。
+- ✅ 在真实 Memory smoke 前执行一次性受控迁移：把当前 `data/memories/resume/` 下两份 legacy Markdown 记忆转换为 2 条 `MemoryRecord` JSON 并通过既有 KnowledgeService 建立 `memories` 索引；原文件 hash／mtime／长度不变，production 未增加 legacy 路径扫描或常驻兼容层。
+- ✅ 迁移后验证当前 repository、manifest、Chroma `memories` collection 与 `query_memory` 的真实命中；smoke 另发现 targeted reload 会误删非目标 manifest entries，已恢复 reference 索引并将 diff 限制到同一 target 范围，同时回归目标范围内真实缺失仍会删除。最终真实 `/ragreload memories` 只报告两条 memory unchanged；Chroma 为 `memories=36`、`references=34` chunks，manifest 为 2 条 memory 与 6 条 reference source，全部 `ready`。30 项定向测试、完整 249 项自动化测试、`compileall` 与 `git diff --check` 通过。
 - ✅ 修复 RAG 后台加载语义：`KnowledgeIndexPort` 增加最小 `prepare(cancellation)`；startup reload 在 manifest diff 前幂等预热 embedding 与 reranker，只有模型和索引均就绪才进入 `READY/DEGRADED`。manifest 无变化仍预热，失败保持 `ERROR` 且显式 reload 可重试，首次用户查询不再承担模型构造。
 - ✅ 恢复生产 CLI 权重加载静默配置：在 build application 前固定设置 `HF_HUB_DISABLE_PROGRESS_BARS=1`、`TQDM_DISABLE=1`、`TRANSFORMERS_VERBOSITY=error`，并将 Hugging Face／transformers／sentence-transformers logger 限制为 ERROR；继续保留 encode／predict 的 `show_progress_bar=False`。
 - ✅ 后台预热修复的 41 项 Knowledge/Adapter/Retrieval/CLI 定向测试、完整 253 项自动化测试、`compileall` 与 `git diff --check` 通过。真实 `uv run python main.py` 在欢迎界面出现后后台等待 20 秒，终端无权重／进度输出；首次 `query_memory` 约 2 秒完成真实命中且无延迟加载输出，`/exit` 返回 0。
@@ -515,7 +515,7 @@
 - ✅ 锁文件前后均为 133 个包且 name/version 集合完全一致；无官方 PyPI 或 SJTUG 残留。记录后续依赖工作流为 `uv add <package> --no-sync` → `uv sync`，分别诊断解析和下载／安装耗时；TUNA 同步后 58 项 PDF 定向测试、完整 261 项测试与 `compileall` 通过。
 - ✅ 完成基础对话、`/help`、`/edit`、`/approval`、`/dump`、`/restore`、`/rewind`、`/ragreload`、`/build-memory`、`/exit_sub`、Esc cancel 与关闭 smoke；用户确认完整人工 CLI／交互 matrix 无问题。
 - ✅ 完成 Main→Resume→Main、审批拒绝、Plan、Knowledge/Memory query/build/delete 与真实 Resume copy/read/edit/replace/build/open smoke；工程侧真实 Memory delete 验证删除前命中 1 条、删除后命中 0 条。
-- ✅ 执行拒绝访问旧目录的启动／smoke 边界并完成目录 mtime／hash 人工检查：4 个 legacy 目录设置为访问即失败后，隔离 v2 production composition 完成 Knowledge 启动和一轮 Runtime；确认 v2 只写显式 `data/workspace/` 与 `data/v2/`。
+- ✅ 执行拒绝访问旧目录的启动／smoke 边界并完成目录 mtime／hash 人工检查：4 个 legacy 目录设置为访问即失败后，隔离 production composition 完成 Knowledge 启动和一轮 Runtime；确认当前运行只写显式 `data/workspace/` 与 `data/runtime/`。
 - ✅ 重新运行完整自动化测试、`compileall`、`git diff --check` 和 import scan；全量测试发现的 KnowledgeService 状态读取／锁释放竞态由提交 `9da3242` 修复，随后 20 项定向测试与完整 283 项测试稳定通过，Catalog 为 2 Agent／26 Tool／10 command。
 - ✅ 用户审查 R8-O；用户确认完整人工 smoke matrix 无问题，工程验证全部通过。R8-O 完成；后续决策 227 已单独授权新会话执行 R8-D。
 
@@ -534,7 +534,7 @@
 - ✅ 确认工作区无未提交修改，并记录 R8-D 的父提交；确认 R8-E 回退提交仍为 `9fbeabc`，R8-O 修复与 checkpoint 均已包含在当前历史中。
 - ✅ 重新生成 51 个 Git 跟踪文件的精确清单，并检查白名单目录中的非跟踪／忽略内容、symlink／reparse point；如出现除生成型 `__pycache__`／`.pyc` 与已知 checkpoint 外的意外内容，立即停止并重新审查，不按目录整体删除。
 - ✅ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 记录删除前只读指纹／mtime 基线，并确认本轮所有待执行命令都不以 `data/`、工作区根目录、通配符或未解析变量作为删除目标。
-- ✅ 再次确认保留白名单：`src/__init__.py`、完整 `src/get_me_in/`、`tests/get_me_in/`、`data/reference/`、`data/prompts/`、`data/resume/template/`、`data/workspace/` 与 `data/v2/`；R8-D 不迁移、覆盖或删除任何旧 `data/` 运行数据。
+- ✅ 再次确认保留白名单：`src/__init__.py`、完整 `src/get_me_in/`、`tests/get_me_in/`、`data/reference/`、`data/prompts/`、`data/resume/template/`、`data/workspace/` 与 `data/runtime/`；R8-D 不迁移、覆盖或删除任何旧 `data/` 运行数据。
 
 #### 4.3 精确删除
 
@@ -547,7 +547,7 @@
 #### 4.4 删除后验证
 
 - ✅ 再次扫描 `main.py`、`src/get_me_in/`、`tests/get_me_in/` 与生产配置，确认没有 legacy import、动态 import 字符串、旧模块路径或 import-time registration 依赖；`test_import_boundaries.py` 的 forbidden module 清单继续作为防回归规则保留。
-- ✅ 复核 11 个直接依赖的 v2 使用证据；若仍全部使用，保持 `pyproject.toml`／`uv.lock` 不变。若出现新的未使用证据，停止 R8-D，不在删除提交中顺带猜测性移除依赖。
+- ✅ 复核 11 个直接依赖的当前使用证据；若仍全部使用，保持 `pyproject.toml`／`uv.lock` 不变。若出现新的未使用证据，停止 R8-D，不在删除提交中顺带猜测性移除依赖。
 - ✅ 运行 `uv run python -m unittest discover -s tests/get_me_in -t .`、`uv run python -m compileall src/get_me_in main.py` 与 `git diff --check`；任何失败先定位并恢复绿灯，不得以删除 legacy 测试或放宽契约解决。
 - ✅ 从实际 Catalog 复核 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令，并执行根入口启动／`/exit`、production composition 及拒绝访问 4 个 legacy data 目录的删除敏感 smoke；R8-G 再执行完整真实 adapter 与业务 smoke matrix。
 - ✅ 比较 4 个旧运行数据目录的删除前后指纹／mtime，并确认没有读取、改写、迁移或删除；“未读取”仍以静态扫描、Settings sentinel 与拒绝访问 smoke 为主证据。
@@ -563,7 +563,7 @@
 #### 5.1 清单确认与实施门禁
 
 - ✅ 在 R8-D 前按用户要求将活跃重构内容收敛到 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/decision.md`，删除并行的 `docs/refactor-design.md`、`docs/refactor-plan.md`、`docs/refactor-task.md`；历史 v1 内容由 Git 保留。
-- ✅ 将 capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与 v2 static asset boundary 的有效内容映射到四份主文档和 Git 历史，并删除五份辅助文档；`docs/` 只保留 `current.md` 与四份主文档。
+- ✅ 将 capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与当前 static asset boundary 的有效内容映射到四份主文档和 Git 历史，并删除五份辅助文档；`docs/` 只保留 `current.md` 与四份主文档。
 - ✅ 用户审查 R8-D 完成情况：提交 `7514af3` 仅删除 51 个白名单文件，`c13d455` 完成 checkpoint；本轮独立复验 283 项 unittest、`compileall`、`git diff --check` 与生产 legacy import／动态 import 扫描均通过。
 - ✅ 用户接受本节 5.1～5.6 的详细清单，并明确本会话只更新文档、不修改代码；本项只确认清单，不构成 R8-G 实施授权。
 - ✅ 新会话已执行 `/project-bootstrap`，确认工作区干净、`HEAD` 包含 `c13d455` 与 `7514af3`，并取得用户对 R8-G 的单独明确授权；现从 5.2 开始。
@@ -572,9 +572,9 @@
 
 #### 5.2 过渡配置与 README 归一化
 
-- ✅ 删除 `.env.example` 顶部的 R8 观察期说明和 `legacy rollback only` 段；保留所有 v2 正式变量，以及 v2 仍支持的 `BI_ENCODER_MODEL`、`CROSS_ENCODER_MODEL`、`EMBED_BATCH_SIZE` 兼容别名说明。
+- ✅ 删除 `.env.example` 顶部的 R8 观察期说明和 `legacy rollback only` 段；保留所有正式变量，以及仍支持的 `BI_ENCODER_MODEL`、`CROSS_ENCODER_MODEL`、`EMBED_BATCH_SIZE` 兼容别名说明。
 - ✅ 将 `.env.example` 与实际 `Settings.from_env()` 逐项核对：变量名、必填项、默认值、类型、目录边界和兼容别名一致；未增加或删除 Settings 字段；示例配置解析验证通过。
-- ✅ 将 README 从“受控迁移／R8-O 观察期”改为已落地 v2 事实，记录唯一生产入口、诊断模块入口、Main／Resume 当前能力、10 个 CLI 命令、环境配置入口、静态输入、v2 运行目录、旧数据保留边界和紧急回退顺序。
+- ✅ 将 README 从“受控迁移／R8-O 观察期”改为当前基线事实，记录唯一生产入口、诊断模块入口、Main／Resume 当前能力、10 个 CLI 命令、环境配置入口、静态输入、当前运行目录、旧数据保留边界和紧急回退顺序。
 - ✅ README 未把历史 `/auto-approve-switch`、25-tool baseline、JobSearchAgent 或 R9 备忘写成当前能力；Catalog／Registry 数量来源已注明为实际代码导出。
 
 #### 5.3 活跃文档与 AGENTS.md 归一化
@@ -595,11 +595,11 @@
 #### 5.5 G8 根入口、真实 adapter 与数据边界 smoke
 
 - ✅ 根入口 PTY 复核欢迎界面、`/help`、`/approval auto`／切回 prompt、`/dump`、`/restore`、`/rewind` 无候选、`/ragreload`／`/build-memory` 调度、无 handoff 时的 `/exit_sub false` typed 错误与 `/exit`；进程正常退出，历史人工 smoke 已覆盖基础对话、handoff、审批拒绝、Esc／选择取消、restore／rewind 与资源关闭。
-- ✅ 真实 KnowledgeService 使用 Chroma／embedder／reranker 完成 prepare、reload、query、source delete 与 close，输出 `KNOWLEDGE_RELOAD_SMOKE_OK added=1 hits=1 deleted=1 after=0 state=ready`；真实 MemoryService 使用 v2 JSON repository、MemoryExtractor 与后台 worker 完成 build／query／delete，输出 `MEMORY_SMOKE_OK job=memory-build-1 records=1 hits_before=1 hits_after=0`。
+- ✅ 真实 KnowledgeService 使用 Chroma／embedder／reranker 完成 prepare、reload、query、source delete 与 close，输出 `KNOWLEDGE_RELOAD_SMOKE_OK added=1 hits=1 deleted=1 after=0 state=ready`；真实 MemoryService 使用当前 JSON repository、MemoryExtractor 与后台 worker 完成 build／query／delete，输出 `MEMORY_SMOKE_OK job=memory-build-1 records=1 hits_before=1 hits_after=0`。
 - ✅ 独立修复 `src/get_me_in/adapters/subprocess_runner.py` 的确定性 UTF-8 输出解码与替换策略，并在 `tests/get_me_in/test_subprocess_runner.py` 增加非法输出／`None` 回归断言；提交 `6a092b5`。针对性测试 4/4、完整 unittest 284/284、`compileall` 与 `git diff --check` 通过；此前 `UnicodeDecodeError`／`stdout=None` 阻塞已解除。
 - ✅ 已完成中文、英文、双语 Resume copy／read／edit／replace／build／open 的真实链路复验，以及 `merge_pdfs` 的 first→second 页面合并、Artifact metadata 与幂等 replay；本次实际合并 PDF 为 4 页，构建退出码均为 0，未出现 `None`。
 - ✅ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 完成静态 forbidden-path／legacy-env 扫描、`SETTINGS_SENTINEL_OK` 与既有拒绝访问 smoke／只读 metadata 证据；未迁移、覆盖、删除或打开旧用户文件内容。
-- ✅ 确认 v2 只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`，运行写入仅落在 `data/workspace/`、`data/v2/` 与诊断日志目录；本轮真实 worker、模型 adapter、Knowledge／Memory／Artifact 资源均显式 close，根入口进程正常退出。
+- ✅ 确认 production 只复用 `data/reference/`、`data/prompts/`、`data/resume/template/`，运行写入仅落在 `data/workspace/`、`data/runtime/` 与诊断日志目录；本轮真实 worker、模型 adapter、Knowledge／Memory／Artifact 资源均显式 close，根入口进程正常退出。
 
 #### 5.6 提交、回退与停止门禁
 
@@ -760,7 +760,7 @@
 
 ## R8 完成态回归订正 —— Chroma memory／persistent 模式
 
-- ✅ 只读确认 v1 的 `CHROMA_PERSIST_DIR` 存在／缺失曾切换 persistent／memory，v2 无条件 persistent，属于未显式确认的能力遗漏。
+- ✅ 只读确认 legacy 的 `CHROMA_PERSIST_DIR` 存在／缺失曾切换 persistent／memory，新架构无条件 persistent，属于未显式确认的能力遗漏。
 - ✅ 建立专项计划与决策 271；默认保持 persistent，新增显式 `KNOWLEDGE_INDEX_MODE=persistent|memory`，旧 `CHROMA_PERSIST_DIR` 继续隔离。
 - ✅ 新增 `InMemoryManifestRepository`，memory mode 使用 `EphemeralClient` 与空 process-local manifest 成对装配，每个进程全量重建。
 - ✅ 保持 `KnowledgeService`、port/domain、Runtime、Tool、Session、CLI command 与公开检索协议不变；未知 mode 在 Settings 和 composition 两层拒绝。
@@ -878,7 +878,7 @@
 
 ## 重构完成定义
 
-- v2 主入口覆盖当前已实现能力，完整 smoke matrix 通过。
+- 主入口覆盖当前已实现能力，完整 smoke matrix 通过。
 - Runtime、Session、Tool、Knowledge、Memory、Workspace、CLI 边界均通过公开协议协作。
 - 无可变全局运行时单例、无 import-time 注册、无 CLI→Agent 私有字段访问。
 - 无魔法控制 dict；handoff/approval/cancel/failure 为明确类型。

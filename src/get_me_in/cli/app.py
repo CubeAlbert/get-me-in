@@ -1,4 +1,4 @@
-"""The thin v2 CLI event driver."""
+"""The thin CLI event driver."""
 
 from src.get_me_in.application.commands import Approve, CancelSelection, Continue, Reject, SubmitSelection, UserMessage
 from src.get_me_in.application.app_results import ApplicationResult

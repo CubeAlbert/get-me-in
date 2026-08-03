@@ -1,4 +1,4 @@
-"""Explicit tool definitions and typed outcomes for the v2 runtime."""
+"""Explicit tool definitions and typed outcomes for the runtime."""
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
