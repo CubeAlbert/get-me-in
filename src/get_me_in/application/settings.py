@@ -7,6 +7,11 @@ import os
 from pathlib import Path
 from typing import Mapping
 
+from src.get_me_in.application.localization import (
+    Locale,
+    parse_locale,
+    resolve_response_locale,
+)
 from src.get_me_in.ports.llm import ModelProfile
 
 
@@ -49,6 +54,9 @@ class Settings:
     max_model_calls_per_run: int
     cancel_grace_seconds: float
     show_thinking: bool
+    ui_locale: Locale
+    response_locale: Locale
+    locales_dir: Path
     knowledge_index_mode: KnowledgeIndexMode
     knowledge_manifest_path: Path
     knowledge_chroma_dir: Path
@@ -100,6 +108,8 @@ class Settings:
             "LLM_TIMEOUT",
             "LLM_THINKING_ENABLED",
             "SHOW_THINKING",
+            "UI_LOCALE",
+            "MODEL_RESPONSE_LANGUAGE",
             "AGENT_MAX_MODEL_CALLS",
             "CANCEL_GRACE_SECONDS",
             "SHUTDOWN_TIMEOUT_SECONDS",
@@ -107,6 +117,7 @@ class Settings:
             "REFERENCE_DIR",
             "PROMPTS_DIR",
             "RESUME_TEMPLATE_DIR",
+            "LOCALES_DIR",
             "WORKSPACE_DIR",
             "SESSIONS_DIR",
             "ARTIFACTS_DIR",
@@ -223,6 +234,7 @@ class Settings:
                 "REFERENCE_DIR",
                 "PROMPTS_DIR",
                 "RESUME_TEMPLATE_DIR",
+                "LOCALES_DIR",
                 "WORKSPACE_DIR",
                 "SESSIONS_DIR",
                 "ARTIFACTS_DIR",
@@ -253,6 +265,16 @@ class Settings:
             raise SettingsValidationError(
                 "SHOW_THINKING must be true, false, 1, or 0"
             )
+        try:
+            ui_locale = parse_locale(env["UI_LOCALE"], setting_name="UI_LOCALE")
+        except ValueError as error:
+            raise SettingsValidationError(str(error)) from error
+        try:
+            response_locale = resolve_response_locale(
+                env["MODEL_RESPONSE_LANGUAGE"], ui_locale
+            )
+        except ValueError as error:
+            raise SettingsValidationError(str(error)) from error
         knowledge_index_mode_raw = env["KNOWLEDGE_INDEX_MODE"].strip().lower()
         try:
             knowledge_index_mode = KnowledgeIndexMode(knowledge_index_mode_raw)
@@ -350,6 +372,9 @@ class Settings:
             max_model_calls_per_run=max_calls,
             cancel_grace_seconds=cancel_grace,
             show_thinking=boolean_values[show_thinking_raw],
+            ui_locale=ui_locale,
+            response_locale=response_locale,
+            locales_dir=path_values["LOCALES_DIR"],
             knowledge_index_mode=knowledge_index_mode,
             knowledge_manifest_path=path_values["KNOWLEDGE_MANIFEST_PATH"],
             knowledge_chroma_dir=path_values["KNOWLEDGE_CHROMA_DIR"],

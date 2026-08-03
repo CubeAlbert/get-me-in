@@ -10,6 +10,7 @@ from src.get_me_in.bootstrap import build_application
 from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
 from src.get_me_in.application.app_commands import DumpSession, ReloadKnowledge, RestoreSession, RewindSession
 from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Paused, Progress, ToolFinished, ToolStarted
+from src.get_me_in.application.localization import Locale
 from src.get_me_in.application.settings import KnowledgeIndexMode, Settings
 from src.get_me_in.application.memory_service import MemoryService
 from src.get_me_in.domain.agents import AgentKey, AgentStyle
@@ -45,6 +46,9 @@ def _settings(*, sessions_dir: Path = Path("data/runtime/sessions")) -> Settings
         max_model_calls_per_run=100,
         cancel_grace_seconds=2.0,
         show_thinking=False,
+        ui_locale=Locale.ZH_CN,
+        response_locale=Locale.ZH_CN,
+        locales_dir=Path("data/locales"),
         knowledge_index_mode=KnowledgeIndexMode.PERSISTENT,
         knowledge_manifest_path=Path("data/runtime/knowledge/manifest.json"),
         knowledge_chroma_dir=Path("data/runtime/knowledge/chroma"),

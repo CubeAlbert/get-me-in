@@ -6,6 +6,7 @@ from src.get_me_in.application.settings import (
     Settings,
     SettingsValidationError,
 )
+from src.get_me_in.application.localization import Locale
 from src.get_me_in.ports.llm import ModelProfile
 
 
@@ -24,6 +25,8 @@ _BASE_ENV = {
     "LLM_TIMEOUT": "60",
     "LLM_THINKING_ENABLED": "true",
     "SHOW_THINKING": "false",
+    "UI_LOCALE": "zh-CN",
+    "MODEL_RESPONSE_LANGUAGE": "ui",
     "AGENT_MAX_MODEL_CALLS": "100",
     "CANCEL_GRACE_SECONDS": "2",
     "SHUTDOWN_TIMEOUT_SECONDS": "60",
@@ -31,6 +34,7 @@ _BASE_ENV = {
     "REFERENCE_DIR": "data/reference",
     "PROMPTS_DIR": "data/prompts",
     "RESUME_TEMPLATE_DIR": "data/resume/template",
+    "LOCALES_DIR": "data/locales",
     "WORKSPACE_DIR": "data/workspace",
     "SESSIONS_DIR": "data/runtime/sessions",
     "ARTIFACTS_DIR": "data/runtime/artifacts",
@@ -95,10 +99,13 @@ class SettingsTests(unittest.TestCase):
             "RESUME_TEMPERATURE",
             "MEMORY_TEMPERATURE",
             "LLM_TIMEOUT",
+            "UI_LOCALE",
+            "MODEL_RESPONSE_LANGUAGE",
             "AGENT_MAX_MODEL_CALLS",
             "REFERENCE_DIR",
             "PROMPTS_DIR",
             "RESUME_TEMPLATE_DIR",
+            "LOCALES_DIR",
             "WORKSPACE_DIR",
             "SESSIONS_DIR",
             "ARTIFACTS_DIR",
@@ -159,6 +166,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(12.5, settings.llm_timeout_seconds)
         self.assertEqual(9, settings.max_model_calls_per_run)
         self.assertEqual(1.5, settings.cancel_grace_seconds)
+        self.assertIs(Locale.ZH_CN, settings.ui_locale)
+        self.assertIs(Locale.ZH_CN, settings.response_locale)
+        self.assertEqual(Path("project/data/locales"), settings.locales_dir)
         self.assertIs(ModelProfile.PRO, settings.main_model_profile)
         self.assertIs(ModelProfile.PRO, settings.resume_model_profile)
         self.assertIs(ModelProfile.FLASH, settings.memory_model_profile)
@@ -428,6 +438,29 @@ class SettingsTests(unittest.TestCase):
 
         self.assertFalse(settings.llm_thinking_enabled)
         self.assertTrue(settings.show_thinking)
+
+    def test_from_env_resolves_explicit_response_locale(self) -> None:
+        settings = Settings.from_env(
+            _env({
+                "UI_LOCALE": "en-US",
+                "MODEL_RESPONSE_LANGUAGE": "zh-CN",
+                "LOCALES_DIR": "custom/locales",
+            }),
+            project_root=Path("project"),
+        )
+
+        self.assertIs(Locale.EN_US, settings.ui_locale)
+        self.assertIs(Locale.ZH_CN, settings.response_locale)
+        self.assertEqual(Path("project/custom/locales"), settings.locales_dir)
+
+    def test_from_env_rejects_invalid_locale_values(self) -> None:
+        for name, value in (
+            ("UI_LOCALE", "zh"),
+            ("MODEL_RESPONSE_LANGUAGE", "auto"),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(SettingsValidationError, name):
+                    Settings.from_env(_env({name: value}), project_root=Path("project"))
 
     def test_from_env_rejects_invalid_show_thinking(self) -> None:
         with self.assertRaisesRegex(SettingsValidationError, "SHOW_THINKING"):

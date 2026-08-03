@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import Mock, call, patch
 
 from src.get_me_in.application.app_results import CloseIssue, CloseReport
+from src.get_me_in.application.localization import Locale
 from src.get_me_in.application.settings import (
     KnowledgeIndexMode,
     Settings,
@@ -50,6 +51,9 @@ def _settings(
         max_model_calls_per_run=100,
         cancel_grace_seconds=2.0,
         show_thinking=False,
+        ui_locale=Locale.ZH_CN,
+        response_locale=Locale.ZH_CN,
+        locales_dir=Path("data/locales"),
         knowledge_index_mode=KnowledgeIndexMode.PERSISTENT,
         knowledge_manifest_path=Path("data/runtime/knowledge/manifest.json"),
         knowledge_chroma_dir=Path("data/runtime/knowledge/chroma"),
@@ -129,7 +133,7 @@ class CliMainTests(unittest.TestCase):
             settings_type.from_env.side_effect = SettingsValidationError("missing key")
             self.assertEqual(2, cli_main.main())
 
-        renderer.render_error.assert_called_once_with("missing key")
+        renderer.render_error.assert_called_once_with("配置错误：missing key")
 
     def test_startup_error_returns_one_without_traceback(self) -> None:
         renderer = Mock()
