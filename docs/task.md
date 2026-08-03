@@ -846,10 +846,10 @@
 
 - ✅ K0：从 2026-08-03 真实日志、当前代码与 Git 历史完成只读诊断；确认普通 Runtime 取消广播误伤 startup Knowledge，且问题发生在 manifest load 前，不是 `data/runtime/` 迁移或索引损坏。
 - ✅ K0：建立 [`knowledge-cancellation-scope-fix.md`](knowledge-cancellation-scope-fix.md)，固定目标契约、推荐实现、文件白名单、回归矩阵、真实 smoke、提交与停止门禁。
-- ⬜ K1：在 `Application` 内实现实例级、锁保护的私有 active cancellation target；RuntimeCommand 只取消 Session，ReloadKnowledge 只取消 Knowledge，其他 ApplicationCommand 不广播取消；公开 API 不变。
-- ⬜ K2：让 `KnowledgeService.reload()` 区分 `InterruptedError` 与真实 failure；startup cancellation 可重试，READY／DEGRADED reload cancellation 保留原可查询状态，worker-owned cancellation 映射为 `CANCELLED`。
-- ⬜ K3：补充普通 Runtime／ReloadKnowledge 取消路由、active target 清理、prepare 阶段取消、状态保留、重试和 worker job-state 回归；真实 prepare failure 仍须为 `ERROR`／`FAILED`。
-- ⬜ K4：运行定向与完整 unittest、compileall、diff-check；完成 cold-start 普通对话取消、`/ragreload` 取消／重试、prepare 中 `/exit` 三组真实行为 smoke。
+- ✅ K1：在 `Application` 内实现实例级、锁保护的私有 active cancellation target；RuntimeCommand 只取消 Session，ReloadKnowledge 只取消 Knowledge，其他 ApplicationCommand 不广播取消；公开 API 不变。
+- ✅ K2：让 `KnowledgeService.reload()` 区分 `InterruptedError` 与真实 failure；startup cancellation 可重试，READY／DEGRADED reload cancellation 保留原可查询状态，worker-owned cancellation 映射为 `CANCELLED`。
+- ✅ K3：补充普通 Runtime／ReloadKnowledge 取消路由、active target 清理、prepare 阶段取消、状态保留、重试和 worker job-state 回归；真实 prepare failure 仍须为 `ERROR`／`FAILED`。
+- 🔄 K4：运行定向与完整 unittest、compileall、diff-check；完成 cold-start 普通对话取消、`/ragreload` 取消／重试、prepare 中 `/exit` 三组真实行为 smoke。
 - ⬜ K5：用户审查后更新五份核心文档与决策，删除临时专项计划并独立提交文档收口。
 - ⛔ 本修复不得修改 R9 设计／代码，不得读取、改写、迁移或删除四个 legacy 数据目录；扩展代码白名单、公开 API、依赖或数据路径前必须停止确认。
 

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 281 — 完成 Knowledge 取消作用域修复 K1～K3](#决策-281--完成-knowledge-取消作用域修复-k1k3)
 - [决策 280 — 建立 Knowledge 命令作用域取消修复计划](#决策-280--建立-knowledge-命令作用域取消修复计划)
 - [决策 279 — 迁移当前运行数据目录并移除版本路径标识](#决策-279--迁移当前运行数据目录并移除版本路径标识)
 - [决策 278 — 收敛三份已完成专项文档并迁移 D1～D7 台账](#决策-278--收敛三份已完成专项文档并迁移-d1d7-台账)
@@ -6697,3 +6698,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 从 `Application.request_cancel()` 完全移除 Knowledge 取消 —— 会使 `/ragreload` 无法通过 Esc／Ctrl+C 取消，拒绝。
 - 让 WorkerRunner 根据具体 command 直接调用 Session／Knowledge —— 会把 application 业务路由泄漏到 CLI，并需要扩大公开接口，拒绝。
 - 把所有取消共用一个全局 token —— 会扩大跨任务串扰并破坏实例隔离，拒绝。
+
+---
+
+### 决策 281 —— 完成 Knowledge 取消作用域修复 K1～K3
+
+**背景：** 按决策 280 的白名单实施 K1～K3。原实现会从 `Application.request_cancel()` 同时取消 Session 与 Knowledge；`KnowledgeService.reload()` 也会把 prepare 阶段的协作取消当作普通 failure。当前代码／测试修改限定在 `application.py`、`knowledge_service.py`、`test_bootstrap.py` 与 `test_knowledge_service.py`。
+
+**决定：**
+
+- `Application.handle()` 使用锁保护的实例级 active cancellation target；RuntimeCommand 只指向 Session，`ReloadKnowledge` 只指向 Knowledge，其他 ApplicationCommand 与空闲取消均不广播。
+- `KnowledgeService` 保存 startup 或显式 reload 前的状态；prepare 抛出 `InterruptedError` 时记录取消上下文并恢复 `IDLE`、`READY` 或 `DEGRADED`，下一次 reload 可重置 token 重试；普通异常继续进入既有 `ERROR` 路径。
+- 保持公开 API、WorkerRunner、Chroma adapter、Settings、依赖、持久化字段和数据路径不变；worker-owned prepare cancellation 通过已有 `BackgroundWorker` 结果映射为 `CANCELLED`。
+- K1～K3 定向回归 65/65 通过；K4 的完整工程验证、真实行为 smoke 与用户审查仍未完成，本 checkpoint 不构成 R9 授权。
+
+**理由：**
+
+- 取消目标必须跟随当前命令而不是应用内所有可取消组件，才能隔离普通前台 Runtime 与后台 startup，同时保留 `/ragreload` 的显式取消能力。
+- 协作取消不是 adapter failure；恢复取消前可查询状态并允许重试，避免用户看到错误故障并避免丢失可用 Knowledge index。
+
+**曾考虑的替代方案：**
+
+- 仅调整 Knowledge 的错误日志而保留 Application 的取消广播 —— 仍会误伤后台 startup，拒绝。
+- 扩展 WorkerRunner、command/event 或公开 API 表达取消作用域 —— 现有 Application 私有 target 已足够，且会扩大专项白名单，拒绝。
