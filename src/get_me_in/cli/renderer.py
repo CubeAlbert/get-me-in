@@ -19,6 +19,7 @@ from src.get_me_in.application.events import (
     HandoffRequested,
     Paused,
     Progress,
+    ProgressKind,
     RuntimeEvent,
     SelectionRequested,
     ToolFinished,
@@ -66,7 +67,21 @@ class Renderer:
 
     def render_event(self, event: RuntimeEvent) -> None:
         if isinstance(event, Progress):
-            self._console.print(f"[dim]🔄 {escape(event.message)}[/]")
+            progress_keys = {
+                ProgressKind.CALLING_MODEL: "progress.calling_model",
+                ProgressKind.REPAIRING_MODEL_RESPONSE: "progress.repairing_model_response",
+                ProgressKind.WAITING_FOR_TOOL_RESULT: "progress.waiting_for_tool_result",
+            }
+            key = progress_keys.get(event.kind)
+            message = (
+                self._translator.text(key)
+                if key is not None
+                else self._translator.text(
+                    "progress.unknown",
+                    kind=escape(str(event.kind)),
+                )
+            )
+            self._console.print(f"[dim]🔄 {escape(message)}[/]")
         elif isinstance(event, ToolStarted):
             self._render_thinking(event.thinking)
             self._console.print(Markdown(event.message))
@@ -94,7 +109,7 @@ class Renderer:
                 )
         elif isinstance(event, ApprovalRequested):
             self._console.print(
-                f"[yellow]{self._translator.text('approval.required', summary=escape(event.summary))}[/]"
+                f"[yellow]{self._translator.text('approval.required', tool_name=escape(event.tool_name))}[/]"
             )
         elif isinstance(event, SelectionRequested):
             self._console.print(

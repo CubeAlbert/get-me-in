@@ -10,7 +10,7 @@ from src.get_me_in.application.commands import Continue
 from src.get_me_in.application.localization import Locale
 from src.get_me_in.application.app_commands import ReloadKnowledge
 from src.get_me_in.application.app_results import ApplicationResult
-from src.get_me_in.application.events import Progress
+from src.get_me_in.application.events import Progress, ProgressKind
 from src.get_me_in.cli.worker import WorkerRunner
 from src.get_me_in.cli.localization import load_translator
 
@@ -24,7 +24,7 @@ def _translator(locale: Locale = Locale.ZH_CN):
 
 class WorkerRunnerTests(unittest.TestCase):
     def test_runs_one_application_command_and_returns_event(self) -> None:
-        application = _Application(Progress("done"))
+        application = _Application(Progress(ProgressKind.CALLING_MODEL))
         renderer = _Renderer()
         runner = WorkerRunner(
             application,
@@ -35,12 +35,12 @@ class WorkerRunnerTests(unittest.TestCase):
 
         event = runner.run(Continue())
 
-        self.assertEqual(Progress("done"), event)
+        self.assertEqual(Progress(ProgressKind.CALLING_MODEL), event)
         self.assertEqual([Continue()], application.commands)
         self.assertEqual(["处理中"], renderer.statuses)
 
     def test_english_worker_status_uses_translator(self) -> None:
-        application = _Application(Progress("done"))
+        application = _Application(Progress(ProgressKind.CALLING_MODEL))
         renderer = _Renderer()
         runner = WorkerRunner(
             application,
@@ -54,7 +54,7 @@ class WorkerRunnerTests(unittest.TestCase):
         self.assertEqual(["Processing"], renderer.statuses)
 
     def test_escape_requests_cancellation_only_through_application(self) -> None:
-        application = _Application(Progress("cancelled"), wait_for_cancel=True)
+        application = _Application(Progress(ProgressKind.CALLING_MODEL), wait_for_cancel=True)
         runner = WorkerRunner(
             application,
             _Renderer(),
@@ -63,7 +63,7 @@ class WorkerRunnerTests(unittest.TestCase):
         )
 
         with patch("src.get_me_in.cli.worker._esc_pressed", side_effect=(True, False)):
-            self.assertEqual(Progress("cancelled"), runner.run(Continue()))
+            self.assertEqual(Progress(ProgressKind.CALLING_MODEL), runner.run(Continue()))
 
         self.assertEqual(["Cancelled by user"], application.cancellations)
 
@@ -82,7 +82,7 @@ class WorkerRunnerTests(unittest.TestCase):
         self.assertEqual([ReloadKnowledge("references")], application.commands)
 
     def test_rejects_concurrent_runs_and_close_cancels_active_work(self) -> None:
-        application = _Application(Progress("done"), wait_for_cancel=True)
+        application = _Application(Progress(ProgressKind.CALLING_MODEL), wait_for_cancel=True)
         runner = WorkerRunner(
             application,
             _Renderer(),

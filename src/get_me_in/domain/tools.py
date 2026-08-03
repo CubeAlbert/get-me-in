@@ -112,7 +112,7 @@ class ToolHandoff(ToolOutcome):
 class ToolApproval(ToolOutcome):
     """A tool call paused until the frontend approves or rejects it."""
 
-    prompt: str
+    tool_name: str
 
 
 @dataclass(frozen=True)

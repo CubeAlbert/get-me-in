@@ -17,6 +17,7 @@ from src.get_me_in.application.events import (
     HandoffRequested,
     Paused,
     Progress,
+    ProgressKind,
     SelectionRequested,
     ToolFinished,
     ToolStarted,
@@ -41,6 +42,7 @@ class RuntimeTests(unittest.TestCase):
 
         events = _pump(runtime, UserMessage("question"))
 
+        self.assertEqual(ProgressKind.CALLING_MODEL, events[0].kind)
         self.assertIsInstance(events[-1], Completed)
         self.assertEqual("answer", events[-1].message.content)
         self.assertEqual("private", events[-1].message.thinking)
@@ -338,6 +340,7 @@ class RuntimeTests(unittest.TestCase):
         rejected = _pump(rejected_runtime, Reject(rejection.call_id))
 
         self.assertIsInstance(approval, ApprovalRequested)
+        self.assertEqual("delete", approval.tool_name)
         self.assertIsInstance(approved[-1], Completed)
         self.assertIsInstance(rejected[-1], Paused)
         self.assertEqual("approval_rejected", rejected[-1].code)

@@ -58,7 +58,7 @@ class CliAppTests(unittest.TestCase):
 
     def test_auto_approval_uses_typed_approve_without_prompting(self) -> None:
         application = _Application()
-        worker = _Worker((ApprovalRequested("call", "write file"), Completed(_message())))
+        worker = _Worker((ApprovalRequested("call", "write_file"), Completed(_message())))
         input_controller = _Input(("/approval auto", "hello", "/exit"))
         app = CliApp(
             application,
@@ -76,7 +76,7 @@ class CliAppTests(unittest.TestCase):
 
     def test_rejected_approval_returns_to_input_without_continuing_model_loop(self) -> None:
         application = _Application()
-        worker = _Worker((ApprovalRequested("call", "web search"), Paused("approval_rejected", "User rejected approval")))
+        worker = _Worker((ApprovalRequested("call", "web_search"), Paused("approval_rejected", "User rejected approval")))
         input_controller = _Input(("hello", "/exit"), approved=False)
         app = CliApp(
             application,
@@ -93,6 +93,7 @@ class CliAppTests(unittest.TestCase):
             (UserMessage("hello"), Reject("call", "User rejected approval")),
             worker.commands,
         )
+        self.assertEqual(("批准工具 web_search？",), tuple(input_controller.prompts))
         self.assertEqual(1, application.snapshots)
 
     def test_subagent_failure_returns_to_user_without_continuing_main_model_loop(self) -> None:
@@ -302,6 +303,7 @@ class _Input:
         self.values = list(values)
         self.approved = approved
         self.confirms = 0
+        self.prompts: list[str] = []
         self.prefills: list[str | None] = []
         self.trace = trace
 
@@ -316,6 +318,7 @@ class _Input:
 
     def confirm(self, prompt: str) -> bool:
         self.confirms += 1
+        self.prompts.append(prompt)
         return self.approved
 
     def select(self, prompt: str, choices: tuple[str, ...], allow_custom: bool = False) -> str | None:

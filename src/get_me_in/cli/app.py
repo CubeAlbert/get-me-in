@@ -123,7 +123,12 @@ class CliApp:
                 if self._approval_mode is ApprovalMode.AUTO:
                     event = self._worker.run(Approve(event.call_id))
                 else:
-                    approved = self._input.confirm(event.summary)
+                    approved = self._input.confirm(
+                        self._translator.text(
+                            "approval.confirm",
+                            tool_name=event.tool_name,
+                        )
+                    )
                     event = self._worker.run(Approve(event.call_id) if approved else Reject(event.call_id, "User rejected approval"))
                 continue
             if isinstance(event, SelectionRequested):

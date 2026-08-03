@@ -33,6 +33,7 @@ from src.get_me_in.application.events import (
     HandoffRequested,
     Paused,
     Progress,
+    ProgressKind,
     RuntimeEvent,
     SelectionRequested,
     ToolFinished,
@@ -189,14 +190,14 @@ class AgentRuntime:
             turn_id=turn_id,
             plan=self._state.plan,
         )
-        return Progress("Calling model")
+        return Progress(ProgressKind.CALLING_MODEL)
 
     def _continue(self) -> RuntimeEvent:
         if self._state.phase is RuntimePhase.MODEL_PENDING:
             return self._complete_model()
         if self._state.phase is RuntimePhase.MODEL_QUEUED:
             self._state = replace(self._state, phase=RuntimePhase.MODEL_PENDING)
-            return Progress("Calling model")
+            return Progress(ProgressKind.CALLING_MODEL)
         if self._state.phase is RuntimePhase.TOOL_READY:
             return self._execute_pending()
         if self._state.phase is RuntimePhase.CANCELLED_NOTICE:
@@ -314,7 +315,7 @@ class AgentRuntime:
                 history=(*self._state.history, repair),
                 format_repairs_used=self._state.format_repairs_used + 1,
             )
-            return Progress("Repairing model response format")
+            return Progress(ProgressKind.REPAIRING_MODEL_RESPONSE)
         if reply.repair_kind is not None:
             logger.info(
                 "Model reply normalized locally: agent=%s turn=%s kind=%s",
@@ -373,7 +374,7 @@ class AgentRuntime:
             return Failed("pending_tool_missing", "Runtime has no pending tool call")
         if self._tool_executor is None or self._tool_context is None:
             self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_TOOL_RESULT)
-            return Progress("Waiting for external tool result")
+            return Progress(ProgressKind.WAITING_FOR_TOOL_RESULT)
         if self._session_id is None:
             raise RuntimeError("Tool execution requires an active session scope")
         context = replace(
@@ -401,7 +402,7 @@ class AgentRuntime:
     ) -> RuntimeEvent:
         if isinstance(outcome, ToolApproval):
             self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_APPROVAL)
-            return ApprovalRequested(pending.call_id, outcome.prompt)
+            return ApprovalRequested(pending.call_id, outcome.tool_name)
         if isinstance(outcome, ToolSelection):
             self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_SELECTION)
             return SelectionRequested(pending.call_id, outcome.prompt, outcome.choices)

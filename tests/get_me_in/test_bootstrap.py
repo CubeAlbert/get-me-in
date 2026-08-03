@@ -9,7 +9,7 @@ from unittest.mock import patch
 from src.get_me_in.bootstrap import build_application
 from src.get_me_in.application.commands import Approve, Continue, Reject, UserMessage
 from src.get_me_in.application.app_commands import DumpSession, ReloadKnowledge, RestoreSession, RewindSession
-from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Paused, Progress, ToolFinished, ToolStarted
+from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, HandoffRequested, Paused, Progress, ProgressKind, ToolFinished, ToolStarted
 from src.get_me_in.application.localization import Locale
 from src.get_me_in.application.settings import KnowledgeIndexMode, Settings
 from src.get_me_in.application.memory_service import MemoryService
@@ -533,7 +533,7 @@ class BootstrapTests(unittest.TestCase):
             del command
             runtime_started.set()
             runtime_cancelled.wait(timeout=1)
-            return Progress("runtime stopped")
+            return Progress(ProgressKind.CALLING_MODEL)
 
         def cancel_runtime(reason: str) -> None:
             del reason
@@ -576,7 +576,7 @@ class BootstrapTests(unittest.TestCase):
     def test_application_clears_active_cancellation_target_after_return_and_error(self) -> None:
         application = self._build_application(_settings(), llm=_FakeLlm("unused"))
 
-        with patch.object(application._sessions, "handle", return_value=Progress("done")):
+        with patch.object(application._sessions, "handle", return_value=Progress(ProgressKind.CALLING_MODEL)):
             application.handle(UserMessage("done"))
         with patch.object(application._sessions, "request_cancel") as cancel_session:
             application.request_cancel()

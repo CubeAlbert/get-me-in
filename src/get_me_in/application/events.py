@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord
@@ -13,15 +14,21 @@ class RuntimeEvent:
     """Base type for Runtime output; it deliberately carries no magic dict."""
 
 
+class ProgressKind(StrEnum):
+    CALLING_MODEL = "calling_model"
+    REPAIRING_MODEL_RESPONSE = "repairing_model_response"
+    WAITING_FOR_TOOL_RESULT = "waiting_for_tool_result"
+
+
 @dataclass(frozen=True)
 class Progress(RuntimeEvent):
-    message: str
+    kind: ProgressKind
 
 
 @dataclass(frozen=True)
 class ApprovalRequested(RuntimeEvent):
     call_id: str
-    summary: str
+    tool_name: str
 
 
 @dataclass(frozen=True)

@@ -30,6 +30,7 @@ from src.get_me_in.application.events import (
     HandoffRequested,
     Paused,
     Progress,
+    ProgressKind,
     SelectionRequested,
     ToolFinished,
     ToolStarted,
@@ -313,6 +314,8 @@ class RendererTests(unittest.TestCase):
         )
 
         renderer.render_welcome()
+        renderer.render_event(Progress(ProgressKind.CALLING_MODEL))
+        renderer.render_event(ApprovalRequested("call", "write_file"))
         renderer.render_event(
             ToolStarted(
                 call_id="call",
@@ -327,6 +330,8 @@ class RendererTests(unittest.TestCase):
 
         text = output.getvalue()
         self.assertIn("AI job search assistant", text)
+        self.assertIn("Calling model", text)
+        self.assertIn("Approval required: write_file", text)
         self.assertIn("Running tool: search", text)
         self.assertIn("Knowledge reload complete: 1 added", text)
         self.assertNotIn("正在执行工具", text)
@@ -430,7 +435,7 @@ class RendererTests(unittest.TestCase):
         payload = "[bold]owned[/] [yellow]approval[/]"
         plan = Plan("plan", (PlanItem(payload, payload, PlanStatus.IN_PROGRESS),))
 
-        renderer.render_event(Progress(payload))
+        renderer.render_event(Progress(ProgressKind.CALLING_MODEL))
         renderer.render_event(
             ToolStarted(
                 call_id=payload,

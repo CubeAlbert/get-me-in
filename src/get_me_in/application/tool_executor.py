@@ -71,7 +71,7 @@ class ToolExecutor:
             definition.policy.confirmation is ConfirmationMode.ALWAYS
             and not context.approved
         ):
-            return ToolApproval(prompt=f"Approve tool {tool_name}?")
+            return ToolApproval(tool_name=tool_name)
 
         # 与 v1 保持兼容：模型可能把回复元数据（例如 thinking）混入
         # event_payload。未知参数不属于工具业务输入，应静默丢弃；已知参数

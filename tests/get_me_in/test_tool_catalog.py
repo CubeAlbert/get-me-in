@@ -218,6 +218,7 @@ class ToolExecutorTests(unittest.TestCase):
         outcome = executor.execute("call", "delete", {"text": "x"}, self.context)
 
         self.assertIsInstance(outcome, ToolApproval)
+        self.assertEqual("delete", outcome.tool_name)
 
     def test_rejection_and_cancellation_close_the_call_without_handler_execution(self) -> None:
         executor = ToolExecutor(ToolCatalog((_tool("echo"),)))
