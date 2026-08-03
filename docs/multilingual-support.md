@@ -103,10 +103,10 @@ MODEL_RESPONSE_LANGUAGE=ui
 LOCALES_DIR=data/locales
 ```
 
-- `UI_LOCALE` 只接受 `zh-CN|en-US`。
-- `MODEL_RESPONSE_LANGUAGE` 只接受 `ui|zh-CN|en-US`，Settings 中保存 resolved `Locale`，避免下游重复解析。
-- `LOCALES_DIR` 使用现有 project-relative path 解析与 legacy-path refusal；production 只从该目录读取 locale 静态资源。
-- 三个值进入 `.env.example` canonical key／shape 测试；不保留旧名称或隐式 default。
+- `UI_LOCALE` 可选，缺失时默认为 `zh-CN`；显式值只接受 `zh-CN|en-US`。
+- `MODEL_RESPONSE_LANGUAGE` 可选，缺失时默认为 `ui`，在中文默认 UI 下实际解析为 `zh-CN`；显式值只接受 `ui|zh-CN|en-US`，Settings 中保存 resolved `Locale`，避免下游重复解析。
+- `LOCALES_DIR` 可选，缺失时默认为 `data/locales`；显式值使用现有 project-relative path 解析与 legacy-path refusal，production 只从该目录读取 locale 静态资源。
+- 三个值进入 `.env.example` canonical key／shape 测试；`.env.example` 注释列出全部可用选项与默认值。
 
 ### 5.2 Settings 之前的诊断 Renderer
 

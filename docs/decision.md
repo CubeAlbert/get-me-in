@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 290 — 补充多语言 Settings 中文默认值](#决策-290--补充多语言-settings-中文默认值)
 - [决策 289 — 完成多语言专项 L5 工程验证并等待真实 provider／TTY smoke](#决策-289--完成多语言专项-l5-工程验证并等待真实-providertty-smoke)
 - [决策 288 — 完成多语言专项 L4 ResponseLanguage Prompt 注入](#决策-288--完成多语言专项-l4-responselanguage-prompt-注入)
 - [决策 287 — 完成多语言专项 L3 typed 固定事件文案与审批](#决策-287--完成多语言专项-l3-typed-固定事件文案与审批)
@@ -6930,3 +6931,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 以 fake LLM 或自动化测试直接标记 L5 完成 —— 无法证明真实 provider 语言遵从和物理 TTY 行为，拒绝。
 - 在当前环境未经用户复核直接运行真实 provider／TTY 并记录成功 —— 外部凭据、交互环境和用户侧证据未明确，拒绝。
+
+---
+
+### 决策 290 —— 补充多语言 Settings 中文默认值
+
+**背景：** 多语言专项原先要求 `.env.example` 提供三个配置键，但 `Settings.from_env()` 将它们全部视为必填；用户希望未配置时仍保持中文默认行为，并能在示例中直接看到各项可用选项。
+
+**决定：**
+
+- `UI_LOCALE` 缺失时默认 `zh-CN`，显式值仍只接受 `zh-CN`／`en-US`。
+- `MODEL_RESPONSE_LANGUAGE` 缺失时默认 `ui`，跟随当前 UI；在默认中文 UI 下 resolved response locale 为 `zh-CN`，显式值仍只接受 `ui`／`zh-CN`／`en-US`。
+- `LOCALES_DIR` 缺失时默认 `data/locales`，显式路径继续执行 project-relative 解析与 legacy-path refusal。
+- `.env.example` 注释列出三项可用选项、默认值和跟随关系；代码／测试 checkpoint 为 `a5efaa1 fix: default localization settings to Chinese`，Settings 定向测试 `22/22`、完整 unittest `341/341`、compileall 与 diff-check 通过。
+
+**理由：**
+
+- 默认中文保持现有 CLI 行为，并允许用户只配置 OpenAI 与其他必需运行参数即可启动。
+- `MODEL_RESPONSE_LANGUAGE=ui` 保留 UI 与模型回复语言的一致性；用户仍可通过显式 `en-US` 单独指定模型回复语言。
+- 默认 locale 目录保持当前静态资源布局，不引入数据迁移或运行时切换。
+
+**曾考虑的替代方案：**
+
+- 将缺失值继续视为配置错误 —— 会使新增语言配置破坏未更新 `.env` 的现有启动路径，拒绝。
+- 将 `MODEL_RESPONSE_LANGUAGE` 缺省固定为 `zh-CN` —— 会破坏 `ui` 的跟随语义，拒绝。
