@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 289 — 完成多语言专项 L5 工程验证并等待真实 provider／TTY smoke](#决策-289--完成多语言专项-l5-工程验证并等待真实-providertty-smoke)
 - [决策 288 — 完成多语言专项 L4 ResponseLanguage Prompt 注入](#决策-288--完成多语言专项-l4-responselanguage-prompt-注入)
 - [决策 287 — 完成多语言专项 L3 typed 固定事件文案与审批](#决策-287--完成多语言专项-l3-typed-固定事件文案与审批)
 - [决策 286 — 完成多语言专项 L2 CLI-owned UI 本地化](#决策-286--完成多语言专项-l2-cli-owned-ui-本地化)
@@ -6906,3 +6907,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 为 zh-CN／en-US 复制完整 Agent system prompt —— 会产生协议与约束漂移，拒绝。
 - 在 ModelMessageCodec 或 format repair 中检测并修复回复语言 —— 语言质量不是 JSON 结构契约，且会扩大模型输出边界，拒绝。
+
+---
+
+### 决策 289 —— 完成多语言专项 L5 工程验证并等待真实 provider／TTY smoke
+
+**背景：** L4 已完成 ResponseLanguage Prompt 注入。按 L5 门禁，需要同时验证自动化、静态 contract、双语言 component／fake composition smoke，并由真实 provider 与 Windows TTY 证明模型实际遵从中文／英文回复语言和既有工具调用契约。
+
+**决定：**
+
+- L5 工程验证已完成：定向多语言与 CLI／bootstrap 分组 `151/151`、完整 unittest `340/340`、compileall、`git diff --check`、catalog／Prompt 静态 contract 和 fake/headless component smoke 均通过。
+- 自动化证据只证明代码路径、Prompt 注入和 fake composition 行为，不标记真实 provider／TTY 通过；L5 仍等待 Windows 真实 TTY 矩阵。
+- 用户侧 smoke 必须覆盖 zh-CN 与 en-US 的普通 finish、tool call message、可见 thinking、selection、approval、Main→Resume→Main；en-US 还需明确查询已保存编程语言或年龄，确认真实模型调用一次 `query_memory` 并用英文回答，且不触发 Memory build。
+- 本次只更新状态文档，不修改 production、依赖、数据或 R9；真实 smoke 通过后再进入 L6 用户审查和文档收口。
+
+**理由：**
+
+- 语言遵从是 provider 行为而非 JSON 结构属性，必须区分自动化／fake 证据与真实模型、终端交互证据，避免把 unit 绿灯误报为 provider smoke。
+- 真实矩阵同时覆盖 UI chrome、模型生成内容、handoff、approval 和被动 Memory 契约，能够验证 L1～L4 的组合边界而不扩大数据或 schema 范围。
+
+**曾考虑的替代方案：**
+
+- 以 fake LLM 或自动化测试直接标记 L5 完成 —— 无法证明真实 provider 语言遵从和物理 TTY 行为，拒绝。
+- 在当前环境未经用户复核直接运行真实 provider／TTY 并记录成功 —— 外部凭据、交互环境和用户侧证据未明确，拒绝。
