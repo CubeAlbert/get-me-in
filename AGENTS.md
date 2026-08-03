@@ -4,7 +4,7 @@
 
 ## 项目
 
-**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。生产入口使用 `src/get_me_in/`；R8-D 已删除 legacy production 源码，R8-G 文档归一化与 G8 已完成并通过最终用户审查，当前停在 R9 独立授权门禁前。
+**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。生产入口使用 `src/get_me_in/`，由 Main 统一路由各专业 Agent。
 
 ## 新会话恢复顺序
 
@@ -15,62 +15,10 @@
    - `docs/task.md`
    - `docs/decision.md`
 3. 若 `docs/current.md` 明确路由专项执行文档，只额外加载其当前指定的文件；不得从历史决策中的专项文件名推断当前路由。
-4. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 已收敛为当前基线事实，不再存在并行的 `docs/refactor-*.md`。
-5. 历史 baseline、audit、matrix 和 smoke 原文由 Git 保存；不要在 `docs/` 重新创建归档副本，也不得据此覆盖 `current.md` 的阶段与授权状态。
+4. `docs/current.md` 是唯一阶段快照；`design.md`、`plan.md`、`task.md` 只维护当前基线事实，不并行维护历史版本。
+5. 已完成阶段的执行材料由 Git 和 `docs/decision.md` 保存；不要在 `docs/` 重新创建归档副本，也不得据此覆盖 `current.md` 的阶段与授权状态。
 
-## R8 完成状态与 R9 授权门禁
-
-R8-D 已由提交 `7514af3` 精确删除 51 个 legacy production 文件，并由 `c13d455` checkpoint。R8-G 5.1～5.6、完整 G8 与文档 checkpoint 已完成；决策 239 记录 G8 完成证据，决策 240 记录最终用户审查通过，决策 241 与提交 `860aaae` 记录完成态文档契约收口。R8 已完成，R9 未授权。
-
-新会话必须：
-
-1. 先执行 `/project-bootstrap`，读取 `docs/current.md`、决策 239／240／241 和 `docs/task.md` 的 R8 完成态。
-2. 确认分支为 `main`、工作区干净、`HEAD` 包含 `7514af3`、`c13d455` 与完成态文档契约提交 `860aaae`。
-3. 未取得 R9 单独授权前，只能审查 R8 完成状态，不得检查、设计或实施 R9。
-4. 若后续发现 R8 回归，先记录最小问题与证据并取得对应授权；不得借修复之名进入 R9。
-
-### R8-G 文件与行为边界（已完成）
-
-R8-G 文档归一化仅修改了以下 8 个文档／示例配置文件：
-
-- `.env.example`
-- `README.md`
-- `AGENTS.md`
-- `docs/current.md`
-- `docs/design.md`
-- `docs/plan.md`
-- `docs/task.md`
-- `docs/decision.md`
-
-R8-G 文档提交未修改 `main.py`、`src/`、`tests/`、`scripts/`、`data/`、`pyproject.toml` 或 `uv.lock`，未新增业务能力、runtime class、service、port、schema、公开方法或依赖。G8 暴露的 Settings 测试断言与 SubprocessRunner 缺陷均先停止 R8-G，经独立授权、修复和提交后才恢复验证；修复未混入 R8-G 文档／配置提交。
-
-文档归一化已完成：
-
-- 删除 `.env.example` 的 R8 观察期说明和 `legacy rollback only` 段，但保留当前正式变量及仍受支持的兼容别名。
-- 把 README 从迁移／观察期说明改为当前基线事实，记录当前入口、Main／Resume 能力、10 个 CLI 命令、配置和数据边界。
-- 更新活跃文档与本文件的当前态；历史阶段和决策只保留为明确历史，`docs/decision.md` 只追加、不改写。
-- Agent、Tool、命令和 Settings 数量／名称必须从实际 Catalog、Registry 与代码取证，不维护第二份运行时真相。
-
-### G8 验证与提交（已完成）
-
-已完成：
-
-```powershell
-uv run python -m unittest discover -s tests/get_me_in -t .
-uv run python -m compileall src/get_me_in main.py
-git diff --check
-```
-
-完成内容还包括：
-
-- 扫描生产入口、当前源码、测试和配置，确认无 legacy import、动态 import 字符串、旧模块路径或 import-time registration。
-- 从 `AgentCatalog.list_descriptors()`、`ToolCatalog.export_descriptors()`、`CommandRegistry.help_entries()`／`completions()` 复核 2 个 Agent、26 个 ToolDefinition、10 个 CLI 命令。
-- 从真实根入口验证 Settings／启动退出码、基础对话、10 个 CLI 命令、handoff、审批／拒绝、Esc／选择取消、restore／rewind 和资源关闭。
-- 验证真实 Chroma／embedder／reranker、Knowledge、Memory，以及中文／英文／双语 Resume copy／edit／build／open 和 `merge_pdfs`。
-- 使用静态扫描、Settings sentinel 与拒绝访问 smoke 证明 production 不读取旧数据；mtime／hash 只能证明未改写。确认写入只落在 `data/workspace/` 与 `data/runtime/`。
-- 已审查 `git diff --name-status` 与 staged diff；R8-G 文档变更只涉及上述 8 个文件，独立代码／测试修复保持分离，G8 通过后已完成 R8-G checkpoint。
-
-### 数据与回退边界
+## 数据保护边界
 
 以下 legacy 用户运行数据永远不得读取、改写、迁移或删除：
 
@@ -79,7 +27,7 @@ git diff --check
 - `data/chroma/`
 - `data/temp/`
 
-当前 R8 完成态若需回退，先按逆提交顺序 revert `860aaae` 及其后的文档同步提交，再逆序 revert R8-G 文档 checkpoint，然后 revert `7514af3`，最后 revert `9fbeabc`。只有 legacy 源码恢复后才允许实际启用 legacy-only 配置；任何回退都不得读取、迁移、改写或删除旧运行数据。
+历史迁移、回退或新功能开发都不得绕过这项保护；具体历史提交与回退记录只从 Git 和 `docs/decision.md` 追溯。
 
 ## 常用命令
 
@@ -95,20 +43,7 @@ uv remove <package>
 uv run --with jupyter --with jupyterlab-lsp --with jedi-language-server jupyter lab
 ```
 
-CLI 当前有 10 个命令：
-
-- `/help`
-- `/edit`
-- `/dump`
-- `/restore`
-- `/rewind`
-- `/ragreload`
-- `/build-memory`
-- `/exit_sub`
-- `/approval`
-- `/exit`
-
-旧 `/auto-approve-switch` 仅是历史 baseline，不是当前命令。
+CLI 命令、补全和帮助以 `CommandRegistry.help_entries()` 与 `CommandRegistry.completions()` 的实际结果为准，不在本文件维护第二份清单。
 
 ## 当前架构
 
@@ -136,7 +71,7 @@ main.py
 
 核心约束：
 
-- Main 是唯一入口与路由中心；当前 production Agent 只有 Main 和 Resume。
+- Main 是唯一入口与路由中心；可用专业 Agent 必须通过 `AgentCatalog` 显式装配并由 Main 路由。
 - 子 Agent 之间不得直接通信，也不得持有或调度其他 Agent。
 - `SessionState` 是唯一 canonical session owner；CLI 不访问 Agent 私有字段。
 - Runtime 使用 typed command/event transition；审批、选择、handoff、取消、失败和暂停不得使用魔法 dict。
@@ -167,8 +102,7 @@ main.py
 - 不得通过删除测试、放宽 typed contract 或用 mock 掩盖真实 adapter 问题来获得绿灯。
 - Agent key、capability、状态和事件使用声明式常量／枚举，不写裸字符串控制协议。
 - 当前代码禁止 import legacy package；`tests/get_me_in/test_import_boundaries.py` 持续维护 forbidden module 防回归。
-- 新模块、公开类或公开方法必须先确认设计和清单；R8-G 不允许创建或修改这些对象。
-- R0～R8 继续冻结 InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 和其他 R9 功能。
+- 新模块、公开类或公开方法必须先确认设计和清单。
 - 保留用户已有工作树变更；删除或移动前必须解析并核对精确绝对路径。
 - 在受限 Codex 沙箱中执行会写入 Git 索引或仓库元数据的 `git add`／`git commit` 时，直接申请对应命令的窄范围授权，不先执行一次已知会因 `.git/index.lock: Permission denied` 失败的普通尝试。该错误且无实际 lock 文件、无活动 Git／Git LFS 进程时按沙箱写权限不足处理，不得删除 lock 或修改 ACL；只有错误为 `File exists` 时才排查并发进程或 stale lock。
 - 禁止 Bash/Python 脚本直接读写项目文件；使用专用读取、搜索和补丁工具。
@@ -179,8 +113,7 @@ main.py
 | 文件 | 用途 | 加载时机 |
 |---|---|---|
 | `docs/current.md` | 唯一当前状态快照：阶段、任务、阻塞、下一步和活跃文档路由 | 每次新会话必读 |
-| `docs/design.md` | 当前架构、迁移边界和未来设计备忘 | 涉及架构、边界或 R8 删除范围时 |
+| `docs/design.md` | 当前架构、边界和未来设计备忘 | 涉及架构或边界时 |
 | `docs/plan.md` | 里程碑、依赖、验收和停止门禁 | 排期、进入阶段或检查验收时 |
-| `docs/task.md` | R0～R8 主执行清单与状态标记 | 开始、完成或审查主任务时 |
+| `docs/task.md` | 主执行清单与状态标记 | 开始、完成或审查主任务时 |
 | `docs/decision.md` | 按编号追加的历史决策与理由 | 需要追溯边界或新增重要决定时 |
-不要重新创建 `docs/refactor-design.md`、`docs/refactor-plan.md` 或 `docs/refactor-task.md`。

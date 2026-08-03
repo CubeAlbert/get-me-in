@@ -1,6 +1,6 @@
 # get-me-in
 
-面向程序员的 CLI AI 求职助手。生产运行使用 `src/get_me_in/` 下的当前架构，由 Main 路由 Agent 与 Resume 简历 Agent 协作完成当前已落地的求职能力。
+面向程序员的 CLI AI 求职助手。生产运行使用 `src/get_me_in/` 下的当前架构，由 Main 统一路由专业 Agent 完成求职工作流。
 
 ## 运行入口
 
@@ -20,12 +20,9 @@ uv run python -m src.get_me_in.cli
 
 ## 当前能力
 
-当前 production Catalog 包含 2 个 Agent：
+`Main` 是统一入口和路由中心，根据 `AgentCatalog` 提供的专业 Agent 清单识别需求、收集必要上下文并切换 Agent。当前已落地的 Resume 工作流支持简历模板复制、读取、编辑、替换、PDF 构建、打开和 PDF 合并。
 
-- `Main`：统一入口和路由，只根据当前可用 SubAgent 清单识别需求、收集必要上下文并切换 Agent。
-- `Resume`：处理简历模板复制、读取、编辑、替换、PDF 构建、打开和 PDF 合并等简历工作流。
-
-当前 Catalog 由代码动态导出 26 个 `ToolDefinition`；工具可见性按 Agent capability 隔离，工具本身不构成额外的业务 Agent。真实数量以 `AgentCatalog.list_descriptors()` 与 `ToolCatalog.export_descriptors()` 为准。
+专业 Agent 与工具由代码显式装配，工具可见性按 Agent capability 隔离。实际清单以 `AgentCatalog.list_descriptors()` 与 `ToolCatalog.export_descriptors()` 为准。
 
 ## CLI 命令
 
@@ -42,7 +39,7 @@ CLI 命令由 `CommandRegistry` 注册并提供补全与帮助：
 - `/approval`：切换审批模式
 - `/exit`：退出 CLI
 
-命令名称、帮助文本和补全以 `CommandRegistry.help_entries()` 与 `CommandRegistry.completions()` 的实际结果为准；历史 `/auto-approve-switch` 不属于当前命令。
+命令名称、帮助文本和补全以 `CommandRegistry.help_entries()` 与 `CommandRegistry.completions()` 的实际结果为准。
 
 ## 数据与配置边界
 
@@ -57,18 +54,9 @@ CLI 命令由 `CommandRegistry` 注册并提供补全与帮助：
 - `data/workspace/`：工作区文件和会话可见的用户工作内容
 - `data/runtime/`：session、Knowledge、Memory、Artifact 等持久化数据
 
-Knowledge index 默认使用 `KNOWLEDGE_INDEX_MODE=persistent`，把 Chroma 与 manifest 持久化在 `data/runtime/knowledge/`。显式设置为 `memory` 时，Chroma 与 manifest 只保留在当前进程，并在每次启动时从 `data/reference/` 与 `data/runtime/memories/` 全量重建；Memory JSON 等业务源数据仍按原路径持久化。旧 `CHROMA_PERSIST_DIR` 不再生效。
+Knowledge index 默认使用 `KNOWLEDGE_INDEX_MODE=persistent`，把 Chroma 与 manifest 持久化在 `data/runtime/knowledge/`。显式设置为 `memory` 时，Chroma 与 manifest 只保留在当前进程，并在每次启动时从 `data/reference/` 与 `data/runtime/memories/` 全量重建；Memory JSON 等业务源数据仍按原路径持久化。
 
 诊断日志默认写入 `data/logs/`，由 `LOG_DIR` 和 `LOG_LEVEL` 控制。旧的 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 是保留的历史用户数据；production 不读取、不改写、不迁移、不删除这些目录。
-
-## 回退边界
-
-紧急回退不得触碰旧运行数据：
-
-- 在 R8-D 之后、R8-G 文档提交之前：先 `git revert 7514af3`，再 `git revert 9fbeabc`。
-- R8-G 文档提交之后：先按逆序回退 R8-G 提交，再回退 `7514af3`，最后回退 `9fbeabc`。
-
-只有 legacy 源码已经恢复后，才允许实际启用 legacy-only 配置。回退仅恢复代码和配置历史，不迁移或清理旧用户数据。
 
 ## 开发验证
 
@@ -79,5 +67,3 @@ uv run python -m unittest discover -s tests/get_me_in -t .
 uv run python -m compileall src/get_me_in main.py
 git diff --check
 ```
-
-R8-G 的完整根入口、真实 Knowledge／Memory／Artifact adapter、CLI 交互和旧数据拒绝访问验证，必须在独立 G8 验收中完成。
