@@ -342,17 +342,19 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **当前状态：** 已完成。设计 checkpoint `b190a06`、Prompt/codec checkpoint `0694c2b`、RuntimeEvent/CLI checkpoint `5a43fda` 已提交；定向 65/65 与 84/84、完整 unittest 296/296、`compileall`、diff-check、InputFormat blob 和 production-component smoke 通过。用户已完成 `SHOW_THINKING=false`／`true` 两组真实 provider／TTY smoke，确认 message 始终显示、thinking 仅在存在且开启时以纯文本 Panel 位于 message 上方；最终完成态文档独立 checkpoint。本修正关闭，仍不得进入 R9。
 
-### 当前基线维护修正 —— Knowledge 取消作用域
+### 当前基线维护修正 —— Knowledge 取消作用域（已完成）
 
 **目标：** 修复普通 Runtime Esc／Ctrl+C 在 Knowledge startup 仍为 `LOADING` 时误取消后台预热，并把 prepare cancellation 误记为 `ERROR`／`FAILED` 的问题；保持 `/ragreload` 可取消、后台 worker 有界关闭与真实 failure 可观测。
 
 **实施顺序：** K0 只读诊断与计划（已完成）→ K1 Application 命令作用域 cancellation target → K2 Knowledge cancellation state／logging → K3 定向与完整回归 → K4 真实 cold-start／reload／exit smoke → 用户审查 → 完成态文档收口。
 
-**范围：** 代码和测试白名单、目标契约、验证命令与停止条件以 [`knowledge-cancellation-scope-fix.md`](knowledge-cancellation-scope-fix.md) 为准。默认不修改公开 API、WorkerRunner、Chroma adapter、Settings、bootstrap、持久化、依赖或数据路径；需要扩展时必须停止确认。
+**范围：** 代码和测试白名单、目标契约、验证命令与停止条件已由决策 280～283、`docs/design.md`、`docs/task.md` 与 `docs/current.md` 承接。默认不修改公开 API、WorkerRunner、Chroma adapter、Settings、bootstrap、持久化、依赖或数据路径；需要扩展时必须停止确认。
 
 **验收：** 普通 Runtime 取消只到 Session，startup Knowledge 继续到 `READY`；显式 `/ragreload` 取消保留已有可查询状态并可重试；worker-owned 取消为 `CANCELLED`，真实故障才为 `FAILED`；定向／完整 unittest、compileall、diff-check 与三个真实行为 smoke 全部通过。
 
 **停止门禁：** 本修复独立于 R9。代码／测试与完成态文档分别提交；用户审查完成前不删除专项计划，也不得借修复进入 R9。
+
+**完成结论：** K1～K4 已完成工程验证与 production composition smoke；用户确认普通 Runtime 取消、`/ragreload` 取消／重试和 prepare 中 `/exit` 三项真实终端测试无问题。K5 已完成，五份核心文档同步收口，临时专项计划删除；本修复不构成 R9 授权。
 
 ### R9 —— 新功能恢复
 

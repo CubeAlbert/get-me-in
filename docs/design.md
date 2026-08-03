@@ -593,13 +593,13 @@ R6-F 允许修改 R6 已确认文件及其对应测试，并允许在 `applicati
 
 **实现结论：** 上述边界已按四个切片落地并通过 187 项自动化测试、`compileall` 与真实 Chroma/embedder/reranker smoke。worker 改为首次提交时延迟启动；若关闭超时，ResourceStack 停止关闭仍可能被后台任务使用的下游依赖。Settings 默认模型恢复为项目既有 BAAI 基线；R6-F 当时保留的旧 RAG 环境变量别名已由决策 273 移除，当前只读取 `EMBEDDING_MODEL`、`RERANKER_MODEL` 与 `EMBEDDING_BATCH_SIZE`。G6 已重新通过并曾停在 R6-T；决策 177 已在后续会话授权 R7 总体边界 Review。
 
-#### 6.9.6 当前基线 Knowledge 取消作用域修正（待实施）
+#### 6.9.6 当前基线 Knowledge 取消作用域修正（已完成）
 
 2026-08-03 的真实运行日志确认，当前 `Application.request_cancel()` 会同时取消活动 Session 与处于 `LOADING` 的 Knowledge。普通 Runtime 调用被 Esc／Ctrl+C 取消时，后台 startup reload 因而在 model `prepare()` 后抛出 `InterruptedError`；`KnowledgeService.reload()` 又把该取消映射为 `ERROR`，而 worker-owned token 未取消，最终 job 被误记为 `FAILED`。这与本节 6.9.1“后台任务 cancellation 不与前台 Runtime command 共用”的目标契约不一致；异常发生在 manifest load 之前，与当前 `data/runtime/` 路径或索引迁移无关。
 
 修正后的边界固定为：`Application.handle()` 维护实例级、锁保护的私有 active cancellation target；`RuntimeCommand` 只取消 Session，`ReloadKnowledge` 只取消 Knowledge，其他 ApplicationCommand 不广播取消。后台 startup reload 只接受 BackgroundWorker job token；`KnowledgeService.reload()` 单独处理 `InterruptedError`，首次 startup 取消恢复为不可用但可重试状态，已有 `READY`／`DEGRADED` index 的显式 reload 取消保留原可查询状态，真实 prepare／adapter failure 才进入 `ERROR`／`FAILED`。公开 `Application.request_cancel(reason)`、WorkerRunner、command/event、持久化与 adapter 接口保持不变。
 
-完整实施计划、白名单、回归矩阵与真实 smoke 门禁见 [`knowledge-cancellation-scope-fix.md`](knowledge-cancellation-scope-fix.md)。本修正是当前基线维护，不构成 R9 授权。
+本修正已按决策 280 的白名单完成 K1～K4 工程验证，并经用户确认三项真实终端场景：普通 Runtime 取消不影响后台 Knowledge startup；`/ragreload` 取消后索引仍可查询且可再次 reload；prepare 未完成时 `/exit` 在 shutdown timeout 内退出且无残留进程。定向回归 65/65、完整 unittest 325/325、`compileall`、`git diff --check`、真实 Chroma smoke 和 production composition smoke 均通过。原临时实施计划已删除，事实由本节、`docs/task.md`、`docs/current.md` 与决策 280～283 承接。本修正是当前基线维护，不构成 R9 授权。
 
 ### 6.10 Resume 与 Artifact（R7）
 

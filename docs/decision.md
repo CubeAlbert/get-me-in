@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 283 — 完成 Knowledge 取消作用域修复 K5 最终收口](#决策-283--完成-knowledge-取消作用域修复-k5-最终收口)
 - [决策 282 — 完成 Knowledge 取消作用域修复 K4 验证并等待用户审查](#决策-282--完成-knowledge-取消作用域修复-k4-验证并等待用户审查)
 - [决策 281 — 完成 Knowledge 取消作用域修复 K1～K3](#决策-281--完成-knowledge-取消作用域修复-k1k3)
 - [决策 280 — 建立 Knowledge 命令作用域取消修复计划](#决策-280--建立-knowledge-命令作用域取消修复计划)
@@ -6745,3 +6746,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 把 fake/unit 或 composition smoke 直接记录为真实 TTY Esc 通过 —— 证据类型不等价，拒绝。
 - 因无法在当前执行环境独立按下物理 Esc 而否定已通过的 production composition smoke —— 会丢失已验证的应用层生命周期证据，拒绝。
+
+---
+
+### 决策 283 —— 完成 Knowledge 取消作用域修复 K5 最终收口
+
+**背景：** 决策 282 已完成工程验证与三组 production composition smoke，并将物理终端复核留给用户。用户随后确认普通 Runtime 取消、`/ragreload` 取消／重试以及 prepare 未完成时 `/exit` 三项真实终端测试均无问题。
+
+**决定：**
+
+- Knowledge 取消作用域修复 K1～K5 全部完成；普通 Runtime 的取消只作用于前台 Session，后台 Knowledge startup 不再被误伤；`/ragreload` 仍可取消并支持重试；prepare 中退出可在 shutdown timeout 内完成且 worker 无残留。
+- 五份核心文档已同步为完成态，临时专项计划已删除；后续事实以 `docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 和本决策记录为准。
+- 本次修复、用户复核和文档收口均不构成 R9 授权；四个 legacy 数据目录仍不得读取、改写、迁移或删除。
+
+**理由：**
+
+- 用户终端复核补足了非交互环境无法独立证明的物理按键证据；工程测试与 production composition smoke 则继续承担应用层路由、状态恢复、worker 终态和资源关闭的确定性证据。
+- 删除已完成的临时计划可以避免与核心文档并行维护状态；实现边界、结果和历史决策均已在核心文档、Git 与本记录中保留。
+
+**曾考虑的替代方案：**
+
+- 保留已完成的临时专项计划作为当前状态来源 —— 会形成与核心文档并行的状态入口，拒绝。
+- 将本修复完成解释为 R9 已授权 —— R9 仍需独立指令，拒绝。
