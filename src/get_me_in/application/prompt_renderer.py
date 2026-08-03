@@ -5,6 +5,7 @@ import json
 from collections.abc import Iterable
 from pathlib import Path
 
+from src.get_me_in.application.localization import Locale, prompt_language_name
 from src.get_me_in.domain.agents import AgentDescriptor, AgentSpec, Capability
 from src.get_me_in.domain.tools import ToolDefinition, ToolParameter
 
@@ -44,11 +45,18 @@ class PromptRenderer:
             "EXPLANATION_STYLE",
             "STYLE_RULES",
             "STYLE_AVOIDS",
+            "RESPONSE_LANGUAGE",
         }
     )
 
-    def __init__(self, prompts_dir: Path) -> None:
+    def __init__(
+        self,
+        prompts_dir: Path,
+        *,
+        response_locale: Locale = Locale.ZH_CN,
+    ) -> None:
         self._general_agent_dir = prompts_dir / "general_agent"
+        self._response_language = prompt_language_name(response_locale)
 
     def render(
         self,
@@ -86,6 +94,7 @@ class PromptRenderer:
             "EXPLANATION_STYLE": spec.style.explanation_style,
             "STYLE_RULES": "\n".join(spec.style.rules),
             "STYLE_AVOIDS": "\n".join(spec.style.avoids),
+            "RESPONSE_LANGUAGE": self._response_language,
         }
         missing = placeholders - values.keys()
         if missing:

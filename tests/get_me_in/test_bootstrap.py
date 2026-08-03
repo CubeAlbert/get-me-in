@@ -597,6 +597,28 @@ class BootstrapTests(unittest.TestCase):
         )
         self.assertEqual(expected, application._memory._extractor._prompt)
 
+    def test_composition_shares_resolved_response_language_with_main_and_resume(self) -> None:
+        settings = replace(_settings(), response_locale=Locale.EN_US)
+        application = build_application(
+            settings,
+            runtime_llms={
+                AgentKey.MAIN: _FakeLlm("unused"),
+                AgentKey.RESUME: _FakeLlm("resume"),
+            },
+        )
+        self.addCleanup(application.close)
+
+        runtimes = application._sessions._orchestrator._runtimes
+        main_runtime = runtimes[AgentKey.MAIN]
+        resume_runtime = runtimes[AgentKey.RESUME]
+        self.assertIs(main_runtime._prompt_renderer, resume_runtime._prompt_renderer)
+
+        main_prompt = main_runtime._prompt_renderer.render(main_runtime._spec)
+        resume_prompt = resume_runtime._prompt_renderer.render(resume_runtime._spec)
+        for prompt in (main_prompt, resume_prompt):
+            self.assertEqual(1, prompt.count("<ResponseLanguage>"))
+            self.assertIn("English (en-US)", prompt)
+
     def test_composition_owns_one_shared_artifact_service(self) -> None:
         application = self._build_application(_settings(), llm=_FakeLlm("unused"))
         runtimes = application._sessions._orchestrator._runtimes

@@ -9,6 +9,7 @@ from src.get_me_in.application.prompt_renderer import (
     PromptRenderer,
     UnexpectedPromptVariableError,
 )
+from src.get_me_in.application.localization import Locale
 from src.get_me_in.domain.agents import (
     AgentDescriptor,
     AgentKey,
@@ -69,6 +70,7 @@ class PromptRendererTests(unittest.TestCase):
             "<HandoffContextContract>",
             "\n<SubAgents>\n",
             "<CommunicationStyle>",
+            "<ResponseLanguage>",
             "<InputFormat>",
             "<OutputFormat>",
             "<Reserved>",
@@ -76,6 +78,27 @@ class PromptRendererTests(unittest.TestCase):
         positions = tuple(rendered.index(section) for section in sections)
 
         self.assertEqual(tuple(sorted(positions)), positions)
+        self.assertEqual(1, rendered.count("<ResponseLanguage>"))
+        self.assertIn("zh-CN", rendered)
+
+    def test_injects_explicit_response_locale(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir) / "general_agent"
+            root.mkdir()
+            (root / "01_response.md").write_text(
+                "<ResponseLanguage>{{RESPONSE_LANGUAGE}}</ResponseLanguage>",
+                encoding="utf-8",
+            )
+
+            rendered = PromptRenderer(
+                root.parent,
+                response_locale=Locale.EN_US,
+            ).render(_spec())
+
+        self.assertEqual(
+            "<ResponseLanguage>English (en-US)</ResponseLanguage>",
+            rendered,
+        )
 
     def test_production_handoff_context_contract_is_directional_and_turn_based(self) -> None:
         rendered = PromptRenderer(Path("data/prompts")).render(_spec())

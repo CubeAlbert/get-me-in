@@ -179,7 +179,10 @@ def _build_application(
             raise ValueError("runtime_llms must provide exactly Main and Resume instances")
         if runtime_llms[AgentKey.MAIN] is runtime_llms[AgentKey.RESUME]:
             raise ValueError("Main and Resume runtime LLM instances must be distinct")
-    prompt_renderer = PromptRenderer(settings.prompts_dir)
+    prompt_renderer = PromptRenderer(
+        settings.prompts_dir,
+        response_locale=settings.response_locale,
+    )
     clock = SystemClock()
     id_generator = UuidGenerator()
     main_cancellation = CancellationToken()
