@@ -55,12 +55,18 @@ class PromptRendererTests(unittest.TestCase):
             (root / "09_output_format.md").write_text("output", encoding="utf-8")
             (root / "10_reserved.md").write_text("reserved", encoding="utf-8")
 
-            rendered = PromptRenderer(root.parent).render(_spec())
+            rendered = PromptRenderer(
+                root.parent,
+                response_locale=Locale.ZH_CN,
+            ).render(_spec())
 
         self.assertEqual("目标\n主 Agent\ninput\noutput\nreserved", rendered)
 
     def test_production_templates_follow_their_numeric_filenames(self) -> None:
-        rendered = PromptRenderer(Path("data/prompts")).render(_spec())
+        rendered = PromptRenderer(
+            Path("data/prompts"),
+            response_locale=Locale.ZH_CN,
+        ).render(_spec())
 
         self.assertEqual(
             (
@@ -120,7 +126,10 @@ class PromptRendererTests(unittest.TestCase):
         )
 
     def test_production_handoff_context_contract_is_directional_and_turn_based(self) -> None:
-        rendered = PromptRenderer(Path("data/prompts")).render(_spec())
+        rendered = PromptRenderer(
+            Path("data/prompts"),
+            response_locale=Locale.ZH_CN,
+        ).render(_spec())
 
         self.assertEqual(1, rendered.count("<HandoffContextContract>"))
         self.assertIn(
@@ -165,7 +174,10 @@ class PromptRendererTests(unittest.TestCase):
             (root / "01.md").write_text("{{UNKNOWN}}", encoding="utf-8")
 
             with self.assertRaises(UnexpectedPromptVariableError):
-                PromptRenderer(root.parent).render(_spec())
+                PromptRenderer(
+                    root.parent,
+                    response_locale=Locale.ZH_CN,
+                ).render(_spec())
 
     def test_renders_priorities_placeholder(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -173,7 +185,10 @@ class PromptRendererTests(unittest.TestCase):
             root.mkdir()
             (root / "01.md").write_text("{{PRIORITIES}}", encoding="utf-8")
 
-            rendered = PromptRenderer(root.parent).render(_spec())
+            rendered = PromptRenderer(
+                root.parent,
+                response_locale=Locale.ZH_CN,
+            ).render(_spec())
 
         self.assertEqual("优先级", rendered)
 
@@ -219,7 +234,10 @@ class PromptRendererTests(unittest.TestCase):
                 handler=lambda arguments, context: ToolSuccess("ok"),
             )
 
-            rendered = PromptRenderer(root.parent).render(
+            rendered = PromptRenderer(
+                root.parent,
+                response_locale=Locale.ZH_CN,
+            ).render(
                 _spec(),
                 tools=(visible, second),
             )
@@ -279,12 +297,18 @@ class PromptRendererTests(unittest.TestCase):
                 "<OutputFormat>canonical</OutputFormat>", encoding="utf-8"
             )
 
-            rendered = PromptRenderer(root.parent).render_output_format()
+            rendered = PromptRenderer(
+                root.parent,
+                response_locale=Locale.ZH_CN,
+            ).render_output_format()
 
         self.assertEqual("<OutputFormat>canonical</OutputFormat>", rendered)
 
     def test_production_output_format_uses_flat_message_entity_projection(self) -> None:
-        rendered = PromptRenderer(Path("data/prompts")).render_output_format()
+        rendered = PromptRenderer(
+            Path("data/prompts"),
+            response_locale=Locale.ZH_CN,
+        ).render_output_format()
         schema_text = rendered.split("<Schema>\n", 1)[1].split("\n</Schema>", 1)[0]
         schema = json.loads(schema_text)
 
@@ -340,7 +364,10 @@ class PromptRendererTests(unittest.TestCase):
                 responsibilities=("Search current listings",),
                 hard_constraints=("Use current sources",),
             )
-            renderer = PromptRenderer(root.parent)
+            renderer = PromptRenderer(
+                root.parent,
+                response_locale=Locale.ZH_CN,
+            )
 
             main_rendered = renderer.render(
                 _spec(),

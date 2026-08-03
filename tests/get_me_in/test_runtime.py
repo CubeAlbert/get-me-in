@@ -22,6 +22,7 @@ from src.get_me_in.application.events import (
     ToolFinished,
     ToolStarted,
 )
+from src.get_me_in.application.localization import Locale
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.runtime import AgentRuntime
@@ -625,7 +626,10 @@ def _runtime(
     plan_service = PlanService(_Ids())
     runtime = AgentRuntime(
         spec=spec,
-        prompt_renderer=PromptRenderer(root.parent),
+        prompt_renderer=PromptRenderer(
+            root.parent,
+            response_locale=Locale.ZH_CN,
+        ),
         llm=llm,
         clock=_Clock(),
         id_generator=_Ids(),

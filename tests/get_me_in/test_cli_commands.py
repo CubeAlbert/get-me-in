@@ -20,7 +20,7 @@ from src.get_me_in.cli.commands import (
     build_command_registry,
 )
 from src.get_me_in.cli.input import InputController
-from src.get_me_in.cli.localization import load_translator
+from src.get_me_in.cli.localization import Translator, load_translator
 from src.get_me_in.cli.renderer import Renderer
 from src.get_me_in.application.events import (
     ApprovalRequested,
@@ -40,7 +40,7 @@ from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
 from src.get_me_in.domain.knowledge import ReloadReport
-from src.get_me_in.domain.sessions import SessionPreview
+from src.get_me_in.domain.sessions import RuntimePhase, SessionPreview, SessionView
 
 
 def _translator(locale: Locale = Locale.ZH_CN):
@@ -52,13 +52,19 @@ def _translator(locale: Locale = Locale.ZH_CN):
 
 class CommandRegistryTests(unittest.TestCase):
     def test_dispatches_alias_and_keeps_non_commands_for_cli_app(self) -> None:
-        registry = CommandRegistry((CommandSpec("/hello", "greet", lambda value: CommandResult(CommandAction.SUBMIT, value), ("/hi",)),))
+        registry = CommandRegistry(
+            (CommandSpec("/hello", "greet", lambda value: CommandResult(CommandAction.SUBMIT, value), ("/hi",)),),
+            translator=_translator(),
+        )
 
         self.assertEqual(CommandResult(CommandAction.SUBMIT, "Ada"), registry.dispatch("/HI Ada"))
         self.assertIsNone(registry.dispatch("hello"))
 
     def test_help_completions_and_replace_are_derived_from_specs(self) -> None:
-        registry = CommandRegistry((CommandSpec("/known", "old", lambda _: CommandResult(CommandAction.HANDLED), ("/k",)),))
+        registry = CommandRegistry(
+            (CommandSpec("/known", "old", lambda _: CommandResult(CommandAction.HANDLED), ("/k",)),),
+            translator=_translator(),
+        )
         registry.replace(CommandSpec("/known", "new", lambda _: CommandResult(CommandAction.EXIT), ("/new",)))
 
         self.assertEqual(
@@ -70,7 +76,10 @@ class CommandRegistryTests(unittest.TestCase):
         self.assertEqual("未知命令：/k", registry.dispatch("/k").text)
 
     def test_duplicate_registered_names_are_rejected(self) -> None:
-        registry = CommandRegistry((CommandSpec("/help", "help", lambda _: CommandResult(CommandAction.HANDLED)),))
+        registry = CommandRegistry(
+            (CommandSpec("/help", "help", lambda _: CommandResult(CommandAction.HANDLED)),),
+            translator=_translator(),
+        )
 
         with self.assertRaisesRegex(ValueError, "already registered"):
             registry.register(CommandSpec("/other", "other", lambda _: CommandResult(CommandAction.HANDLED), ("/help",)))
@@ -270,6 +279,24 @@ class InputControllerTests(unittest.TestCase):
 
         self.assertEqual(("✅ Run", "❌ Cancel"), select.call_args.kwargs["choices"])
 
+    def test_custom_input_sentinel_does_not_capture_same_named_model_choice(self) -> None:
+        controller = InputController(translator=_translator(Locale.ZH_CN), editor=lambda: None)
+        same_as_custom = "🔧 自定义输入..."
+
+        with patch("src.get_me_in.cli.input.questionary.select") as select:
+            select.return_value.ask.return_value = same_as_custom
+            selected = controller.select(
+                "选择",
+                (same_as_custom,),
+                allow_custom=True,
+            )
+
+        self.assertEqual(same_as_custom, selected)
+        choices = select.call_args.kwargs["choices"]
+        self.assertEqual(same_as_custom, choices[0].title)
+        self.assertEqual(same_as_custom, choices[1].title)
+        self.assertNotEqual(choices[0].value, choices[1].value)
+
 
 class RendererTests(unittest.TestCase):
     def test_preview_limits_are_injected_for_results_and_arguments(self) -> None:
@@ -305,6 +332,52 @@ class RendererTests(unittest.TestCase):
         self.assertIn("get-me-in", text)
         self.assertIn("AI 求职助手", text)
         self.assertIn("输入 /help 查看所有命令", text)
+
+    def test_catalog_markup_is_rendered_as_literal_text(self) -> None:
+        messages = dict(_translator().messages)
+        messages["tool.started"] = "[red]Running {tool_name}[/]"
+        translator = Translator(Locale.ZH_CN, messages)
+        output = StringIO()
+
+        Renderer(translator=translator, console=_console(output)).render_event(
+            ToolStarted("call", "search", "running", {})
+        )
+
+        self.assertIn("[red]Running search[/]", output.getvalue())
+
+    def test_session_agent_and_phase_values_are_localized_with_fallback(self) -> None:
+        output = StringIO()
+        renderer = Renderer(
+            translator=_translator(Locale.EN_US),
+            console=_console(output),
+        )
+
+        renderer.render_session(
+            SessionView("session", AgentKey.RESUME, RuntimePhase.WAITING_FOR_USER, None)
+        )
+        renderer.render_session(SessionView("session", "future_agent", "future_phase", None))
+
+        text = output.getvalue()
+        self.assertIn("Resume Agent", text)
+        self.assertIn("Waiting for user", text)
+        self.assertIn("future_agent", text)
+        self.assertIn("future_phase", text)
+        self.assertNotIn("waiting_for_user", text)
+
+    def test_handoff_target_is_localized_with_canonical_fallback(self) -> None:
+        output = StringIO()
+        renderer = Renderer(
+            translator=_translator(Locale.EN_US),
+            console=_console(output),
+        )
+
+        renderer.render_event(HandoffRequested("call", AgentKey.MAIN, AgentKey.RESUME, "context"))
+        renderer.render_event(HandoffRequested("call", AgentKey.MAIN, "future_agent", "context"))
+
+        text = output.getvalue()
+        self.assertIn("Handing off to Resume Agent", text)
+        self.assertIn("Handing off to future_agent", text)
+        self.assertNotIn("Handing off to resume", text)
 
     def test_renders_english_cli_owned_text_and_application_result(self) -> None:
         output = StringIO()

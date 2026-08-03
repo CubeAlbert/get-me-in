@@ -8,7 +8,12 @@ import logging
 from dotenv import load_dotenv
 
 from src.get_me_in.application.localization import Locale, parse_locale
-from src.get_me_in.application.settings import Settings, SettingsValidationError
+from src.get_me_in.application.settings import (
+    DEFAULT_LOCALES_DIR,
+    Settings,
+    SettingsValidationError,
+    resolve_config_path,
+)
 from src.get_me_in.bootstrap import build_application
 from src.get_me_in.cli.app import CliApp
 from src.get_me_in.cli.commands import build_command_registry
@@ -201,12 +206,8 @@ def _bootstrap_locales_dir(project_root: Path) -> Path:
     """Resolve the raw bootstrap path without ever entering legacy data roots."""
     raw = os.environ.get("LOCALES_DIR", "").strip()
     if not raw:
-        return project_root / "data/locales"
-    configured = Path(raw)
-    resolved = configured if configured.is_absolute() else project_root / configured
-    canonical = resolved.resolve(strict=False)
-    for legacy in ("data/save", "data/memories", "data/chroma", "data/temp"):
-        legacy_root = (project_root / legacy).resolve(strict=False)
-        if canonical == legacy_root or legacy_root in canonical.parents:
-            return project_root / "data/locales"
-    return Path(os.path.normpath(str(resolved)))
+        return project_root / DEFAULT_LOCALES_DIR
+    try:
+        return resolve_config_path("LOCALES_DIR", raw, project_root)
+    except SettingsValidationError:
+        return project_root / DEFAULT_LOCALES_DIR

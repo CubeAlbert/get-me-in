@@ -12,7 +12,7 @@ from src.get_me_in.application.localization import (
     resolve_response_locale,
 )
 from src.get_me_in.cli.localization import LocaleCatalogError, load_translator
-from src.get_me_in.cli.main import _load_bootstrap_translator
+from src.get_me_in.cli.main import _bootstrap_locales_dir, _load_bootstrap_translator
 
 
 class LocalizationTests(unittest.TestCase):
@@ -110,6 +110,19 @@ class LocalizationTests(unittest.TestCase):
                 clear=False,
             ):
                 self.assertIsNone(_load_bootstrap_translator(Path(temporary)))
+
+    def test_bootstrap_locale_path_uses_shared_legacy_path_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            project_root = Path(temporary)
+            with patch.dict(
+                os.environ,
+                {"LOCALES_DIR": "data/save/nested"},
+                clear=False,
+            ):
+                self.assertEqual(
+                    project_root / "data/locales",
+                    _bootstrap_locales_dir(project_root),
+                )
 
     @staticmethod
     def _write(path: Path, value: object) -> None:

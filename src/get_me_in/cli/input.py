@@ -16,6 +16,7 @@ from src.get_me_in.cli.localization import Translator
 
 CompletionProvider = Callable[[], tuple[str, ...]]
 Editor = Callable[[], str | None]
+_CUSTOM_INPUT_VALUE = object()
 
 
 class InputController:
@@ -67,12 +68,22 @@ class InputController:
     def select(self, prompt: str, choices: Iterable[str], allow_custom: bool = False) -> str | None:
         options = list(choices)
         custom_choice = self._translator.text("input.custom")
+        question_choices = [
+            questionary.Choice(option, value=option)
+            for option in options
+        ]
         if allow_custom:
-            options.append(custom_choice)
+            question_choices.append(
+                questionary.Choice(custom_choice, value=_CUSTOM_INPUT_VALUE)
+            )
         try:
-            selected = questionary.select(prompt, choices=options, qmark="").ask()
-            if selected != custom_choice:
-                return selected
+            selected = questionary.select(
+                prompt,
+                choices=question_choices,
+                qmark="",
+            ).ask()
+            if selected is not _CUSTOM_INPUT_VALUE:
+                return selected if isinstance(selected, str) else None
             return questionary.text(
                 self._translator.text("input.custom_prompt"),
                 qmark="",

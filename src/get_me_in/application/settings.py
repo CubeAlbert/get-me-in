@@ -28,7 +28,14 @@ class KnowledgeIndexMode(StrEnum):
 
 _DEFAULT_UI_LOCALE = Locale.ZH_CN.value
 _DEFAULT_MODEL_RESPONSE_LANGUAGE = "ui"
-_DEFAULT_LOCALES_DIR = "data/locales"
+DEFAULT_LOCALES_DIR = "data/locales"
+LEGACY_DATA_RELATIVE_PATHS = (
+    "data/save",
+    "data/memories",
+    "data/chroma",
+    "data/temp",
+)
+_DEFAULT_LOCALES_DIR = DEFAULT_LOCALES_DIR
 
 
 @dataclass(frozen=True)
@@ -231,7 +238,7 @@ class Settings:
                 "LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
             )
         path_values = {
-            name: _resolve_config_path(
+            name: resolve_config_path(
                 name,
                 env.get(name, _DEFAULT_LOCALES_DIR)
                 if name == "LOCALES_DIR"
@@ -435,12 +442,11 @@ class Settings:
 
 
 _LEGACY_DATA_PATHS = tuple(
-    Path(path)
-    for path in ("data/save", "data/memories", "data/chroma", "data/temp")
+    Path(path) for path in LEGACY_DATA_RELATIVE_PATHS
 )
 
 
-def _resolve_config_path(name: str, raw: str, project_root: Path) -> Path:
+def resolve_config_path(name: str, raw: str, project_root: Path) -> Path:
     """Resolve a configured path and reject all legacy runtime data roots."""
     value = raw.strip()
     if not value:

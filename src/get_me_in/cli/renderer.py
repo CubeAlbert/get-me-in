@@ -30,12 +30,33 @@ from src.get_me_in.application.app_results import (
     KnowledgeReloaded,
     MemoryBuildScheduled,
 )
+from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.plans import Plan, PlanStatus
-from src.get_me_in.domain.sessions import SessionView
-from src.get_me_in.cli.localization import Translator
+from src.get_me_in.domain.sessions import RuntimePhase, SessionView
+from src.get_me_in.cli.localization import LocaleCatalogError, Translator
 
 
 _SENSITIVE_ARGUMENT_NAMES = frozenset({"api_key", "authorization", "credential", "password", "secret", "token"})
+_AGENT_LOCALE_KEYS: Mapping[AgentKey, str] = {
+    AgentKey.MAIN: "agent.main",
+    AgentKey.RESUME: "agent.resume",
+    AgentKey.JOB_SEARCH: "agent.job_search",
+}
+_PHASE_LOCALE_KEYS: Mapping[RuntimePhase, str] = {
+    RuntimePhase.READY: "phase.ready",
+    RuntimePhase.MODEL_PENDING: "phase.model_pending",
+    RuntimePhase.MODEL_QUEUED: "phase.model_queued",
+    RuntimePhase.TOOL_READY: "phase.tool_ready",
+    RuntimePhase.WAITING_FOR_TOOL_RESULT: "phase.waiting_for_tool_result",
+    RuntimePhase.WAITING_FOR_APPROVAL: "phase.waiting_for_approval",
+    RuntimePhase.WAITING_FOR_SELECTION: "phase.waiting_for_selection",
+    RuntimePhase.WAITING_FOR_HANDOFF: "phase.waiting_for_handoff",
+    RuntimePhase.WAITING_FOR_USER: "phase.waiting_for_user",
+    RuntimePhase.CANCELLED_NOTICE: "phase.cancelled_notice",
+    RuntimePhase.COMPLETED: "phase.completed",
+    RuntimePhase.CANCELLED: "phase.cancelled",
+    RuntimePhase.FAILED: "phase.failed",
+}
 
 
 class Renderer:
@@ -59,10 +80,10 @@ class Renderer:
     def render_welcome(self) -> None:
         """Render the stable product identity before the first input prompt."""
         self._console.print()
-        title = escape(self._translator.text("welcome.title"))
-        help_hint = escape(self._translator.text("welcome.help_hint"))
-        self._console.print(Panel.fit(f"[bold green]{title}[/]"))
-        self._console.print(f"[dim]{help_hint}[/]")
+        title = Text(self._translator.text("welcome.title"), style="bold green")
+        help_hint = Text(self._translator.text("welcome.help_hint"), style="dim")
+        self._console.print(Panel.fit(title))
+        self._console.print(help_hint)
         self._console.print()
 
     def render_event(self, event: RuntimeEvent) -> None:
@@ -76,23 +97,17 @@ class Renderer:
             message = (
                 self._translator.text(key)
                 if key is not None
-                else self._translator.text(
-                    "progress.unknown",
-                    kind=escape(str(event.kind)),
-                )
+                else self._translator.text("progress.unknown", kind=str(event.kind))
             )
-            self._console.print(f"[dim]🔄 {escape(message)}[/]")
+            self._console.print(Text(f"🔄 {message}", style="dim"))
         elif isinstance(event, ToolStarted):
             self._render_thinking(event.thinking)
             self._console.print(Markdown(event.message))
-            tool = self._translator.text(
-                "tool.started",
-                tool_name=escape(event.tool_name),
-            )
+            tool = self._translated_markup("tool.started", tool_name=event.tool_name)
             self._console.print(f"[dim]{tool}{self._arguments_summary(event.arguments)}[/]")
         elif isinstance(event, ToolFinished):
             self._console.print(
-                f"[dim]{self._translator.text('tool.finished', tool_name=escape(event.tool_name))}[/]"
+                f"[dim]{self._translated_markup('tool.finished', tool_name=event.tool_name)}[/]"
             )
             if event.plan is not None:
                 self._render_plan(event.plan)
@@ -100,24 +115,28 @@ class Renderer:
                 self._console.print(
                     Panel(
                         Text(self._preview(event.output, limit=self._result_preview_chars)),
-                        title=self._translator.text(
+                        title=self._translated_text(
                             "tool.result_title",
-                            tool_name=escape(event.tool_name),
+                            tool_name=event.tool_name,
                         ),
                         border_style="dim",
                     )
                 )
         elif isinstance(event, ApprovalRequested):
             self._console.print(
-                f"[yellow]{self._translator.text('approval.required', tool_name=escape(event.tool_name))}[/]"
+                f"[yellow]{self._translated_markup('approval.required', tool_name=event.tool_name)}[/]"
             )
         elif isinstance(event, SelectionRequested):
             self._console.print(
-                f"[yellow]{self._translator.text('selection.required', prompt=escape(event.prompt))}[/]"
+                f"[yellow]{self._translated_markup('selection.required', prompt=event.prompt)}[/]"
             )
         elif isinstance(event, HandoffRequested):
+            target = self._enum_text(
+                event.target,
+                _AGENT_LOCALE_KEYS.get(event.target),
+            ).plain
             self._console.print(
-                f"[dim]{self._translator.text('handoff.to', target=escape(str(event.target)))}[/]"
+                f"[dim]{self._translated_markup('handoff.to', target=target)}[/]"
             )
         elif isinstance(event, Completed):
             self._render_thinking(event.message.thinking)
@@ -134,17 +153,23 @@ class Renderer:
 
     def render_session(self, view: SessionView) -> None:
         recap = Table.grid(padding=(0, 1))
-        recap.add_row(self._translator.text("session.label"), Text(view.session_id))
-        recap.add_row(self._translator.text("session.agent"), Text(str(view.active_agent)))
-        recap.add_row(self._translator.text("session.status"), Text(str(view.phase)))
+        recap.add_row(self._translated_text("session.label"), Text(view.session_id))
         recap.add_row(
-            self._translator.text("session.rewind_points"),
+            self._translated_text("session.agent"),
+            self._enum_text(view.active_agent, _AGENT_LOCALE_KEYS.get(view.active_agent)),
+        )
+        recap.add_row(
+            self._translated_text("session.status"),
+            self._enum_text(view.phase, _PHASE_LOCALE_KEYS.get(view.phase)),
+        )
+        recap.add_row(
+            self._translated_text("session.rewind_points"),
             Text(str(len(view.rewind_points))),
         )
         self._console.print(
             Panel(
                 recap,
-                title=self._translator.text("session.title"),
+                title=self._translated_text("session.title"),
                 border_style="dim",
             )
         )
@@ -169,39 +194,39 @@ class Renderer:
         elif isinstance(result, MemoryBuildScheduled):
             content = self._translator.text(
                 "application.memory_scheduled",
-                job_id=escape(result.receipt.job_id),
+                job_id=result.receipt.job_id,
             )
         else:
             content = str(result)
         self._console.print(
             Panel(
                 Text(content),
-                title=self._translator.text("application.result_title"),
+                title=self._translated_text("application.result_title"),
                 border_style="dim",
             )
         )
 
     def _render_plan(self, plan: Plan) -> None:
         table = Table(
-            title=self._translator.text("plan.title"),
+            title=self._translated_text("plan.title"),
             show_header=True,
             header_style="bold",
             box=None,
         )
-        table.add_column(self._translator.text("plan.index"), justify="right", width=4)
-        table.add_column(self._translator.text("plan.item"))
-        table.add_column(self._translator.text("plan.status"), width=8)
+        table.add_column(self._translated_text("plan.index"), justify="right", width=4)
+        table.add_column(self._translated_text("plan.item"))
+        table.add_column(self._translated_text("plan.status"), width=8)
         labels = {
-            PlanStatus.PENDING: self._translator.text("plan.status.pending"),
-            PlanStatus.IN_PROGRESS: self._translator.text("plan.status.in_progress"),
-            PlanStatus.COMPLETED: self._translator.text("plan.status.completed"),
-            PlanStatus.CANCELLED: self._translator.text("plan.status.cancelled"),
+            PlanStatus.PENDING: self._translated_text("plan.status.pending"),
+            PlanStatus.IN_PROGRESS: self._translated_text("plan.status.in_progress"),
+            PlanStatus.COMPLETED: self._translated_text("plan.status.completed"),
+            PlanStatus.CANCELLED: self._translated_text("plan.status.cancelled"),
         }
         for index, item in enumerate(plan.items, start=1):
             description = Text(item.description)
             if item.status is PlanStatus.IN_PROGRESS:
                 description.stylize("bold")
-            table.add_row(Text(str(index)), description, Text(labels[item.status]))
+            table.add_row(Text(str(index)), description, labels[item.status])
         self._console.print(table)
 
     def render_error(self, message: str) -> None:
@@ -215,7 +240,7 @@ class Renderer:
             self._console.print(
                 Panel(
                     Text(thinking),
-                    title=self._translator.text("thinking.title"),
+                    title=self._translated_text("thinking.title"),
                     border_style="dim",
                 )
             )
@@ -233,6 +258,24 @@ class Renderer:
             )
             values.append(f"{escape(str(name))}={escape(rendered)}")
         return f" ({', '.join(values)})"
+
+    def _translated_markup(self, key: str, **values: object) -> str:
+        """Translate plain catalog text before embedding it in Rich markup."""
+        return escape(self._translator.text(key, **values))
+
+    def _translated_text(self, key: str, **values: object) -> Text:
+        """Render catalog text as Rich Text so catalog markup stays inert."""
+        return Text(self._translator.text(key, **values))
+
+    def _enum_text(self, value: AgentKey | RuntimePhase | str, locale_key: str | None) -> Text:
+        """Translate a canonical enum value with an escaped-text fallback."""
+        canonical = str(getattr(value, "value", value))
+        if locale_key is None:
+            return Text(canonical)
+        try:
+            return Text(self._translator.text(locale_key))
+        except LocaleCatalogError:
+            return Text(canonical)
 
     @staticmethod
     def _preview(value: object, *, limit: int | None = None) -> str:

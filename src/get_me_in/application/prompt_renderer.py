@@ -53,7 +53,7 @@ class PromptRenderer:
         self,
         prompts_dir: Path,
         *,
-        response_locale: Locale = Locale.ZH_CN,
+        response_locale: Locale,
     ) -> None:
         self._general_agent_dir = prompts_dir / "general_agent"
         self._response_language = prompt_language_name(response_locale)

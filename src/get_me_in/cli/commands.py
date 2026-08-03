@@ -53,7 +53,7 @@ class CommandRegistry:
         self,
         specs: Iterable[CommandSpec] = (),
         *,
-        translator: Translator | None = None,
+        translator: Translator,
     ) -> None:
         self._translator = translator
         self._specs: dict[str, CommandSpec] = {}
@@ -97,11 +97,7 @@ class CommandRegistry:
         command, _, arguments = text.strip().partition(" ")
         target = self._names.get(command.casefold())
         if target is None:
-            message = (
-                self._translator.text("command.unknown", command=command)
-                if self._translator is not None
-                else f"未知命令：{command}"
-            )
+            message = self._translator.text("command.unknown", command=command)
             return CommandResult(CommandAction.HANDLED, text=message)
         return self._specs[target].handler(arguments.strip())
 
@@ -111,11 +107,7 @@ class CommandRegistry:
                 name,
                 spec.description
                 if name == spec.name
-                else (
-                    self._translator.text("command.alias", command=spec.name)
-                    if self._translator is not None
-                    else f"兼容别名；请参见 {spec.name} 的参数说明"
-                ),
+                else self._translator.text("command.alias", command=spec.name),
             )
             for spec in self._specs.values()
             for name in (spec.name, *spec.aliases)
