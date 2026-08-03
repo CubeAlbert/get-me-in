@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 287 — 完成多语言专项 L3 typed 固定事件文案与审批](#决策-287--完成多语言专项-l3-typed-固定事件文案与审批)
 - [决策 286 — 完成多语言专项 L2 CLI-owned UI 本地化](#决策-286--完成多语言专项-l2-cli-owned-ui-本地化)
 - [决策 285 — 完成多语言专项 L1 并进入 L2](#决策-285--完成多语言专项-l1-并进入-l2)
 - [决策 284 — 建立多语言 UI 与模型回复语言专项计划并留待新会话实施](#决策-284--建立多语言-ui-与模型回复语言专项计划并留待新会话实施)
@@ -6855,3 +6856,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 在 Application／domain 中直接读取环境变量或调用 CLI Translator —— 会破坏分层和 composition 注入边界，拒绝。
 - 在 L2 同时引入 `ProgressKind`、canonical tool name 或继续实施 L3 —— 超出当前切片白名单，拒绝。
+
+---
+
+### 决策 287 —— 完成多语言专项 L3 typed 固定事件文案与审批
+
+**背景：** L2 已完成 CLI-owned UI stable-key 本地化，但 Runtime 仍以自由文本 `Progress.message` 和审批摘要驱动前端展示。按 L3 白名单，本次将固定语义收敛为 typed code 与 canonical tool name，同时保持 Application／domain 不依赖 CLI Translator。
+
+**决定：**
+
+- L3 代码／测试 checkpoint 使用提交 `cfca149 feat: type progress and approval events`；新增 `ProgressKind`，迁移生产 `Progress` 构造点，并让 `ToolApproval`／`ApprovalRequested` 携带 canonical `tool_name`。
+- Renderer 按 `ProgressKind` 和 tool name 使用双语 stable key；审批确认提示由 CLI Translator 生成，Tool policy、审批状态转换、snapshot schema、取消 reason 和 raw diagnostic message 保持不变。
+- L3 验证证据为定向回归 `150/150`、完整 unittest `338/338`、`compileall`、`git diff --check`、生产构造点扫描和精确白名单审查通过。
+- 本决定不修改 `design.md`／`plan.md`，不进入 L4 以外的范围，不读取、改写、迁移或删除四个 legacy 数据目录，也不构成 R9 授权。
+
+**理由：**
+
+- typed code 避免把英文展示文本当作翻译 key，并使 Application／domain 与 CLI catalog 保持分层；canonical tool name 保留 Tool 协议标识，同时允许前端生成本地化审批文案。
+- 保留原始 failure／pause／cancel 字段和持久化契约，能在不扩大 Session 或 Runtime schema 的情况下完成展示迁移。
+- L3 独立提交并完成完整验证，便于在进入 L4 Prompt 注入前隔离协议变更与模型语言行为验证。
+
+**曾考虑的替代方案：**
+
+- 继续传递英文 Progress／审批 prompt，由 Renderer 做字符串匹配 —— 会把自由文本误当稳定协议，拒绝。
+- 让 Application 直接依赖 CLI Translator 或修改 snapshot／取消 reason —— 违反分层与既有持久化契约，拒绝。
