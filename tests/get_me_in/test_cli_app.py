@@ -1,15 +1,25 @@
 """CliApp protocol tests for typed command and event driving."""
 
 import unittest
+from pathlib import Path
 
 from src.get_me_in.application.commands import Approve, CancelSelection, Continue, Reject, UserMessage
 from src.get_me_in.application.app_commands import ReloadKnowledge
 from src.get_me_in.application.app_results import ApplicationResult, TurnFinalizationResult
+from src.get_me_in.application.localization import Locale
 from src.get_me_in.application.events import ApprovalRequested, Cancelled, Completed, Failed, HandoffRequested, Paused, Progress, SelectionRequested, ToolFinished
 from src.get_me_in.cli.app import CliApp
 from src.get_me_in.cli.commands import ApprovalMode, CommandAction, CommandResult
+from src.get_me_in.cli.localization import load_translator
 from src.get_me_in.domain.messages import MessageRecord, Role
 from datetime import datetime, timezone
+
+
+def _translator(locale: Locale = Locale.ZH_CN):
+    return load_translator(
+        Path(__file__).resolve().parents[2] / "data/locales",
+        locale,
+    )
 
 
 class CliAppTests(unittest.TestCase):
@@ -22,6 +32,7 @@ class CliAppTests(unittest.TestCase):
             _Input(("/exit",), trace=trace),
             renderer,
             _Worker(()),
+            translator=_translator(),
         )
 
         self.assertEqual(0, app.run())
@@ -32,7 +43,14 @@ class CliAppTests(unittest.TestCase):
     def test_drives_handoff_with_continue_and_snapshots_terminal_event(self) -> None:
         application = _Application()
         worker = _Worker((HandoffRequested("call", "main", "resume", "context"), Completed(_message())))
-        app = CliApp(application, _Commands((None, CommandResult(CommandAction.EXIT))), _Input(("hello", "/exit")), _Renderer(), worker)
+        app = CliApp(
+            application,
+            _Commands((None, CommandResult(CommandAction.EXIT))),
+            _Input(("hello", "/exit")),
+            _Renderer(),
+            worker,
+            translator=_translator(),
+        )
 
         self.assertEqual(0, app.run())
         self.assertEqual((UserMessage("hello"), Continue()), worker.commands)
@@ -42,7 +60,14 @@ class CliAppTests(unittest.TestCase):
         application = _Application()
         worker = _Worker((ApprovalRequested("call", "write file"), Completed(_message())))
         input_controller = _Input(("/approval auto", "hello", "/exit"))
-        app = CliApp(application, _Commands((CommandResult(CommandAction.SET_APPROVAL, approval_mode=ApprovalMode.AUTO), None, CommandResult(CommandAction.EXIT))), input_controller, _Renderer(), worker)
+        app = CliApp(
+            application,
+            _Commands((CommandResult(CommandAction.SET_APPROVAL, approval_mode=ApprovalMode.AUTO), None, CommandResult(CommandAction.EXIT))),
+            input_controller,
+            _Renderer(),
+            worker,
+            translator=_translator(),
+        )
 
         app.run()
 
@@ -59,6 +84,7 @@ class CliAppTests(unittest.TestCase):
             input_controller,
             _Renderer(),
             worker,
+            translator=_translator(),
         )
 
         app.run()
@@ -78,6 +104,7 @@ class CliAppTests(unittest.TestCase):
             _Input(("hello", "/exit")),
             _Renderer(),
             worker,
+            translator=_translator(),
         )
 
         app.run()
@@ -99,6 +126,7 @@ class CliAppTests(unittest.TestCase):
             _Input(("hello", "/exit")),
             _Renderer(),
             worker,
+            translator=_translator(),
         )
 
         app.run()
@@ -120,6 +148,7 @@ class CliAppTests(unittest.TestCase):
             input_controller,
             _Renderer(),
             _Worker(()),
+            translator=_translator(),
         )
 
         app.run()
@@ -136,6 +165,7 @@ class CliAppTests(unittest.TestCase):
             _Input(("/exit_sub", "/exit")),
             _Renderer(),
             worker,
+            translator=_translator(),
         )
 
         app.run()
@@ -151,6 +181,7 @@ class CliAppTests(unittest.TestCase):
             _Input(("/exit_sub", "/exit")),
             renderer,
             _Worker(()),
+            translator=_translator(),
         )
 
         self.assertEqual(0, app.run())
@@ -160,16 +191,46 @@ class CliAppTests(unittest.TestCase):
     def test_approval_without_argument_toggles_from_prompt_to_auto(self) -> None:
         application = _Application()
         renderer = _Renderer()
-        app = CliApp(application, _Commands((CommandResult(CommandAction.SET_APPROVAL), CommandResult(CommandAction.EXIT))), _Input(("/approval", "/exit")), renderer, _Worker(()))
+        app = CliApp(
+            application,
+            _Commands((CommandResult(CommandAction.SET_APPROVAL), CommandResult(CommandAction.EXIT))),
+            _Input(("/approval", "/exit")),
+            renderer,
+            _Worker(()),
+            translator=_translator(),
+        )
 
         app.run()
 
         self.assertEqual(["审批模式：auto"], renderer.notices)
 
+    def test_english_approval_notice_uses_translator(self) -> None:
+        application = _Application()
+        renderer = _Renderer()
+        app = CliApp(
+            application,
+            _Commands((CommandResult(CommandAction.SET_APPROVAL), CommandResult(CommandAction.EXIT))),
+            _Input(("/approval", "/exit")),
+            renderer,
+            _Worker(()),
+            translator=_translator(Locale.EN_US),
+        )
+
+        app.run()
+
+        self.assertEqual(["Approval mode: auto"], renderer.notices)
+
     def test_snapshot_failure_is_rendered_without_replacing_completed_event(self) -> None:
         application = _Application(fail_snapshot=True)
         renderer = _Renderer()
-        app = CliApp(application, _Commands((None, CommandResult(CommandAction.EXIT))), _Input(("hello", "/exit")), renderer, _Worker((Completed(_message()),)))
+        app = CliApp(
+            application,
+            _Commands((None, CommandResult(CommandAction.EXIT))),
+            _Input(("hello", "/exit")),
+            renderer,
+            _Worker((Completed(_message()),)),
+            translator=_translator(),
+        )
 
         app.run()
 
@@ -186,6 +247,7 @@ class CliAppTests(unittest.TestCase):
             _Input(("/ragreload", "/exit")),
             renderer,
             worker,
+            translator=_translator(),
         )
 
         app.run()

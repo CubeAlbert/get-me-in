@@ -11,16 +11,25 @@ from src.get_me_in.application.app_commands import ApplicationCommand
 from src.get_me_in.application.app_results import ApplicationResult
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
+from src.get_me_in.cli.localization import Translator
 
 
 class WorkerRunner:
     """Serializes blocking Application calls and forwards cancellation publicly."""
 
-    def __init__(self, application: object, renderer: object, *, poll_interval_seconds: float) -> None:
+    def __init__(
+        self,
+        application: object,
+        renderer: object,
+        *,
+        translator: Translator,
+        poll_interval_seconds: float,
+    ) -> None:
         if poll_interval_seconds <= 0:
             raise ValueError("poll_interval_seconds must be positive")
         self._application = application
         self._renderer = renderer
+        self._translator = translator
         self._poll_interval_seconds = poll_interval_seconds
         self._run_lock = Lock()
         self._closed = False
@@ -35,7 +44,10 @@ class WorkerRunner:
         worker = Thread(target=self._handle, args=(command, results), daemon=True)
         cancelled = False
         try:
-            with _status(self._renderer, "处理中"):
+            with _status(
+                self._renderer,
+                self._translator.text("status.processing"),
+            ):
                 worker.start()
                 while worker.is_alive():
                     try:

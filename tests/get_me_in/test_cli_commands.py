@@ -3,12 +3,14 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import StringIO
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 from rich.console import Console
 
 from src.get_me_in.application.app_commands import BuildMemory, DumpSession, ExitSubAgent, ReloadKnowledge, RestoreSession, RewindSession
+from src.get_me_in.application.app_results import KnowledgeReloaded
 from src.get_me_in.cli.commands import (
     ApprovalMode,
     CommandAction,
@@ -18,6 +20,7 @@ from src.get_me_in.cli.commands import (
     build_command_registry,
 )
 from src.get_me_in.cli.input import InputController
+from src.get_me_in.cli.localization import load_translator
 from src.get_me_in.cli.renderer import Renderer
 from src.get_me_in.application.events import (
     ApprovalRequested,
@@ -31,10 +34,19 @@ from src.get_me_in.application.events import (
     ToolFinished,
     ToolStarted,
 )
+from src.get_me_in.application.localization import Locale
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
+from src.get_me_in.domain.knowledge import ReloadReport
 from src.get_me_in.domain.sessions import SessionPreview
+
+
+def _translator(locale: Locale = Locale.ZH_CN):
+    return load_translator(
+        Path(__file__).resolve().parents[2] / "data/locales",
+        locale,
+    )
 
 
 class CommandRegistryTests(unittest.TestCase):
@@ -68,7 +80,12 @@ class CoreCommandTests(unittest.TestCase):
         self.application = _Application()
         self.input_controller = _InputController()
         self.renderer = _Renderer()
-        self.registry = build_command_registry(self.application, self.input_controller, self.renderer)
+        self.registry = build_command_registry(
+            self.application,
+            self.input_controller,
+            self.renderer,
+            translator=_translator(),
+        )
 
     def test_restore_and_rewind_use_public_application_api_and_refresh_history(self) -> None:
         restored = self.registry.dispatch("/restore session-2")
@@ -95,6 +112,7 @@ class CoreCommandTests(unittest.TestCase):
             self.application,
             self.input_controller,
             self.renderer,
+            translator=_translator(),
             session_preview_chars=4,
         )
 
@@ -157,6 +175,22 @@ class CoreCommandTests(unittest.TestCase):
         self.assertNotIn("/auto-approve-switch", tuple(command for command, _ in entries))
         self.assertIn(("/approval", "切换审批模式（可选参数：prompt|auto）"), entries)
 
+    def test_english_registry_uses_catalog_for_help_and_unknown_command(self) -> None:
+        registry = build_command_registry(
+            self.application,
+            self.input_controller,
+            self.renderer,
+            translator=_translator(Locale.EN_US),
+        )
+
+        entries = dict(registry.help_entries())
+
+        self.assertEqual("Show available commands", entries["/help"])
+        self.assertEqual(
+            "Unknown command: /missing",
+            registry.dispatch("/missing").text,
+        )
+
     def test_edit_dump_and_exit_subagent_delegate_only_to_public_dependencies(self) -> None:
         self.input_controller.editor_result = "long input"
 
@@ -189,7 +223,7 @@ class CoreCommandTests(unittest.TestCase):
 
 class InputControllerTests(unittest.TestCase):
     def test_read_uses_latest_completion_provider_value_each_time(self) -> None:
-        controller = InputController(editor=lambda: None)
+        controller = InputController(translator=_translator(), editor=lambda: None)
         completions = ("/first",)
         controller.set_completions(lambda: completions)
         prompts: list[object] = []
@@ -206,7 +240,7 @@ class InputControllerTests(unittest.TestCase):
         self.assertEqual(("/second",), prompts[1].kwargs["choices"])
 
     def test_editor_and_history_remain_process_local(self) -> None:
-        controller = InputController(editor=lambda: "  long text  ")
+        controller = InputController(translator=_translator(), editor=lambda: "  long text  ")
         controller.remember("first")
         controller.remember("/help")
         controller.replace_history(("restored", "/exit", "  "))
@@ -215,7 +249,7 @@ class InputControllerTests(unittest.TestCase):
         self.assertEqual(["restored"], controller._history)
 
     def test_confirm_uses_explicit_approve_and_reject_choices(self) -> None:
-        controller = InputController(editor=lambda: None)
+        controller = InputController(translator=_translator(), editor=lambda: None)
 
         with patch("src.get_me_in.cli.input.questionary.select") as select:
             select.return_value.ask.return_value = "✅ 执行"
@@ -226,11 +260,21 @@ class InputControllerTests(unittest.TestCase):
         self.assertEqual(("✅ 执行", "❌ 取消"), select.call_args_list[0].kwargs["choices"])
         self.assertEqual("", select.call_args_list[0].kwargs["qmark"])
 
+    def test_english_confirm_uses_translated_choices(self) -> None:
+        controller = InputController(translator=_translator(Locale.EN_US), editor=lambda: None)
+
+        with patch("src.get_me_in.cli.input.questionary.select") as select:
+            select.return_value.ask.return_value = "✅ Run"
+            self.assertTrue(controller.confirm("Approve tool write_file?"))
+
+        self.assertEqual(("✅ Run", "❌ Cancel"), select.call_args.kwargs["choices"])
+
 
 class RendererTests(unittest.TestCase):
     def test_preview_limits_are_injected_for_results_and_arguments(self) -> None:
         output = StringIO()
         renderer = Renderer(
+            translator=_translator(),
             console=_console(output),
             result_preview_chars=4,
             argument_preview_chars=3,
@@ -252,7 +296,7 @@ class RendererTests(unittest.TestCase):
 
     def test_renders_stable_welcome_banner(self) -> None:
         output = StringIO()
-        renderer = Renderer(console=_console(output))
+        renderer = Renderer(translator=_translator(), console=_console(output))
 
         self.assertIsNone(renderer.render_welcome())
 
@@ -261,9 +305,35 @@ class RendererTests(unittest.TestCase):
         self.assertIn("AI 求职助手", text)
         self.assertIn("输入 /help 查看所有命令", text)
 
+    def test_renders_english_cli_owned_text_and_application_result(self) -> None:
+        output = StringIO()
+        renderer = Renderer(
+            translator=_translator(Locale.EN_US),
+            console=_console(output),
+        )
+
+        renderer.render_welcome()
+        renderer.render_event(
+            ToolStarted(
+                call_id="call",
+                tool_name="search",
+                message="Searching…",
+                arguments={},
+            )
+        )
+        renderer.render_application_result(
+            KnowledgeReloaded(ReloadReport(added=("reference.md",)))
+        )
+
+        text = output.getvalue()
+        self.assertIn("AI job search assistant", text)
+        self.assertIn("Running tool: search", text)
+        self.assertIn("Knowledge reload complete: 1 added", text)
+        self.assertNotIn("正在执行工具", text)
+
     def test_renders_typed_terminal_events_without_returning_commands(self) -> None:
         output = StringIO()
-        renderer = Renderer(console=_console(output))
+        renderer = Renderer(translator=_translator(), console=_console(output))
         message = MessageRecord("event", Role.ASSISTANT, "**done**", _now(), "turn")
 
         self.assertIsNone(renderer.render_event(Completed(message)))
@@ -277,7 +347,7 @@ class RendererTests(unittest.TestCase):
 
     def test_renders_redacted_arguments_result_preview_and_plan_projection(self) -> None:
         output = StringIO()
-        renderer = Renderer(console=_console(output))
+        renderer = Renderer(translator=_translator(), console=_console(output))
         plan = Plan("plan", (PlanItem("item", "查询广州 Java 薪资", PlanStatus.IN_PROGRESS),))
 
         renderer.render_event(
@@ -306,7 +376,7 @@ class RendererTests(unittest.TestCase):
         shown_output = StringIO()
         message = MessageRecord("event", Role.ASSISTANT, "done", _now(), "turn", "final summary")
 
-        Renderer(console=_console(hidden_output)).render_event(
+        Renderer(translator=_translator(), console=_console(hidden_output)).render_event(
             ToolStarted(
                 call_id="call",
                 tool_name="search",
@@ -314,8 +384,8 @@ class RendererTests(unittest.TestCase):
                 thinking="hidden tool thinking",
             )
         )
-        Renderer(console=_console(hidden_output)).render_event(Completed(message))
-        Renderer(console=_console(shown_output), show_thinking=True).render_event(
+        Renderer(translator=_translator(), console=_console(hidden_output)).render_event(Completed(message))
+        Renderer(translator=_translator(), console=_console(shown_output), show_thinking=True).render_event(
             ToolStarted(
                 call_id="call",
                 tool_name="search",
@@ -323,7 +393,7 @@ class RendererTests(unittest.TestCase):
                 thinking="**tool summary**",
             )
         )
-        Renderer(console=_console(shown_output), show_thinking=True).render_event(Completed(message))
+        Renderer(translator=_translator(), console=_console(shown_output), show_thinking=True).render_event(Completed(message))
 
         self.assertIn("hidden tool message", hidden_output.getvalue())
         self.assertNotIn("hidden tool thinking", hidden_output.getvalue())
@@ -350,13 +420,13 @@ class RendererTests(unittest.TestCase):
         output = StringIO()
         message = MessageRecord("event", Role.ASSISTANT, "done", _now(), "turn", " \n\t")
 
-        Renderer(console=_console(output), show_thinking=True).render_event(Completed(message))
+        Renderer(translator=_translator(), console=_console(output), show_thinking=True).render_event(Completed(message))
 
         self.assertNotIn("思考摘要", output.getvalue())
 
     def test_escapes_untrusted_rich_markup_in_events_plan_help_and_arguments(self) -> None:
         output = StringIO()
-        renderer = Renderer(console=_console(output), show_thinking=True)
+        renderer = Renderer(translator=_translator(), console=_console(output), show_thinking=True)
         payload = "[bold]owned[/] [yellow]approval[/]"
         plan = Plan("plan", (PlanItem(payload, payload, PlanStatus.IN_PROGRESS),))
 

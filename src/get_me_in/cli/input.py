@@ -11,6 +11,8 @@ import questionary
 from prompt_toolkit.filters import has_completions
 from prompt_toolkit.key_binding import KeyBindings
 
+from src.get_me_in.cli.localization import Translator
+
 
 CompletionProvider = Callable[[], tuple[str, ...]]
 Editor = Callable[[], str | None]
@@ -19,7 +21,8 @@ Editor = Callable[[], str | None]
 class InputController:
     """Owns process-local input navigation, editor input, and completion lookup."""
 
-    def __init__(self, editor: Editor | None = None) -> None:
+    def __init__(self, *, translator: Translator, editor: Editor | None = None) -> None:
+        self._translator = translator
         self._editor = editor or _edit_with_system_editor
         self._completion_provider: CompletionProvider = lambda: ()
         self._history: list[str] = []
@@ -49,26 +52,31 @@ class InputController:
         return text.strip() if text else None
 
     def confirm(self, prompt: str) -> bool | None:
+        execute = self._translator.text("input.execute")
+        cancel = self._translator.text("input.cancel")
         try:
             choice = questionary.select(
                 prompt,
-                choices=("✅ 执行", "❌ 取消"),
+                choices=(execute, cancel),
                 qmark="",
             ).ask()
-            return choice == "✅ 执行"
+            return choice == execute
         except (EOFError, KeyboardInterrupt):
             return None
 
     def select(self, prompt: str, choices: Iterable[str], allow_custom: bool = False) -> str | None:
         options = list(choices)
-        custom_choice = "🔧 自定义输入..."
+        custom_choice = self._translator.text("input.custom")
         if allow_custom:
             options.append(custom_choice)
         try:
             selected = questionary.select(prompt, choices=options, qmark="").ask()
             if selected != custom_choice:
                 return selected
-            return questionary.text("请输入:", qmark="").ask()
+            return questionary.text(
+                self._translator.text("input.custom_prompt"),
+                qmark="",
+            ).ask()
         except (EOFError, KeyboardInterrupt):
             return None
 

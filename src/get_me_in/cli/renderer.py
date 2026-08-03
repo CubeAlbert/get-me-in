@@ -24,9 +24,14 @@ from src.get_me_in.application.events import (
     ToolFinished,
     ToolStarted,
 )
-from src.get_me_in.application.app_results import ApplicationResult
+from src.get_me_in.application.app_results import (
+    ApplicationResult,
+    KnowledgeReloaded,
+    MemoryBuildScheduled,
+)
 from src.get_me_in.domain.plans import Plan, PlanStatus
 from src.get_me_in.domain.sessions import SessionView
+from src.get_me_in.cli.localization import Translator
 
 
 _SENSITIVE_ARGUMENT_NAMES = frozenset({"api_key", "authorization", "credential", "password", "secret", "token"})
@@ -39,11 +44,13 @@ class Renderer:
         self,
         console: Console | None = None,
         *,
+        translator: Translator,
         show_thinking: bool = False,
         result_preview_chars: int | None = None,
         argument_preview_chars: int | None = None,
     ) -> None:
         self._console = console or Console(force_terminal=True)
+        self._translator = translator
         self._show_thinking = show_thinking
         self._result_preview_chars = result_preview_chars
         self._argument_preview_chars = argument_preview_chars
@@ -51,8 +58,10 @@ class Renderer:
     def render_welcome(self) -> None:
         """Render the stable product identity before the first input prompt."""
         self._console.print()
-        self._console.print(Panel.fit("[bold green]get-me-in[/] — AI 求职助手"))
-        self._console.print("[dim]输入 /help 查看所有命令[/]")
+        title = escape(self._translator.text("welcome.title"))
+        help_hint = escape(self._translator.text("welcome.help_hint"))
+        self._console.print(Panel.fit(f"[bold green]{title}[/]"))
+        self._console.print(f"[dim]{help_hint}[/]")
         self._console.print()
 
     def render_event(self, event: RuntimeEvent) -> None:
@@ -61,25 +70,40 @@ class Renderer:
         elif isinstance(event, ToolStarted):
             self._render_thinking(event.thinking)
             self._console.print(Markdown(event.message))
-            self._console.print(f"[dim]正在执行工具：{escape(event.tool_name)}{self._arguments_summary(event.arguments)}[/]")
+            tool = self._translator.text(
+                "tool.started",
+                tool_name=escape(event.tool_name),
+            )
+            self._console.print(f"[dim]{tool}{self._arguments_summary(event.arguments)}[/]")
         elif isinstance(event, ToolFinished):
-            self._console.print(f"[dim]工具完成：{escape(event.tool_name)}[/]")
+            self._console.print(
+                f"[dim]{self._translator.text('tool.finished', tool_name=escape(event.tool_name))}[/]"
+            )
             if event.plan is not None:
                 self._render_plan(event.plan)
             elif event.output:
                 self._console.print(
                     Panel(
                         Text(self._preview(event.output, limit=self._result_preview_chars)),
-                        title=f"工具结果 · {escape(event.tool_name)}",
+                        title=self._translator.text(
+                            "tool.result_title",
+                            tool_name=escape(event.tool_name),
+                        ),
                         border_style="dim",
                     )
                 )
         elif isinstance(event, ApprovalRequested):
-            self._console.print(f"[yellow]需要审批：{escape(event.summary)}[/]")
+            self._console.print(
+                f"[yellow]{self._translator.text('approval.required', summary=escape(event.summary))}[/]"
+            )
         elif isinstance(event, SelectionRequested):
-            self._console.print(f"[yellow]需要选择：{escape(event.prompt)}[/]")
+            self._console.print(
+                f"[yellow]{self._translator.text('selection.required', prompt=escape(event.prompt))}[/]"
+            )
         elif isinstance(event, HandoffRequested):
-            self._console.print(f"[dim]正在转交给 {escape(str(event.target))}[/]")
+            self._console.print(
+                f"[dim]{self._translator.text('handoff.to', target=escape(str(event.target)))}[/]"
+            )
         elif isinstance(event, Completed):
             self._render_thinking(event.message.thinking)
             self._console.print(Markdown(event.message.content))
@@ -87,17 +111,28 @@ class Renderer:
             self.render_error(f"{event.code}: {event.message}")
         elif isinstance(event, Paused):
             self.render_notice(f"{event.code}: {event.message}")
-            self.render_notice("当前 Agent 已暂停；请直接输入下一条消息继续当前会话。")
+            self.render_notice(self._translator.text("paused.resume_hint"))
         elif isinstance(event, Cancelled):
-            self.render_notice(f"已取消：{event.reason}")
+            self.render_notice(
+                self._translator.text("cancelled.by_user", reason=event.reason)
+            )
 
     def render_session(self, view: SessionView) -> None:
         recap = Table.grid(padding=(0, 1))
-        recap.add_row("会话", Text(view.session_id))
-        recap.add_row("当前 Agent", Text(str(view.active_agent)))
-        recap.add_row("状态", Text(str(view.phase)))
-        recap.add_row("可回退回合", Text(str(len(view.rewind_points))))
-        self._console.print(Panel(recap, title="会话摘要", border_style="dim"))
+        recap.add_row(self._translator.text("session.label"), Text(view.session_id))
+        recap.add_row(self._translator.text("session.agent"), Text(str(view.active_agent)))
+        recap.add_row(self._translator.text("session.status"), Text(str(view.phase)))
+        recap.add_row(
+            self._translator.text("session.rewind_points"),
+            Text(str(len(view.rewind_points))),
+        )
+        self._console.print(
+            Panel(
+                recap,
+                title=self._translator.text("session.title"),
+                border_style="dim",
+            )
+        )
 
     def render_help(self, entries: tuple[tuple[str, str], ...]) -> None:
         table = Table(show_header=False, box=None, padding=(0, 1))
@@ -107,18 +142,45 @@ class Renderer:
 
     def render_application_result(self, result: ApplicationResult) -> None:
         """Render an already-computed application result without choosing follow-up work."""
-        self._console.print(Panel(Text(str(result)), title="应用命令结果", border_style="dim"))
+        if isinstance(result, KnowledgeReloaded):
+            report = result.report
+            content = self._translator.text(
+                "application.knowledge_reloaded",
+                added=len(report.added),
+                updated=len(report.updated),
+                deleted=len(report.deleted),
+                failures=len(report.failures),
+            )
+        elif isinstance(result, MemoryBuildScheduled):
+            content = self._translator.text(
+                "application.memory_scheduled",
+                job_id=escape(result.receipt.job_id),
+            )
+        else:
+            content = str(result)
+        self._console.print(
+            Panel(
+                Text(content),
+                title=self._translator.text("application.result_title"),
+                border_style="dim",
+            )
+        )
 
     def _render_plan(self, plan: Plan) -> None:
-        table = Table(title="执行计划", show_header=True, header_style="bold", box=None)
-        table.add_column("序号", justify="right", width=4)
-        table.add_column("事项")
-        table.add_column("状态", width=8)
+        table = Table(
+            title=self._translator.text("plan.title"),
+            show_header=True,
+            header_style="bold",
+            box=None,
+        )
+        table.add_column(self._translator.text("plan.index"), justify="right", width=4)
+        table.add_column(self._translator.text("plan.item"))
+        table.add_column(self._translator.text("plan.status"), width=8)
         labels = {
-            PlanStatus.PENDING: "待执行",
-            PlanStatus.IN_PROGRESS: "进行中",
-            PlanStatus.COMPLETED: "已完成",
-            PlanStatus.CANCELLED: "已取消",
+            PlanStatus.PENDING: self._translator.text("plan.status.pending"),
+            PlanStatus.IN_PROGRESS: self._translator.text("plan.status.in_progress"),
+            PlanStatus.COMPLETED: self._translator.text("plan.status.completed"),
+            PlanStatus.CANCELLED: self._translator.text("plan.status.cancelled"),
         }
         for index, item in enumerate(plan.items, start=1):
             description = Text(item.description)
@@ -135,7 +197,13 @@ class Renderer:
 
     def _render_thinking(self, thinking: str | None) -> None:
         if self._show_thinking and thinking and thinking.strip():
-            self._console.print(Panel(Text(thinking), title="思考摘要", border_style="dim"))
+            self._console.print(
+                Panel(
+                    Text(thinking),
+                    title=self._translator.text("thinking.title"),
+                    border_style="dim",
+                )
+            )
 
     def status(self, message: str) -> AbstractContextManager[Any]:
         return self._console.status(Text(message))

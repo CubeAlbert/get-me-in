@@ -29,25 +29,23 @@ def main() -> int:
     project_root = Path(__file__).resolve().parents[3]
     load_dotenv(project_root / ".env")
     bootstrap_translator = _load_bootstrap_translator(project_root)
-    renderer = Renderer()
+    translator = bootstrap_translator or _diagnostic_translator()
+    renderer = Renderer(translator=translator)
     try:
         settings = Settings.from_env(os.environ, project_root=project_root)
     except SettingsValidationError as error:
-        if bootstrap_translator is None:
-            renderer.render_error(f"Configuration error: {error}")
-            return 1
-        renderer.render_error(bootstrap_translator.text("startup.settings_error", detail=str(error)))
-        return 2
+        renderer.render_error(translator.text("startup.settings_error", detail=str(error)))
+        return 1 if bootstrap_translator is None else 2
     _configure_model_loading(settings)
 
     application = None
     worker = None
     exit_code = 1
     logging_ready = False
-    translator = bootstrap_translator
     try:
         translator = load_translator(settings.locales_dir, settings.ui_locale)
         renderer = Renderer(
+            translator=translator,
             show_thinking=settings.show_thinking,
             result_preview_chars=settings.cli_result_preview_chars,
             argument_preview_chars=settings.cli_argument_preview_chars,
@@ -62,20 +60,29 @@ def main() -> int:
         logging_ready = True
         logger.info("CLI starting; log=%s level=%s", log_path, settings.log_level)
         application = build_application(settings)
-        input_controller = InputController()
+        input_controller = InputController(translator=translator)
         commands = build_command_registry(
             application,
             input_controller,
             renderer,
+            translator=translator,
             session_preview_chars=settings.session_preview_chars,
         )
         input_controller.set_completions(commands.completions)
         worker = WorkerRunner(
             application,
             renderer,
+            translator=translator,
             poll_interval_seconds=settings.cli_worker_poll_interval_seconds,
         )
-        app = CliApp(application, commands, input_controller, renderer, worker)
+        app = CliApp(
+            application,
+            commands,
+            input_controller,
+            renderer,
+            worker,
+            translator=translator,
+        )
         exit_code = app.run()
     except Exception:
         if logging_ready:
@@ -84,10 +91,7 @@ def main() -> int:
                 exc_info=True,
                 extra=_FILE_ONLY_LOG,
             )
-        if translator is None:
-            renderer.render_error("Startup failed; check the configuration or logs and try again.")
-        else:
-            renderer.render_error(translator.text("startup.failed"))
+        renderer.render_error(translator.text("startup.failed"))
         exit_code = 1
     finally:
         try:
@@ -100,11 +104,7 @@ def main() -> int:
                         exc_info=True,
                         extra=_FILE_ONLY_LOG,
                     )
-                    renderer.render_error(
-                        translator.text("close.worker_failed")
-                        if translator is not None
-                        else "CLI Worker close failed; check the logs."
-                    )
+                    renderer.render_error(translator.text("close.worker_failed"))
                     exit_code = 1
         finally:
             if application is not None:
@@ -116,11 +116,7 @@ def main() -> int:
                         exc_info=True,
                         extra=_FILE_ONLY_LOG,
                     )
-                    renderer.render_error(
-                        translator.text("close.application_failed")
-                        if translator is not None
-                        else "Application resource close failed; check the logs."
-                    )
+                    renderer.render_error(translator.text("close.application_failed"))
                     exit_code = 1
                 else:
                     for issue in close_report.issues:
@@ -132,19 +128,13 @@ def main() -> int:
                             extra=_FILE_ONLY_LOG,
                         )
                         key = "close.worker_timeout" if issue.timed_out else "close.resource_failed"
-                        if translator is None:
-                            renderer.render_error(
-                                f"Resource close {'timed out' if issue.timed_out else 'failed'} "
-                                f"({issue.resource_name}): {issue.message}"
+                        renderer.render_error(
+                            translator.text(
+                                key,
+                                resource=issue.resource_name,
+                                detail=issue.message,
                             )
-                        else:
-                            renderer.render_error(
-                                translator.text(
-                                    key,
-                                    resource=issue.resource_name,
-                                    detail=issue.message,
-                                )
-                            )
+                        )
                         exit_code = 1
             logger.info("CLI stopped")
     return exit_code
@@ -169,6 +159,21 @@ def _configure_model_loading(settings: Settings) -> None:
     configured_level = logging.getLevelNamesMapping()[settings.model_library_log_level]
     for logger_name in ("huggingface_hub", "transformers", "sentence_transformers"):
         logging.getLogger(logger_name).setLevel(configured_level)
+
+
+def _diagnostic_translator() -> Translator:
+    """Provide only the messages needed when the base catalog cannot load."""
+    return Translator(
+        Locale.EN_US,
+        {
+            "startup.settings_error": "Configuration error: {detail}",
+            "startup.failed": "Startup failed; check the configuration or logs and try again.",
+            "close.worker_failed": "CLI Worker close failed; check the logs.",
+            "close.application_failed": "Application resource close failed; check the logs.",
+            "close.worker_timeout": "Resource close timed out ({resource}): {detail}",
+            "close.resource_failed": "Resource close failed ({resource}): {detail}",
+        },
+    )
 
 
 def _load_bootstrap_translator(project_root: Path) -> Translator | None:

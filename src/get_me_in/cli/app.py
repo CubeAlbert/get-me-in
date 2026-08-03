@@ -16,17 +16,28 @@ from src.get_me_in.application.events import (
     ToolStarted,
 )
 from src.get_me_in.cli.commands import ApprovalMode, CommandAction, CommandResult
+from src.get_me_in.cli.localization import Translator
 
 
 class CliApp:
     """Owns the outer terminal loop while delegating all business work publicly."""
 
-    def __init__(self, application: object, commands: object, input_controller: object, renderer: object, worker: object) -> None:
+    def __init__(
+        self,
+        application: object,
+        commands: object,
+        input_controller: object,
+        renderer: object,
+        worker: object,
+        *,
+        translator: Translator,
+    ) -> None:
         self._application = application
         self._commands = commands
         self._input = input_controller
         self._renderer = renderer
         self._worker = worker
+        self._translator = translator
         self._approval_mode = ApprovalMode.PROMPT
 
     def run(self) -> int:
@@ -45,7 +56,9 @@ class CliApp:
                 try:
                     result = self._commands.dispatch(text)
                 except Exception as error:
-                    self._renderer.render_error(f"命令执行失败：{error}")
+                    self._renderer.render_error(
+                        self._translator.text("command.execution_failed", detail=error)
+                    )
                     continue
                 if result is None:
                     self._input.remember(text)
@@ -66,21 +79,32 @@ class CliApp:
                         result.approval_mode
                         or (ApprovalMode.AUTO if self._approval_mode is ApprovalMode.PROMPT else ApprovalMode.PROMPT)
                     )
-                    self._renderer.render_notice(f"审批模式：{self._approval_mode}")
+                    self._renderer.render_notice(
+                        self._translator.text(
+                            "approval.mode",
+                            mode=self._approval_mode.value,
+                        )
+                    )
                     continue
                 if result.action is CommandAction.DRIVE:
                     if result.event is None:
-                        self._renderer.render_error("命令未返回可驱动的运行事件。")
+                        self._renderer.render_error(
+                            self._translator.text("command.missing_event")
+                        )
                     else:
                         self._drive(result.event)
                     continue
                 if result.action is CommandAction.RUN:
                     if result.command is None:
-                        self._renderer.render_error("命令未返回可执行的应用命令。")
+                        self._renderer.render_error(
+                            self._translator.text("command.missing_application")
+                        )
                         continue
                     application_result = self._worker.run(result.command)
                     if not isinstance(application_result, ApplicationResult):
-                        self._renderer.render_error("应用命令未返回强类型结果。")
+                        self._renderer.render_error(
+                            self._translator.text("command.invalid_application_result")
+                        )
                     else:
                         self._renderer.render_application_result(application_result)
                     continue
@@ -120,8 +144,20 @@ class CliApp:
         try:
             result = self._application.finalize_turn()
             if result.snapshot_error:
-                self._renderer.render_error(f"会话保存失败：{result.snapshot_error}")
+                self._renderer.render_error(
+                    self._translator.text(
+                        "snapshot.save_failed",
+                        detail=result.snapshot_error,
+                    )
+                )
             if result.memory_error:
-                self._renderer.render_error(f"自动构建记忆失败：{result.memory_error}")
+                self._renderer.render_error(
+                    self._translator.text(
+                        "memory.auto_build_failed",
+                        detail=result.memory_error,
+                    )
+                )
         except Exception as error:
-            self._renderer.render_error(f"会话保存失败：{error}")
+            self._renderer.render_error(
+                self._translator.text("snapshot.save_failed", detail=error)
+            )

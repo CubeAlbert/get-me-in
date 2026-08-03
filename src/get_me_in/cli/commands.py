@@ -6,6 +6,7 @@ from enum import StrEnum
 
 from src.get_me_in.application.app_commands import ApplicationCommand, BuildMemory, DumpSession, ExitSubAgent, ReloadKnowledge, RestoreSession, RewindSession
 from src.get_me_in.application.events import RuntimeEvent
+from src.get_me_in.cli.localization import Translator
 
 
 class ApprovalMode(StrEnum):
@@ -37,9 +38,6 @@ class CommandResult:
 
 
 CommandHandler = Callable[[str], CommandResult]
-_CANCEL_SELECTION = "❌ 取消"
-
-
 @dataclass(frozen=True)
 class CommandSpec:
     name: str
@@ -51,7 +49,13 @@ class CommandSpec:
 class CommandRegistry:
     """Owns command names, aliases, help text, and replaceable handlers."""
 
-    def __init__(self, specs: Iterable[CommandSpec] = ()) -> None:
+    def __init__(
+        self,
+        specs: Iterable[CommandSpec] = (),
+        *,
+        translator: Translator | None = None,
+    ) -> None:
+        self._translator = translator
         self._specs: dict[str, CommandSpec] = {}
         self._names: dict[str, str] = {}
         for spec in specs:
@@ -93,12 +97,26 @@ class CommandRegistry:
         command, _, arguments = text.strip().partition(" ")
         target = self._names.get(command.casefold())
         if target is None:
-            return CommandResult(CommandAction.HANDLED, text=f"未知命令：{command}")
+            message = (
+                self._translator.text("command.unknown", command=command)
+                if self._translator is not None
+                else f"未知命令：{command}"
+            )
+            return CommandResult(CommandAction.HANDLED, text=message)
         return self._specs[target].handler(arguments.strip())
 
     def help_entries(self) -> tuple[tuple[str, str], ...]:
         entries = [
-            (name, spec.description if name == spec.name else f"兼容别名；请参见 {spec.name} 的参数说明")
+            (
+                name,
+                spec.description
+                if name == spec.name
+                else (
+                    self._translator.text("command.alias", command=spec.name)
+                    if self._translator is not None
+                    else f"兼容别名；请参见 {spec.name} 的参数说明"
+                ),
+            )
             for spec in self._specs.values()
             for name in (spec.name, *spec.aliases)
         ]
@@ -113,6 +131,7 @@ def build_command_registry(
     input_controller: object,
     renderer: object,
     *,
+    translator: Translator,
     session_preview_chars: int | None = None,
 ) -> CommandRegistry:
     """Build R5 commands using only public Application and frontend APIs."""
@@ -130,16 +149,20 @@ def build_command_registry(
 
     def dump_command(_: str) -> CommandResult:
         path = application.handle(DumpSession())
-        return handled(f"会话已导出：{path}")
+        return handled(translator.text("command.exported", path=path))
 
     def restore_command(arguments: str) -> CommandResult:
         if not arguments:
             sessions = application.list_sessions()
             if not sessions:
-                return handled("没有可恢复的会话。")
-            choices = _restore_choices(sessions)
-            selected = input_controller.select("选择要恢复的会话:", (*choices, _CANCEL_SELECTION))
-            if selected is None or selected == _CANCEL_SELECTION:
+                return handled(translator.text("command.restore.no_sessions"))
+            choices = _restore_choices(sessions, translator=translator)
+            cancel = translator.text("input.cancel")
+            selected = input_controller.select(
+                translator.text("command.restore.select"),
+                (*choices, cancel),
+            )
+            if selected is None or selected == cancel:
                 return CommandResult(CommandAction.HANDLED)
             arguments = choices[selected]
         view = application.handle(RestoreSession(arguments))
@@ -151,10 +174,18 @@ def build_command_registry(
         points = application.view().rewind_points
         if not arguments:
             if not points:
-                return handled("没有可回退的用户输入。")
-            choices = _rewind_choices(points, preview_chars=session_preview_chars)
-            selected = input_controller.select("选择要回退的输入:", (*choices, _CANCEL_SELECTION))
-            if selected is None or selected == _CANCEL_SELECTION:
+                return handled(translator.text("command.rewind.no_points"))
+            choices = _rewind_choices(
+                points,
+                preview_chars=session_preview_chars,
+                translator=translator,
+            )
+            cancel = translator.text("input.cancel")
+            selected = input_controller.select(
+                translator.text("command.rewind.select"),
+                (*choices, cancel),
+            )
+            if selected is None or selected == cancel:
                 return CommandResult(CommandAction.HANDLED)
             arguments = choices[selected]
         prefill = next((point.user_text for point in points if point.turn_id == arguments), None)
@@ -164,7 +195,7 @@ def build_command_registry(
         return CommandResult(CommandAction.PREFILL, text=prefill) if prefill is not None else CommandResult(CommandAction.HANDLED)
 
     def unavailable_command(_: str) -> CommandResult:
-        return handled("该命令将在 R6 提供，目前不可用。")
+        return handled(translator.text("command.unavailable"))
 
     def reload_command(arguments: str) -> CommandResult:
         return CommandResult(CommandAction.RUN, command=ReloadKnowledge(arguments or None))
@@ -178,7 +209,7 @@ def build_command_registry(
         elif arguments.casefold() in {"true", "false"}:
             summarize = arguments.casefold() == "true"
         else:
-            return handled("用法：/exit_sub [true|false]；默认 true，会让子 Agent 总结后退回。")
+            return handled(translator.text("command.exit_sub.usage"))
         event = application.handle(ExitSubAgent(summarize=summarize))
         if not isinstance(event, RuntimeEvent):
             raise TypeError("ExitSubAgent must return a RuntimeEvent")
@@ -190,22 +221,22 @@ def build_command_registry(
         try:
             mode = ApprovalMode(arguments.casefold())
         except ValueError:
-            return handled("审批模式仅支持 prompt 或 auto；不带参数可直接切换。")
+            return handled(translator.text("command.approval.invalid"))
         return CommandResult(CommandAction.SET_APPROVAL, approval_mode=mode)
 
-    registry = CommandRegistry()
-    registry.register(CommandSpec("/help", "显示可用命令", help_command))
-    registry.register(CommandSpec("/edit", "使用编辑器输入长文本", edit_command))
-    registry.register(CommandSpec("/dump", "导出当前会话", dump_command))
-    registry.register(CommandSpec("/restore", "恢复会话（可选 session_id）", restore_command))
-    registry.register(CommandSpec("/rewind", "选择或指定 turn_id 回退到用户回合", rewind_command))
-    registry.register(CommandSpec("/ragreload", "重载知识库（可选 target；R6 前不可用）", unavailable_command))
-    registry.register(CommandSpec("/build-memory", "构建记忆（R6 前不可用）", unavailable_command))
-    registry.register(CommandSpec("/exit_sub", "退出当前子 Agent（默认 true：总结后退回；false：用户主动退出）", exit_subagent_command))
-    registry.register(CommandSpec("/approval", "切换审批模式（可选参数：prompt|auto）", approval_command))
-    registry.register(CommandSpec("/exit", "退出 CLI", lambda _: CommandResult(CommandAction.EXIT)))
-    registry.replace(CommandSpec("/ragreload", "重载知识库（可选 target）", reload_command))
-    registry.replace(CommandSpec("/build-memory", "构建当前会话记忆", build_memory_command))
+    registry = CommandRegistry(translator=translator)
+    registry.register(CommandSpec("/help", translator.text("command.help.description"), help_command))
+    registry.register(CommandSpec("/edit", translator.text("command.edit.description"), edit_command))
+    registry.register(CommandSpec("/dump", translator.text("command.dump.description"), dump_command))
+    registry.register(CommandSpec("/restore", translator.text("command.restore.description"), restore_command))
+    registry.register(CommandSpec("/rewind", translator.text("command.rewind.description"), rewind_command))
+    registry.register(CommandSpec("/ragreload", translator.text("command.ragreload.unavailable_description"), unavailable_command))
+    registry.register(CommandSpec("/build-memory", translator.text("command.build_memory.unavailable_description"), unavailable_command))
+    registry.register(CommandSpec("/exit_sub", translator.text("command.exit_sub.description"), exit_subagent_command))
+    registry.register(CommandSpec("/approval", translator.text("command.approval.description"), approval_command))
+    registry.register(CommandSpec("/exit", translator.text("command.exit.description"), lambda _: CommandResult(CommandAction.EXIT)))
+    registry.replace(CommandSpec("/ragreload", translator.text("command.ragreload.description"), reload_command))
+    registry.replace(CommandSpec("/build-memory", translator.text("command.build_memory.description"), build_memory_command))
     return registry
 
 
@@ -217,23 +248,28 @@ def _validate_name(name: str) -> str:
 
 
 def _rewind_choices(
-    points: Iterable[object], *, preview_chars: int | None = None
+    points: Iterable[object],
+    *,
+    preview_chars: int | None = None,
+    translator: Translator,
 ) -> dict[str, str]:
     """Build human-readable rewind labels while keeping opaque turn ids internal."""
     choices: dict[str, str] = {}
     for index, point in enumerate(points, start=1):
-        preview = " ".join(point.user_text.split()) or "（空白输入）"
+        preview = " ".join(point.user_text.split()) or translator.text("input.blank_preview")
         if preview_chars is not None and len(preview) > preview_chars:
             preview = f"{preview[:preview_chars - 1]}…"
         choices[f"{index}. {preview}"] = point.turn_id
     return choices
 
 
-def _restore_choices(sessions: Iterable[object]) -> dict[str, str]:
+def _restore_choices(
+    sessions: Iterable[object], *, translator: Translator
+) -> dict[str, str]:
     """Build session labels from the public preview without exposing raw history."""
     choices: dict[str, str] = {}
     for index, session in enumerate(sessions, start=1):
-        preview = session.preview or "（没有用户输入）"
+        preview = session.preview or translator.text("input.empty_session_preview")
         timestamp = session.updated_at.strftime("%Y-%m-%d %H:%M")
         choices[f"{index}. {preview}  [{timestamp}]"] = session.session_id
     return choices

@@ -2,29 +2,65 @@
 
 from threading import Event, Thread
 from time import sleep
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 from src.get_me_in.application.commands import Continue
+from src.get_me_in.application.localization import Locale
 from src.get_me_in.application.app_commands import ReloadKnowledge
 from src.get_me_in.application.app_results import ApplicationResult
 from src.get_me_in.application.events import Progress
 from src.get_me_in.cli.worker import WorkerRunner
+from src.get_me_in.cli.localization import load_translator
+
+
+def _translator(locale: Locale = Locale.ZH_CN):
+    return load_translator(
+        Path(__file__).resolve().parents[2] / "data/locales",
+        locale,
+    )
 
 
 class WorkerRunnerTests(unittest.TestCase):
     def test_runs_one_application_command_and_returns_event(self) -> None:
         application = _Application(Progress("done"))
-        runner = WorkerRunner(application, _Renderer(), poll_interval_seconds=0.1)
+        renderer = _Renderer()
+        runner = WorkerRunner(
+            application,
+            renderer,
+            translator=_translator(),
+            poll_interval_seconds=0.1,
+        )
 
         event = runner.run(Continue())
 
         self.assertEqual(Progress("done"), event)
         self.assertEqual([Continue()], application.commands)
+        self.assertEqual(["处理中"], renderer.statuses)
+
+    def test_english_worker_status_uses_translator(self) -> None:
+        application = _Application(Progress("done"))
+        renderer = _Renderer()
+        runner = WorkerRunner(
+            application,
+            renderer,
+            translator=_translator(Locale.EN_US),
+            poll_interval_seconds=0.1,
+        )
+
+        runner.run(Continue())
+
+        self.assertEqual(["Processing"], renderer.statuses)
 
     def test_escape_requests_cancellation_only_through_application(self) -> None:
         application = _Application(Progress("cancelled"), wait_for_cancel=True)
-        runner = WorkerRunner(application, _Renderer(), poll_interval_seconds=0.001)
+        runner = WorkerRunner(
+            application,
+            _Renderer(),
+            translator=_translator(),
+            poll_interval_seconds=0.001,
+        )
 
         with patch("src.get_me_in.cli.worker._esc_pressed", side_effect=(True, False)):
             self.assertEqual(Progress("cancelled"), runner.run(Continue()))
@@ -33,7 +69,12 @@ class WorkerRunnerTests(unittest.TestCase):
 
     def test_runs_application_command_and_returns_typed_result(self) -> None:
         application = _Application(_Result())
-        runner = WorkerRunner(application, _Renderer(), poll_interval_seconds=0.1)
+        runner = WorkerRunner(
+            application,
+            _Renderer(),
+            translator=_translator(),
+            poll_interval_seconds=0.1,
+        )
 
         result = runner.run(ReloadKnowledge("references"))
 
@@ -42,7 +83,12 @@ class WorkerRunnerTests(unittest.TestCase):
 
     def test_rejects_concurrent_runs_and_close_cancels_active_work(self) -> None:
         application = _Application(Progress("done"), wait_for_cancel=True)
-        runner = WorkerRunner(application, _Renderer(), poll_interval_seconds=0.001)
+        runner = WorkerRunner(
+            application,
+            _Renderer(),
+            translator=_translator(),
+            poll_interval_seconds=0.001,
+        )
         result: list[object] = []
         thread = Thread(target=lambda: result.append(runner.run(Continue())))
         thread.start()
@@ -81,7 +127,11 @@ class _Application:
 
 
 class _Renderer:
+    def __init__(self) -> None:
+        self.statuses: list[str] = []
+
     def status(self, message: str):
+        self.statuses.append(message)
         return _Status()
 
 
