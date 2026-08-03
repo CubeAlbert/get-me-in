@@ -792,9 +792,9 @@ UI 使用专用 locale loader 从 `data/locales/` 加载严格 key 对齐的 JSO
 
 Memory build、Memory repository、embedding／reranker、Chroma index 和 Knowledge lifecycle 不在本专项范围。当前生产索引已用英文技术栈查询和英文年龄查询对中文 Memory 完成真实 Top-1 验证；该证据只支持首版 zh-CN／en-US 方案，最终仍须由真实 provider／TTY smoke 证明模型会在英文回合正确调用一次 `query_memory` 并用英文回答。
 
-完整类型、资源、逐切片白名单、验证矩阵、停止条件和新会话入口以 [`docs/multilingual-support.md`](multilingual-support.md) 为准。本专项独立于 R9，实施或完成都不构成 R9 授权。
+当前类型、资源、运行边界、验证结论和停止条件由本节、`docs/plan.md`、`docs/task.md` 与 `docs/current.md` 保存；已完成切片的逐文件白名单和执行过程由 Git 与决策 284～293 追溯。本专项独立于 R9，实施或完成都不构成 R9 授权。
 
-L1～L4 已分别完成代码／测试 checkpoint；L5 的定向验证 `151/151`、完整 unittest `346/346`、compileall、diff-check、静态 contract、fake/headless component smoke 和用户确认的双语言真实 provider／Windows TTY 体验均已通过。L6 已完成 README、核心状态文档和决策记录收口；代码／测试审查修复 checkpoint 为 `02c9c5d`。专项文档按用户要求保留，作为完整范围、白名单和验证矩阵的历史参考。
+L1～L4 已分别完成代码／测试 checkpoint；L5 的定向验证 `151/151`、完整 unittest `346/346`、compileall、diff-check、静态 contract、fake/headless component smoke 和用户确认的双语言真实 provider／Windows TTY 体验均已通过。L6 已完成 README、核心状态文档和决策记录收口；代码／测试审查修复 checkpoint 为 `02c9c5d`。完成态专项执行文档已在最终事实迁入核心文档后删除，历史范围、白名单和验证矩阵继续由 Git 与决策记录保存。
 
 ### 6.13 InterviewAgent Workflow 前置备忘（R9，非确认清单）
 

@@ -360,7 +360,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **目标：** 首版支持 `zh-CN`／`en-US`。CLI 自有文本由 strict locale catalog loader 和命名占位符生成；Main／Resume system prompt 注入统一 ResponseLanguage。UI、对话回复和 Resume artifact language 保持三个独立语义，不复制完整 system prompt，不改变模型消息 schema。
 
-**范围：** 新增进程级 `UI_LOCALE`、`MODEL_RESPONSE_LANGUAGE`、`LOCALES_DIR`；新增 typed Locale、CLI Translator、两份 locale catalog 和 `07_response_language.md`；本地化 CLI-owned 文案，并将固定 Progress／审批展示语义改为 typed code／canonical tool name 后由前端翻译。完整新类型、文件白名单和禁止清单以 [`docs/multilingual-support.md`](multilingual-support.md) 为准。
+**范围：** 新增进程级 `UI_LOCALE`、`MODEL_RESPONSE_LANGUAGE`、`LOCALES_DIR`；新增 typed Locale、CLI Translator、两份 locale catalog 和 `07_response_language.md`；本地化 CLI-owned 文案，并将固定 Progress／审批展示语义改为 typed code／canonical tool name 后由前端翻译。当前类型与边界由 `docs/design.md`、`docs/task.md` 和代码保存；已完成切片的文件白名单由 Git 与决策 284～293 追溯。
 
 **实施顺序：** L0 文档计划（本会话完成）→ L1 Locale／loader／Settings → L2 CLI-owned UI → L3 typed 固定事件文案与审批 → L4 ResponseLanguage Prompt → L5 完整验证与真实 provider／TTY smoke → L6 用户审查与文档收口。L1～L4 各自形成独立代码／测试 checkpoint；L5 原则上不修改 production；L6 文档独立 checkpoint。
 
@@ -370,7 +370,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **停止门禁：** L1～L6 已完成；不得增加 `/language`、自动检测、Session locale 字段、Prompt 多语言副本、Memory build 改造、依赖、索引迁移或 R9 工作。任何白名单扩展或 schema／公开 API 变化先停止确认；R9 仍需独立授权。
 
-**当前状态：** L0～L4 代码／测试 checkpoint、L5 工程验证与用户确认的双语言真实 provider／Windows TTY 体验均已完成；L5 最终完整 unittest 为 `346/346`，代码／测试审查修复 checkpoint 为 `02c9c5d`。L6 README、五份核心文档和决策记录已完成；专项文档按用户要求保留。本专项不构成 R9 授权。
+**当前状态：** L0～L4 代码／测试 checkpoint、L5 工程验证与用户确认的双语言真实 provider／Windows TTY 体验均已完成；L5 最终完整 unittest 为 `346/346`，代码／测试审查修复 checkpoint 为 `02c9c5d`。L6 README、五份核心文档和决策记录已完成，完成态专项执行文档已在最终事实合并后删除。本专项不构成 R9 授权。
 
 ### R9 —— 新功能恢复
 
