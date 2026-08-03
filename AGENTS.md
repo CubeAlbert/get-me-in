@@ -170,6 +170,7 @@ main.py
 - 新模块、公开类或公开方法必须先确认设计和清单；R8-G 不允许创建或修改这些对象。
 - R0～R8 继续冻结 InterviewAgent、LearningAgent、完整 Job Search、Sticky Plan 和其他 R9 功能。
 - 保留用户已有工作树变更；删除或移动前必须解析并核对精确绝对路径。
+- 在受限 Codex 沙箱中执行会写入 Git 索引或仓库元数据的 `git add`／`git commit` 时，直接申请对应命令的窄范围授权，不先执行一次已知会因 `.git/index.lock: Permission denied` 失败的普通尝试。该错误且无实际 lock 文件、无活动 Git／Git LFS 进程时按沙箱写权限不足处理，不得删除 lock 或修改 ACL；只有错误为 `File exists` 时才排查并发进程或 stale lock。
 - 禁止 Bash/Python 脚本直接读写项目文件；使用专用读取、搜索和补丁工具。
 - `docs/current.md` 新增决策摘要时必须同步追加 `docs/decision.md`。
 
