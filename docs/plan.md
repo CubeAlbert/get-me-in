@@ -1,6 +1,6 @@
 # 实施计划
 
-> 适用分支：`refactor`
+> 适用分支：`main`
 >
 > 工作流继续遵循 **Plan → Execute → Result Validation → Replan**。本文只描述重构顺序与验收门禁；任务粒度见 `docs/task.md`，目标架构见 `docs/design.md`。
 

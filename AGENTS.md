@@ -4,7 +4,7 @@
 
 ## 项目
 
-**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。`refactor` 分支已将生产入口切换到 `src/get_me_in/` v2；R8-D 已删除 legacy production 源码，R8-G 文档归一化与 G8 已完成并通过最终用户审查，当前停在 R9 独立授权门禁前。
+**get-me-in** 是面向程序员的 CLI AI 求职助手，使用 Python 3.14 和多 Agent Hub-and-Spoke 架构。生产入口已切换到 `src/get_me_in/` v2；R8-D 已删除 legacy production 源码，R8-G 文档归一化与 G8 已完成并通过最终用户审查，当前停在 R9 独立授权门禁前。
 
 ## 新会话恢复顺序
 
@@ -25,7 +25,7 @@ R8-D 已由提交 `7514af3` 精确删除 51 个 legacy production 文件，并�
 新会话必须：
 
 1. 先执行 `/project-bootstrap`，读取 `docs/current.md`、决策 239／240／241 和 `docs/task.md` 的 R8 完成态。
-2. 确认分支为 `refactor`、工作区干净、`HEAD` 包含 `7514af3`、`c13d455` 与完成态文档契约提交 `860aaae`。
+2. 确认分支为 `main`、工作区干净、`HEAD` 包含 `7514af3`、`c13d455` 与完成态文档契约提交 `860aaae`。
 3. 未取得 R9 单独授权前，只能审查 R8 完成状态，不得检查、设计或实施 R9。
 4. 若后续发现 R8 回归，先记录最小问题与证据并取得对应授权；不得借修复之名进入 R9。
 
@@ -163,7 +163,7 @@ main.py
 - 项目遵循 **Plan → Execute → Result Validation → Replan**；完成阶段后使用 `/project-checkpoint`。
 - 使用同步代码，不引入 `asyncio` 或异步框架。
 - 运行项目 Python 代码必须使用 `uv run`。
-- `refactor` 分支已授权核心自动化测试；纯 domain/application 逻辑必须有自动化保护，真实 LLM、Chroma、LaTeX 与 CLI 交互使用集成或 smoke 验证。
+- 核心自动化测试已获授权；纯 domain/application 逻辑必须有自动化保护，真实 LLM、Chroma、LaTeX 与 CLI 交互使用集成或 smoke 验证。
 - 不得通过删除测试、放宽 typed contract 或用 mock 掩盖真实 adapter 问题来获得绿灯。
 - Agent key、capability、状态和事件使用声明式常量／枚举，不写裸字符串控制协议。
 - v2 禁止 import legacy package；`tests/get_me_in/test_import_boundaries.py` 持续维护 forbidden module 防回归。

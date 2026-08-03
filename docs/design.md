@@ -1,6 +1,6 @@
 # 系统设计文档
 
-> 适用分支：`refactor`
+> 适用分支：`main`
 >
 > 本文是当前 v2 架构与剩余迁移边界的唯一设计来源。历史 v1 设计由 Git 保留，不再维护并行的重构设计文件。
 
@@ -15,7 +15,7 @@ R0 重构启动时，legacy 项目已经完成一个可运行的 CLI 多 Agent �
 - Tool 使用 `__switch__`、`__reject__`、`__cancelled__` 魔法字典传递控制流，Request/Response 枚举仍保留已废弃分支。
 - 新增 Agent 需要重复实现约 14 个 `_get_*()` 方法；三个现有 Agent 的大部分代码都是提示词元数据样板。
 
-因此本分支采用 **受控重写（controlled rewrite）**：在新的 `src/get_me_in/` 包中构建 v2，通过纵向切片逐步获得功能等价；不在原有 `BaseAgent` 和 `App` 上继续做大规模就地拆分。
+因此项目采用 **受控重写（controlled rewrite）**：在新的 `src/get_me_in/` 包中构建 v2，通过纵向切片逐步获得功能等价；不在原有 `BaseAgent` 和 `App` 上继续做大规模就地拆分。
 
 当前 v2 已完成 R0～R8。根 `main.py` 已在 R8-E 切换到 `src.get_me_in.cli.main.main()`，R8-O 完整 smoke 与用户审查已经通过；R8-D 由提交 `7514af3` 删除 51 个 legacy production 文件，并由 `c13d455` checkpoint；R8-G 文档归一化与完整 G8 已完成，最终用户审查由决策 240 收口。当前停在 R9 独立授权门禁前，不检查、设计或实施 R9。
 
@@ -850,7 +850,7 @@ v2 只复用以下静态项目资产：
 
 ## 8. 验证策略
 
-用户已明确授权在 `refactor` 分支为核心 domain/runtime/session/tool codec/workspace 编写自动化 characterization、unit 和 contract tests。Adapter、CLI、真实 LLM、Chroma 与 LaTeX 仍通过集成测试、Notebook 或人工 smoke checklist 验证。
+用户已明确授权为核心 domain/runtime/session/tool codec/workspace 编写自动化 characterization、unit 和 contract tests。Adapter、CLI、真实 LLM、Chroma 与 LaTeX 仍通过集成测试、Notebook 或人工 smoke checklist 验证。
 
 每个迁移门禁至少验证：基础对话、工具成功/失败/拒绝、主→子→主 handoff、Plan、save/restore/rewind、Esc cancel、RAG query、Memory write/query、Resume template/edit/build。自动化测试应优先覆盖纯 domain/application 逻辑和失败路径，不用 mock 掩盖真实 adapter 集成问题。
 

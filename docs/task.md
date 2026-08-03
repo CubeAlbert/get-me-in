@@ -1,6 +1,6 @@
 # 任务列表
 
-> 适用分支：`refactor`。架构目标见 `docs/design.md`，里程碑见 `docs/plan.md`。
+> 适用分支：`main`。架构目标见 `docs/design.md`，里程碑见 `docs/plan.md`。
 
 ## 状态说明
 
@@ -199,7 +199,7 @@
 - ✅ G4 完成并 checkpoint 后，基于实际 Application/Session/Command/Event/cancellation API 重新 Review R5～R8。
 - ✅ 复核 R5 CliApp、CommandRegistry、InputController、Renderer、WorkerRunner 的职责和新文件/公开方法清单，确保 CLI 不吸收业务编排。
 - ✅ 复核 R6 命令接入与资源清理、R6/R7 并行及验收依赖、R8 删除/回退/临时 Runner 清理范围。
-- ✅ 将复审结论与 R5 清单同步到 refactor design/plan/task/decision。
+- ✅ 将复审结论与 R5 清单同步到活跃 design/plan/task/decision。
 - ✅ 用户已确认 `docs/design.md#67-cli` 的 R5 新文件、类与公开方法清单；允许在新会话按清单开始编码。
 
 ### 1. CLI shell
@@ -531,7 +531,7 @@
 
 #### 4.2 删除前安全快照
 
-- ✅ 确认分支为 `refactor`、工作区无未提交修改，并记录 R8-D 的父提交；确认 R8-E 回退提交仍为 `9fbeabc`，R8-O 修复与 checkpoint 均已包含在当前历史中。
+- ✅ 确认工作区无未提交修改，并记录 R8-D 的父提交；确认 R8-E 回退提交仍为 `9fbeabc`，R8-O 修复与 checkpoint 均已包含在当前历史中。
 - ✅ 重新生成 51 个 Git 跟踪文件的精确清单，并检查白名单目录中的非跟踪／忽略内容、symlink／reparse point；如出现除生成型 `__pycache__`／`.pyc` 与已知 checkpoint 外的意外内容，立即停止并重新审查，不按目录整体删除。
 - ✅ 对 `data/save/`、`data/memories/`、`data/chroma/`、`data/temp/` 记录删除前只读指纹／mtime 基线，并确认本轮所有待执行命令都不以 `data/`、工作区根目录、通配符或未解析变量作为删除目标。
 - ✅ 再次确认保留白名单：`src/__init__.py`、完整 `src/get_me_in/`、`tests/get_me_in/`、`data/reference/`、`data/prompts/`、`data/resume/template/`、`data/workspace/` 与 `data/v2/`；R8-D 不迁移、覆盖或删除任何旧 `data/` 运行数据。
@@ -566,7 +566,7 @@
 - ✅ 将 capability parity、G0 audit、legacy CLI smoke、legacy entry baseline 与 v2 static asset boundary 的有效内容映射到四份主文档和 Git 历史，并删除五份辅助文档；`docs/` 只保留 `current.md` 与四份主文档。
 - ✅ 用户审查 R8-D 完成情况：提交 `7514af3` 仅删除 51 个白名单文件，`c13d455` 完成 checkpoint；本轮独立复验 283 项 unittest、`compileall`、`git diff --check` 与生产 legacy import／动态 import 扫描均通过。
 - ✅ 用户接受本节 5.1～5.6 的详细清单，并明确本会话只更新文档、不修改代码；本项只确认清单，不构成 R8-G 实施授权。
-- ✅ 新会话已执行 `/project-bootstrap`，确认分支为 `refactor`、工作区干净、`HEAD` 包含 `c13d455` 与 `7514af3`，并取得用户对 R8-G 的单独明确授权；现从 5.2 开始。
+- ✅ 新会话已执行 `/project-bootstrap`，确认工作区干净、`HEAD` 包含 `c13d455` 与 `7514af3`，并取得用户对 R8-G 的单独明确授权；现从 5.2 开始。
 - ✅ R8-G 只允许修改 `.env.example`、`README.md`、`AGENTS.md`、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与 `docs/decision.md`；不得修改 `main.py`、`src/`、`tests/`、`scripts/`、`data/`、`pyproject.toml` 或 `uv.lock`。
 - ✅ 已确认：若 G8 暴露生产代码、测试、依赖、公开协议或数据迁移缺陷，立即停止 R8-G，保留失败证据并提交独立修复清单供用户审查；不得把修复混入 R8-G 文档／配置提交，也不得以改测试、放宽契约或跳过真实 adapter 获得绿灯。
 
@@ -618,7 +618,7 @@
 - ✅ 用户确认改为唯一 `message/thinking/tool_call` envelope，Parser 继续只返回现有 `ModelReply`，不改变 RuntimeEvent／Session 消息／工具／handoff／CLI 协议。
 - ✅ 用户要求提高每回合 repair 冗余；计划固定为每个 Agent 用户 turn 最多 3 次模型格式修复，本地 `json_repair` 不计数，第四次失败暂停，下一条 `UserMessage` 清零。
 - ✅ 用户确认必须增加自动化回归；真实模型随机性由用户在工程验证后执行最终 smoke。本会话只更新文档，不修改生产代码或测试。
-- ✅ 新会话已执行 `/project-bootstrap`，确认分支为 `refactor`、工作区干净、`HEAD` 包含决策 242 文档提交；只实施本节清单，不检查或进入 R9。
+- ✅ 新会话已执行 `/project-bootstrap`，确认工作区干净、`HEAD` 包含决策 242 文档提交；只实施本节清单，不检查或进入 R9。
 
 ### 2. 单一 OutputFormat 与 Parser
 
@@ -653,7 +653,7 @@
 - ✅ 对照删除前 v1 的 `Message.to_json()`／`Message.from_llm_reply()` 与两份格式文档，确认稳定基线是“两个方向文档 + 一个 Message Entity + flat tool/event_payload”。
 - ✅ 按用户要求 hard reset 到 `8111319`，撤销错误合并 Prompt 的 4 个提交；决策 249 取代决策 248 的单文件方案。
 - ✅ 本会话只纠正五份活跃文档并建立 checkpoint，不修改生产代码、Prompt 或测试。
-- ✅ 新会话已执行 `/project-bootstrap`，确认 `refactor`、工作区干净、HEAD 包含决策 249；只实施本节，未检查或进入 R9。
+- ✅ 新会话已执行 `/project-bootstrap`，确认工作区干净、HEAD 包含决策 249；只实施本节，未检查或进入 R9。
 
 ### 2. 单一 Entity 与 codec
 
