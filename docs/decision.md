@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 286 — 完成多语言专项 L2 CLI-owned UI 本地化](#决策-286--完成多语言专项-l2-cli-owned-ui-本地化)
 - [决策 285 — 完成多语言专项 L1 并进入 L2](#决策-285--完成多语言专项-l1-并进入-l2)
 - [决策 284 — 建立多语言 UI 与模型回复语言专项计划并留待新会话实施](#决策-284--建立多语言-ui-与模型回复语言专项计划并留待新会话实施)
 - [决策 283 — 完成 Knowledge 取消作用域修复 K5 最终收口](#决策-283--完成-knowledge-取消作用域修复-k5-最终收口)
@@ -6829,3 +6830,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 为新增 Settings 字段增加隐式 dataclass 默认值以避免修改 fixture —— 会削弱配置 fail-fast 语义，拒绝。
 - 将状态文档修改混入 L1 代码／测试提交 —— 会混淆实现 checkpoint 与项目状态 checkpoint，拒绝。
+
+---
+
+### 决策 286 —— 完成多语言专项 L2 CLI-owned UI 本地化
+
+**背景：** L1 已建立 `Locale`、strict catalog loader、双语 catalog、Settings 语言配置和 bootstrap 诊断。按 `docs/multilingual-support.md` 的 L2 白名单，本次继续迁移 CLI-owned UI，目标是让 CLI 自有文案通过 stable key 使用已解析的 `Translator`，同时保留命令名、Rich／Markdown／escape、thinking Panel、参数脱敏和 Application／domain 边界。
+
+**决定：**
+
+- L2 代码／测试 checkpoint 使用提交 `a868252 feat: localize CLI-owned UI`；变更限于两个 locale catalog、`Renderer`、`InputController`、`CommandRegistry`、`CliApp`、`WorkerRunner`、bootstrap wiring 以及对应 CLI 测试白名单。
+- `Renderer` 负责 CLI-owned event、session、plan、approval、handoff、暂停／取消和 application result presentation 的 catalog 文案；模型生成的 message、thinking、question、choices 和 Plan description 不做 UI 二次翻译。
+- `Translator` 通过 composition root 注入 CLI 组件；Application 与 domain 不依赖 CLI Translator。Progress 的固定事件文案保留到 L3 的 `ProgressKind`／canonical tool name 切片处理。
+- L2 验证证据为完整 unittest `338/338`、`compileall`、`git diff --check` 和精确白名单审查通过；本次未修改 L1 白名单外文件，未修改 `tests/get_me_in/test_bootstrap.py`。
+- 本决定不修改 `design.md`／`plan.md`，按当前门禁停在 L3 前，不读取、改写、迁移或删除四个 legacy 数据目录，也不构成 R9 授权。
+
+**理由：**
+
+- stable key 注入能够集中迁移 CLI 自有文案，同时保持 Rich 样式、Markdown 内容、escape 边界和动态参数脱敏；将 Translator 留在 CLI 侧避免 Application／domain 反向依赖前端实现。
+- L2 与 L3 分离可以保留当前 typed event 契约，并避免在本次 UI 文案迁移中扩大 Progress 事件或 canonical tool name 的协议范围。
+- 代码／测试提交与状态文档 checkpoint 分离，能够单独回退实现并保留阶段、验证和白名单证据。
+
+**曾考虑的替代方案：**
+
+- 在 Application／domain 中直接读取环境变量或调用 CLI Translator —— 会破坏分层和 composition 注入边界，拒绝。
+- 在 L2 同时引入 `ProgressKind`、canonical tool name 或继续实施 L3 —— 超出当前切片白名单，拒绝。

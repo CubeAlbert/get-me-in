@@ -859,7 +859,7 @@
 - ✅ L0：建立 [`docs/multilingual-support.md`](multilingual-support.md)，固定 `zh-CN`／`en-US`、两个进程级语言配置、完整新类型、逐切片文件白名单、禁止清单、测试矩阵、真实 smoke、checkpoint 和停止门禁。
 - ✅ L0：用当前 production Chroma、embedding 和 reranker 完成两组英文→中文 Memory 查询对照；技术栈与年龄均正确 Top-1。本证据不修改 Memory／索引，也不替代真实模型工具调用 smoke。
 - ✅ L1：新增 typed Locale、strict catalog loader、zh-CN／en-US catalog，以及 `UI_LOCALE`／`MODEL_RESPONSE_LANGUAGE`／`LOCALES_DIR` Settings；解决 Settings 解析前诊断 Renderer 的 bootstrap locale 顺序。代码／测试 checkpoint 为 `21ccef3`；用户批准将仅含新增必填 Settings fixture 字段的 `tests/get_me_in/test_bootstrap.py` 纳入 L1 测试白名单；333 项 unittest、compileall、diff-check 通过。
-- 🔄 L2：本地化 Renderer、InputController、CommandRegistry、CliApp、WorkerRunner 和 application result presentation；保持命令名、Rich／Markdown／escape、thinking Panel 和参数脱敏契约。
+- ✅ L2：完成 Renderer、InputController、CommandRegistry、CliApp、WorkerRunner 和 application result presentation 的本地化；保持命令名、Rich／Markdown／escape、thinking Panel 和参数脱敏契约。代码／测试 checkpoint 为 `a868252`；完整 unittest `338/338`、compileall、diff-check 和 L2 精确白名单审查通过。
 - ⬜ L3：用 `ProgressKind` 和 canonical tool name 替代固定英文 Progress／审批展示文本；前端按 stable code 翻译，Application／domain 不依赖 CLI Translator，snapshot 与取消 reason 不变。
 - ⬜ L4：新增 `06_response_language.md` 与 `RESPONSE_LANGUAGE` 注入；Main／Resume 使用相同 resolved locale，InputFormat／OutputFormat、ModelMessageCodec 和 format repair 不变。
 - ⬜ L5：完成定向／完整 unittest、compileall、diff-check、catalog／Prompt 静态 contract、zh-CN／en-US component smoke 和双语言真实 provider／TTY 矩阵；英文 Memory smoke 必须由真实模型按既有被动契约调用一次 `query_memory`。
