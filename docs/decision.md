@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 284 — 建立多语言 UI 与模型回复语言专项计划并留待新会话实施](#决策-284--建立多语言-ui-与模型回复语言专项计划并留待新会话实施)
 - [决策 283 — 完成 Knowledge 取消作用域修复 K5 最终收口](#决策-283--完成-knowledge-取消作用域修复-k5-最终收口)
 - [决策 282 — 完成 Knowledge 取消作用域修复 K4 验证并等待用户审查](#决策-282--完成-knowledge-取消作用域修复-k4-验证并等待用户审查)
 - [决策 281 — 完成 Knowledge 取消作用域修复 K1～K3](#决策-281--完成-knowledge-取消作用域修复-k1k3)
@@ -6768,3 +6769,39 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 保留已完成的临时专项计划作为当前状态来源 —— 会形成与核心文档并行的状态入口，拒绝。
 - 将本修复完成解释为 R9 已授权 —— R9 仍需独立指令，拒绝。
+
+---
+
+### 决策 284 —— 建立多语言 UI 与模型回复语言专项计划并留待新会话实施
+
+**背景：** 用户要求评估同时覆盖 CLI UI 和模型返回语言的多语言支持，并明确本会话不 coding、只生成完整计划和实施细节，后续在新会话执行。只读审查确认当前 CLI welcome／help／commands／input／Renderer／startup／shutdown 等文案大量硬编码中文，部分 Runtime／Tool 固定提示为英文；Main 只在能力介绍等局部场景要求使用用户语言，Resume 和统一 OutputFormat 没有一等公民的回复语言配置。当前 PromptRenderer 按文件名拼接中文通用模板、AgentSpec 和 ToolDefinition，ModelMessageCodec 只校验 flat JSON 结构与非空 message，不校验自然语言。进一步用当前 production Chroma、`BAAI/bge-base-zh-v1.5` embedding 和既有 reranker 对当前中文 Memory 执行英文技术栈／英文年龄查询，两个英文查询均正确 Top-1，中文对照也正确；测试未修改 Memory、索引或代码。
+
+**决定：**
+
+- 新增 [`docs/multilingual-support.md`](multilingual-support.md)，由新会话按 L1～L6 实施；本会话只完成 L0 文档计划，不修改生产代码、测试、配置或数据。
+- 首版只支持 `zh-CN`／`en-US`，新增进程级 `UI_LOCALE`、`MODEL_RESPONSE_LANGUAGE` 和 `LOCALES_DIR`；`MODEL_RESPONSE_LANGUAGE=ui` 解析为当前 UI locale。不增加 `/language`、自动检测或运行时切换，因此不修改 SessionState、SessionSnapshotCodec 或 schema。
+- UI 新增 typed Locale、strict JSON catalog loader 和 immutable Translator；`zh-CN`／`en-US` catalog 必须 key set 与命名占位符完全一致。Renderer／InputController／CommandRegistry／CliApp／WorkerRunner 通过 stable key 生成普通文本；Rich／Markdown／escape／参数脱敏继续由代码控制。
+- Application 不依赖 CLI Translator。固定 Progress 使用 typed `ProgressKind`，ToolApproval／ApprovalRequested 携带 canonical tool name；Failed／Paused 继续以 code 映射，Cancelled reason 与 snapshot 现有契约保持不变。模型生成的 message／thinking／question／choices／Plan description 不做 UI 二次翻译。
+- 新增唯一 `data/prompts/general_agent/06_response_language.md` 与 `RESPONSE_LANGUAGE` placeholder，由 bootstrap 将同一 resolved locale 注入 Main／Resume。Prompt 要求所有用户可见模型内容使用目标语言，同时保留代码、路径、命令、Tool 名、JSON key、专有名词和引用原文；Resume artifact language 保持独立。
+- 保留 filename-driven PromptRenderer，不复制整套 system prompt；不修改 `07_input_format.md`、`08_output_format.md`、ModelMessageEntity／ModelMessageCodec、format repair、provider JSON mode、AgentSpec／ToolDefinition canonical 元数据。
+- Memory build、MemoryExtractor prompt、Memory repository、Knowledge lifecycle、embedding／reranker、Chroma index 和现有数据不在范围。英文直接检索成功作为首版可行性证据，但真实 provider／TTY 门禁仍须证明模型在英文回合按既有被动契约调用一次 `query_memory` 并用英文回答。
+- L1 Locale／loader／Settings、L2 CLI-owned UI、L3 typed 固定事件文案、L4 ResponseLanguage Prompt 各自独立代码／测试 checkpoint；L5 完整 unittest／compileall／diff-check／静态 contract／双语言 component 与真实 provider／TTY smoke；L6 用户审查、README／核心文档和完成决策独立收口。
+- 本专项独立于 R9，实施和完成都不构成 R9 授权；四个 legacy 数据目录继续不得读取、改写、迁移或删除。任何文件白名单、公开 API、schema、依赖或数据范围扩展必须停止确认。
+
+**理由：**
+
+- UI locale 与模型回复语言属于不同边界：前者是 frontend presentation，后者是 LLM instruction。分开配置、由 composition root 注入可以避免 Domain/Application 读取环境变量或依赖具体前端，同时允许默认跟随 UI。
+- stable key／命名占位符比对最终字符串做全局替换更可验证，也能保持动态值转义、Rich 样式、Markdown 和参数脱敏的现有安全边界。
+- 一段动态 ResponseLanguage 足以表达目标语言；复制 InputFormat／OutputFormat、Tool schema 或全部 system prompt 会产生协议、安全约束和修复规则漂移。
+- 自然语言是否符合目标语言不适合进入 JSON parser 或 format repair；prompt contract 加真实 provider smoke 能区分结构确定性与模型行为证据。
+- 用户明确说明正常情况下不应频繁切换语言；首版使用进程级配置可以避免不必要的 session migration、恢复语义和历史翻译问题。
+- 两组当前索引英文查询已证明本次具体 zh-CN／en-US 需求无需先更换检索模型；保持 Memory／RAG 不变能缩小风险和避免无关索引重建。
+
+**曾考虑的替代方案：**
+
+- 为每种语言复制整套 general Agent system prompt —— Input／Output schema、Handoff、Tool authority 和安全约束会形成多份权威来源，拒绝。
+- 仅要求模型“跟随用户语言”并自动检测每轮输入 —— 代码、JD、HandoffContext 和混合语言会导致 Main／Resume 间漂移，且用户没有频繁切换需求，拒绝。
+- 增加 `/language` 并持久化到 Session —— 会扩大 command、Session schema、restore／rewind 和 migration 范围，首版不需要，拒绝。
+- 在 ModelMessageCodec 中检测输出语言并触发 format repair —— 语言识别对代码、专有名词和混合文本不确定，也会混淆结构错误与行为质量，拒绝。
+- 因默认 embedding 名称偏中文而立即更换模型／重建索引 —— 当前真实英文查询已通过，且更换会扩大持久化与真实数据风险，拒绝。
+- 同时改造 Memory build 统一语言 —— 用户不频繁切换语言，当前需求只涉及 UI 和回复语言；会无必要扩大后台 LLM 与数据边界，拒绝。

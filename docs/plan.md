@@ -356,6 +356,22 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **完成结论：** K1～K4 已完成工程验证与 production composition smoke；用户确认普通 Runtime 取消、`/ragreload` 取消／重试和 prepare 中 `/exit` 三项真实终端测试无问题。K5 已完成，五份核心文档同步收口，临时专项计划删除；本修复不构成 R9 授权。
 
+### 当前基线多语言支持 —— UI locale 与模型回复语言（待新会话实施）
+
+**目标：** 首版支持 `zh-CN`／`en-US`。CLI 自有文本由 strict locale catalog loader 和命名占位符生成；Main／Resume system prompt 注入统一 ResponseLanguage。UI、对话回复和 Resume artifact language 保持三个独立语义，不复制完整 system prompt，不改变模型消息 schema。
+
+**范围：** 新增进程级 `UI_LOCALE`、`MODEL_RESPONSE_LANGUAGE`、`LOCALES_DIR`；新增 typed Locale、CLI Translator、两份 locale catalog 和 `06_response_language.md`；本地化 CLI-owned 文案，并将固定 Progress／审批展示语义改为 typed code／canonical tool name 后由前端翻译。完整新类型、文件白名单和禁止清单以 [`docs/multilingual-support.md`](multilingual-support.md) 为准。
+
+**实施顺序：** L0 文档计划（本会话完成）→ L1 Locale／loader／Settings → L2 CLI-owned UI → L3 typed 固定事件文案与审批 → L4 ResponseLanguage Prompt → L5 完整验证与真实 provider／TTY smoke → L6 用户审查与文档收口。L1～L4 各自形成独立代码／测试 checkpoint；L5 原则上不修改 production；L6 文档独立 checkpoint。
+
+**验收：** 两种 locale 的 catalog key／placeholder 严格一致；welcome、help、命令、输入、Session、Plan、Tool、审批、取消、错误和 application result 完成本地化且 Rich／Markdown／脱敏契约不退化；Main／Resume Prompt 都只含一个正确 ResponseLanguage；InputFormat／OutputFormat、ModelMessageCodec、snapshot、Memory build 和 Chroma 不变；完整 unittest、compileall、diff-check、静态 contract、双语言 component smoke 和双语言真实 provider／TTY 矩阵通过。
+
+**已验证前提：** 当前 production Chroma、现有 embedding 和 reranker 已用英文技术栈与英文年龄查询正确 Top-1 召回中文 Memory；本专项不更换检索模型或重建索引。最终仍须验证真实模型在英文回合会按被动 Memory 契约调用一次 `query_memory` 并用英文回答。
+
+**停止门禁：** 本会话不得 coding；新会话只从 L1 开始。不得增加 `/language`、自动检测、Session locale 字段、Prompt 多语言副本、Memory build 改造、依赖、索引迁移或 R9 工作。任何白名单扩展或 schema／公开 API 变化先停止确认。
+
+**当前状态：** 设计、逐切片白名单、验证矩阵和新会话入口已完成并由决策 284 记录；代码尚未开始。用户明确要求在新会话执行 coding。
+
 ### R9 —— 新功能恢复
 
 **目标：** 在稳定架构上重新启动产品功能开发。

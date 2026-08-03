@@ -782,11 +782,23 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 - 本专项未改变 Tool 名称、schema 结构、错误码、Memory／Knowledge 行为、Session 持久化字段、数据目录或 legacy refusal；E3 代码／测试 checkpoint 为 `154ff4f`，完整 unittest 318/318。
 - `LOG_FILE_NAME` 在 Settings 与 logging setup 中都显式拒绝 `/`、`\\`、`.`、`..` 和绝对路径，避免 Windows/Linux 配置语义漂移。E4 的 key/shape、配置错误退出码、legacy refusal、persistent／memory 组件和 headless 根入口 smoke 已通过；P1/P2 修复 checkpoint 为 `459b1cf`，当前等待用户复核，R9 仍未授权。
 
-### 6.12 InterviewAgent Workflow 前置备忘（R9，非确认清单）
+### 6.12 多语言 UI 与模型回复语言（已规划，待新会话实施）
+
+多语言支持拆为两个独立、进程级配置边界：`UI_LOCALE` 控制 CLI 自有展示文本，`MODEL_RESPONSE_LANGUAGE` 控制 Main／Resume 的模型生成内容，后者默认 `ui` 并解析为当前 UI locale。首版只支持 `zh-CN`／`en-US`，不增加运行时语言切换、自动检测或 Session 持久化字段；简历中文／英文／双语继续是独立的 artifact language。
+
+UI 使用专用 locale loader 从 `data/locales/` 加载严格 key 对齐的 JSON catalog，通过稳定 message key 和命名占位符生成普通文本。Rich Panel、Markdown、escape、敏感参数脱敏和动态值格式继续由 Renderer 负责；slash command、Tool 名称／参数、AgentKey、Capability、error code、持久化枚举和 JSON 字段均保持 canonical。Application 不依赖 CLI Translator；固定 Progress／审批语义使用 typed code／canonical tool name 进入 RuntimeEvent，由前端翻译，模型生成的 message／thinking／question／choices／Plan description 不做二次翻译。
+
+模型侧新增独立 `06_response_language.md`，由 PromptRenderer 注入 resolved response locale，覆盖 `finish.message`、`tool_call.message`、可见 thinking、问题／选项和 Plan 描述，同时要求代码、路径、命令、标识符、专有名词和引用原文保持原样。Main 与 Resume 使用同一配置；`07_input_format.md`、`08_output_format.md`、`ModelMessageEntity`／`ModelMessageCodec`、format repair 和 provider JSON mode 均不改变，也不维护多份完整 system prompt。
+
+Memory build、Memory repository、embedding／reranker、Chroma index 和 Knowledge lifecycle 不在本专项范围。当前生产索引已用英文技术栈查询和英文年龄查询对中文 Memory 完成真实 Top-1 验证；该证据只支持首版 zh-CN／en-US 方案，最终仍须由真实 provider／TTY smoke 证明模型会在英文回合正确调用一次 `query_memory` 并用英文回答。
+
+完整类型、资源、逐切片白名单、验证矩阵、停止条件和新会话入口以 [`docs/multilingual-support.md`](multilingual-support.md) 为准。本专项独立于 R9，实施或完成都不构成 R9 授权。
+
+### 6.13 InterviewAgent Workflow 前置备忘（R9，非确认清单）
 
 本节只记录 R9 未来设计时不得遗忘的兼容性结论、阻塞点和优化方向，不构成 InterviewAgent 的实现授权，也不构成新文件、类或公开方法清单。R9 启动时仍须基于 R8 后的实际代码重新 Review，并由用户确认具体边界。
 
-#### 6.12.1 与现有架构的兼容性结论
+#### 6.13.1 与现有架构的兼容性结论
 
 Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约束的是 Agent 间拓扑：Main 是唯一调度中心，子 Agent 不直接调用其他子 Agent；ReAct 或 Workflow 属于单个 Agent 内部的执行策略。InterviewAgent 可以作为一个 spoke 使用确定性 Workflow，只要继续遵守：
 
@@ -798,7 +810,7 @@ Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约
 
 推荐采用“确定性 Workflow 外壳 + 节点内 LLM”：由代码固定阶段、分支、循环、终止和恢复规则；LLM 只承担生成问题、评估回答、生成追问与总结等开放任务。不要为了实现 Workflow 引入第二套 Application、Session、CLI loop 或通用 Agent 网络。
 
-#### 6.12.2 R9 已知阻塞点
+#### 6.13.2 R9 已知阻塞点
 
 1. **Executor 具体类型耦合：** 当前 Orchestrator 的 runtime map 直接声明为 `Mapping[AgentKey, AgentRuntime]`，composition root 也默认所有 Agent 使用同一种 ReAct `AgentRuntime`；Workflow executor 尚不能作为正式可替换实现注入。
 2. **状态形状偏向 ReAct：** 当前 `RuntimeTransition` 固定返回 `AgentSessionState`，后者直接包含 `RuntimePhase`、history、model call、pending tool、repair 与 Plan。Interview workflow 还需要 workflow version、稳定 step id、当前问题、收集的回答、评分进度和等待原因，不能塞入开放 metadata dict、Plan 或 runtime 私有字段。
@@ -809,7 +821,7 @@ Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约
 7. **隐私与保留期未定义：** 原始回答、评分与反馈可能包含敏感求职信息；R9 必须明确持久化范围、日志脱敏、删除入口和 retention，再决定是否长期保存。
 8. **外部 Workflow 框架边界：** “Workflow”是控制流设计，不等于必须采用 LangGraph/LangChain 等框架。当前自研轻量框架决策仍有效；若未来希望引入外部 workflow engine，必须单独重开依赖与架构决策。
 
-#### 6.12.3 推荐调整与优化方向
+#### 6.13.3 推荐调整与优化方向
 
 - 把 Orchestrator 依赖从具体 `AgentRuntime` 收敛为最小 typed executor protocol；候选能力为单步 `advance(...) -> RuntimeTransition`、跨线程 `request_cancel()` 与幂等 `close()`。最终命名和签名须在 R9 清单确认时固定。
 - 为 Session 中的 agent-local state 设计 tagged union 或 typed envelope，例如 ReAct state 与 Interview workflow state；共同字段只保留真正共享的 history、turn/provenance，禁止复制第二份长期状态。
@@ -820,7 +832,7 @@ Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约
 - 将问题库／评价 rubric 视为 versioned Knowledge/reference 输入，将最终可交付报告视为候选 Artifact；不要把 prompt、workflow 定义和用户运行数据混在同一存储边界。
 - 建立两层验证：纯 workflow transition/property tests 覆盖分支、循环、取消和恢复；真实 LLM smoke 覆盖中文／英文问答、追问质量、评分稳定性与完整 main → interview → main 链路。
 
-#### 6.12.4 R9 启动前必须重新确认
+#### 6.13.4 R9 启动前必须重新确认
 
 - InterviewAgent 的职责、非目标、面试模式与完成条件；
 - executor protocol 是否需要抽取，以及 ReAct/Workflow state 的具体 tagged schema；
