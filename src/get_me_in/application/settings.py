@@ -26,6 +26,11 @@ class KnowledgeIndexMode(StrEnum):
     MEMORY = "memory"
 
 
+_DEFAULT_UI_LOCALE = Locale.ZH_CN.value
+_DEFAULT_MODEL_RESPONSE_LANGUAGE = "ui"
+_DEFAULT_LOCALES_DIR = "data/locales"
+
+
 @dataclass(frozen=True)
 class Settings:
     """Configuration required to assemble the R1 application skeleton."""
@@ -108,8 +113,6 @@ class Settings:
             "LLM_TIMEOUT",
             "LLM_THINKING_ENABLED",
             "SHOW_THINKING",
-            "UI_LOCALE",
-            "MODEL_RESPONSE_LANGUAGE",
             "AGENT_MAX_MODEL_CALLS",
             "CANCEL_GRACE_SECONDS",
             "SHUTDOWN_TIMEOUT_SECONDS",
@@ -117,7 +120,6 @@ class Settings:
             "REFERENCE_DIR",
             "PROMPTS_DIR",
             "RESUME_TEMPLATE_DIR",
-            "LOCALES_DIR",
             "WORKSPACE_DIR",
             "SESSIONS_DIR",
             "ARTIFACTS_DIR",
@@ -229,7 +231,13 @@ class Settings:
                 "LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
             )
         path_values = {
-            name: _resolve_config_path(name, env[name], project_root)
+            name: _resolve_config_path(
+                name,
+                env.get(name, _DEFAULT_LOCALES_DIR)
+                if name == "LOCALES_DIR"
+                else env[name],
+                project_root,
+            )
             for name in (
                 "REFERENCE_DIR",
                 "PROMPTS_DIR",
@@ -266,12 +274,19 @@ class Settings:
                 "SHOW_THINKING must be true, false, 1, or 0"
             )
         try:
-            ui_locale = parse_locale(env["UI_LOCALE"], setting_name="UI_LOCALE")
+            ui_locale = parse_locale(
+                env.get("UI_LOCALE", _DEFAULT_UI_LOCALE),
+                setting_name="UI_LOCALE",
+            )
         except ValueError as error:
             raise SettingsValidationError(str(error)) from error
         try:
             response_locale = resolve_response_locale(
-                env["MODEL_RESPONSE_LANGUAGE"], ui_locale
+                env.get(
+                    "MODEL_RESPONSE_LANGUAGE",
+                    _DEFAULT_MODEL_RESPONSE_LANGUAGE,
+                ),
+                ui_locale,
             )
         except ValueError as error:
             raise SettingsValidationError(str(error)) from error

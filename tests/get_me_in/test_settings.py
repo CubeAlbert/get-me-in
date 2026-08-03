@@ -203,6 +203,17 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(60.0, settings.pdf_build_timeout_seconds)
         self.assertEqual(65536, settings.artifact_log_max_bytes)
 
+    def test_from_env_uses_chinese_localization_defaults_when_omitted(self) -> None:
+        env = _env()
+        for name in ("UI_LOCALE", "MODEL_RESPONSE_LANGUAGE", "LOCALES_DIR"):
+            del env[name]
+
+        settings = Settings.from_env(env, project_root=Path("project"))
+
+        self.assertIs(Locale.ZH_CN, settings.ui_locale)
+        self.assertIs(Locale.ZH_CN, settings.response_locale)
+        self.assertEqual(Path("project/data/locales"), settings.locales_dir)
+
     def test_from_env_requires_canonical_application_settings(self) -> None:
         settings = Settings.from_env(
             _env(),
