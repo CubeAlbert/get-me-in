@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 288 — 完成多语言专项 L4 ResponseLanguage Prompt 注入](#决策-288--完成多语言专项-l4-responselanguage-prompt-注入)
 - [决策 287 — 完成多语言专项 L3 typed 固定事件文案与审批](#决策-287--完成多语言专项-l3-typed-固定事件文案与审批)
 - [决策 286 — 完成多语言专项 L2 CLI-owned UI 本地化](#决策-286--完成多语言专项-l2-cli-owned-ui-本地化)
 - [决策 285 — 完成多语言专项 L1 并进入 L2](#决策-285--完成多语言专项-l1-并进入-l2)
@@ -6880,3 +6881,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 继续传递英文 Progress／审批 prompt，由 Renderer 做字符串匹配 —— 会把自由文本误当稳定协议，拒绝。
 - 让 Application 直接依赖 CLI Translator 或修改 snapshot／取消 reason —— 违反分层与既有持久化契约，拒绝。
+
+---
+
+### 决策 288 —— 完成多语言专项 L4 ResponseLanguage Prompt 注入
+
+**背景：** L3 已将固定 Runtime 展示语义收敛为 typed code 和 canonical tool name。L4 需要让 Main／Resume 的模型生成内容遵循同一 resolved response locale，同时保持 filename-driven PromptRenderer、InputFormat／OutputFormat、ModelMessageCodec 和 format repair 契约不变。
+
+**决定：**
+
+- L4 代码／测试 checkpoint 使用提交 `8dc56a5 feat: inject response language prompt`；新增 `data/prompts/general_agent/06_response_language.md`，扩展 PromptRenderer 的 `RESPONSE_LANGUAGE` 变量，并由 bootstrap 将 `settings.response_locale` 注入共享 PromptRenderer。
+- Main 与 Resume 共享同一 PromptRenderer 实例和 resolved locale；默认测试构造保持 `zh-CN`，显式 `en-US` 通过 composition 与 PromptRenderer 回归覆盖。
+- `06_response_language.md` 排在 CommunicationStyle 后、InputFormat 前；`render_output_format()` 仍只读取唯一 `*_output_format.md`，既有 InputFormat／OutputFormat 内容未改动。
+- L4 验证证据为完整 unittest `340/340`、compileall、`git diff --check`、Prompt 静态 contract 和精确白名单审查通过；真实 provider／TTY 行为留待 L5 门禁验证。
+- 本决定不修改 `design.md`／`plan.md`，不读取、改写、迁移或删除四个 legacy 数据目录，也不构成 R9 授权。
+
+**理由：**
+
+- 单一 Prompt 片段和单一 resolved locale 注入避免复制完整 system prompt，并保证 Main／Resume 语言一致；PromptRenderer 仍只负责静态模板和显式变量替换。
+- 保持输入／输出格式文件、消息 codec 和 repair 不变，避免将自然语言行为门禁混入结构校验；真实 provider smoke 才能验证模型是否遵从语言要求。
+- L4 独立提交并与文档 checkpoint 分离，便于在 L5 真实行为验证前回退 Prompt 注入而不混淆阶段证据。
+
+**曾考虑的替代方案：**
+
+- 为 zh-CN／en-US 复制完整 Agent system prompt —— 会产生协议与约束漂移，拒绝。
+- 在 ModelMessageCodec 或 format repair 中检测并修复回复语言 —— 语言质量不是 JSON 结构契约，且会扩大模型输出边界，拒绝。
