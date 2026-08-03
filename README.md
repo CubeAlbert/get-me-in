@@ -18,6 +18,16 @@ uv run python -m src.get_me_in.cli
 
 启动前将 `.env.example` 复制为 `.env`，填写 OpenAI-compatible 服务地址、密钥和模型名称。配置由 `Settings.from_env()` 解析；静态输入目录由项目固定提供，运行目录由配置提供。
 
+## 语言配置
+
+CLI 首版支持 `zh-CN` 和 `en-US`，通过进程级环境变量配置：
+
+- `UI_LOCALE`：CLI 界面语言，可选 `zh-CN`／`en-US`，默认 `zh-CN`。
+- `MODEL_RESPONSE_LANGUAGE`：模型回复语言，可选 `ui`／`zh-CN`／`en-US`，默认 `ui`；`ui` 跟随 `UI_LOCALE`。
+- `LOCALES_DIR`：locale catalog 目录，默认 `data/locales`；相对路径按项目根目录解析。
+
+UI 语言、模型回复语言和 Resume artifact 语言相互独立；当前不支持运行时切换语言。
+
 ## 当前能力
 
 `Main` 是统一入口和路由中心，根据 `AgentCatalog` 提供的专业 Agent 清单识别需求、收集必要上下文并切换 Agent。当前已落地的 Resume 工作流支持简历模板复制、读取、编辑、替换、PDF 构建、打开和 PDF 合并。

@@ -2,8 +2,8 @@
 
 ## 1. 状态与授权边界
 
-- **专项状态：** 设计与实施清单已完成；本会话只写文档，不实施代码。
-- **实施入口：** 新会话先执行 `/project-bootstrap`，读取 `docs/current.md`、四份核心活跃文档和本文件，再从 L1 开始。
+- **专项状态：** L1～L6 已完成；代码／测试 checkpoint 为 `02c9c5d`，文档已完成收口。本文件按用户要求保留，作为专项范围、白名单和验证矩阵的历史参考。
+- **实施入口：** 本专项已收口；后续变更须从核心文档重新建立授权，不从本文件自动进入 R9。
 - **首版语言：** `zh-CN`、`en-US`。
 - **配置方式：** 进程启动时确定语言；不增加 `/language`，不在运行中自动检测或切换语言。
 - **R9 边界：** 本专项是当前基线维护，独立于 R9；实施和完成均不构成 R9 授权。
@@ -260,7 +260,7 @@ Prompt 必须表达：
 
 **验收：** zh-CN／en-US 均只出现一个 ResponseLanguage 区块；Main／Resume 使用同一 resolved locale；Prompt filename order 保持；InputFormat 与 OutputFormat 均存在且各自 blob／内容不变；`render_output_format()` 仍只返回 OutputFormat。L4 独立 checkpoint。
 
-### L5 —— 完整工程验证与真实 smoke
+### L5 —— 完整工程验证与真实 smoke（已完成）
 
 1. 定向测试按 L1～L4 分组通过。
 2. `uv run python -m unittest discover -s tests/get_me_in -t .`。
@@ -276,11 +276,13 @@ Prompt 必须表达：
 
 L5 不应修改 production；若验证发现白名单外缺陷，立即停止，记录证据并提交最小扩展清单，不得顺手修复。
 
-### L6 —— 用户审查与文档收口
+**完成状态：** 定向验证 `151/151`、完整 unittest `346/346`、compileall、diff-check、catalog／Prompt 静态 contract、fake/headless component smoke 已通过；用户已确认双语言真实 provider／Windows TTY 体验无大问题。
 
-- 用户复核 zh-CN／en-US 的 UI、工具调用步骤、thinking、handoff 和最终回复体验。
-- 更新 README 的语言配置说明以及五份核心文档的完成事实。
-- 追加完成决策；专项完成后将仍有效事实迁入核心文档，再删除本专项文件，历史由 Git 与 decision 保存。
+### L6 —— 用户审查与文档收口（已完成）
+
+- 用户已复核 zh-CN／en-US 的 UI、工具调用步骤、thinking、handoff 和最终回复体验。
+- 已更新 README 的语言配置说明以及五份核心文档的完成事实。
+- 已追加完成决策；专项文档按用户要求保留，核心文档和 Git／decision 均保存收口事实。
 - 文档 checkpoint 与代码／测试 checkpoint 分离；完成不自动进入 R9。
 
 ## 9. 完整文件清单

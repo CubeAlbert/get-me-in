@@ -356,7 +356,7 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **完成结论：** K1～K4 已完成工程验证与 production composition smoke；用户确认普通 Runtime 取消、`/ragreload` 取消／重试和 prepare 中 `/exit` 三项真实终端测试无问题。K5 已完成，五份核心文档同步收口，临时专项计划删除；本修复不构成 R9 授权。
 
-### 当前基线多语言支持 —— UI locale 与模型回复语言（待新会话实施）
+### 当前基线多语言支持 —— UI locale 与模型回复语言（已完成，R9 仍未授权）
 
 **目标：** 首版支持 `zh-CN`／`en-US`。CLI 自有文本由 strict locale catalog loader 和命名占位符生成；Main／Resume system prompt 注入统一 ResponseLanguage。UI、对话回复和 Resume artifact language 保持三个独立语义，不复制完整 system prompt，不改变模型消息 schema。
 
@@ -368,9 +368,9 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **已验证前提：** 当前 production Chroma、现有 embedding 和 reranker 已用英文技术栈与英文年龄查询正确 Top-1 召回中文 Memory；本专项不更换检索模型或重建索引。最终仍须验证真实模型在英文回合会按被动 Memory 契约调用一次 `query_memory` 并用英文回答。
 
-**停止门禁：** 本会话不得 coding；新会话只从 L1 开始。不得增加 `/language`、自动检测、Session locale 字段、Prompt 多语言副本、Memory build 改造、依赖、索引迁移或 R9 工作。任何白名单扩展或 schema／公开 API 变化先停止确认。
+**停止门禁：** L1～L6 已完成；不得增加 `/language`、自动检测、Session locale 字段、Prompt 多语言副本、Memory build 改造、依赖、索引迁移或 R9 工作。任何白名单扩展或 schema／公开 API 变化先停止确认；R9 仍需独立授权。
 
-**当前状态：** 设计、逐切片白名单、验证矩阵和新会话入口已完成并由决策 284 记录；代码尚未开始。用户明确要求在新会话执行 coding。
+**当前状态：** L0～L4 代码／测试 checkpoint、L5 工程验证与用户确认的双语言真实 provider／Windows TTY 体验均已完成；L5 最终完整 unittest 为 `346/346`，代码／测试审查修复 checkpoint 为 `02c9c5d`。L6 README、五份核心文档和决策记录已完成；专项文档按用户要求保留。本专项不构成 R9 授权。
 
 ### R9 —— 新功能恢复
 

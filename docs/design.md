@@ -782,7 +782,7 @@ R8 不新建 runtime class、service、port、schema 或公开方法。若实现
 - 本专项未改变 Tool 名称、schema 结构、错误码、Memory／Knowledge 行为、Session 持久化字段、数据目录或 legacy refusal；E3 代码／测试 checkpoint 为 `154ff4f`，完整 unittest 318/318。
 - `LOG_FILE_NAME` 在 Settings 与 logging setup 中都显式拒绝 `/`、`\\`、`.`、`..` 和绝对路径，避免 Windows/Linux 配置语义漂移。E4 的 key/shape、配置错误退出码、legacy refusal、persistent／memory 组件和 headless 根入口 smoke 已通过；P1/P2 修复 checkpoint 为 `459b1cf`，当前等待用户复核，R9 仍未授权。
 
-### 6.12 多语言 UI 与模型回复语言（已规划，待新会话实施）
+### 6.12 多语言 UI 与模型回复语言（已完成，R9 仍未授权）
 
 多语言支持拆为两个独立、进程级配置边界：`UI_LOCALE` 控制 CLI 自有展示文本，`MODEL_RESPONSE_LANGUAGE` 控制 Main／Resume 的模型生成内容，后者默认 `ui` 并解析为当前 UI locale。首版只支持 `zh-CN`／`en-US`，不增加运行时语言切换、自动检测或 Session 持久化字段；简历中文／英文／双语继续是独立的 artifact language。
 
@@ -793,6 +793,8 @@ UI 使用专用 locale loader 从 `data/locales/` 加载严格 key 对齐的 JSO
 Memory build、Memory repository、embedding／reranker、Chroma index 和 Knowledge lifecycle 不在本专项范围。当前生产索引已用英文技术栈查询和英文年龄查询对中文 Memory 完成真实 Top-1 验证；该证据只支持首版 zh-CN／en-US 方案，最终仍须由真实 provider／TTY smoke 证明模型会在英文回合正确调用一次 `query_memory` 并用英文回答。
 
 完整类型、资源、逐切片白名单、验证矩阵、停止条件和新会话入口以 [`docs/multilingual-support.md`](multilingual-support.md) 为准。本专项独立于 R9，实施或完成都不构成 R9 授权。
+
+L1～L4 已分别完成代码／测试 checkpoint；L5 的定向验证 `151/151`、完整 unittest `346/346`、compileall、diff-check、静态 contract、fake/headless component smoke 和用户确认的双语言真实 provider／Windows TTY 体验均已通过。L6 已完成 README、核心状态文档和决策记录收口；代码／测试审查修复 checkpoint 为 `02c9c5d`。专项文档按用户要求保留，作为完整范围、白名单和验证矩阵的历史参考。
 
 ### 6.13 InterviewAgent Workflow 前置备忘（R9，非确认清单）
 

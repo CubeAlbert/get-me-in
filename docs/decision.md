@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 292 — 完成多语言专项 L6 收口并保留专项文档](#决策-292--完成多语言专项-l6-收口并保留专项文档)
 - [决策 291 — 重排 general_agent Prompt 文件编号](#决策-291--重排-general_agent-prompt-文件编号)
 - [决策 290 — 补充多语言 Settings 中文默认值](#决策-290--补充多语言-settings-中文默认值)
 - [决策 289 — 完成多语言专项 L5 工程验证并等待真实 provider／TTY smoke](#决策-289--完成多语言专项-l5-工程验证并等待真实-providertty-smoke)
@@ -6981,3 +6982,28 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 仅把新文件改为 `07` 而不顺延其余文件 —— 会使 `InputFormat`、`OutputFormat`、`Reserved` 的编号继续断档，拒绝。
 - 修改 PromptRenderer 为显式文件名列表 —— 会破坏现有字典序装配约定，拒绝。
+
+---
+
+### 决策 292 —— 完成多语言专项 L6 收口并保留专项文档
+
+**背景：** 多语言专项已完成 L1～L5 工程实现与验证，用户随后确认真实 provider／Windows TTY 体验无大问题，并授权提交与收口。最后一轮审查补充修复了 catalog Rich markup 防护、Agent／RuntimePhase 本地化投影、自定义输入 sentinel、composition root 默认依赖和 Handoff 目标 Agent 本地化。
+
+**决定：**
+
+- 以代码／测试 checkpoint `02c9c5d` 收录最后一轮多语言审查修复；完整 unittest `346/346`、compileall 与 `git diff --check` 通过。
+- 标记 L5、L6 完成，更新 README、`docs/current.md`、`docs/design.md`、`docs/plan.md`、`docs/task.md` 与本决策记录。
+- `docs/multilingual-support.md` 按用户明确要求保留，不删除；它继续作为专项范围、白名单和验证矩阵的历史参考。
+- 多语言专项完成不构成 R9 授权；R9 仍须独立前置 Review 与用户授权。
+
+**理由：**
+
+- Handoff、会话摘要和 catalog 安全边界均已由显式映射、纯文本渲染和回归测试覆盖，最后审查发现已闭合。
+- 代码／测试与文档 checkpoint 分离，既保留可回溯的实现提交，也使当前状态文档与实际完成态一致。
+- 保留专项文档遵循用户的明确保留要求，不影响核心文档作为当前状态来源。
+
+**曾考虑的替代方案：**
+
+- 按原专项计划删除 `docs/multilingual-support.md` —— 与用户明确的保留要求冲突，拒绝。
+- 仅提交代码、不更新核心状态文档 —— 会使 L5/L6 门禁和当前阶段继续显示为未完成，拒绝。
+- 将本专项完成视为 R9 授权 —— 超出本次授权范围，拒绝。

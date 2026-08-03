@@ -1,19 +1,20 @@
 # 当前状态
 
-**当前阶段：** 当前基线多语言 UI／模型回复语言专项 L5 工程验证已完成，等待真实 provider／TTY smoke；R9 仍未授权
+**当前阶段：** 当前基线多语言 UI／模型回复语言专项 L1～L6 已完成并收口；R9 仍未授权
 
-**当前任务：** 按 [`docs/multilingual-support.md`](multilingual-support.md) 完成 L5 真实 provider／TTY 矩阵，再进入 L6 用户审查与文档收口
+**当前任务：** 多语言专项已完成；如继续开发，须先获得 R9 独立授权并重新执行前置 Review
 
-**当前子任务：** L5 工程验证已完成：定向 151/151、完整 341/341、compileall、diff-check、静态 contract 和 fake/headless component smoke 通过；已补充语言配置中文默认值并完成 general_agent Prompt 编号重排；真实 provider／TTY smoke 待用户执行。
+**当前子任务：** L1～L6 已完成：定向 151/151、完整 346/346、compileall、diff-check、静态 contract、fake/headless component smoke 和用户确认的双语言真实 provider／Windows TTY 体验通过；代码／测试审查修复 checkpoint 为 `02c9c5d`，文档 checkpoint 已完成。
 
-**当前阻塞：** 等待用户在 Windows 真实 TTY 执行 zh-CN／en-US provider smoke；自动化与 fake LLM 不能替代该证据。R9 仍需独立授权，未授权前不检查、设计或实施 R9。
+**当前阻塞：** 当前专项无阻塞。R9 仍需独立授权，未授权前不检查、设计或实施 R9。
 
 **会话交接说明：** 决策 284 与 `docs/multilingual-support.md` 固定首版只支持 `zh-CN`／`en-US`，以 `UI_LOCALE`、`MODEL_RESPONSE_LANGUAGE` 两个进程级语义分别控制 UI 和模型回复；缺失时分别默认为 `zh-CN`、`ui`（随中文 UI 解析为 `zh-CN`），`LOCALES_DIR` 默认为 `data/locales`。UI 使用 strict JSON catalog loader、stable key 和命名占位符，模型使用独立 `07_response_language.md`，并按 `08_input_format.md`、`09_output_format.md`、`10_reserved.md` 顺序拼接，不复制 system prompt。L1～L4 各自独立 checkpoint，L5 完整验证／真实 provider／TTY，L6 用户审查与收口。禁止新增 `/language`、自动检测、Session locale／schema、Memory build、embedding／Chroma、Input／Output schema、ModelMessageCodec、依赖、数据迁移或 R9 工作。当前 production Memory 已完成英文技术栈与英文年龄查询中文事实的真实检索对照，均正确 Top-1；该证据不替代英文真实模型 `query_memory` smoke。四个 legacy 数据目录仍不得读取、改写、迁移或删除。
 
-**下一步：** 用户执行并反馈 L5 真实 provider／TTY 矩阵：zh-CN 与 en-US 的 finish、tool call、thinking、selection、approval、Main→Resume→Main；en-US 另验证一次真实 `query_memory` 并用英文回答，不触发 Memory build。通过后再实施 L6 收口，不得进入 R9。
+**下一步：** 若继续工作，先请求 R9 前置 Review 授权；在此之前不进入 R9，不删除专项文档，不读取或改写四个 legacy 数据目录。
 
 **决策记录说明：** `current.md` 仅保留最近 10 条决策摘要；更早决策及完整正文请查阅 [`docs/decision.md`](decision.md)。以下按编号从新到旧排列。
 
+292. **完成多语言专项 L6 收口并保留专项文档** — 用户确认双语言真实 provider／Windows TTY 体验无大问题；代码／测试审查修复提交 `02c9c5d`，完整 unittest 346/346、compileall、diff-check 通过；README、五份核心文档和本决策记录完成收口。按用户要求保留 `docs/multilingual-support.md`，专项完成但不进入 R9。
 291. **重排 general_agent Prompt 文件编号** — `06_response_language`、`07_input_format`、`08_output_format`、`09_reserved` 依次改为 `07`、`08`、`09`、`10`；PromptRenderer 仍按文件名排序，`render_output_format()` 仍按唯一 suffix 发现；代码／测试提交 `c4ac8dd`，全量 unittest 341/341 通过。
 290. **补充多语言 Settings 中文默认值** — `UI_LOCALE` 缺失默认为 `zh-CN`，`MODEL_RESPONSE_LANGUAGE` 缺失默认为 `ui` 并解析为中文，`LOCALES_DIR` 缺失默认为 `data/locales`；`.env.example` 已注释可用选项，代码／测试提交 `a5efaa1`，全量 unittest 341/341 通过。
 289. **完成多语言专项 L5 工程验证并等待真实 provider／TTY smoke** — 定向 151/151、完整 unittest 340/340、compileall、diff-check、locale／Prompt 静态 contract 和 fake/headless component smoke 通过；真实 provider／Windows TTY 矩阵仍待用户证据，L6 尚未开始，R9 仍未授权。
