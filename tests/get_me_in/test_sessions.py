@@ -1,10 +1,14 @@
 """Session aggregate domain tests."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 import unittest
 
 from src.get_me_in.application.session_codec import SessionSnapshot
+from src.get_me_in.application.commands import Continue, UserMessage
+from src.get_me_in.application.events import Progress, ProgressKind, ToolFinished
+from src.get_me_in.application.orchestration import SessionTransition
 from src.get_me_in.application.session_service import SessionService
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord
@@ -50,6 +54,7 @@ class SessionDomainTests(unittest.TestCase):
 
     def test_rewind_clears_plan_pending_handoff_and_workspace_grants(self) -> None:
         user = MessageRecord("event-1", Role.USER, "delegate", _now(), "turn-1")
+        subagent_record = MessageRecord("event-sub", Role.ASSISTANT, "old episode", _now(), "turn-sub")
         call = ToolCallRecord("event-2", "call-1", "switch_to_subagent", {}, _now(), "turn-1")
         plan = Plan("plan-1", (PlanItem("item-1", "delegate", PlanStatus.IN_PROGRESS),))
         session = SessionState(
@@ -63,7 +68,12 @@ class SessionDomainTests(unittest.TestCase):
                     turn_id="turn-1",
                     plan=plan,
                 ),
-                AgentKey.RESUME: AgentSessionState(phase=RuntimePhase.MODEL_PENDING, turn_id="turn-sub", plan=plan),
+                AgentKey.RESUME: AgentSessionState(
+                    phase=RuntimePhase.MODEL_PENDING,
+                    history=(subagent_record,),
+                    turn_id="turn-sub",
+                    plan=plan,
+                ),
             },
             handoff_stack=(HandoffFrame(AgentKey.MAIN, AgentKey.RESUME, "call-1", "turn-1", "context"),),
             created_at=_now(),
@@ -79,6 +89,7 @@ class SessionDomainTests(unittest.TestCase):
         self.assertIsNone(view.plan)
         self.assertEqual((), snapshot.session.handoff_stack)
         self.assertTrue(all(state.pending_tool is None and state.plan is None for state in snapshot.session.agents.values()))
+        self.assertEqual((), snapshot.session.agents[AgentKey.RESUME].history)
         self.assertEqual(["session-1"], access.cleared)
         self.assertIs(snapshot, repository.saved)
 
@@ -102,6 +113,69 @@ class SessionDomainTests(unittest.TestCase):
 
         self.assertEqual(["current", "first", "first", "second"], access.cleared)
 
+    def test_restore_clears_inactive_plan_services_before_restoring_active_plan(self) -> None:
+        stale_plan = Plan("stale", (PlanItem("item", "stale", PlanStatus.IN_PROGRESS),))
+        current = SessionState(
+            session_id="current",
+            active_agent=AgentKey.MAIN,
+            agents={
+                AgentKey.MAIN: AgentSessionState(),
+                AgentKey.RESUME: AgentSessionState(plan=stale_plan),
+            },
+            handoff_stack=(),
+            created_at=_now(),
+            updated_at=_now(),
+        )
+        restored = SessionSnapshot(_session("restored"), _now())
+        service, _, _ = _service(current, restored)
+
+        service.restore("restored")
+
+        self.assertIsNone(service._plans[AgentKey.RESUME].plan)
+
+    def test_typed_start_and_close_signals_clear_plan_service_and_target_state(self) -> None:
+        main_plan = Plan("main", (PlanItem("item", "main", PlanStatus.IN_PROGRESS),))
+        stale_plan = Plan("stale", (PlanItem("item", "stale", PlanStatus.IN_PROGRESS),))
+        frame = HandoffFrame(AgentKey.MAIN, AgentKey.RESUME, "call-1", "turn-1", "context")
+        session = SessionState(
+            session_id="session-1",
+            active_agent=AgentKey.MAIN,
+            agents={
+                AgentKey.MAIN: AgentSessionState(plan=main_plan),
+                AgentKey.RESUME: AgentSessionState(plan=stale_plan),
+            },
+            handoff_stack=(),
+            created_at=_now(),
+            updated_at=_now(),
+        )
+        started_session = replace(
+            session,
+            active_agent=AgentKey.RESUME,
+            agents={AgentKey.MAIN: AgentSessionState(plan=main_plan), AgentKey.RESUME: AgentSessionState()},
+            handoff_stack=(frame,),
+        )
+        closed_session = replace(
+            started_session,
+            active_agent=AgentKey.MAIN,
+            agents={AgentKey.MAIN: AgentSessionState(plan=main_plan), AgentKey.RESUME: AgentSessionState(plan=stale_plan)},
+            handoff_stack=(),
+        )
+        orchestrator = _QueuedOrchestrator(
+            [
+                SessionTransition(started_session, Progress(ProgressKind.CALLING_MODEL), started_agent=AgentKey.RESUME),
+                SessionTransition(closed_session, ToolFinished("call-1", "switch_to_subagent", "done"), closed_agent=AgentKey.RESUME),
+            ]
+        )
+        service, _, _ = _service(session, orchestrator=orchestrator)
+
+        service.handle(UserMessage("delegate"))
+        self.assertIsNone(service._plans[AgentKey.RESUME].plan)
+        service.handle(Continue())
+
+        self.assertEqual(AgentSessionState(), service._session.agents[AgentKey.RESUME])
+        self.assertIsNone(service._plans[AgentKey.RESUME].plan)
+        self.assertEqual(main_plan, service._session.agents[AgentKey.MAIN].plan)
+
 
 def _now() -> datetime:
     return datetime(2026, 7, 22, tzinfo=timezone.utc)
@@ -118,7 +192,7 @@ def _session(session_id: str) -> SessionState:
     )
 
 
-def _service(session: SessionState, loaded: SessionSnapshot | None = None):
+def _service(session: SessionState, loaded: SessionSnapshot | None = None, *, orchestrator=None):
     repository = _Repository(loaded)
     access = _WorkspaceAccess()
     plans = {key: _PlanService() for key in session.agents}
@@ -126,7 +200,7 @@ def _service(session: SessionState, loaded: SessionSnapshot | None = None):
         plans.update({key: _PlanService() for key in loaded.session.agents if key is not AgentKey.JOB_SEARCH})
     service = SessionService(
         session,
-        orchestrator=_Orchestrator(),
+        orchestrator=orchestrator or _Orchestrator(),
         plans=plans,
         repository=repository,
         clock=_Clock(),
@@ -163,6 +237,15 @@ class _Repository:
 class _Orchestrator:
     def close(self) -> None:
         pass
+
+
+class _QueuedOrchestrator(_Orchestrator):
+    def __init__(self, transitions: list[SessionTransition]) -> None:
+        self.transitions = transitions
+
+    def handle(self, session: SessionState, command: object) -> SessionTransition:
+        del session, command
+        return self.transitions.pop(0)
 
 
 class _PlanService:

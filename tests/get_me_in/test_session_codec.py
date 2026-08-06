@@ -1,9 +1,14 @@
 """Session snapshot codec tests."""
 
+from dataclasses import replace
 from datetime import datetime, timezone
 import unittest
 
-from src.get_me_in.application.session_codec import SessionSnapshot, SessionSnapshotCodec
+from src.get_me_in.application.session_codec import (
+    SessionSnapshot,
+    SessionSnapshotCodec,
+    UnsupportedSessionSchemaError,
+)
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
@@ -28,6 +33,7 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         self.assertEqual(2, restored.session.agents[AgentKey.MAIN].format_repairs_used)
         self.assertEqual(2, payload["agents"]["main"]["format_repairs_used"])
         self.assertTrue(payload["agents"]["main"]["repair_attempted"])
+        self.assertEqual(3, payload["schema_version"])
 
     def test_decode_prefers_new_repair_count_and_reads_legacy_bool_projection(self) -> None:
         codec = SessionSnapshotCodec()
@@ -90,12 +96,40 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         codec = SessionSnapshotCodec()
         payload = codec.encode(_snapshot())
         payload["schema_version"] = 1
-        with self.assertRaises(ValueError):
+        with self.assertRaises(UnsupportedSessionSchemaError):
             codec.decode(payload)
 
         unsafe = _snapshot(phase=RuntimePhase.TOOL_READY)
         with self.assertRaisesRegex(ValueError, "cannot be restored safely"):
             codec.encode(unsafe)
+
+    def test_rejects_v2_with_typed_unsupported_schema_error(self) -> None:
+        payload = SessionSnapshotCodec().encode(_snapshot())
+        payload["schema_version"] = 2
+
+        with self.assertRaises(UnsupportedSessionSchemaError):
+            SessionSnapshotCodec().decode(payload)
+
+    def test_rejects_non_empty_inactive_subagent_state(self) -> None:
+        snapshot = _snapshot()
+        agents = dict(snapshot.session.agents)
+        agents[AgentKey.RESUME] = AgentSessionState(
+            phase=RuntimePhase.COMPLETED,
+            history=(MessageRecord("old", Role.ASSISTANT, "old episode", _now(), "old-turn"),),
+        )
+        invalid = SessionSnapshot(replace(snapshot.session, agents=agents), snapshot.saved_at)
+
+        with self.assertRaisesRegex(ValueError, "Inactive SubAgent state must be empty"):
+            SessionSnapshotCodec().encode(invalid)
+
+    def test_active_handoff_rejects_non_target_subagent_state(self) -> None:
+        snapshot = _handoff_snapshot()
+        agents = dict(snapshot.session.agents)
+        agents[AgentKey.JOB_SEARCH] = AgentSessionState(phase=RuntimePhase.COMPLETED)
+        invalid = SessionSnapshot(replace(snapshot.session, agents=agents), snapshot.saved_at)
+
+        with self.assertRaisesRegex(ValueError, "Inactive SubAgent state must be empty"):
+            SessionSnapshotCodec().encode(invalid)
 
     def test_rejects_unmatched_tool_result(self) -> None:
         codec = SessionSnapshotCodec()

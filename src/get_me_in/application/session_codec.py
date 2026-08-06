@@ -16,7 +16,7 @@ from src.get_me_in.domain.sessions import (
 )
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 _PERSISTABLE_PHASES = frozenset(
     {
         RuntimePhase.READY,
@@ -38,12 +38,20 @@ class SessionSnapshot:
     schema_version: int = SCHEMA_VERSION
 
 
+class UnsupportedSessionSchemaError(ValueError):
+    """The snapshot belongs to a schema this runtime deliberately does not migrate."""
+
+    unsupported_schema = True
+
+
 class SessionSnapshotCodec:
     """Encode only stable state and reject malformed or incompatible data."""
 
     def encode(self, snapshot: SessionSnapshot) -> dict[str, object]:
         if snapshot.schema_version != SCHEMA_VERSION:
-            raise ValueError("Only schema_version=2 session snapshots are supported")
+            raise UnsupportedSessionSchemaError(
+                f"Only schema_version={SCHEMA_VERSION} session snapshots are supported"
+            )
         self._validate_session(snapshot.session)
         return {
             "schema_version": SCHEMA_VERSION,
@@ -61,7 +69,9 @@ class SessionSnapshotCodec:
 
     def decode(self, payload: Mapping[str, object]) -> SessionSnapshot:
         if payload.get("schema_version") != SCHEMA_VERSION:
-            raise ValueError("Session snapshot must use schema_version=2")
+            raise UnsupportedSessionSchemaError(
+                f"Session snapshot must use schema_version={SCHEMA_VERSION}"
+            )
         try:
             agents_raw = _mapping(payload["agents"], "agents")
             agents = {AgentKey(key): self._decode_agent(_mapping(value, f"agents.{key}")) for key, value in agents_raw.items()}
@@ -116,6 +126,17 @@ class SessionSnapshotCodec:
                 raise ValueError("Handoff frame must match the source pending call")
             if source.turn_id != frame.turn_id:
                 raise ValueError("Handoff frame must match the source turn")
+            self._validate_inactive_subagents(session, frame.target)
+        else:
+            self._validate_inactive_subagents(session, None)
+
+    @staticmethod
+    def _validate_inactive_subagents(session: SessionState, active_target: AgentKey | None) -> None:
+        for key, state in session.agents.items():
+            if key is AgentKey.MAIN or key is active_target:
+                continue
+            if state != AgentSessionState():
+                raise ValueError(f"Inactive SubAgent state must be empty: {key.value}")
 
     @staticmethod
     def _validate_agent(key: AgentKey, state: AgentSessionState) -> None:

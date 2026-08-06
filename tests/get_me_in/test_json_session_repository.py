@@ -1,12 +1,13 @@
 """Atomic JSON session repository tests."""
 
+import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from src.get_me_in.adapters.json_session_repository import JsonSessionRepository
-from src.get_me_in.application.session_codec import SessionSnapshotCodec
+from src.get_me_in.application.session_codec import SessionSnapshotCodec, UnsupportedSessionSchemaError
 from tests.get_me_in.test_session_codec import _snapshot
 
 
@@ -64,3 +65,29 @@ class JsonSessionRepositoryTests(unittest.TestCase):
                     repository.save(_snapshot())
 
             self.assertEqual("session-1", repository.load("session-1").session.session_id)
+
+    def test_list_skips_v2_but_explicit_load_fails_and_file_remains(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = JsonSessionRepository(root, codec=SessionSnapshotCodec(), session_preview_chars=80)
+            repository.save(_snapshot())
+            legacy_payload = SessionSnapshotCodec().encode(_snapshot())
+            legacy_payload["schema_version"] = 2
+            legacy_path = root / "legacy.json"
+            legacy_path.write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+            with self.assertRaises(UnsupportedSessionSchemaError):
+                repository.load("legacy")
+
+            self.assertEqual(("session-1",), tuple(item.session_id for item in repository.list()))
+            self.assertTrue(legacy_path.exists())
+
+    def test_list_does_not_hide_corrupt_v3_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = JsonSessionRepository(root, codec=SessionSnapshotCodec(), session_preview_chars=80)
+            repository.save(_snapshot())
+            (root / "corrupt.json").write_text(json.dumps({"schema_version": 3}), encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                repository.list()

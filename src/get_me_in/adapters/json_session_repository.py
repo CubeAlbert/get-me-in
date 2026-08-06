@@ -49,7 +49,14 @@ class JsonSessionRepository:
         for path in self._root.glob("*.json"):
             if path.name.endswith(".dump.json"):
                 continue
-            snapshot = self.load(path.stem)
+            try:
+                snapshot = self.load(path.stem)
+            except ValueError as error:
+                # Adapters cannot import application-layer types; the codec's
+                # typed exception carries this narrow classification marker.
+                if not getattr(error, "unsupported_schema", False):
+                    raise
+                continue
             session = snapshot.session
             previews.append(
                 SessionPreview(

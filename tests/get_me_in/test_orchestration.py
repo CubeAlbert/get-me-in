@@ -9,6 +9,7 @@ from src.get_me_in.application.events import Cancelled, Failed, HandoffRequested
 from src.get_me_in.application.orchestration import Orchestrator
 from src.get_me_in.application.runtime import RuntimeTransition
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.messages import MessageRecord, Role
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, PendingToolCall, RuntimePhase, SessionState
 
 
@@ -16,18 +17,33 @@ class OrchestratorTests(unittest.TestCase):
     def test_main_sub_main_closes_original_call_id(self) -> None:
         main, resume = _FakeRuntime(AgentKey.MAIN), _FakeRuntime(AgentKey.RESUME)
         orchestrator = Orchestrator({AgentKey.MAIN: main, AgentKey.RESUME: resume})
-        session = _session()
+        session = replace(
+            _session(),
+            agents={
+                AgentKey.MAIN: AgentSessionState(),
+                AgentKey.RESUME: AgentSessionState(
+                    phase=RuntimePhase.FAILED,
+                    history=(MessageRecord("old", Role.ASSISTANT, "old episode", _now(), "old-turn"),),
+                    model_calls=9,
+                ),
+            },
+        )
 
         started = orchestrator.handle(session, UserMessage("delegate"))
         returned = orchestrator.handle(started.session, Continue())
 
         self.assertIsInstance(started.event, HandoffRequested)
+        self.assertEqual(AgentKey.RESUME, started.started_agent)
         self.assertEqual(AgentKey.RESUME, started.session.active_agent)
         self.assertEqual(RuntimePhase.MODEL_PENDING, started.session.agents[AgentKey.RESUME].phase)
+        self.assertEqual((), started.session.agents[AgentKey.RESUME].history)
+        self.assertEqual(0, started.session.agents[AgentKey.RESUME].model_calls)
         self.assertIsInstance(returned.event, ToolFinished)
         self.assertEqual("call-main", returned.event.call_id)
+        self.assertEqual(AgentKey.RESUME, returned.closed_agent)
         self.assertEqual(AgentKey.MAIN, returned.session.active_agent)
         self.assertEqual((), returned.session.handoff_stack)
+        self.assertEqual(AgentSessionState(), returned.session.agents[AgentKey.RESUME])
         self.assertEqual(["session-1", "session-1"], main.session_ids)
         self.assertEqual(["session-1", "session-1"], resume.session_ids)
 
@@ -51,6 +67,8 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual("call-main", exited.event.call_id)
         self.assertEqual(AgentKey.MAIN, exited.session.active_agent)
         self.assertEqual((), exited.session.handoff_stack)
+        self.assertEqual(AgentKey.RESUME, exited.closed_agent)
+        self.assertEqual(AgentSessionState(), exited.session.agents[AgentKey.RESUME])
 
     def test_exit_subagent_summary_path_asks_subagent_to_return_with_summary(self) -> None:
         main = _FakeRuntime(AgentKey.MAIN)
@@ -79,6 +97,8 @@ class OrchestratorTests(unittest.TestCase):
         self.assertIsInstance(exited.event, ToolFinished)
         self.assertIsInstance(main.commands[-1], FailHandoff)
         self.assertEqual("用户主动退出", main.commands[-1].message)
+        self.assertEqual(AgentKey.RESUME, exited.closed_agent)
+        self.assertEqual(AgentSessionState(), exited.session.agents[AgentKey.RESUME])
 
     def test_subagent_cancellation_keeps_original_handoff_active(self) -> None:
         main = _FakeRuntime(AgentKey.MAIN)
@@ -118,6 +138,8 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual("subagent_failed", failed.event.code)
         self.assertEqual(AgentKey.MAIN, failed.session.active_agent)
         self.assertEqual((), failed.session.handoff_stack)
+        self.assertEqual(AgentKey.RESUME, failed.closed_agent)
+        self.assertEqual(AgentSessionState(), failed.session.agents[AgentKey.RESUME])
         self.assertEqual(RuntimePhase.FAILED, failed.session.agents[AgentKey.MAIN].phase)
 
     def test_model_reply_parse_failure_pauses_subagent_for_user_continuation(self) -> None:

@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from src.get_me_in.application.commands import CompleteHandoff, FailHandoff, RuntimeCommand, UserMessage
-from src.get_me_in.application.events import Cancelled, Failed, HandoffRequested, RuntimeEvent
+from src.get_me_in.application.events import Cancelled, Failed, HandoffRequested, RuntimeEvent, ToolFinished
 from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, SessionState
@@ -20,6 +20,8 @@ _EXIT_SUBAGENT_SUMMARY_PROMPT = (
 class SessionTransition:
     session: SessionState
     event: RuntimeEvent
+    started_agent: AgentKey | None = None
+    closed_agent: AgentKey | None = None
 
 
 class Orchestrator:
@@ -54,9 +56,13 @@ class Orchestrator:
             session_id=session.session_id,
         )
         session = self._replace_agent(session, frame.source, transition.state)
+        if not isinstance(transition.event, ToolFinished):
+            return SessionTransition(session, transition.event)
+        session = self._clear_closed_subagent(session, frame)
         return SessionTransition(
             replace(session, active_agent=frame.source, handoff_stack=session.handoff_stack[:-1]),
             transition.event,
+            closed_agent=frame.target,
         )
 
     def request_cancel(self, session: SessionState, reason: str = "Cancelled by user") -> None:
@@ -80,7 +86,7 @@ class Orchestrator:
         frame = HandoffFrame(event.source, event.target, event.call_id, source_state.turn_id, event.context)
         target_runtime = self._runtimes[event.target]
         target_transition = target_runtime.advance(
-            session.agents[event.target],
+            AgentSessionState(),
             UserMessage(event.context or "Continue the delegated task."),
             session_id=session.session_id,
         )
@@ -95,6 +101,7 @@ class Orchestrator:
         return SessionTransition(
             replace(session, active_agent=event.target, handoff_stack=(*session.handoff_stack, frame)),
             event,
+            started_agent=event.target,
         )
 
     def _close_active_handoff(self, session: SessionState, event: Cancelled | Failed) -> SessionTransition:
@@ -110,9 +117,13 @@ class Orchestrator:
             session_id=session.session_id,
         )
         session = self._replace_agent(session, frame.source, transition.state)
+        if not isinstance(transition.event, Failed):
+            return SessionTransition(session, transition.event)
+        session = self._clear_closed_subagent(session, frame)
         return SessionTransition(
             replace(session, active_agent=frame.source, handoff_stack=session.handoff_stack[:-1]),
             transition.event,
+            closed_agent=frame.target,
         )
 
     def _return_to_main(self, session: SessionState, event: HandoffRequested) -> SessionTransition:
@@ -126,9 +137,13 @@ class Orchestrator:
             session.agents[frame.source], CompleteHandoff(frame.call_id, event.context), session_id=session.session_id
         )
         session = self._replace_agent(session, frame.source, source_transition.state)
+        if not isinstance(source_transition.event, ToolFinished):
+            return SessionTransition(session, source_transition.event)
+        session = self._clear_closed_subagent(session, frame)
         return SessionTransition(
             replace(session, active_agent=frame.source, handoff_stack=session.handoff_stack[:-1]),
             source_transition.event,
+            closed_agent=frame.target,
         )
 
     def _close_failure(self, session: SessionState, event: HandoffRequested, code: str, message: str) -> SessionTransition:
@@ -145,3 +160,7 @@ class Orchestrator:
         agents = dict(session.agents)
         agents[key] = state
         return replace(session, agents=agents)
+
+    @staticmethod
+    def _clear_closed_subagent(session: SessionState, frame: HandoffFrame) -> SessionState:
+        return Orchestrator._replace_agent(session, frame.target, AgentSessionState())

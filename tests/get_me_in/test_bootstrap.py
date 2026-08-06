@@ -15,7 +15,7 @@ from src.get_me_in.application.settings import KnowledgeIndexMode, Settings
 from src.get_me_in.application.memory_service import MemoryService
 from src.get_me_in.domain.agents import AgentKey, AgentStyle
 from src.get_me_in.domain.knowledge import ReloadReport
-from src.get_me_in.domain.sessions import RuntimePhase
+from src.get_me_in.domain.sessions import AgentSessionState, RuntimePhase
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
 from src.get_me_in.tools.retrieval import build_retrieval_tools
 
@@ -726,7 +726,8 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual((), application._sessions._session.handoff_stack)
             agent_states = application._sessions._session.agents
             self.assertEqual(2, agent_states[AgentKey.MAIN].model_calls)
-            self.assertEqual(1, agent_states[AgentKey.RESUME].model_calls)
+            self.assertEqual(0, agent_states[AgentKey.RESUME].model_calls)
+            self.assertEqual((), agent_states[AgentKey.RESUME].history)
             self.assertIsNot(agent_states[AgentKey.MAIN], agent_states[AgentKey.RESUME])
 
             snapshot = application.snapshot()
@@ -737,7 +738,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(RuntimePhase.READY, rewound.phase)
             self.assertEqual(RuntimePhase.COMPLETED, restored.phase)
             self.assertEqual(AgentKey.MAIN, restored.active_agent)
-            self.assertTrue(snapshot.session.agents[AgentKey.RESUME].history)
+            self.assertEqual(AgentSessionState(), snapshot.session.agents[AgentKey.RESUME])
 
     def test_rejected_resume_handoff_stays_in_main(self) -> None:
         application = self._build_application(
@@ -759,6 +760,36 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual("approval_rejected", rejected.code)
         self.assertEqual(AgentKey.MAIN, application.view().active_agent)
         self.assertEqual((), application._sessions._session.handoff_stack)
+
+    def test_second_resume_handoff_starts_without_previous_episode_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            main_llm = _FakeLlm([
+                _tool_call("switch_to_subagent", {"agent_name": "resume", "context": "first task"}),
+                _finish("first main complete", "done"),
+                _tool_call("switch_to_subagent", {"agent_name": "resume", "context": "second task"}),
+                _finish("second main complete", "done"),
+            ])
+            resume_llm = _FakeLlm([
+                _tool_call("switch_to_mainagent", {"summary": "FIRST_RESUME_SUMMARY"}),
+                _tool_call("switch_to_mainagent", {"summary": "SECOND_RESUME_SUMMARY"}),
+            ])
+            application = build_application(
+                _settings(sessions_dir=Path(temporary)),
+                runtime_llms={AgentKey.MAIN: main_llm, AgentKey.RESUME: resume_llm},
+            )
+            self.addCleanup(application.close)
+
+            for prompt in ("first request", "second request"):
+                main_approval = _pump(application, UserMessage(prompt))[-1]
+                application.handle(Approve(main_approval.call_id))
+                resume_approval = _pump(application, Continue())[-1]
+                _pump(application, Approve(resume_approval.call_id))
+
+            self.assertEqual(2, len(resume_llm.requests))
+            second_request = "\n".join(message.content for message in resume_llm.requests[1].messages)
+            self.assertIn("second task", second_request)
+            self.assertNotIn("FIRST_RESUME_SUMMARY", second_request)
+            self.assertEqual(AgentSessionState(), application._sessions._session.agents[AgentKey.RESUME])
 
     def test_rejected_subagent_approval_pauses_until_next_user_message(self) -> None:
         main_llm = _FakeLlm(
