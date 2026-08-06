@@ -3,7 +3,7 @@
 > 状态：R9-P 前置 Review 进行中
 > 分支：`feat/interviewer-agent`
 > 首次审查日期：2026-08-05
-> 授权边界：B-01 已实现并验证关闭；Interviewer、B00 及其他 production／测试实现仍未授权
+> 授权边界：B-01 已实现并验证关闭；B00 设计已确认但暂缓实施；Interviewer、B00 及其他 production／测试实现仍未授权
 > canonical 命名：新能力统一为 `InterviewerAgent`／`AgentKey.INTERVIEWER`；既有文档中的 `InterviewAgent` 原文不回写
 
 ## 1. 文档用途
@@ -38,7 +38,7 @@
 | ID | 阻塞点 | 当前状态 | 主要依赖 | 阻塞的下一步 |
 |---|---|---|---|---|
 | B-01 | SubAgent 单次 handoff 上下文生命周期与退出销毁 | 已验证关闭 | 当前 Session／handoff 链路 | 已解除 |
-| B00 | 逐次 LLM token usage 的采集、归属、持久化与查询 | 讨论中 | B-01、当前 LLM／Session 链路 | 后续 Workflow 预算与实施 |
+| B00 | 逐次 LLM token usage 的采集、归属、持久化与查询 | 已决定（暂不实施） | B-01、当前 LLM／Session 链路 | 已形成独立实施白名单，等待未来单独授权 |
 | B01 | MVP 产品职责、命名、输入与完成条件 | 已验证关闭 | 无 | 全部后续设计 |
 | B02 | Workflow 阶段、分支、循环与预算上限 | 已验证关闭 | B01 | state、executor、测试 |
 | B03 | typed executor protocol 与 agent-local state 形状 | 待讨论 | B02 | Orchestrator、Session、composition |
@@ -57,7 +57,7 @@
 ```text
 B-01（已验证关闭）
   ↓
-B00（全局 token usage 与 context guard）
+B00（已决定，暂不实施）
 
 B01（已关闭）
  ├─→ B02 ─→ B03 ─→ B04 ─→ B05 ─→ B06
@@ -182,7 +182,7 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 **当前状态与授权**
 
 - 用户在确认 B02 后提出：当前系统没有统计会话中的 token 用量，必须支持获取每一次 LLM 调用的 token 消耗。
-- B-01 已验证关闭，本项恢复为当前最高优先级；当前只授权审计和方案设计，不授权 production／测试实现。
+- B-01 已验证关闭；本项方案、精确文件白名单与验收边界已经用户确认，但用户明确要求暂不实施，production／测试实现仍未授权。
 
 **当前代码事实**
 
@@ -210,28 +210,116 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 - 最小稳定计数使用 input／output／total；cached／reasoning 作为可选细分字段。记录实际 model、Agent、turn、purpose 和 outcome，以便未来 Interviewer 按 node 做预算。
 - 按每次 provider attempt 记录，格式修复与恢复重试各是一条独立记录；逻辑调用可通过稳定 logical call id 聚合。
 - 已发生的计费事实不随 rewind 删除。若统计用于 Session 预算，canonical ledger 应由 `SessionState` 或与其有明确一致性契约的 owner 持有，不能只写日志。
-- 首版优先覆盖所有 `LLMPort.complete()`；Web Search、embedding、STT／TTS 属于不同 usage 类型，明确排除并留待独立扩展。
+- 首版只覆盖交互式 Agent Runtime 主动发起的 `LLMPort.complete()`；MemoryExtractor、Web Search、embedding、STT／TTS 明确排除并留待独立扩展。
 - 提供独立只读 `/usage` 入口，默认展示当前 Session 汇总和最近调用；公开 Application API 返回强类型数据，CLI 不读取 Runtime 私有字段。
 - 不使用本地 tokenizer 伪装 provider 账单数字；缺失 usage 保持 unknown。若未来需要估算，必须使用独立 `estimated` 标志和口径。
 
 **已确认的设计**
 
-- 所有 `LLMPort.complete()` provider attempt 均进入 `SessionState` 顶层全局 ledger，至少覆盖 Main、Resume、MemoryExtractor 和未来 Interviewer；Web Search、embedding、STT／TTS 首版排除。
+- 只有交互式 Agent Runtime 主动发起的 `LLMPort.complete()` attempt 进入 `SessionState` 顶层 lifetime ledger，覆盖 Main、Resume 与未来 Interviewer；MemoryExtractor、Web Search、embedding、STT／TTS 首版均排除，不计入 Session token 或参考费用。
 - ledger 按 actual attempt 记录，并以 logical call id 聚合重试／格式修复；provider 未返回 usage 时保留 typed unknown，不记 0，不用本地 tokenizer 冒充账单数字。
 - `/rewind` 不回滚已经发生的 Session lifetime usage，也不单独展示“rewound usage”；它只回退模型可见 history，并重新计算当前 context estimate。销毁 B-01 SubAgent episode 同样不回滚全局 usage。
 - 独立 `/usage` 展示当前 Session lifetime 汇总、按 Agent／component 明细、unknown attempt 和最近逐次记录；不把完整 ledger 塞进 `/status`，CLI 只经公开 Application query。
-- context safety 与累计 usage 分离：每个 Agent／每次请求有独立 context window；预留 `context_window_tokens`、`compression_threshold_ratio=0.95`、`reserved_output_tokens`、`ContextSizer` 与 `ContextPolicy`。
-- provider usage 是调用后的真实计量，不能单独承担防爆保护；未来必须在调用前估算 system prompt、tools、history、handoff、当前输入和输出预留。自动压缩未实现前达到阈值必须 fail-closed 进入 typed pause，禁止冒险请求。
-- 未来压缩只替换模型可见工作上下文为“摘要 + 最近记录”，不删除累计 usage；原始 transcript 与模型可见上下文是否正式拆成两个持久化层仍待 B00 后续确认。
+- context safety 与累计 usage 分离：Settings 提供一套全局 `usable_context_tokens` 与 `compression_threshold_ratio`，前者由用户配置为低于模型物理上限的应用可用额度（例如物理 256k、应用约 230k），两者由 `ContextSizer` 与 `ContextPolicy` 使用。物理上限到应用额度之间已作为输出和估算误差缓冲，B00 不新增 provider 输出硬上限。
+- provider usage 是调用后的真实计量，不能单独承担防爆保护；未来必须在调用前估算 system prompt、tools、history、handoff 与当前输入。自动压缩未实现前达到应用额度的配置阈值必须 fail-closed 进入 typed pause，禁止冒险请求。
+- 未来压缩只替换模型可见工作上下文为“摘要 + 最近记录”，不删除累计 usage；B00 不拆分原始 transcript 与模型可见上下文，正式双层持久化留给未来 compression schema 单独设计。
+- 防爆使用每次 provider 调用前重新计算的 `ContextEstimate`，核心口径为“即将发送的完整 input estimate”相对全局应用可用上下文的占比；例如 `usable_context_tokens=230k`、ratio `0.95` 时约在 218.5k 开始压缩准备。Session lifetime 累计 input／output 不能代表下一次请求的上下文占用，`ContextEstimate` 是当前投影而非 lifetime ledger 的持久化事实。
+- provider 已知 usage 的 canonical 核心字段为 `input_tokens` 与 `output_tokens`；`cached_input_tokens`、`cache_write_input_tokens`、`reasoning_output_tokens` 是可选细分。cached／cache-write 是 input 子集，reasoning 是 output 子集，汇总时不得重复相加；`total_tokens` 由 input + output 派生，不作为 canonical 累计源。provider 未返回 usage 时仍使用 typed unknown。
+- cached input 仍占 context window，但影响参考成本，因此 Session lifetime 汇总需要分别显示 total input、cached／cache-write／uncached input、total output、reasoning output 与 unknown attempts；context guard 不以 cache 命中量抵扣 input。
+- 成本仅作为用户参考估算，不实现供应商账单、通用费率引擎或汇率换算。首版由配置提供一个全局计费单位，并分别为 `ModelProfile.PRO` 与 `ModelProfile.FLASH` 提供 input／cached input／output 等同单位参考单价，按 attempt 的请求 profile 选取；attempt 仍记录 provider 实际 model 供审计。每次 attempt 完成时使用当时生效的 profile 价格和计费单位计算并保存该次估算费用，后续请求保存自己的估算费用，Session 总参考费用直接累加。相同计费单位下的价格变化只影响新 attempt；restore 时若历史估算费用的单位与当前配置不同，则只丢弃旧估算金额，使用当前单位与当前 PRO／FLASH 单价对全部已知历史 usage 重新计算，不换算汇率、不删除 token／attempt 事实，usage 不可用的 attempt 费用仍为 typed unknown。
+- attempt 精确定义为纳入统计范围的交互式 Agent Runtime 主动发起的一次 `LLMPort.complete()` 调用；OpenAI SDK／transport 内部不可见 retry 不单列。格式 repair 或未来由应用显式执行的 retry 各生成一个新 attempt，并在属于同一业务决策点时共享 `logical_call_id`；Tool result 后的新模型决策点和下一用户回合使用新的 logical call。
+- 每条 attempt 使用唯一 `attempt_id`、`logical_call_id` 与同组 `attempt_index`，并记录 component、可选 Agent／turn／handoff episode、typed purpose、请求 `ModelProfile`、provider 实际 model 和 terminal record 时间。ledger 已由 `SessionState` 所有，因此记录内不重复 `session_id`，也不复制 prompt、原始回复或 provider 异常文本。
+- attempt outcome 固定为 `COMPLETED`、`TIMEOUT`、`CANCELLED`、`FAILED` 四类 provider-boundary 结果。provider 已返回响应时即为 `COMPLETED`；随后发生 OutputFormat／JSON 解析失败或 Application 才观察到取消，不得把已完成的 provider attempt 改写为失败或取消，Application／workflow 的上层结果与 attempt outcome 分离。
+- usage measurement 与 outcome 正交，使用 `Reported(TokenUsage)` 或 `Unavailable(reason)`；首版 unavailable reason 为 `NOT_REPORTED`、`NO_RESPONSE`、`MALFORMED`。不保存 provider 异常原文；格式 repair／未来显式 retry 的触发原因使用 typed attempt reason（`PRIMARY`／`FORMAT_REPAIR`／`EXPLICIT_RETRY`），而不是污染 provider outcome。
+- ledger 只保存 terminal attempt，不预写 `PENDING`。调用前只在内存生成 identity／归属；provider 返回或抛错后形成 outcome、校验 usage、计算参考费用并构造 immutable record，再与该次调用产生的 Session 状态转换一起提交。相同 `attempt_id` 不得重复累计，repair／显式 retry 使用新 attempt id 并保留原 logical call id。
+- B00 的准确性目标是 best-effort reference estimate，不承诺与供应商账单 100% 一致。可观察的 timeout／cancel／failure 保留 usage unknown 的 terminal attempt；网络中断、API 异常、SDK 内部 retry 或进程硬终止可能导致未知或遗漏，均不猜测 token／费用，也不为首版引入逐调用 durable journal。正常可观察路径应尽量保存 provider 明确返回的 usage。
+- `SessionState` 顶层以 immutable attempt tuple 持有单一 lifetime ledger，Main、SubAgent 与未来 Interviewer 共用；Agent closure、context 销毁和 `/rewind` 不回滚，save／dump／restore 完整保留，新 Session 为空。累计 token／费用及 Agent／component 汇总均按 attempts 派生，不持久化第二份 aggregate。
+- MemoryExtractor 的后台 LLM usage 不进入任何当前 Session ledger，也不参与 `/usage` 或 Session 参考费用；B00 不为它增加跨线程／跨 Session recorder。未来 Sticky Plan 建立后台消息推送区域后，再把 MemoryExtractor usage 作为独立后台通知展示给前台，但仍不并入触发它的 Session lifetime totals。
+- B00 在当前 schema v3 顶层增加向后兼容的可选 attempt ledger；既有缺少该字段的合法 v3 按空 ledger 读取，不因此升级 v4，v2 继续拒绝。字段存在时严格校验 attempt identity、index、非负 token、细分字段不超过所属 input／output、费用非负及单一计费单位，非法当前 schema 不得静默忽略。
+- restore 时历史费用单位与当前配置一致则保留原 estimated cost；不一致则保留全部 attempt／token facts，丢弃旧估算金额并按当前单位及当前 PRO／FLASH 单价重新计算，下一次正常 save／dump 再持久化，不做汇率换算。首版保留 Session 内全部 attempt，不做截断；若未来长期 Session 产生规模问题，再单独设计聚合与近期明细分层。
+- 独立 `/usage` 首版不接受参数，返回当前 active Agent 的 context-safety estimate、Session lifetime logical call／attempt／token／参考费用汇总、按 Agent／component 分组，以及最近 10 条 terminal attempt。CLI 只消费公开 typed Application view，不读取 Session／Runtime 私有字段，不显示 prompt、模型原文或 provider 异常原文。
+- context 区块显示当前 working context 在“不含用户尚未输入的下一条消息”条件下的基础 input estimate、全局应用可用上下文、配置阈值、utilization 与安全状态；真正 provider 调用前必须加入本次新输入重新估算。费用明确标为 estimate，并单列 usage／cost unknown attempt 数。
+- 首版 `ContextSizer` 使用无模型依赖的轻量启发式：ASCII 约 4 字符/token、非 ASCII 约 1 字符/token，并计入消息结构固定开销；它只用于安全估算，不进入 provider usage 或费用。2026-08-06 的只读 synthetic microbenchmark 对约 230k 内容测得约 1.53～4.27 ms/次，满足几十毫秒门槛；实现仍须保持对完整请求大小的线性复杂度。若后续真实请求基准无法维持该量级，应停止启用估算逻辑并重新设计，不在调用路径加入明显延迟。
+- preflight 达到配置阈值时不创建 attempt、不调用 provider；自动压缩未实现前返回 typed pause 并保留当前 Agent／handoff，未来压缩机制必须在调用前把 working context 降回安全范围，正常设计下不得让请求越过应用可用上下文。
+- B00 不提前拆分或迁移 transcript／working-context 持久化字段；当前 `AgentSessionState.history` 继续同时承担原始记录与模型可见上下文，B00 只落地 estimate／guard／typed pause。未来压缩功能再以新 snapshot schema 引入完整 transcript 与“摘要＋近期记录”的 working context：Main 跟随 Session，active SubAgent 两层状态只在 handoff episode 内保留并在 closure 后共同销毁，restore 直接恢复已提交摘要而不得重新调用 LLM 生成；任何压缩都不改变 Session lifetime usage ledger。
+- usage 提交保持单向 typed flow：OpenAI adapter 的 `LLMResult` 只返回 content、provider model 与 normalized provider usage；`AgentRuntime` 补全调用 identity／归属／outcome／参考费用并通过 `RuntimeTransition.attempt` 返回；Orchestrator 的全部正常、handoff 与 failure 分支必须把 optional attempt 原样传播到 `SessionTransition`；SessionService 在 `_apply_transition()` 中与 Agent state／updated_at 同一次 commit 追加到顶层 ledger。
+- 为使 format repair／未来显式 retry 复用 logical call，`AgentSessionState` 增加仅在活动模型调用期间存在的 typed `PendingLogicalCall(logical_call_id, next_attempt_index, next_attempt_reason)`。PRIMARY 前创建，repair／retry 时递增，调用终止且不再继续时清空；preflight 超限不创建。该 transient state 不作为 v3 长期业务字段写入，snapshot 把不安全执行阶段规范化时必须清空。
+- Settings 新增必填全局 `LLM_USABLE_CONTEXT_TOKENS`（正整数）与 `LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO`（`0 < value < 1`）；`.env.example` 使用 `230000`／`0.95` 作为可见示例。context 配置由 PRO／FLASH 共用，不表示 provider 物理上限。
+- 参考费用配置全部必填：全局 `LLM_COST_UNIT`，以及 PRO／FLASH 各自的 `INPUT_PRICE_PER_MILLION`、`CACHED_INPUT_PRICE_PER_MILLION`、`CACHE_WRITE_INPUT_PRICE_PER_MILLION`、`OUTPUT_PRICE_PER_MILLION`（完整键以 `LLM_PRO_...`／`LLM_FLASH_...` 命名）。单位 trim 后转大写且只要求非空；价格使用 `Decimal`、允许 0、禁止负数。配置只用于本地 estimate，不进入 provider 请求；`.env.example` 明示必须按实际 provider 修改，测试显式构造 env，不读取真实 `.env`。
+- provider 已返回核心 input／output、但没有 cached 明细时，参考费用把全部 input 暂按普通 input 单价计算并标记 `ASSUMED_UNCACHED`，不把整条 usage 降为 unknown；核心 input／output 不可用时费用才是 unknown。recent attempts 默认固定 10 条，首版不增加筛选、分页或命令参数。
+
+**已确认的未来实施白名单（当前未授权执行）**
+
+新增 production 文件：
+
+- `src/get_me_in/domain/llm_usage.py`
+- `src/get_me_in/application/llm_usage.py`
+
+修改 production／配置／用户文档：
+
+- `src/get_me_in/ports/llm.py`
+- `src/get_me_in/adapters/openai_llm.py`
+- `src/get_me_in/domain/sessions.py`
+- `src/get_me_in/application/settings.py`
+- `src/get_me_in/application/runtime.py`
+- `src/get_me_in/application/orchestration.py`
+- `src/get_me_in/application/session_service.py`
+- `src/get_me_in/application/session_codec.py`
+- `src/get_me_in/application/application.py`
+- `src/get_me_in/bootstrap.py`
+- `src/get_me_in/cli/commands.py`
+- `src/get_me_in/cli/renderer.py`
+- `data/locales/zh-CN.json`
+- `data/locales/en-US.json`
+- `.env.example`
+- `README.md`
+
+新增测试文件：
+
+- `tests/get_me_in/test_llm_usage.py`
+- `tests/get_me_in/test_renderer.py`
+
+修改测试文件：
+
+- `tests/get_me_in/test_settings.py`
+- `tests/get_me_in/test_openai_llm.py`
+- `tests/get_me_in/test_runtime.py`
+- `tests/get_me_in/test_orchestration.py`
+- `tests/get_me_in/test_sessions.py`
+- `tests/get_me_in/test_session_codec.py`
+- `tests/get_me_in/test_json_session_repository.py`
+- `tests/get_me_in/test_cli_commands.py`
+- `tests/get_me_in/test_localization.py`
+- `tests/get_me_in/test_bootstrap.py`
+- `tests/get_me_in/test_import_boundaries.py`
+
+明确禁止扩大到：MemoryExtractor／MemoryService／后台 worker、Web Search／embedding／STT／TTS、`application/app_commands.py`、`domain/events.py`、CLI app 驱动、JSON repository adapter 的 production 实现、Prompt、Knowledge／Artifact／Workspace、Interviewer production 代码、依赖／lock、四个 legacy 数据目录，以及 transcript compression。若实施中发现必须修改上述边界，必须停止并重新提交最小扩展清单。
+
+**已确认的未来验收矩阵（当前不执行）**
+
+1. adapter 能规范化 provider 的核心 input／output 和全部可选细分字段，并保留实际 provider model。
+2. provider 缺少可选 cache／reasoning 明细时 usage 仍有效；缺少核心 usage 时返回 typed unavailable，不以 0 代替。
+3. PRIMARY、FORMAT_REPAIR 和应用主动 EXPLICIT_RETRY 形成独立 attempt；同一业务决策点共享 logical call identity 并递增 attempt index，SDK 内部 retry 不单列。
+4. provider 返回后解析失败或上层才观察到取消时 attempt 仍为 `COMPLETED`；无响应的 timeout／cancel／failure 使用正确 terminal outcome 与 unavailable reason。
+5. terminal attempt 与 Agent state／`updated_at` 在同一 Session transition 中提交；相同 `attempt_id` 不重复累计，in-flight 丢失按已接受的 best-effort 边界处理。
+6. Main、Resume 与未来 Interviewer 共用 Session lifetime ledger；SubAgent closure、Plan 清理与 `/rewind` 均不回滚真实 attempts。
+7. schema v3 缺少可选 ledger 时按空 ledger恢复；字段存在时严格拒绝非法 identity、index、token 细分、费用和单位，不升级 v4、不恢复 v2。
+8. save／dump／restore 保留完整 attempts；累计 token、费用、Agent／component 分组均从 ledger 派生，不持久化第二份 aggregate。
+9. 相同单位下历史 attempt 保留调用当时的参考费用；单位变化时保留 usage 并用当前 profile 价格重算全部已知历史费用，不进行汇率转换。
+10. 缺少 cache 明细时按普通 input 价格估算并标记 `ASSUMED_UNCACHED`；核心 usage unknown 时费用保持 unknown。
+11. `/usage` 无参数并只经 typed Application view 展示 context safety、lifetime 汇总、Agent／component 分组和最近 10 条 attempt，不泄露 prompt、回复或异常原文。
+12. preflight 对完整待发送 input 做线性启发式估算；达到配置阈值时不创建 attempt、不调用 provider，并以 typed pause 保留 active Agent／handoff。
+13. MemoryExtractor 及其他排除组件不进入 Session ledger、`/usage` 或参考费用；未来 Sticky Plan 只能独立通知其后台 usage。
+14. Settings 对 context、ratio、计费单位和 PRO／FLASH Decimal 价格执行严格验证；测试显式构造环境，不依赖仓库 `.env`，并完成定向测试、完整 unittest、compileall、diff-check 与 import-boundary。
 
 **最终决策状态**
 
-> 核心 owner、rewind、全局汇总与 context guard 已确认；B-01 已关闭，下一步继续确认数据类型、写入时序、transcript／working-context 分层、schema v3 可选字段和精确实现白名单。
+> B00 的统计范围、typed 数据、写入时序、Session lifetime ledger、schema v3、rewind、参考费用、`/usage`、context guard、配置、精确文件白名单和验收矩阵均已确认。用户决定暂不实施；未来必须重新明确授权后才能按白名单进入 coding。
 
 **关闭条件**
 
-- 统计范围、字段、attempt／logical call identity、owner、snapshot 兼容、rewind、查询入口、unknown 语义和验证矩阵全部确认。
-- 形成精确文件／类／公开方法白名单，并由用户另行授权后才可实现。
+- ✅ 统计范围、字段、attempt／logical call identity、owner、snapshot 兼容、rewind、查询入口、unknown 语义和验证矩阵全部确认。
+- ✅ 已形成精确文件白名单；production／测试实现暂缓，未来仍须由用户另行授权。
 
 ### B01 —— MVP 产品职责、命名、输入与完成条件
 
@@ -664,6 +752,6 @@ R9-F  完整工程验证 + 真实 provider/TTY smoke + 用户审查
 
 ## 5. 当前审查结论
 
-当前没有“技术上无法实现”的硬阻塞；B-01、B01、B02 已验证关闭。当前最高优先级回到 B00：继续固定全局 token ledger 的数据类型、写入时序、持久化分层与精确实现白名单。
+当前没有“技术上无法实现”的硬阻塞；B-01、B01、B02 已验证关闭，B00 已决定但按用户要求暂不实施。Interviewer production／测试实现仍未授权。
 
-下一条讨论从 **B00 —— 逐次 LLM token usage 的采集、归属、持久化与查询** 的 provider-neutral usage record 与 attempt 写入顺序开始；每次只更新已确认结论和依赖，不提前实施代码。
+下一条讨论进入 **B03 —— typed executor protocol 与 agent-local state 形状**；每次只更新已确认结论和依赖，不提前实施代码。

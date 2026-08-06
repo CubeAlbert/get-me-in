@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 300 — 完成 B00 token usage 方案并暂缓实施](#决策-300--完成-b00-token-usage-方案并暂缓实施)
 - [决策 299 — 完成 B-01 无状态 SubAgent 生命周期修复并恢复全量测试环境隔离](#决策-299--完成-b-01-无状态-subagent-生命周期修复并恢复全量测试环境隔离)
 - [决策 298 — 完成 B-01 修复设计并授权下一新会话按白名单实施](#决策-298--完成-b-01-修复设计并授权下一新会话按白名单实施)
 - [决策 297 — 恢复 SubAgent 单次 handoff 无状态契约并提升为 B-01](#决策-297--恢复-subagent-单次-handoff-无状态契约并提升为-b-01)
@@ -7209,3 +7210,40 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 继续让 list 跳过所有 schema 错误 —— 会掩盖当前 v3 数据损坏，拒绝。
 - 保留缺失 `turn_id` 的自动回填 —— 会让 malformed v3 通过严格校验，拒绝。
 - 修改或清空开发者 `.env`、放宽中英文断言、改变生产 locale 默认值 —— 都会把测试隔离问题转嫁给用户配置或生产契约，拒绝；采用 test-local environment isolation。
+
+---
+
+### 决策 300 —— 完成 B00 token usage 方案并暂缓实施
+
+**背景：** B-01 关闭后，用户要求先设计每次交互式 LLM 调用的 token 用量统计，同时为未来上下文上限保护、Main／SubAgent 全局累计、Session save／restore 和参考费用估算建立稳定边界。讨论进一步覆盖 cache token、rewind、显式 retry、计费单位变化、MemoryExtractor、context preflight 性能、schema v3 和 `/usage`。用户已确认最终方案、精确文件白名单与验收矩阵，但明确要求暂不实施，只通过本 checkpoint 固化设计并继续 Interviewer 前置 Review。
+
+**决定：**
+
+- 首版只记录 Main、Resume 与未来 Interviewer 等交互式 Agent Runtime 主动调用 `LLMPort.complete()` 的 actual attempts；MemoryExtractor、Web Search、embedding、STT／TTS 不进入当前 Session ledger、`/usage` 或参考费用。未来 Sticky Plan 可独立向前台通知 MemoryExtractor 后台 usage，但仍不并入 Session totals。
+- provider-neutral usage 以 input／output 为核心，cached input、cache-write input 与 reasoning output 为可选子集，total 由核心字段派生。usage 与 `COMPLETED`／`TIMEOUT`／`CANCELLED`／`FAILED` outcome 正交；缺失或无响应使用 typed unavailable，不以 0 或本地估算冒充 provider 计量。
+- attempt 对应应用可见的一次 provider 调用；SDK 内部 retry 不单列，格式修复和应用主动 retry 各生成新 attempt，并以 logical call id、attempt index 和 typed reason 聚合。provider 已返回响应后发生解析失败或上层取消时，provider outcome 仍为 `COMPLETED`。
+- `SessionState` 顶层 immutable tuple 是 Main／SubAgent 共用的唯一 lifetime ledger。只提交 terminal attempts，不建立 durable pending journal；attempt 与该次 Agent state／`updated_at` transition 一起提交，并按 attempt id 幂等。进程硬终止、网络异常、用户取消或 SDK 行为造成的遗漏和账单偏差属于已接受的 best-effort 估算边界。
+- `/rewind`、SubAgent closure、Plan 清理和 context 销毁均不回滚真实 attempts。save／dump／restore 保存完整 ledger，汇总从 attempts 派生。schema v3 增加向后兼容的可选 ledger；缺失按空 ledger，存在时严格校验，不升级 v4、不恢复 v2。
+- 参考费用不是供应商账单。Settings 使用全局 `LLM_COST_UNIT` 和 PRO／FLASH 各自的 input／cached input／cache-write input／output 每百万 token Decimal 单价；attempt 保存调用当时的估算。同单位价格变化只影响新 attempt；restore 发现历史单位与当前配置不同，保留 usage、丢弃历史金额并按当前单位和当前 profile 单价重算，不进行汇率转换。缺少 cache 明细时暂按普通 input 价格并标记 `ASSUMED_UNCACHED`。
+- 独立 `/usage` 无参数，通过 typed Application view 展示当前 active Agent context safety、Session lifetime logical calls／attempts／tokens／费用、Agent／component 分组和最近 10 条；不读取 Runtime 私有字段，不显示 prompt、原始回复或 provider 异常原文。
+- context safety 与 lifetime usage 分离。全局配置提供 `LLM_USABLE_CONTEXT_TOKENS` 和 `LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO`；每次调用前按完整待发送 input 重新估算，达到阈值时不创建 attempt、不调用 provider，并 typed pause 保留 active Agent／handoff。首版启发式为 ASCII 约 4 字符/token、非 ASCII 约 1 字符/token加结构开销；约 230k synthetic 输入基准为约 1.53～4.27 ms，满足几十毫秒门槛。B00 不实现压缩，也不预先拆分 transcript／working context schema。
+- typed flow 固定为 adapter 返回 content、provider model 和 normalized usage；Runtime 补全 identity、归属、outcome 和费用并把 optional attempt 放入 `RuntimeTransition`；Orchestrator 全分支原样传播至 `SessionTransition`；SessionService 同次提交 ledger。活动调用可使用不持久化的 `PendingLogicalCall` 维持 repair／retry identity。
+- 未来实现白名单固定为 tracker 中列出的 2 个新增 production 文件、16 个 production／配置／用户文档修改、2 个新增测试和 11 个测试修改；明确排除 Memory 后台链路、其他 provider 能力、CLI app 驱动、Prompt、Interviewer、依赖／lock、压缩和 legacy 数据目录。tracker 中的 14 项验收矩阵是实施完成门禁。
+- B00 当前状态为“已决定（暂不实施）”。本决定和白名单不构成 coding 授权；未来进入实现前仍须用户单独明确授权，白名单外需求必须停止并重新确认。
+
+**理由：**
+
+- 把 provider 真实计量、当前请求 context estimate 和参考费用分开，能分别回答历史消耗、防爆上下文与成本辅助三个问题，避免用 lifetime totals 或 cache 命中量错误推断下一次请求大小。
+- Session 顶层 append-only ledger 同时覆盖 Main 和生命周期短暂的 SubAgent，避免 Agent closure 丢失全局消耗，也让 rewind 保持“只回退模型可见状态、不虚构未发生费用”的语义。
+- terminal-only、best-effort 记录符合“尽量准确估算而非复刻供应商账单”的目标，避免为了不可完全解决的 in-flight 计费问题引入高复杂度 durable journal。
+- 全局计费单位加 profile 价格足以支持当前两类模型；单位变化时整体重算比混合单位累计或隐式汇率换算更清晰、可审计。
+- 先固化边界、白名单和验收条件但暂缓实现，可以继续处理 Interviewer 的前置协议设计，同时不让已确认的 token usage 方案在后续讨论中漂移。
+
+**曾考虑的替代方案：**
+
+- 把 usage 放在各 Agent state、rewind 时删除或 SubAgent 退出时丢弃 —— 无法表达 Session 全局真实消耗，拒绝。
+- 将 MemoryExtractor 或全部 provider 能力统一计入当前 Session —— 后台任务难以归属单一前台 Session，且与未来 Sticky Plan 的独立通知边界冲突，拒绝。
+- 保存 pending attempt 以追求 100% 账单准确，或为异常路径猜测 token —— 仍无法可靠观测 provider 内部 retry／断网后的服务端行为，复杂度与收益不匹配，拒绝。
+- 使用 lifetime input totals 作为 context guard，或用 cached tokens 抵扣 context —— 二者都不代表下一次完整请求的上下文占用，拒绝。
+- 混合累计 CNY／USD 等不同单位，或内置汇率换算 —— 超出本地参考估算目标；单位变化时统一按当前配置重算。
+- 当前就引入 transcript compression、长期 ledger 聚合或通用费率引擎 —— 都扩大首版 schema 和实现范围，留待独立设计与授权。
