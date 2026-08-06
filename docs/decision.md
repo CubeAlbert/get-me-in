@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 299 — 完成 B-01 无状态 SubAgent 生命周期修复并恢复全量测试环境隔离](#决策-299--完成-b-01-无状态-subagent-生命周期修复并恢复全量测试环境隔离)
 - [决策 298 — 完成 B-01 修复设计并授权下一新会话按白名单实施](#决策-298--完成-b-01-修复设计并授权下一新会话按白名单实施)
 - [决策 297 — 恢复 SubAgent 单次 handoff 无状态契约并提升为 B-01](#决策-297--恢复-subagent-单次-handoff-无状态契约并提升为-b-01)
 - [决策 296 — 关闭 B02 Workflow 控制流并置顶 B00 token usage 方案审查](#决策-296--关闭-b02-workflow-控制流并置顶-b00-token-usage-方案审查)
@@ -7181,3 +7182,30 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 为每次 handoff 新增独立 episode aggregate —— B-01 只需生命周期 identity，现有唯一 call id 已足够；新增类型留待确有独立数据 owner 时再审查。
 - 只在 Orchestrator 清空 target —— SessionService 会重新附加旧 PlanService snapshot，无法真正恢复无状态契约，拒绝。
 - closure 时清理整个 WorkspaceAccess／外部产物 —— 超出 Agent context 生命周期范围，并会影响 Main 或已提交业务结果，拒绝。
+
+---
+
+### 决策 299 —— 完成 B-01 无状态 SubAgent 生命周期修复并恢复全量测试环境隔离
+
+**背景：** B-01 已按决策 298 的精确白名单实施。提交 `cdb45e2` 完成 SubAgent episode fresh-start／closure-destroy、typed lifecycle signal、Plan／rewind 协调与 schema v3；用户随后确认 smoke 已完成。Codex 代码审查发现两处 snapshot 严格性缺口：malformed／missing `schema_version` 会被错误归类为 unsupported 并在 list 中静默隐藏，以及 v3 仍保留缺少 `turn_id` 时的 legacy handoff 回填；提交 `96fa690` 已修复。完整测试复验又发现 `CliMainTests.test_settings_error_returns_two` 会读取仓库真实 `.env`，因此 `UI_LOCALE=en-US` 可改变测试断言。
+
+**决定：**
+
+- B-01 状态改为“已验证关闭”。每次 Main→Sub 使用全新 `AgentSessionState()`；active handoff 内保留多轮上下文；normal／exit／failure closure 后 target 与 Plan 回到 canonical 空状态；Cancel／Paused 保留 active episode；通用 Main rewind 清空全部 SubAgent state／plan。
+- snapshot baseline 固定为严格 schema v3：v2 不迁移、不改写、不删除；显式 load 返回 `UnsupportedSessionSchemaError`，list 隔离明确不支持的版本；missing、布尔、字符串、浮点或其他 malformed schema 字段返回普通 `ValueError` 并继续暴露损坏文件；v3 `turn_id` 必填，不做 legacy 回填。
+- CLI main 单元测试不得读取仓库真实 `.env` 或继承调用进程的环境。`CliMainTests.setUp()` 清空并在测试后恢复 `os.environ`，同时 mock `load_dotenv()`；生产 `.env` 加载、locale 默认值与真实 CLI 行为不变。
+- B-01 关闭后恢复 B00 为当前最高优先级；B00 继续只讨论 provider-neutral usage record、attempt 写入时序、持久化分层与精确白名单，尚未授权 production／测试实现。
+
+**验证：** 用户确认 B-01 smoke 已完成。Codex 首轮定向 65 项通过；修复 snapshot finding 后定向 67 项、import-boundary 2 项通过。隔离 `.env` 后 `test_cli_main` 8/8、完整 unittest 356/356、`compileall` 与 `git diff --check` 通过；两轮代码审查未留下开放 finding。
+
+**理由：**
+
+- 生命周期清理与严格 snapshot invariant 共同保证已闭合的 SubAgent episode 不会重新进入模型上下文，同时保留 active handoff 的真实多轮恢复能力。
+- 把 malformed schema 与明确不支持的版本分开，避免损坏 Session 从列表中静默消失；删除 field-level legacy repair 与用户放弃旧 snapshot compatibility 的决定一致。
+- 单元测试显式拥有自己的环境边界，才能证明默认 locale 和错误路径，而不是偶然验证开发者本机 `.env`；生产配置不应为了让测试通过而改变。
+
+**曾考虑的替代方案：**
+
+- 继续让 list 跳过所有 schema 错误 —— 会掩盖当前 v3 数据损坏，拒绝。
+- 保留缺失 `turn_id` 的自动回填 —— 会让 malformed v3 通过严格校验，拒绝。
+- 修改或清空开发者 `.env`、放宽中英文断言、改变生产 locale 默认值 —— 都会把测试隔离问题转嫁给用户配置或生产契约，拒绝；采用 test-local environment isolation。

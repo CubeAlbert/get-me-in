@@ -3,7 +3,7 @@
 > 状态：R9-P 前置 Review 进行中
 > 分支：`feat/interviewer-agent`
 > 首次审查日期：2026-08-05
-> 授权边界：B-01 已获下一新会话按精确白名单实施授权；Interviewer、B00 及其他 production／测试实现仍未授权
+> 授权边界：B-01 已实现并验证关闭；Interviewer、B00 及其他 production／测试实现仍未授权
 > canonical 命名：新能力统一为 `InterviewerAgent`／`AgentKey.INTERVIEWER`；既有文档中的 `InterviewAgent` 原文不回写
 
 ## 1. 文档用途
@@ -37,7 +37,7 @@
 
 | ID | 阻塞点 | 当前状态 | 主要依赖 | 阻塞的下一步 |
 |---|---|---|---|---|
-| B-01 | SubAgent 单次 handoff 上下文生命周期与退出销毁 | 已决定（待实施） | 当前 Session／handoff 链路 | B00、B03、B05～B09 |
+| B-01 | SubAgent 单次 handoff 上下文生命周期与退出销毁 | 已验证关闭 | 当前 Session／handoff 链路 | 已解除 |
 | B00 | 逐次 LLM token usage 的采集、归属、持久化与查询 | 讨论中 | B-01、当前 LLM／Session 链路 | 后续 Workflow 预算与实施 |
 | B01 | MVP 产品职责、命名、输入与完成条件 | 已验证关闭 | 无 | 全部后续设计 |
 | B02 | Workflow 阶段、分支、循环与预算上限 | 已验证关闭 | B01 | state、executor、测试 |
@@ -55,7 +55,7 @@
 当前讨论顺序：
 
 ```text
-B-01（当前最高优先，只讨论方案，尚未授权实现）
+B-01（已验证关闭）
   ↓
 B00（全局 token usage 与 context guard）
 
@@ -76,7 +76,7 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 
 - 用户确认原始 v1 契约是：SubAgent 只在一次 active handoff 内保留多轮上下文；退出后销毁该 SubAgent 上下文，下次调用从全新状态开始。
 - 用户要求本项优先级高于 B00 token usage，并明确旧 snapshot 可以放弃、不要求向前兼容。
-- 本 checkpoint 只完成设计与交接，不修改代码；用户已要求在下一新会话优先按本条精确白名单执行修复。
+- 用户随后授权并完成精确白名单内实现；`cdb45e2` 落地生命周期／Plan／rewind／schema v3，`96fa690` 关闭严格 schema 审查 finding，当前状态为“已验证关闭”。
 
 **历史契约证据**
 
@@ -84,12 +84,12 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 - 决策 78 再次固定：Main 只保留异步 tool call 与返回 summary，子 Agent 多轮交互不进入 Main history，且“子 Agent 无持久状态”。
 - 后续 Plan 决策也要求子 Agent plan 随 return 丢弃，以保持无状态原则。
 
-**当前代码漂移**
+**实现结果**
 
-- `SessionState.agents` 当前长期保存 Main 与 Resume 各自的 `AgentSessionState`。
-- Main→Sub 时，Orchestrator 把新的 handoff context 作为 `UserMessage` 发送给 `session.agents[target]`；`AgentRuntime` 会在原 `history` 后追加，而不是创建全新 SubAgent episode。
-- Sub→Main 时只恢复 Main、弹出 handoff frame，没有清空已退出 target 的 history／plan／turn-local state；因此同一 Session 再次进入该 SubAgent 时会携带上一次 handoff 的完整 SubAgent history。
-- Main 的模型上下文仍只看到 handoff tool call／return summary，不会看到 SubAgent 全量 history；问题在于 SubAgent 自身跨 handoff episode 持续累积，与 v1 无状态契约不符，也会造成隐私、restore 与 context-window 膨胀。
+- Main→Sub 现在从 canonical 空 `AgentSessionState()` 启动；正常 return、主动退出和真实 failure closure 后清空 target，Cancel／Paused 继续保留 active episode。
+- `SessionTransition.started_agent`／`closed_agent` 驱动 SessionService 清理 PlanService；restore 只恢复 active Agent plan，通用 Main rewind 清空全部 SubAgent state／plan。
+- snapshot baseline 已升为严格 v3；v2 显式拒绝且 list 隔离，malformed v3 不会被静默隐藏，v3 必填 `turn_id` 不再执行 legacy 回填。
+- 用户确认 Windows smoke 已完成；Codex 两轮代码审查关闭全部 finding，B-01 定向、完整 unittest、compileall、diff-check 与 import-boundary 均通过。
 
 **已确认的目标不变量**
 
@@ -175,21 +175,21 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 
 - ✅ lifecycle、fresh start、closure 顺序、cancel／pause、Plan、rewind、side-effect 边界、schema v3 和旧 snapshot 策略均已固定。
 - ✅ production／测试／公开契约白名单与自动化／TTY 验收矩阵完整。
-- ⏳ 下一新会话按白名单实施并通过全部门禁后，状态从“已决定”改为“已验证关闭”；白名单外问题必须停止并重新授权。
+- ✅ 已按白名单实施；用户 smoke、两轮代码审查、定向／完整自动化、compileall、diff-check 与 import-boundary 均已完成，状态为“已验证关闭”。
 
 ### B00 —— 逐次 LLM token usage 的采集、归属、持久化与查询
 
 **当前状态与授权**
 
 - 用户在确认 B02 后提出：当前系统没有统计会话中的 token 用量，必须支持获取每一次 LLM 调用的 token 消耗。
-- 本项排在 B-01 之后；当前只授权审计和方案设计，不授权 production／测试实现。
+- B-01 已验证关闭，本项恢复为当前最高优先级；当前只授权审计和方案设计，不授权 production／测试实现。
 
 **当前代码事实**
 
 - `LLMResult` 当前只返回 `content`；`OpenAILLMAdapter` 没有读取 Chat Completions response 的 `usage`。
 - 当前锁定的 OpenAI SDK `2.43.0` 对 Chat Completions 提供 `prompt_tokens`、`completion_tokens`、`total_tokens`，并可选提供 `cached_tokens`、`reasoning_tokens` 等细分字段。
 - `AgentRuntime` 在 provider 调用前递增 `model_calls`，但该计数只表达当前用户回合的调用次数；新 `UserMessage` 会重建 per-turn state，因此它不是跨回合 token ledger。
-- `SessionView` 与 CLI `/status` 当前不包含 token 用量；B-01 将把 snapshot baseline 升为 schema v3，但 v3 初始仍没有逐次 LLM usage 记录。
+- `SessionView` 与 CLI `/status` 当前不包含 token 用量；B-01 已把 snapshot baseline 升为 schema v3，但 v3 初始仍没有逐次 LLM usage 记录。
 - 除 Main／Resume Runtime 外，MemoryExtractor 也直接调用 `LLMPort`；OpenAI Web Search 与 embedding 等 provider 请求不经过同一 `LLMPort`，是否纳入首版统计必须明确。
 - provider failure、timeout 或 cancellation 可能已经产生计费 token，但通常拿不到可靠 `usage`；不能用 `0` 冒充未知。
 
@@ -226,7 +226,7 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 
 **最终决策状态**
 
-> 核心 owner、rewind、全局汇总与 context guard 已确认；数据类型、写入时序、transcript／working-context 分层、schema v3 可选字段和精确实现白名单待 B-01 修复后继续讨论。
+> 核心 owner、rewind、全局汇总与 context guard 已确认；B-01 已关闭，下一步继续确认数据类型、写入时序、transcript／working-context 分层、schema v3 可选字段和精确实现白名单。
 
 **关闭条件**
 
@@ -392,7 +392,7 @@ RECEIVED_HANDOFF
 
 **当前事实**
 
-- 当前代码仍只接受并写出严格的 `schema_version=2`；已决定的 B-01 修复将在进入 B00／Interviewer 实现前把 baseline 升为 v3，并明确拒绝 v2。
+- 当前代码只接受并写出严格的 `schema_version=3`；B-01 已明确拒绝 v2，且 malformed v3 必须显式报错。
 - B-01 v3 仍使用单一 ReAct `AgentSessionState` 形状，只新增 inactive SubAgent empty invariant；没有 state kind/tag。
 - restore 会拒绝 snapshot 中存在但当前 composition 未装配的 Agent。
 - 当前运行数据属于 `data/runtime/`，不是 legacy 目录；本 Review 不读取其中的用户数据。
@@ -664,6 +664,6 @@ R9-F  完整工程验证 + 真实 provider/TTY smoke + 用户审查
 
 ## 5. 当前审查结论
 
-当前没有“技术上无法实现”的硬阻塞；B01、B02 已关闭。当前最高优先级是 B-01：恢复 SubAgent 只在单次 active handoff 内有状态、closure 后销毁的历史契约；其结论会直接决定 B00 token ledger 的 episode 归属，以及后续 executor、snapshot、rewind、lifecycle 和隐私边界。
+当前没有“技术上无法实现”的硬阻塞；B-01、B01、B02 已验证关闭。当前最高优先级回到 B00：继续固定全局 token ledger 的数据类型、写入时序、持久化分层与精确实现白名单。
 
-下一条讨论从 **B-01 —— SubAgent 单次 handoff 上下文生命周期与退出销毁** 开始。关闭后再回到 B00；每次只更新已确认结论和依赖，不提前实施代码。
+下一条讨论从 **B00 —— 逐次 LLM token usage 的采集、归属、持久化与查询** 的 provider-neutral usage record 与 attempt 写入顺序开始；每次只更新已确认结论和依赖，不提前实施代码。

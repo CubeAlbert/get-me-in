@@ -101,6 +101,14 @@ class RootEntryTests(unittest.TestCase):
 
 
 class CliMainTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._environment_patch = patch.dict(os.environ, {}, clear=True)
+        self._environment_patch.start()
+        self.addCleanup(self._environment_patch.stop)
+        self._load_dotenv_patch = patch.object(cli_main, "load_dotenv")
+        self._load_dotenv_patch.start()
+        self.addCleanup(self._load_dotenv_patch.stop)
+
     def test_model_loading_progress_is_disabled_for_the_cli_process(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             cli_main._configure_model_loading(_settings())
