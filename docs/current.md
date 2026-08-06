@@ -1,26 +1,26 @@
 # 当前状态
 
-**当前阶段：** 当前基线多语言 UI／模型回复语言专项 L1～L6 已完成并收口；R9 仍未授权
+**当前阶段：** R9-P 前置 Review 中的 B-01 设计已完成并 checkpoint；下一新会话获授权先修复 SubAgent 跨 handoff 保留上下文的生命周期漂移，Interviewer 与 B00 实现仍未授权
 
-**当前任务：** 多语言专项已完成；如继续开发，须先获得 R9 独立授权并重新执行前置 Review
+**当前任务：** 下一新会话按 [`docs/interviewer-agent-review.md`](interviewer-agent-review.md) 的 B-01 精确白名单实施并验证 SubAgent episode fresh-start／closure-destroy；完成后回到 B00 token usage 方案，不进入 Interviewer coding
 
-**当前子任务：** L1～L6 已完成：定向 151/151、完整 346/346、compileall、diff-check、静态 contract、fake/headless component smoke 和用户确认的双语言真实 provider／Windows TTY 体验通过；代码／测试审查修复 checkpoint 为 `02c9c5d`，文档 checkpoint 已完成。
+**当前子任务：** B-01 已达到“已决定（待实施）”：fresh start、typed start／close signal、closure 原子顺序、cancel／pause 保留、Plan／rewind、schema v3、放弃 v2 compatibility、精确 production／测试白名单和验收矩阵均已固定。本会话未改代码。
 
-**当前阻塞：** 当前专项无阻塞。R9 仍需独立授权，未授权前不检查、设计或实施 R9。
+**当前阻塞：** B-01 设计已关闭但代码尚未修复，B00 与 B03～B12 等待其完成；白名单外改动、旧 snapshot migration、WorkspaceAccess／Artifact／Memory／Knowledge 行为变化均未授权。
 
-**会话交接说明：** 决策 284 与当前核心文档固定首版只支持 `zh-CN`／`en-US`，以 `UI_LOCALE`、`MODEL_RESPONSE_LANGUAGE` 两个进程级语义分别控制 UI 和模型回复；缺失时分别默认为 `zh-CN`、`ui`（随中文 UI 解析为 `zh-CN`），`LOCALES_DIR` 默认为 `data/locales`。UI 使用 strict JSON catalog loader、stable key 和命名占位符，模型使用独立 `07_response_language.md`，并按 `08_input_format.md`、`09_output_format.md`、`10_reserved.md` 顺序拼接，不复制 system prompt。L1～L4 各自独立 checkpoint，L5 完整验证／真实 provider／TTY，L6 用户审查与收口。禁止新增 `/language`、自动检测、Session locale／schema、Memory build、embedding／Chroma、Input／Output schema、ModelMessageCodec、依赖、数据迁移或 R9 工作。当前 production Memory 已完成英文技术栈与英文年龄查询中文事实的真实检索对照，均正确 Top-1；该证据不替代英文真实模型 `query_memory` smoke。四个 legacy 数据目录仍不得读取、改写、迁移或删除。
+**会话交接说明：** B-01 复用 handoff `call_id` 作为 episode identity，不新增 episode 类型；`SessionTransition` 仅增加 `started_agent`／`closed_agent`，Orchestrator fresh-start 并在 committed closure 后清空 target，SessionService 同步清空 PlanService。schema 升至 v3，只接受 v3；v2 不迁移、不改写、不删除，显式 restore 报 `UnsupportedSessionSchemaError`，session list 跳过旧 schema。active handoff save／restore 保留 target episode；closed、failure、abandon、通用 Main rewind 后所有 SubAgent state 为空；Cancel／Paused 保留。B00 已确认 Session 顶层 lifetime ledger、`/usage`、rewind 不回滚真实消耗、每 Agent context guard／95% 阈值与未实现压缩时 fail-closed，但仍未授权实现。
 
-**下一步：** 若继续工作，先请求 R9 前置 Review 授权；在此之前不进入 R9，不读取或改写四个 legacy 数据目录。
+**下一步：** 新会话先执行 `/project-bootstrap`，只按 B-01 白名单分四步实施：typed lifecycle/fresh closure → Session Plan／rewind 协调 → schema v3／repository 旧文件隔离 → 定向／全量／TTY 验证与 checkpoint；任何白名单外需求立即停止并重新授权。
 
 **决策记录说明：** `current.md` 仅保留最近 10 条决策摘要；更早决策及完整正文请查阅 [`docs/decision.md`](decision.md)。以下按编号从新到旧排列。
 
+298. **完成 B-01 修复设计并授权下一新会话按白名单实施** — 使用 handoff `call_id` 标识 episode，增加 typed start／close signal，committed closure 后清空 target 与 Plan，Cancel／Paused 和 active snapshot 保留；schema 升 v3 并拒绝／隔离 v2，精确四个 production 文件、五个测试文件与验收矩阵已固定。
+297. **恢复 SubAgent 单次 handoff 无状态契约并提升为 B-01** — 历史决策与用户确认均要求 SubAgent 仅在 active handoff 内保留多轮上下文，closure 后销毁并在下次 delegate 全新开始；当前 v2 跨 handoff 保留 history／plan 属于设计漂移，优先级高于 B00 token usage，当前只讨论方案。
+296. **关闭 B02 Workflow 控制流并置顶 B00 token usage 方案审查** — 固定阶段、5 主问题／每题 1 次且全场 3 次追问、异常回答／提示／拒答、隐藏评估、partial 路径和 10 次逻辑调用／20 次实际请求上限；新增 B00 优先设计逐次 LLM token usage 的统计与查询，当前未授权实现。
+295. **关闭 B01 InterviewerAgent MVP 产品契约** — canonical 名称固定为 `InterviewerAgent`／`AgentKey.INTERVIEWER`；MVP 使用用户提供的 JD 与简历摘要，由同一 LLM 完成出题和判断，不开放外部 tool call，结束后按稳定模板统一报告；默认语言／5 题、typed partial 退出、无计时执行和未来 Observer／计时扩展边界一并固定。
+294. **启动 R9-P InterviewerAgent 前置 Review 并建立阻塞点追踪** — 用户授权展开 R9 前置审查，但未授权 production／测试实现；当前代码审计确认 12 个 coding 前阻塞点，新增 `docs/interviewer-agent-review.md` 作为逐条讨论入口，并继续固定 Hub-and-Spoke、typed state、隐私与 legacy 数据边界。
 293. **合并多语言专项最终事实并删除已完成执行文档** — 删除已完成的 `docs/multilingual-support.md`，移除核心文档中的活跃链接和保留措辞；当前架构、配置、边界、验证与 R9 门禁继续由 README、五份核心文档、Git 和决策 284～292 保存。
 292. **完成多语言专项 L6 收口并保留专项文档** — 用户确认双语言真实 provider／Windows TTY 体验无大问题；代码／测试审查修复提交 `02c9c5d`，完整 unittest 346/346、compileall、diff-check 通过；README、五份核心文档和本决策记录完成收口；专项文档当时按用户要求保留，后由决策 293 授权删除。
 291. **重排 general_agent Prompt 文件编号** — `06_response_language`、`07_input_format`、`08_output_format`、`09_reserved` 依次改为 `07`、`08`、`09`、`10`；PromptRenderer 仍按文件名排序，`render_output_format()` 仍按唯一 suffix 发现；代码／测试提交 `c4ac8dd`，全量 unittest 341/341 通过。
 290. **补充多语言 Settings 中文默认值** — `UI_LOCALE` 缺失默认为 `zh-CN`，`MODEL_RESPONSE_LANGUAGE` 缺失默认为 `ui` 并解析为中文，`LOCALES_DIR` 缺失默认为 `data/locales`；`.env.example` 已注释可用选项，代码／测试提交 `a5efaa1`，全量 unittest 341/341 通过。
 289. **完成多语言专项 L5 工程验证并等待真实 provider／TTY smoke** — 定向 151/151、完整 unittest 340/340、compileall、diff-check、locale／Prompt 静态 contract 和 fake/headless component smoke 通过；真实 provider／Windows TTY 矩阵仍待用户证据，L6 尚未开始，R9 仍未授权。
-288. **完成多语言专项 L4 ResponseLanguage Prompt 注入** — `06_response_language.md`、PromptRenderer 和 bootstrap Main／Resume 共享 resolved response locale 已由代码／测试提交 `8dc56a5` 完成；340 项 unittest、compileall、diff-check、Prompt 静态 contract 和精确白名单审查通过；进入 L5 验证，R9 仍未授权。
-287. **完成多语言专项 L3 typed 固定事件文案与审批** — `ProgressKind`、canonical `tool_name`、CLI stable-key 投影和双语文案已由代码／测试提交 `cfca149` 完成；338 项 unittest、compileall、diff-check 和精确白名单审查通过；下一步实施 L4，R9 仍未授权。
-286. **完成多语言专项 L2 CLI-owned UI 本地化** — Renderer、InputController、CommandRegistry、CliApp、WorkerRunner 和 application result presentation 已由代码／测试提交 `a868252` 完成；338 项 unittest、compileall、diff-check 和精确白名单审查通过；按门禁停在 L3 前，R9 仍未授权。
-285. **完成多语言专项 L1 并进入 L2** — Locale、strict catalog loader、双语 catalog、Settings 语言配置和 bootstrap 诊断已由代码／测试提交 `21ccef3` 完成；用户批准将仅含必填 Settings fixture 迁移的 `tests/get_me_in/test_bootstrap.py` 纳入 L1 白名单；333 项 unittest、compileall 和 diff-check 通过，文档 checkpoint 与代码提交分离，R9 仍未授权。
-284. **建立多语言 UI 与模型回复语言专项计划并留待新会话实施** — 首版固定 `zh-CN`／`en-US`、strict locale loader／命名占位符和单一 ResponseLanguage Prompt，按 L1～L6 实施；不增加运行时切换、Session／Memory／RAG／schema 变更，也不构成 R9 授权。

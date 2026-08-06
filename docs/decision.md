@@ -8,6 +8,11 @@
 
 ## 目录
 
+- [决策 298 — 完成 B-01 修复设计并授权下一新会话按白名单实施](#决策-298--完成-b-01-修复设计并授权下一新会话按白名单实施)
+- [决策 297 — 恢复 SubAgent 单次 handoff 无状态契约并提升为 B-01](#决策-297--恢复-subagent-单次-handoff-无状态契约并提升为-b-01)
+- [决策 296 — 关闭 B02 Workflow 控制流并置顶 B00 token usage 方案审查](#决策-296--关闭-b02-workflow-控制流并置顶-b00-token-usage-方案审查)
+- [决策 295 — 关闭 B01 InterviewerAgent MVP 产品契约](#决策-295--关闭-b01-intervieweragent-mvp-产品契约)
+- [决策 294 — 启动 R9-P InterviewerAgent 前置 Review 并建立阻塞点追踪](#决策-294--启动-r9-p-intervieweragent-前置-review-并建立阻塞点追踪)
 - [决策 293 — 合并多语言专项最终事实并删除已完成执行文档](#决策-293--合并多语言专项最终事实并删除已完成执行文档)
 - [决策 292 — 完成多语言专项 L6 收口并保留专项文档](#决策-292--完成多语言专项-l6-收口并保留专项文档)
 - [决策 291 — 重排 general_agent Prompt 文件编号](#决策-291--重排-general_agent-prompt-文件编号)
@@ -7033,3 +7038,146 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 继续保留专项文件作为历史参考 —— 会在核心文档之外长期维护第二份已完成执行事实，拒绝。
 - 删除专项文件但不更新引用 —— 会留下失效链接和错误的当前状态，拒绝。
 - 重写决策 292，删除当时的保留决定 —— 会破坏追加式决策历史，拒绝。
+
+---
+
+### 决策 294 —— 启动 R9-P InterviewerAgent 前置 Review 并建立阻塞点追踪
+
+**背景：** 用户在 `feat/interviewer-agent` 分支明确要求开始展开 InterviewerAgent，先给出阻塞点列表和详情，在 `docs/` 下建立新文档逐条追踪与讨论。当前 R9 备忘形成于较早的 `refactor` 基线，只能作为风险提示，不能替代基于当前代码的重新 Review。对当前 Runtime、Orchestrator、Session、snapshot、rewind、CLI finalize、handoff、Memory、Artifact、Settings 和 composition root 的只读审查确认：旧备忘中的核心耦合仍存在，并新增暴露出 Interview 回合 rewind、typed exit、auto-memory 和 raw reply 日志等必须先决定的边界。
+
+**决定：**
+
+- 授权范围进入 R9-P 前置 Review：允许检查当前代码、讨论设计、形成阻塞点结论和最终实现清单；不授权 production、测试、Prompt、reference、schema migration、配置或依赖实现。
+- 新增 [`docs/interviewer-agent-review.md`](interviewer-agent-review.md) 作为当前专项 Review 入口，按 B01～B12 追踪产品职责、Workflow、executor/state、command/event、snapshot、rewind、生命周期、数据所有权、隐私、question/rubric、composition 和验收门禁。
+- 当前已确认且不重复开放的边界为：Main 继续作为唯一跨 Agent 调度中心；Workflow 只是 InterviewerAgent 内部确定性执行策略；`SessionState` 继续是唯一长期状态 owner；不引入外部 workflow 或异步框架；workflow node 不绕过 capability／port／service；四个 legacy 用户数据目录继续隔离。
+- 12 个条目的推荐方向只用于推动讨论，状态统一从“待讨论”开始；只有用户逐条确认并满足关闭条件后才标记“已决定”。全部关闭后仍须先提交精确文件／类／公开方法白名单、实施切片和验收矩阵，再由用户单独授权 coding。
+- 讨论从 B01 开始；canonical 命名也在 B01 正式确认。既有历史文档中的 `InterviewAgent` 原文不回写，当前分支名保持 `feat/interviewer-agent`。
+
+**理由：**
+
+- 产品范围会决定 workflow、数据 owner、配置和测试边界；先关闭 B01 可避免底层接口在未确定目标下过度设计。
+- 当前 `Orchestrator`、`RuntimeTransition`、`AgentSessionState` 和 schema v2 不能零修改承载 Workflow；rewind、typed exit、auto-memory 与日志策略又跨越生命周期和敏感数据边界，必须先形成一致设计。
+- 独立追踪文档能把仍在讨论的推荐方案与五份核心文档中的稳定当前事实分开，同时由 `current.md` 显式路由，避免专项状态丢失。
+
+**曾考虑的替代方案：**
+
+- 直接按历史 R9 备忘开始 coding —— 旧备忘明确不是最终 API，且没有覆盖当前多语言、取消作用域、auto-memory 和日志边界，拒绝。
+- 只在 `docs/task.md` 的 R9 段落逐行打勾 —— 无法容纳每个阻塞点的事实、选项、最终决定和关闭证据，也会把稳定主任务清单变成讨论草稿，拒绝。
+- 一次性决定全部 12 项并形成实现计划 —— 产品与隐私选择需要用户逐条确认，不能由审查者代替用户授权，拒绝。
+
+---
+
+### 决策 295 —— 关闭 B01 InterviewerAgent MVP 产品契约
+
+**背景：** B01 要先固定新 SubAgent 的 canonical 命名、首版职责、启动输入、用户可见反馈、完成条件、报告形状和非目标，否则 Workflow、数据 owner、Prompt／rubric、capability、配置与测试范围都会漂移。用户逐项确认了首版范围，并要求显式记录提前结束命令、计时边界和未来隔离评分方向。
+
+**决定：**
+
+- 新能力 canonical 名称为 `InterviewerAgent`，稳定 key 为 `AgentKey.INTERVIEWER`；沿用声明式 `AgentSpec` 风格，具体 executor／workflow 类名留待 B03／B11，历史 `InterviewAgent` 原文不回写。
+- MVP 只实现基于用户提供 JD 与简历摘要的单场文本岗位技术模拟面试：Main 转交、确认输入、LLM 准备问题、多轮问答与判断、模板化总结报告、返回 Main。
+- MVP 不依赖外部 tool call，不开放 `query_reference_data`、`query_memory` 或其他检索能力。问题由 Interviewer LLM 生成，回答暂由同一 LLM 判断；提示词注入和同一上下文污染可能影响评分，作为首版已知限制。未来可设计独立 Observer Agent 做隔离逐题评分，但不属于当前范围。
+- Interviewer 启动前必须显式询问并取得用户提供的 JD 与简历摘要，不得自动读取 Memory、Knowledge、Resume workspace 或历史会话。语言沿用 resolved response locale，题数默认 5；MVP 不通过自然语言修改语言或题数，未来选择必须由 typed state／command 驱动。
+- 面试期间不展示逐题评分或即时反馈；正常完成默认题数时生成完整报告。用户可通过可发现的指定命令提前结束并获得标注为 partial 的部分报告；精确命令、状态转换和 handoff closure 在 B07 决定。
+- 报告必须使用稳定、带版本的模板填充，至少表达面试目标与完成度、总体及分维度评价、逐题证据、优势、短板／风险和改进建议；精确 schema、owner、渲染与持久化边界在 B08／B10 决定。
+- MVP 不实现计时或时间预算终止。B11 只评审可替换计时模块的接口边界；未来语音场景必须能区分模型生成、TTS 播放、用户听取／阅读、STT 和作答时间，不能简单从模型输出完成时开始扣减统一答题时限。
+- MVP 还明确排除语音、视频、STT／TTS、实时 coding sandbox、外部题库／Reference／Memory 检索、多面试官、Observer Agent、多会话并行和运行时自然语言配置。
+
+**理由：**
+
+- 首版以无外部工具的文本纵向切片验证核心多回合 Workflow，可以减少 capability、side effect 和检索生命周期耦合，同时保留明确的后续扩展边界。
+- 用户显式提供 JD 与简历摘要，且语言／题数使用确定性默认值，可以避免模型从自由文本隐式改变运行设置。
+- 结束后统一反馈可减少反馈对后续回答的影响；稳定模板使报告结构可验证。未来 Observer Agent 再解决评分上下文隔离，而不是在 MVP 同时引入第二个 Agent 协作协议。
+- 文字、模型生成、语音播放／转写和用户作答耗时语义不同；未定义时间归属前不实现计时，比提供错误倒计时更符合可扩展性要求。
+
+**曾考虑的替代方案：**
+
+- MVP 直接接入 Reference／Memory 检索 —— 会扩大 capability、隐私和可复现性范围，暂缓。
+- 面试中逐题展示评分 —— 可能改变后续回答并污染同一上下文中的评估，暂缓。
+- 让 LLM 从自然语言识别语言、题数或提前退出 —— 会把控制协议交给不确定语义解析，拒绝；使用默认值和未来 typed command。
+- 首版实现统一答题计时 —— 无法正确表达模型生成、阅读／听取、转写和作答的不同时间归属，暂缓，仅预留接口边界。
+
+---
+
+### 决策 296 —— 关闭 B02 Workflow 控制流并置顶 B00 token usage 方案审查
+
+**背景：** 用户确认 B02 的 Workflow 阶段、分支和预算推荐方案；同时指出当前系统没有会话级 token 使用统计，要求支持获取每次 LLM 调用的 token 消耗，并将该事项放到后续阻塞点之前。用户随后明确澄清：当前只讨论逐次 token usage 统计方案，并非授权在本次会话实施。
+
+**决定：**
+
+- B02 固定为：收集上下文、确认开始、准备、提问、等待回答、评估、追问或下一题、汇总、返回 Main、完成的确定性流程；默认 5 道主问题，每题最多追问 1 次、全场最多 3 次。
+- 空输入不调用 LLM；空泛／跑题在额度内追问，否则记录证据不足；拒答记为跳过；提示占用该题追问额度并标记 assisted；MVP 不用自然语言修改上一答案。
+- 逐次回答使用隐藏的强类型判断，状态机校验计数后决定分支；未回答／拒答不直接计零。partial 只汇总已评估内容并显示完成度，正常返回 Main。
+- 每场最多 10 次逻辑 LLM 调用和 20 次实际模型请求；每次逻辑调用最多一次格式修复，provider／transport error 不在 Workflow 内静默循环。
+- 新增 B00“逐次 LLM token usage 的采集、归属、持久化与查询”，置于所有未关闭条目之前。B00 需覆盖统计范围、字段、provider attempt／logical call identity、owner、snapshot／rewind、unknown usage、查询入口和验证矩阵。
+- B00 当前仅授权只读审计、方案讨论、追踪和最终白名单；未授权 production 或测试实现。B00 关闭前不把 token 数用于 Interviewer 控制预算，B02 已确认的调用次数硬上限保持不变。
+
+**理由：**
+
+- B02 的调用次数上限可以在没有 token 计量时稳定约束循环，因此产品控制流可以关闭；token usage 是跨 Agent／Memory／provider／Session 的通用能力，应独立审查而不是塞进 Interviewer 状态机。
+- provider 可能不返回 usage，失败或取消也可能产生无法获知的计费；逐次记录必须区分已知数字与 unknown，不能把缺失解释为零。
+- 先确定统计范围、canonical owner 和查询入口，可以避免只在 adapter 打日志、无法跨回合查询，或为统计擅自改变 snapshot schema。
+
+**曾考虑的替代方案：**
+
+- 立即实现 `LLMResult.usage` —— 只能证明 adapter 读到了数字，不能解决逐次归属、跨回合保存、失败记录与公开查询，且用户未授权本轮实现，拒绝。
+- 把 token budget 直接并入 B02 —— 会混淆确定性调用次数预算与 provider usage telemetry，拆分为 B00。
+- 只记录日志 —— 无法提供可靠的强类型查询、汇总和 restore 语义，拒绝作为完整方案。
+
+---
+
+### 决策 297 —— 恢复 SubAgent 单次 handoff 无状态契约并提升为 B-01
+
+**背景：** 在 B00 token usage 讨论中核对 Main／Sub 上下文后发现，当前 v2 在 Sub→Main return 时只恢复 Main 并弹出 handoff frame，没有清空 target `AgentSessionState`；同一 Session 下次进入相同 SubAgent 时会在旧 history 后继续。用户指出原始 v1 设计并非如此，并要求该修改优先于 token 记录。历史决策 51、78 明确写明“子 Agent 无状态／无持久状态”，后续 Plan 决策也要求子 Agent plan 随 return 丢弃。
+
+**决定：**
+
+- 恢复 canonical SubAgent 生命周期：每次 Main→Sub handoff 创建全新 episode；active handoff 内可以多轮保留 context；handoff closure 后销毁该 SubAgent episode，下次 delegate 从全新上下文开始。
+- Main 仍只保留原 handoff tool call 与 typed return／failure summary，不注入 SubAgent 全量对话。
+- Esc／Ctrl+C 和可恢复 pause 不构成 closure，继续保留 active SubAgent episode；正常 return、partial return、用户退出／放弃和真实 failure closure 后必须销毁。
+- Session save 在 active handoff 时必须保存并可恢复该 episode；handoff 已闭合后不得把旧 SubAgent transcript／plan／pending／workflow state 恢复为下一次调用上下文。
+- target `AgentKey` 继续保留在 composition 与 `SessionState.agents` 中，但 closed episode 的 value 必须回到 canonical 空 state；是否保留不含 transcript 的 episode metadata、旧 snapshot 如何规范化及精确 closure 顺序继续在 B-01 讨论。
+- SubAgent context 销毁不回滚 Session 顶层真实 token usage；usage 仍按 Agent／episode 归属并在全局 Session ledger 累计。每个 active Agent 的 context-window guard 与累计 usage 分离。
+- 新增 B-01 并置于 B00 前；当前仅授权追溯、方案讨论、追踪和最终白名单，未授权 production／测试实现。
+
+**理由：**
+
+- 当前跨 handoff 保留 SubAgent history 与两次明确历史决策及用户当前产品预期冲突，是需要先修复的生命周期漂移。
+- 单次 handoff episode 能阻止 SubAgent 历史无限累积，减少跨任务信息污染和敏感上下文残留，同时保留 active handoff 内真正需要的多轮体验。
+- token usage 是已经发生的 provider 计量事实，不能因销毁模型上下文而消失；把 episode context 生命周期与 Session usage ledger 分开，可以同时满足无状态 SubAgent 和全局统计。
+
+**曾考虑的替代方案：**
+
+- 保留当前跨 handoff SubAgent history —— 与 v1 无状态契约冲突，并造成上下文膨胀与跨任务污染，拒绝。
+- 每次用户输入都重建 SubAgent —— 会破坏 active handoff 内的多轮面试／简历协作，拒绝；重建边界必须是 handoff episode closure。
+- 先做 token usage、以后再处理 SubAgent lifecycle —— usage owner、episode attribution、rewind 与 context guard 都依赖生命周期边界，按用户要求先关闭 B-01。
+
+---
+
+### 决策 298 —— 完成 B-01 修复设计并授权下一新会话按白名单实施
+
+**背景：** 用户确认旧 snapshot 可以放弃、不要求向前兼容，要求由 Codex 完成 SubAgent 无状态修复方案并 checkpoint，随后在新会话优先执行该修复。审计进一步确认：Orchestrator 当前在 start 时复用 target state、closure 后不清空；SessionService 会把 active SubAgent 的旧 PlanService snapshot 再写回；JsonSessionRepository.list 会被不兼容文件整体阻断。因此修复必须同时覆盖 handoff lifecycle、Plan、rewind、snapshot invariant 与旧 schema 隔离，但不能扩展到 Interviewer、token usage 或外部副作用。
+
+**决定：**
+
+- 复用 Main→Sub handoff 的唯一 `call_id` 作为 episode identity，不新增 episode domain type。每次 start 都以新的 `AgentSessionState()` 接收 delegate context；active handoff 内多轮保留，closure 后 target 回到 canonical 空 state。
+- `SessionTransition` 增加 `started_agent`／`closed_agent` 两个 typed optional field。SessionService 依此清空 start／close Agent 的 PlanService，禁止通过 message、裸 dict 或 active-agent 差值推断生命周期。
+- closure 顺序固定为：取得 typed summary／failure → Main 用原 call id 完成 `CompleteHandoff`／`FailHandoff` → Main closure state 成功形成 → pop frame／切 Main／清空 target。closure command 未成功时保留原 active episode，不产生半提交。
+- 正常／partial return、summarized exit、abandon 与真实 failure closure 均清空；Esc／Ctrl+C `Cancelled`、可恢复 `Paused` 和选择取消保留 active episode。active handoff save／dump／restore 保留；通用 Main rewind 关闭 handoff并清空全部 SubAgent state／plan。
+- 修复只销毁 Agent history、plan、pending、turn-local／workflow state；不回退 Workspace、Artifact、Memory、Knowledge 或其他已提交副作用。WorkspaceAccess 是 session/path 级共享授权，本切片不修改。
+- Session schema 从 v2 升为 v3，v3 强制：无 handoff 时所有非 Main state 为空；有 handoff 时仅 frame.target 可非空。v2 不 decode、不迁移、不改写、不删除；显式 load 报 `UnsupportedSessionSchemaError`，list 仅跳过该异常，损坏 v3 仍报错。
+- 精确 production 白名单为 `application/orchestration.py`、`application/session_service.py`、`application/session_codec.py`、`adapters/json_session_repository.py`；唯一允许的公开契约变化是 `SessionTransition.started_agent`、`SessionTransition.closed_agent` 和 `UnsupportedSessionSchemaError`。
+- 精确测试白名单为 `test_orchestration.py`、`test_sessions.py`、`test_session_codec.py`、`test_json_session_repository.py`、`test_bootstrap.py`。完成定向测试后必须运行完整 unittest、compileall、diff-check、import-boundary 与四项 Windows TTY lifecycle smoke。
+- 用户授权下一新会话在上述白名单内实施 B-01；本 checkpoint 不修改 production／测试，不授权 B00 token usage、context compression 或 Interviewer 实现。白名单外需求必须停止并重新授权。
+
+**理由：**
+
+- typed start／close signal 让 Orchestrator 与 SessionService 可以共同维护 state 和 Plan，而不通过脆弱的状态差推断；复用 call id 又避免为未来 usage 提前增加 domain 类型。
+- schema v3 把无状态 SubAgent 从运行约定提升为持久化 invariant；拒绝 v2 比迁移旧的错误生命周期状态更简单，也符合用户明确放弃旧 snapshot 的选择。
+- 只跳过明确的旧 schema、继续暴露损坏 v3，可以保证旧文件不阻塞新版本，同时不掩盖真实数据损坏或擅自删除用户文件。
+
+**曾考虑的替代方案：**
+
+- restore v2 后静默清空 SubAgent —— 仍构成兼容／迁移逻辑，且难以区分合法 active episode 与历史漂移，按用户决定拒绝。
+- 为每次 handoff 新增独立 episode aggregate —— B-01 只需生命周期 identity，现有唯一 call id 已足够；新增类型留待确有独立数据 owner 时再审查。
+- 只在 Orchestrator 清空 target —— SessionService 会重新附加旧 PlanService snapshot，无法真正恢复无状态契约，拒绝。
+- closure 时清理整个 WorkspaceAccess／外部产物 —— 超出 Agent context 生命周期范围，并会影响 Main 或已提交业务结果，拒绝。
