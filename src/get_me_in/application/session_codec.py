@@ -1,7 +1,7 @@
 """Disk-safe codec for session snapshots, separate from model conversation codec."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 
 from src.get_me_in.domain.agents import AgentKey
@@ -68,7 +68,8 @@ class SessionSnapshotCodec:
         }
 
     def decode(self, payload: Mapping[str, object]) -> SessionSnapshot:
-        if payload.get("schema_version") != SCHEMA_VERSION:
+        schema_version = _schema_version(payload)
+        if schema_version != SCHEMA_VERSION:
             raise UnsupportedSessionSchemaError(
                 f"Session snapshot must use schema_version={SCHEMA_VERSION}"
             )
@@ -87,14 +88,6 @@ class SessionSnapshotCodec:
                 created_at=_time(payload["created_at"], "created_at"),
                 updated_at=_time(payload["updated_at"], "updated_at"),
             )
-            if handoff_stack:
-                frame = handoff_stack[-1]
-                source_payload = _mapping(agents_raw[frame.source.value], f"agents.{frame.source.value}")
-                source_state = session.agents[frame.source]
-                if "turn_id" not in source_payload and not source_state.turn_id:
-                    repaired_agents = dict(session.agents)
-                    repaired_agents[frame.source] = replace(source_state, turn_id=frame.turn_id)
-                    session = replace(session, agents=repaired_agents)
             snapshot = SessionSnapshot(session, _time(payload["saved_at"], "saved_at"))
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"Invalid session snapshot: {error}") from error
@@ -183,7 +176,7 @@ class SessionSnapshotCodec:
         return AgentSessionState(
             phase=RuntimePhase(_text(payload["phase"], "phase")),
             history=tuple(self._decode_record(_mapping(item, "history item")) for item in _sequence(payload["history"], "history")),
-            turn_id=_string(payload.get("turn_id", ""), "turn_id"),
+            turn_id=_string(payload["turn_id"], "turn_id"),
             model_calls=_integer(payload["model_calls"], "model_calls"),
             pending_tool=pending,
             format_repairs_used=format_repairs_used,
@@ -254,6 +247,16 @@ class SessionSnapshotCodec:
 def _mapping(value: object, label: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise TypeError(f"{label} must be an object")
+    return value
+
+
+def _schema_version(payload: Mapping[str, object]) -> int:
+    try:
+        value = payload["schema_version"]
+    except KeyError as error:
+        raise ValueError("schema_version is required") from error
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError("schema_version must be a non-negative integer")
     return value
 
 

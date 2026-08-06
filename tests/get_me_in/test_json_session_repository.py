@@ -91,3 +91,18 @@ class JsonSessionRepositoryTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 repository.list()
+
+    def test_list_does_not_hide_missing_or_malformed_schema_version(self) -> None:
+        for value in (None, "3", True, 3.0):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                repository = JsonSessionRepository(root, codec=SessionSnapshotCodec(), session_preview_chars=80)
+                payload = SessionSnapshotCodec().encode(_snapshot())
+                if value is None:
+                    del payload["schema_version"]
+                else:
+                    payload["schema_version"] = value
+                (root / "corrupt.json").write_text(json.dumps(payload), encoding="utf-8")
+
+                with self.assertRaises(ValueError):
+                    repository.list()

@@ -67,15 +67,27 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             codec.decode(payload)
 
-    def test_decode_repairs_legacy_handoff_snapshot_without_agent_turn_id(self) -> None:
+    def test_rejects_v3_handoff_snapshot_without_agent_turn_id(self) -> None:
         codec = SessionSnapshotCodec()
         snapshot = _handoff_snapshot()
         payload = codec.encode(snapshot)
         del payload["agents"]["main"]["turn_id"]
 
-        restored = codec.decode(payload)
+        with self.assertRaisesRegex(ValueError, "turn_id"):
+            codec.decode(payload)
 
-        self.assertEqual("turn-1", restored.session.agents[AgentKey.MAIN].turn_id)
+    def test_rejects_missing_or_malformed_schema_version_as_corruption(self) -> None:
+        for value in (None, "3", True, 3.0):
+            with self.subTest(value=value):
+                payload = SessionSnapshotCodec().encode(_snapshot())
+                if value is None:
+                    del payload["schema_version"]
+                else:
+                    payload["schema_version"] = value
+
+                with self.assertRaises(ValueError) as raised:
+                    SessionSnapshotCodec().decode(payload)
+                self.assertNotIsInstance(raised.exception, UnsupportedSessionSchemaError)
 
     def test_round_trip_preserves_tool_call_thinking_and_accepts_missing_fields(self) -> None:
         codec = SessionSnapshotCodec()
