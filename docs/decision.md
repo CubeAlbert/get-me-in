@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 301 — 完成 B00 token usage 审查修订并同步核心文档](#决策-301--完成-b00-token-usage-审查修订并同步核心文档)
 - [决策 300 — 完成 B00 token usage 方案并暂缓实施](#决策-300--完成-b00-token-usage-方案并暂缓实施)
 - [决策 299 — 完成 B-01 无状态 SubAgent 生命周期修复并恢复全量测试环境隔离](#决策-299--完成-b-01-无状态-subagent-生命周期修复并恢复全量测试环境隔离)
 - [决策 298 — 完成 B-01 修复设计并授权下一新会话按白名单实施](#决策-298--完成-b-01-修复设计并授权下一新会话按白名单实施)
@@ -7247,3 +7248,32 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - 使用 lifetime input totals 作为 context guard，或用 cached tokens 抵扣 context —— 二者都不代表下一次完整请求的上下文占用，拒绝。
 - 混合累计 CNY／USD 等不同单位，或内置汇率换算 —— 超出本地参考估算目标；单位变化时统一按当前配置重算。
 - 当前就引入 transcript compression、长期 ledger 聚合或通用费率引擎 —— 都扩大首版 schema 和实现范围，留待独立设计与授权。
+
+### 决策 301 —— 完成 B00 token usage 审查修订并同步核心文档
+
+**背景：** 决策 300 固化 B00 后，用户要求重新检查 token usage 方案的矛盾与遗漏。只读审查指出 context 配置责任、启发式准确性、handoff episode 归属、post-response metadata、schema v3 降级风险、费用可选性、ledger invariant、context pause 恢复、真实 provider smoke 与 OpenAI timeout 映射等问题。用户逐项确认取舍，并要求处理完成后把稳定事实写入其他活跃文档；本轮仍未授权 production／测试实现。
+
+**决定：**
+
+- 保留一套全局 context 配置和轻量启发式，不按 model profile 自动识别物理窗口，也不增加输出硬上限；配置者负责保证实际 PRO／FLASH model mapping 安全并预留足够输出与估算误差缓冲。启发式明确不是 tokenizer 上界。
+- Orchestrator 向 Runtime 显式传入 typed attempt scope；SubAgent episode 使用活动 handoff `call_id`。adapter 使用 response envelope，取得 response 后不得因 content 缺失、post-response cancellation 或上层解析失败丢弃 model／usage metadata；无 response 时实际 response model 为 unknown。
+- OpenAI SDK `APITimeoutError` 与 Python 内置 `TimeoutError` 不同；由 adapter 在 provider-neutral 边界映射为既定 timeout 语义，避免 Runtime 把它归为通用 provider failure，不新增 domain outcome。
+- schema 继续使用 v3 可选 ledger：新代码可把缺少字段的旧 v3 读为空 ledger，但不保证旧代码读取新 v3 后的保存安全。用户接受旧 reader 可能忽略并丢失 ledger 的数据风险，不要求向前兼容、降级安全或升级 v4。
+- token／identity／归属事实保持 append-only；计费单位变化时允许按当前 profile 价格重算历史已知费用。费用配置改为整组可选：全部缺失时 token usage 正常工作，新 attempt 使用 `CostUnavailable(NO_PRICING)`；部分提供视为配置错误。
+- ledger 使用 1-based 连续 attempt index；attempt id 与 logical-call/index 组合唯一，同组归属字段一致。cached 与 cache-write 是互斥 input 子集，provider total 必须等于 input + output；不一致为 `MALFORMED`。Decimal 以精确字符串持久化，不经过 float 或 canonical 展示舍入。
+- context preflight 阻断时不创建 attempt、不调用 provider、不递增 `model_calls`。typed pause 后普通用户消息继续按当前逻辑追加并重估，不自动替换或删除；`/rewind` 是显式后退入口。
+- 验收矩阵由 14 项扩为 16 项，新增用户运行的真实 provider usage／save-restore smoke，以及 ASCII、中文、代码／JSON、tool schema、长 history 的 estimate 与真实 provider input token 对照校准；实现白名单和禁止清单不扩大。
+- 将上述稳定事实同步到 `docs/design.md`、`docs/plan.md`、`docs/task.md`、`docs/current.md` 与 B00 tracker。B00 状态保持“已决定（暂不实施）”，下一步继续 Interviewer B03；任何 production／测试 coding 仍须用户单独授权。
+
+**理由：**
+
+- 这些调整补齐现有 Runtime／Orchestrator／adapter 的真实信息边界，同时保留用户接受的配置责任、估算精度、消息追加和 schema 风险，不引入 model registry、tokenizer、通用费率引擎或新持久化版本。
+- 将成本缺失表达为 typed unavailable，使核心 token telemetry 不再依赖用户维护价格；单位变化时直接重算符合当前“简单参考估算”目标。
+- 显式 identity／token arithmetic invariant 和真实 provider／estimate smoke 让未来实现有可执行验收条件，避免只通过 fake unit tests 证明字段存在。
+
+**拒绝或暂不采用：**
+
+- 按 PRO／FLASH 自动维护物理 context window、增加 provider 输出硬上限或使用精确 tokenizer —— 用户接受由配置者保证安全和启发式缓冲，首版不增加复杂度。
+- schema v4 或旧代码降级保护 —— 用户接受新 v3 ledger 被旧 reader 丢失的风险，不要求向前兼容。
+- 保存不可重算的完整历史定价快照或构建通用费用引擎 —— 超出参考估算需要；单位变化时直接按当前配置重算。
+- context pause 后禁止普通消息、替换上次输入或自动 rewind —— 用户确认继续追加是既定行为，是否后退由用户显式选择。

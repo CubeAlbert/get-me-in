@@ -866,6 +866,16 @@
 - ✅ L6：用户审查完成；README、五份核心文档和完成决策已更新并独立提交。最终事实迁入核心文档后，已按用户授权删除完成态专项执行文档；本专项完成且不进入 R9。
 - ⛔ 首版不增加 `/language`、自动语言检测、Session locale／schema、Prompt 多语言副本、Memory build 改造、embedding／Chroma 变更、依赖或数据迁移；本专项独立于 R9。
 
+## B00 —— 交互式 Runtime token usage（已完成设计，暂缓实施）
+
+- ✅ 固定交互式 Agent Runtime actual-attempt 范围、Session 顶层 lifetime ledger、logical call／1-based attempt identity、typed usage／unknown／outcome、rewind 与 SubAgent closure 不回滚边界。
+- ✅ 固定 Orchestrator 显式 attempt scope、response envelope、post-response completion、可选 response model、OpenAI timeout adapter 映射，以及 RuntimeTransition → SessionTransition → SessionService 同次提交链路。
+- ✅ 固定 schema v3 可选 ledger 与单向兼容风险；严格校验 identity、logical-call 分组、cache 子集、provider total、Decimal 字符串和单一计费单位，不恢复 v2、不升级 v4。
+- ✅ 固定 provider usage、context estimate 和参考费用三条独立口径；全局 context 配置及估算缓冲由配置者负责，preflight pause 不发请求／不增 `model_calls`，普通消息继续追加，`/rewind` 显式后退。
+- ✅ 固定整组可选费用配置与 `CostUnavailable(NO_PRICING)`；单位变化时保留 usage 并按当前 profile 单价重算历史已知费用，不做汇率换算。
+- ✅ 固定独立 `/usage` typed Application view、最近 10 条、隐私边界、MemoryExtractor 永久排除，以及精确 production／测试白名单和 16 项验收矩阵；新增真实 provider smoke 与 estimator／真实 input token 对照校准。
+- ⏸️ production／测试实现仍未授权。未来必须由用户按 `docs/interviewer-agent-review.md` B00 白名单单独授权；禁止借 B00 修改 Memory、其他 provider 能力、Interviewer production、compression、依赖、legacy 数据或任何白名单外文件。
+
 ## R9 —— 重构后功能（不在当前执行范围）
 
 ### 1. InterviewAgent Workflow 前置 Review

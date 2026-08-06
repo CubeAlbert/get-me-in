@@ -844,6 +844,22 @@ Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约
 - 问题库、rubric、模型调用、工具 capability 与外部依赖清单；
 - 新文件、类、构造依赖、公开方法、snapshot migration 和独立实施切片。
 
+### 6.14 交互式 Runtime token usage（B00，已决定但未授权实施）
+
+首版只统计 Main、Resume 与未来 Interviewer 等交互式 Agent Runtime 主动发起的 `LLMPort.complete()` actual attempt；MemoryExtractor、Web Search、embedding、STT／TTS 均排除。`SessionState` 顶层 immutable attempt tuple 是唯一 lifetime ledger；Agent closure、context 销毁、Plan 清理和 `/rewind` 不回滚已经发生的 attempt，save／dump／restore 保留完整 ledger，汇总始终从 attempts 派生。
+
+provider usage 以 input／output 为 canonical 核心，cached input、cache-write input 与 reasoning output 为可选子集，total 由 input + output 派生。usage 与 `COMPLETED`／`TIMEOUT`／`CANCELLED`／`FAILED` outcome 正交；缺失或无响应使用 typed unavailable，不以 0 或本地估算冒充 provider 计量。每次 provider attempt 独立记录，以 1-based 连续 `attempt_index` 和 `logical_call_id` 聚合 format repair／应用显式 retry；SDK／transport 内部 retry 不单列。
+
+Orchestrator 向 `AgentRuntime` 显式传入 typed attempt scope，其中 SubAgent handoff episode 使用活动 `HandoffFrame.call_id`。adapter 的 response envelope 返回可选 content、可选 response model 与 normalized usage；取得 response 后发生 content 缺失、post-response cancellation 或上层解析失败时，provider attempt 仍为 `COMPLETED` 并保留 response metadata。provider 未返回 response 时 model 为 unknown。OpenAI SDK 的 provider-specific timeout 必须在 adapter 边界映射为 Runtime 已识别的 provider-neutral timeout。
+
+schema v3 顶层增加可选 ledger；新代码把缺少 ledger 的合法 v3 视为空 ledger，不升级 v4，v2 继续拒绝。该策略不保证旧代码读取新 v3 后的保存安全；旧 reader 可能忽略并丢失 ledger，用户已明确接受该单向兼容与代码降级风险。ledger 严格校验 identity、1-based index、logical-call 分组一致性、token 子集、provider total 和 Decimal 字符串；cached input 与 cache-write input 是互斥 input 子集。
+
+context preflight 与 lifetime usage 分离。全局 `usable_context_tokens` 和 `compression_threshold_ratio` 由配置者负责按实际 PRO／FLASH model mapping 预留物理窗口、输出和估算误差缓冲；首版不自动识别 model context window，也不增加 provider 输出硬上限。`ContextSizer` 使用 ASCII 约 4 字符/token、非 ASCII 约 1 字符/token的线性启发式，它是可接受的近似值而非 tokenizer 上界。达到阈值时不创建 attempt、不调用 provider、不递增 `model_calls`，进入 typed pause；后续普通用户消息继续追加并重估，`/rewind` 是显式后退入口。
+
+参考费用按 PRO／FLASH profile 的同单位 Decimal 单价估算，不是供应商账单。计费配置整组可选：全部缺失时 token ledger 正常工作，新 attempt 使用 `CostUnavailable(NO_PRICING)`；部分提供视为配置错误。相同单位下价格变化只影响新 attempt；单位变化时保留 usage，并用当前 profile 价格重算全部已知历史费用，不进行汇率转换。独立 `/usage` 经 typed Application view 展示当前 context estimate、Session lifetime 汇总、Agent／component 分组、unknown 数和最近 10 条 attempt，不泄露 prompt、回复或 provider 异常原文。
+
+完整 production／测试白名单与 16 项验收矩阵以 `docs/interviewer-agent-review.md` B00 为当前实施入口；验收包含真实 provider smoke 和 estimator／provider input token 对照校准。B00 仍未授权 implementation，任何白名单外扩展必须停止确认。
+
 ## 7. 迁移策略
 
 采用 Strangler Fig/纵向切片迁移：
