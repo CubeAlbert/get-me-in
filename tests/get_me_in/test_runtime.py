@@ -23,6 +23,7 @@ from src.get_me_in.application.events import (
     ToolStarted,
 )
 from src.get_me_in.application.localization import Locale
+from src.get_me_in.application.llm_usage import ContextPolicy, ContextSizer
 from src.get_me_in.application.prompt_renderer import PromptRenderer
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.runtime import AgentRuntime
@@ -31,6 +32,7 @@ from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
 from src.get_me_in.domain.llm_usage import (
     LLMAttemptOutcome,
+    LLMAttemptReason,
     ReportedUsage,
     TokenUsage,
 )
@@ -86,6 +88,27 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual("system", repair_message.role.value)
         self.assertIn("Model response must be a JSON object", repair_message.content)
         self.assertIn("<OutputFormat>canonical contract</OutputFormat>", repair_message.content)
+
+    def test_format_repair_uses_same_logical_call_with_next_attempt_index(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            ["plain **markdown** answer", _finish("repaired", "summary")]
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        _pump(runtime, UserMessage("question"))
+
+        attempts = [
+            transition.attempt
+            for transition in runtime.transitions
+            if transition.attempt is not None
+        ]
+        self.assertEqual(2, len(attempts))
+        self.assertEqual(attempts[0].logical_call_id, attempts[1].logical_call_id)
+        self.assertEqual((1, 2), tuple(attempt.attempt_index for attempt in attempts))
+        self.assertEqual(
+            (LLMAttemptReason.PRIMARY, LLMAttemptReason.FORMAT_REPAIR),
+            tuple(attempt.reason for attempt in attempts),
+        )
 
     def test_malformed_json_is_repaired_locally_without_another_model_call(self) -> None:
         runtime, llm, temporary_dir = _runtime(
@@ -550,13 +573,37 @@ class RuntimeTests(unittest.TestCase):
         timeout_runtime, _, timeout_dir = _runtime([TimeoutError()])
         failure_runtime, _, failure_dir = _runtime([RuntimeError("provider down")])
         cancel_runtime, _, cancel_dir = _runtime([_cancel_during_completion])
+        interrupted_runtime, _, interrupted_dir = _runtime([InterruptedError("cancelled")])
         self.addCleanup(timeout_dir.cleanup)
         self.addCleanup(failure_dir.cleanup)
         self.addCleanup(cancel_dir.cleanup)
+        self.addCleanup(interrupted_dir.cleanup)
 
         self.assertEqual("timeout", _pump(timeout_runtime, UserMessage("q"))[-1].code)
         self.assertEqual("provider_failure", _pump(failure_runtime, UserMessage("q"))[-1].code)
         self.assertIsInstance(_pump(cancel_runtime, UserMessage("q"))[-1], Cancelled)
+        self.assertEqual(LLMAttemptOutcome.TIMEOUT, timeout_runtime.last_transition.attempt.outcome)
+        self.assertEqual(LLMAttemptOutcome.FAILED, failure_runtime.last_transition.attempt.outcome)
+        self.assertEqual(LLMAttemptOutcome.COMPLETED, cancel_runtime.last_transition.attempt.outcome)
+        self.assertIsInstance(_pump(interrupted_runtime, UserMessage("q"))[-1], Cancelled)
+        self.assertEqual(LLMAttemptOutcome.CANCELLED, interrupted_runtime.last_transition.attempt.outcome)
+
+    def test_context_preflight_pauses_without_provider_call_or_attempt_side_effects(self) -> None:
+        runtime, llm, temporary_dir = _runtime(
+            [_finish("should not run", "")],
+            context_policy=ContextPolicy(
+                ContextSizer(), usable_context_tokens=10, threshold_ratio=0.5
+            ),
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        event = _pump(runtime, UserMessage("question"))[-1]
+
+        self.assertIsInstance(event, Paused)
+        self.assertEqual("context_limit_reached", event.code)
+        self.assertEqual([], llm.requests)
+        self.assertEqual(0, runtime.state.model_calls)
+        self.assertIsNone(runtime.last_transition.attempt)
 
     def test_model_repair_respects_model_call_limit(self) -> None:
         runtime, _, temporary_dir = _runtime(["plain text"], max_model_calls=1)
@@ -616,6 +663,7 @@ def _runtime(
     timeout_seconds: float = 60,
     format_repair_limit: int = 3,
     definitions: tuple[ToolDefinition, ...] = (),
+    context_policy: ContextPolicy | None = None,
 ) -> tuple["_RuntimeDriver", "_FakeLlm", tempfile.TemporaryDirectory[str]]:
     temporary_dir = tempfile.TemporaryDirectory()
     root = Path(temporary_dir.name) / "general_agent"
@@ -663,6 +711,7 @@ def _runtime(
         format_repair_limit=format_repair_limit,
         tool_executor=ToolExecutor(catalog),
         tool_context=ToolContext("session", AgentKey.MAIN, cancellation, plan=plan_service),
+        context_policy=context_policy,
     )
     return _RuntimeDriver(runtime), llm, temporary_dir
 
@@ -675,12 +724,18 @@ class _RuntimeDriver:
         self._state = AgentSessionState()
         self.session_id = "session"
         self.last_transition = None
+        self.transitions = []
 
     def handle(self, command: object) -> object:
         transition = self._runtime.advance(self._state, command, session_id=self.session_id)
         self._state = transition.state
         self.last_transition = transition
+        self.transitions.append(transition)
         return transition.event
+
+    @property
+    def state(self) -> AgentSessionState:
+        return self._state
 
 
 class _FakeLlm:

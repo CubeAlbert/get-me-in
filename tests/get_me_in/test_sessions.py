@@ -2,15 +2,31 @@
 
 from dataclasses import replace
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 import unittest
 
+from src.get_me_in.application.llm_usage import LLMUsageService, LLMPricing, ProfileTokenPricing
 from src.get_me_in.application.session_codec import SessionSnapshot
 from src.get_me_in.application.commands import Continue, UserMessage
 from src.get_me_in.application.events import Progress, ProgressKind, ToolFinished
 from src.get_me_in.application.orchestration import SessionTransition
 from src.get_me_in.application.session_service import SessionService
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.llm_usage import (
+    CostEstimateBasis,
+    CostUnavailable,
+    CostUnavailableReason,
+    EstimatedCost,
+    LLMAttemptOutcome,
+    LLMAttemptPurpose,
+    LLMAttemptReason,
+    LLMAttemptRecord,
+    LLMAttemptScope,
+    ModelProfile,
+    ReportedUsage,
+    TokenUsage,
+)
 from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, PendingToolCall, RuntimePhase, SessionState
@@ -92,6 +108,66 @@ class SessionDomainTests(unittest.TestCase):
         self.assertEqual((), snapshot.session.agents[AgentKey.RESUME].history)
         self.assertEqual(["session-1"], access.cleared)
         self.assertIs(snapshot, repository.saved)
+
+    def test_rewind_preserves_lifetime_llm_attempt_ledger(self) -> None:
+        session = replace(
+            _session("session-1"),
+            agents={
+                AgentKey.MAIN: AgentSessionState(
+                    history=(MessageRecord("event-1", Role.USER, "hello", _now(), "turn-1"),)
+                )
+            },
+            llm_attempts=(_attempt(),),
+        )
+        service, _, _ = _service(session)
+
+        service.rewind("turn-1")
+        snapshot = service.snapshot()
+
+        self.assertEqual((_attempt(),), snapshot.session.llm_attempts)
+
+    def test_session_append_allows_exact_replay_but_rejects_conflict(self) -> None:
+        attempt = _attempt()
+
+        self.assertEqual(
+            (attempt,),
+            SessionService._append_attempt((), attempt),
+        )
+        self.assertEqual(
+            (attempt,),
+            SessionService._append_attempt((attempt,), attempt),
+        )
+        with self.assertRaisesRegex(ValueError, "Conflicting replay"):
+            SessionService._append_attempt(
+                (attempt,),
+                replace(attempt, response_model="different-model"),
+            )
+
+    def test_restore_reconciles_known_usage_without_pricing(self) -> None:
+        historical = replace(
+            _attempt(),
+            cost=CostUnavailable(CostUnavailableReason.NO_PRICING),
+        )
+        restored = SessionSnapshot(
+            replace(_session("restored"), llm_attempts=(historical,)),
+            _now(),
+        )
+        pricing = LLMPricing(
+            "USD",
+            ProfileTokenPricing(Decimal("1"), Decimal("0.5"), Decimal("2")),
+            ProfileTokenPricing(Decimal("1"), Decimal("0.5"), Decimal("2")),
+        )
+        service, _, _ = _service(
+            _session("current"),
+            restored,
+            usage_service=LLMUsageService(pricing),
+        )
+
+        service.restore("restored")
+        snapshot = service.snapshot()
+
+        self.assertIsInstance(snapshot.session.llm_attempts[0].cost, EstimatedCost)
+        self.assertEqual("USD", snapshot.session.llm_attempts[0].cost.unit)
 
     def test_restore_clears_old_and_restored_workspace_grants(self) -> None:
         restored = SessionSnapshot(_session("restored"), _now())
@@ -192,7 +268,13 @@ def _session(session_id: str) -> SessionState:
     )
 
 
-def _service(session: SessionState, loaded: SessionSnapshot | None = None, *, orchestrator=None):
+def _service(
+    session: SessionState,
+    loaded: SessionSnapshot | None = None,
+    *,
+    orchestrator=None,
+    usage_service: LLMUsageService | None = None,
+):
     repository = _Repository(loaded)
     access = _WorkspaceAccess()
     plans = {key: _PlanService() for key in session.agents}
@@ -206,6 +288,7 @@ def _service(session: SessionState, loaded: SessionSnapshot | None = None, *, or
         clock=_Clock(),
         id_generator=_Ids(),
         workspace_access=access,
+        usage_service=usage_service,
     )
     return service, repository, access
 
@@ -275,3 +358,19 @@ class _Clock:
 class _Ids:
     def new_id(self) -> str:
         return "new-id"
+
+
+def _attempt() -> LLMAttemptRecord:
+    return LLMAttemptRecord(
+        "attempt-1",
+        "call-1",
+        1,
+        LLMAttemptScope(AgentKey.MAIN, "turn-1", LLMAttemptPurpose.RUNTIME_DECISION),
+        LLMAttemptReason.PRIMARY,
+        ModelProfile.PRO,
+        "provider-model",
+        LLMAttemptOutcome.COMPLETED,
+        ReportedUsage(TokenUsage(100, 20, cached_input_tokens=10)),
+        EstimatedCost(Decimal("0.001"), "USD", CostEstimateBasis.REPORTED_BREAKDOWN),
+        _now(),
+    )

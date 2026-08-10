@@ -4,6 +4,9 @@ import threading
 from types import SimpleNamespace
 import unittest
 
+import httpx
+from openai import APITimeoutError
+
 from src.get_me_in.adapters.openai_llm import OpenAILLMAdapter
 from src.get_me_in.application.cancellation import CancellationToken
 from src.get_me_in.domain.messages import Role
@@ -45,6 +48,28 @@ class OpenAILLMAdapterTests(unittest.TestCase):
 
         self.assertIsInstance(result.usage, UnavailableUsage)
         self.assertEqual(UsageUnavailableReason.NOT_REPORTED, result.usage.reason)
+
+    def test_inconsistent_provider_total_is_malformed_usage(self) -> None:
+        client = _FakeClient()
+        client.response = SimpleNamespace(
+            model="provider-model",
+            choices=(SimpleNamespace(message=SimpleNamespace(content='{"content": "ok"}')),),
+            usage=SimpleNamespace(prompt_tokens=100, completion_tokens=30, total_tokens=129),
+        )
+
+        result = _adapter(lambda: client).complete(_request(), CancellationToken())
+
+        self.assertIsInstance(result.usage, UnavailableUsage)
+        self.assertEqual(UsageUnavailableReason.MALFORMED, result.usage.reason)
+
+    def test_api_timeout_error_is_mapped_to_builtin_timeout(self) -> None:
+        client = _FakeClient()
+        client.chat.completions.error = APITimeoutError(
+            httpx.Request("POST", "https://example.test")
+        )
+
+        with self.assertRaises(TimeoutError):
+            _adapter(lambda: client).complete(_request(), CancellationToken())
 
     def test_closed_adapter_rejects_new_completion_without_creating_client(self) -> None:
         created: list[object] = []
@@ -167,9 +192,12 @@ class _FakeChat:
 class _FakeCompletions:
     def __init__(self, client: _FakeClient) -> None:
         self._client = client
+        self.error = None
 
     def create(self, **kwargs):
         self._client.create_kwargs = kwargs
+        if self.error is not None:
+            raise self.error
         if isinstance(self._client, _BlockingClient):
             self._client.started.set()
             self._client.closed.wait(timeout=2)
