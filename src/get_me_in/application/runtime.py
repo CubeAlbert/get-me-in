@@ -40,6 +40,13 @@ from src.get_me_in.application.events import (
     ToolStarted,
 )
 from src.get_me_in.application.prompt_renderer import PromptRenderer
+from src.get_me_in.application.llm_usage import (
+    ContextEstimate,
+    ContextPolicy,
+    ContextSafetyStatus,
+    ContextSizer,
+    LLMUsageService,
+)
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentSpec
@@ -52,6 +59,17 @@ from src.get_me_in.domain.messages import (
 )
 from src.get_me_in.domain.plans import Plan
 from src.get_me_in.domain.sessions import AgentSessionState, PendingToolCall, RuntimePhase
+from src.get_me_in.domain.sessions import PendingLogicalCall
+from src.get_me_in.domain.llm_usage import (
+    LLMAttemptOutcome,
+    LLMAttemptPurpose,
+    LLMAttemptReason,
+    LLMAttemptRecord,
+    LLMAttemptScope,
+    UnavailableUsage,
+    UsageMeasurement,
+    UsageUnavailableReason,
+)
 from src.get_me_in.domain.tools import (
     ToolApproval,
     ToolFailure,
@@ -72,6 +90,7 @@ logger = logging.getLogger(__name__)
 class RuntimeTransition:
     state: AgentSessionState
     event: RuntimeEvent
+    attempt: LLMAttemptRecord | None = None
 
 
 class AgentRuntime:
@@ -94,6 +113,8 @@ class AgentRuntime:
         format_repair_limit: int,
         tool_executor: ToolExecutor | None = None,
         tool_context: ToolContext | None = None,
+        context_policy: ContextPolicy | None = None,
+        usage_service: LLMUsageService | None = None,
     ) -> None:
         if max_model_calls < 1:
             raise ValueError("max_model_calls must be at least one")
@@ -115,8 +136,14 @@ class AgentRuntime:
         self._format_repair_limit = format_repair_limit
         self._tool_executor = tool_executor
         self._tool_context = tool_context
+        self._context_policy = context_policy or ContextPolicy(
+            ContextSizer(), usable_context_tokens=230000, threshold_ratio=0.95
+        )
+        self._usage_service = usage_service or LLMUsageService(None)
         self._state: AgentSessionState | None = None
         self._session_id: str | None = None
+        self._attempt_scope: LLMAttemptScope | None = None
+        self._attempt: LLMAttemptRecord | None = None
         self._requested_cancel_reason = "Cancelled by user"
 
     def advance(
@@ -125,17 +152,22 @@ class AgentRuntime:
         command: RuntimeCommand,
         *,
         session_id: str,
+        attempt_scope: LLMAttemptScope | None = None,
     ) -> RuntimeTransition:
         """Advance caller-owned state once, without retaining a state copy."""
         self._state = state
         self._session_id = session_id
+        self._attempt_scope = attempt_scope
+        self._attempt = None
         try:
             event = self._handle(command)
             assert self._state is not None
-            return RuntimeTransition(self._state, event)
+            return RuntimeTransition(self._state, event, self._attempt)
         finally:
             self._state = None
             self._session_id = None
+            self._attempt_scope = None
+            self._attempt = None
 
     def _handle(self, command: RuntimeCommand) -> RuntimeEvent:
         if isinstance(command, Cancel):
@@ -168,6 +200,10 @@ class AgentRuntime:
     def close(self) -> None:
         self._cancellation.cancel()
         self._llm.close()
+
+    def context_estimate(self, state: AgentSessionState) -> ContextEstimate:
+        """Return a read-only estimate for the current model-visible request."""
+        return self._context_policy.evaluate(self._build_model_request(state))
 
     def _start(self, command: UserMessage) -> RuntimeEvent:
         if self._state.phase not in {
@@ -216,19 +252,26 @@ class AgentRuntime:
                 f"Runtime exceeded {self._max_model_calls} model calls",
             )
 
-        tools = self._tool_catalog.list_for_capabilities(self._spec.capabilities)
-        prompt = self._prompt_renderer.render(
-            self._spec,
-            tools=tools,
-            agents=self._agent_catalog.list_descriptors(),
+        request = self._build_model_request(self._state)
+        context = self._context_policy.evaluate(request)
+        if context.status is ContextSafetyStatus.BLOCKED:
+            self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_USER)
+            return Paused(
+                "context_limit_reached",
+                "The current model context reached the configured safety threshold",
+            )
+        pending = self._state.pending_logical_call
+        if pending is None:
+            pending = PendingLogicalCall(
+                logical_call_id=self._id_generator.new_id(),
+                next_attempt_index=1,
+                next_attempt_reason=LLMAttemptReason.PRIMARY,
+            )
+        self._state = replace(
+            self._state,
+            model_calls=self._state.model_calls + 1,
+            pending_logical_call=pending,
         )
-        request = LLMRequest(
-            messages=self._conversation_codec.encode(prompt, self._state.history),
-            profile=ModelProfile(self._spec.model_profile),
-            timeout_seconds=self._model_timeout_seconds,
-            temperature=self._spec.temperature,
-        )
-        self._state = replace(self._state, model_calls=self._state.model_calls + 1)
         logger.debug(
             "Calling model: agent=%s turn=%s call=%d profile=%s messages=%d",
             self._spec.key.value,
@@ -240,6 +283,12 @@ class AgentRuntime:
         try:
             result = self._llm.complete(request, self._cancellation)
         except TimeoutError:
+            self._record_attempt(
+                outcome=LLMAttemptOutcome.TIMEOUT,
+                usage=UnavailableUsage(UsageUnavailableReason.NO_RESPONSE),
+                response_model=None,
+            )
+            self._state = replace(self._state, phase=RuntimePhase.FAILED, pending_logical_call=None)
             logger.warning(
                 "Model completion timed out: agent=%s turn=%s timeout=%ss",
                 self._spec.key.value,
@@ -249,6 +298,12 @@ class AgentRuntime:
             self._state = replace(self._state, phase=RuntimePhase.FAILED)
             return Failed("timeout", "Model completion timed out")
         except InterruptedError:
+            self._record_attempt(
+                outcome=LLMAttemptOutcome.CANCELLED,
+                usage=UnavailableUsage(UsageUnavailableReason.NO_RESPONSE),
+                response_model=None,
+            )
+            self._state = replace(self._state, phase=RuntimePhase.CANCELLED, pending_logical_call=None)
             logger.info(
                 "Model completion cancelled: agent=%s turn=%s",
                 self._spec.key.value,
@@ -258,8 +313,18 @@ class AgentRuntime:
             return Cancelled(self._requested_cancel_reason)
         except Exception as error:
             if self._cancellation.is_cancelled:
-                self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
+                self._record_attempt(
+                    outcome=LLMAttemptOutcome.CANCELLED,
+                    usage=UnavailableUsage(UsageUnavailableReason.NO_RESPONSE),
+                    response_model=None,
+                )
+                self._state = replace(self._state, phase=RuntimePhase.CANCELLED, pending_logical_call=None)
                 return Cancelled(self._requested_cancel_reason)
+            self._record_attempt(
+                outcome=LLMAttemptOutcome.FAILED,
+                usage=UnavailableUsage(UsageUnavailableReason.NO_RESPONSE),
+                response_model=None,
+            )
             logger.warning(
                 "Model provider failure: agent=%s turn=%s error=%s: %s",
                 self._spec.key.value,
@@ -267,20 +332,31 @@ class AgentRuntime:
                 type(error).__name__,
                 error,
             )
-            self._state = replace(self._state, phase=RuntimePhase.FAILED)
+            self._state = replace(self._state, phase=RuntimePhase.FAILED, pending_logical_call=None)
             return Failed("provider_failure", str(error))
+        self._record_attempt(
+            outcome=LLMAttemptOutcome.COMPLETED,
+            usage=result.usage,
+            response_model=result.response_model,
+        )
         if self._cancellation.is_cancelled:
-            self._state = replace(self._state, phase=RuntimePhase.CANCELLED)
+            self._state = replace(
+                self._state,
+                phase=RuntimePhase.CANCELLED,
+                pending_logical_call=None,
+            )
             return Cancelled(self._requested_cancel_reason)
 
         logger.debug(
             "Model raw reply: agent=%s turn=%s chars=%d\n%s",
             self._spec.key.value,
             self._state.turn_id,
-            len(result.content),
+            len(result.content or ""),
             result.content,
         )
         try:
+            if result.content is None:
+                raise ModelMessageParseError("Model response content was missing")
             reply = self._conversation_codec.parse(result.content)
         except ModelMessageParseError as error:
             logger.warning(
@@ -290,11 +366,15 @@ class AgentRuntime:
                 self._state.turn_id,
                 self._state.format_repairs_used,
                 error,
-                len(result.content),
+                len(result.content or ""),
                 result.content,
             )
             if self._state.format_repairs_used >= self._format_repair_limit:
-                self._state = replace(self._state, phase=RuntimePhase.WAITING_FOR_USER)
+                self._state = replace(
+                    self._state,
+                    phase=RuntimePhase.WAITING_FOR_USER,
+                    pending_logical_call=None,
+                )
                 return Paused(
                     "invalid_model_reply",
                     "Model response remained invalid after "
@@ -314,6 +394,15 @@ class AgentRuntime:
                 phase=RuntimePhase.MODEL_PENDING,
                 history=(*self._state.history, repair),
                 format_repairs_used=self._state.format_repairs_used + 1,
+                pending_logical_call=PendingLogicalCall(
+                    logical_call_id=self._state.pending_logical_call.logical_call_id
+                    if self._state.pending_logical_call is not None
+                    else self._id_generator.new_id(),
+                    next_attempt_index=self._state.pending_logical_call.next_attempt_index + 1
+                    if self._state.pending_logical_call is not None
+                    else 2,
+                    next_attempt_reason=LLMAttemptReason.FORMAT_REPAIR,
+                ),
             )
             return Progress(ProgressKind.REPAIRING_MODEL_RESPONSE)
         if reply.repair_kind is not None:
@@ -345,6 +434,7 @@ class AgentRuntime:
                 phase=RuntimePhase.TOOL_READY,
                 history=(*self._state.history, tool_call),
                 pending_tool=PendingToolCall(call_id, reply.tool, arguments),
+                pending_logical_call=None,
             )
             return ToolStarted(
                 call_id=call_id,
@@ -365,8 +455,53 @@ class AgentRuntime:
             phase=RuntimePhase.COMPLETED,
             history=(*self._state.history, assistant),
             pending_tool=None,
+            pending_logical_call=None,
         )
         return Completed(assistant)
+
+    def _build_model_request(self, state: AgentSessionState) -> LLMRequest:
+        tools = self._tool_catalog.list_for_capabilities(self._spec.capabilities)
+        prompt = self._prompt_renderer.render(
+            self._spec,
+            tools=tools,
+            agents=self._agent_catalog.list_descriptors(),
+        )
+        return LLMRequest(
+            messages=self._conversation_codec.encode(prompt, state.history),
+            profile=ModelProfile(self._spec.model_profile),
+            timeout_seconds=self._model_timeout_seconds,
+            temperature=self._spec.temperature,
+        )
+
+    def _record_attempt(
+        self,
+        *,
+        outcome: LLMAttemptOutcome,
+        usage: UsageMeasurement,
+        response_model: str | None,
+    ) -> None:
+        if self._state is None:
+            raise RuntimeError("Attempt recording requires active runtime state")
+        pending = self._state.pending_logical_call
+        if pending is None:
+            raise RuntimeError("Attempt recording requires a pending logical call")
+        scope = self._attempt_scope or LLMAttemptScope(
+            self._spec.key,
+            self._state.turn_id,
+            LLMAttemptPurpose.RUNTIME_DECISION,
+        )
+        self._attempt = self._usage_service.build_attempt(
+            attempt_id=self._id_generator.new_id(),
+            logical_call_id=pending.logical_call_id,
+            attempt_index=pending.next_attempt_index,
+            scope=scope,
+            reason=pending.next_attempt_reason,
+            request_profile=ModelProfile(self._spec.model_profile),
+            response_model=response_model,
+            outcome=outcome,
+            usage=usage,
+            terminal_at=self._clock.now(),
+        )
 
     def _execute_pending(self, *, approved: bool = False, rejected: bool = False) -> RuntimeEvent:
         pending = self._state.pending_tool

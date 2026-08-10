@@ -29,6 +29,11 @@ from src.get_me_in.application.runtime import AgentRuntime
 from src.get_me_in.application.tool_catalog import ToolCatalog
 from src.get_me_in.application.tool_executor import ToolContext, ToolExecutor
 from src.get_me_in.domain.agents import AgentKey, AgentSpec, AgentStyle, Capability
+from src.get_me_in.domain.llm_usage import (
+    LLMAttemptOutcome,
+    ReportedUsage,
+    TokenUsage,
+)
 from src.get_me_in.domain.sessions import AgentSessionState
 from src.get_me_in.domain.tools import ConfirmationMode, ToolDefinition, ToolPolicy, ToolSchema, ToolSuccess
 from src.get_me_in.ports.llm import CancellationSignal, LLMRequest, LLMResult, ModelProfile
@@ -37,6 +42,23 @@ from src.get_me_in.tools.plan import build_plan_tools
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_provider_response_records_completed_attempt_and_metadata(self) -> None:
+        result = LLMResult(
+            content=_finish("answer", "private"),
+            response_model="actual-provider-model",
+            usage=ReportedUsage(TokenUsage(12, 4, cached_input_tokens=2)),
+        )
+        runtime, _, temporary_dir = _runtime([result])
+        self.addCleanup(temporary_dir.cleanup)
+
+        _pump(runtime, UserMessage("question"))
+
+        attempt = runtime.last_transition.attempt
+        self.assertIsNotNone(attempt)
+        self.assertEqual(LLMAttemptOutcome.COMPLETED, attempt.outcome)
+        self.assertEqual("actual-provider-model", attempt.response_model)
+        self.assertEqual(12, attempt.usage.value.input_tokens)
+
     def test_user_message_completes_and_never_replays_thinking(self) -> None:
         runtime, llm, temporary_dir = _runtime([_finish("answer", "private")])
         self.addCleanup(temporary_dir.cleanup)
@@ -652,10 +674,12 @@ class _RuntimeDriver:
         self._runtime = runtime
         self._state = AgentSessionState()
         self.session_id = "session"
+        self.last_transition = None
 
     def handle(self, command: object) -> object:
         transition = self._runtime.advance(self._state, command, session_id=self.session_id)
         self._state = transition.state
+        self.last_transition = transition
         return transition.event
 
 
@@ -671,6 +695,8 @@ class _FakeLlm:
             raise response
         if callable(response):
             response = response(cancellation)
+        if isinstance(response, LLMResult):
+            return response
         return LLMResult(content=response)
 
     def close(self) -> None:

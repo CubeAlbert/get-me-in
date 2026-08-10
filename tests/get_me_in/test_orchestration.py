@@ -223,7 +223,8 @@ class _FakeRuntime:
         self.cancel_reasons: list[str] = []
         self.commands: list[object] = []
 
-    def advance(self, state: AgentSessionState, command: object, *, session_id: str) -> RuntimeTransition:
+    def advance(self, state: AgentSessionState, command: object, *, session_id: str, attempt_scope=None) -> RuntimeTransition:
+        del attempt_scope
         self.commands.append(command)
         self.session_ids.append(session_id)
         if isinstance(command, CompleteHandoff):

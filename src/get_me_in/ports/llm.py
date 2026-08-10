@@ -2,9 +2,14 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Protocol
 
+from src.get_me_in.domain.llm_usage import (
+    ModelProfile,
+    UnavailableUsage,
+    UsageMeasurement,
+    UsageUnavailableReason,
+)
 from src.get_me_in.domain.messages import Role
 
 
@@ -17,11 +22,6 @@ class CancellationSignal(Protocol):
     def is_cancelled(self) -> bool: ...
 
     def register(self, callback: Callable[[], None]) -> CancellationRegistrationPort: ...
-
-
-class ModelProfile(StrEnum):
-    PRO = "pro"
-    FLASH = "flash"
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,9 @@ class LLMRequest:
 
 @dataclass(frozen=True)
 class LLMResult:
-    content: str
+    content: str | None
+    response_model: str | None = None
+    usage: UsageMeasurement = UnavailableUsage(UsageUnavailableReason.NOT_REPORTED)
 
 
 class LLMPort(Protocol):

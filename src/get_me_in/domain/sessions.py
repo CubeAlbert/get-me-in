@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.llm_usage import LLMAttemptReason, LLMAttemptRecord
 from src.get_me_in.domain.messages import ConversationRecord
 from src.get_me_in.domain.plans import Plan
 
@@ -34,6 +35,13 @@ class PendingToolCall:
 
 
 @dataclass(frozen=True)
+class PendingLogicalCall:
+    logical_call_id: str
+    next_attempt_index: int
+    next_attempt_reason: LLMAttemptReason
+
+
+@dataclass(frozen=True)
 class AgentSessionState:
     """All persistent Runtime state for one agent within one session."""
 
@@ -45,6 +53,7 @@ class AgentSessionState:
     cancel_reason: str = "Cancelled by user"
     turn_id: str = ""
     plan: Plan | None = None
+    pending_logical_call: PendingLogicalCall | None = None
 
 
 @dataclass(frozen=True)
@@ -66,6 +75,7 @@ class SessionState:
     handoff_stack: tuple[HandoffFrame, ...]
     created_at: datetime
     updated_at: datetime
+    llm_attempts: tuple[LLMAttemptRecord, ...] = ()
 
 
 @dataclass(frozen=True)

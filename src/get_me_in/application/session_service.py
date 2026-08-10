@@ -5,11 +5,13 @@ from pathlib import Path
 
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
+from src.get_me_in.application.llm_usage import LLMUsageService, UsageView
 from src.get_me_in.application.plan_service import PlanService
 from src.get_me_in.application.orchestration import Orchestrator, SessionTransition
 from src.get_me_in.application.session_codec import SessionSnapshot
 from src.get_me_in.application.workspace_access import WorkspaceAccessState
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.llm_usage import LLMAttemptRecord
 from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord, ToolResultRecord
 from src.get_me_in.domain.memories import MemoryBuildSource
 from src.get_me_in.domain.sessions import RuntimePhase
@@ -38,6 +40,7 @@ class SessionService:
         clock: Clock,
         id_generator: IdGenerator,
         workspace_access: WorkspaceAccessState,
+        usage_service: LLMUsageService | None = None,
     ) -> None:
         self._session = session
         self._orchestrator = orchestrator
@@ -46,6 +49,7 @@ class SessionService:
         self._clock = clock
         self._id_generator = id_generator
         self._workspace_access = workspace_access
+        self._usage_service = usage_service or LLMUsageService(None)
 
     def handle(self, command: RuntimeCommand) -> RuntimeEvent:
         active_key = self._session.active_agent
@@ -89,12 +93,19 @@ class SessionService:
             raise ValueError(f"Session requires unavailable agents: {names}")
         self._workspace_access.clear_session(self._session.session_id)
         self._workspace_access.clear_session(snapshot.session.session_id)
-        self._session = snapshot.session
+        self._session = replace(
+            snapshot.session,
+            llm_attempts=self._usage_service.reconcile_restored(snapshot.session.llm_attempts),
+        )
         self._restore_active_plan()
         return self.view()
 
     def list_sessions(self) -> tuple[SessionPreview, ...]:
         return self._repository.list()
+
+    def usage_view(self) -> UsageView:
+        context = self._orchestrator.context_estimate(self._session)
+        return self._usage_service.usage_view(self._session.llm_attempts, context)
 
     def dump(self) -> Path:
         snapshot = self.snapshot()
@@ -168,7 +179,7 @@ class SessionService:
                 agents[key] = AgentSessionState()
                 continue
             if state.phase in safe:
-                agents[key] = state
+                agents[key] = replace(state, pending_logical_call=None)
                 continue
             history = state.history
             if state.pending_tool is not None:
@@ -187,6 +198,7 @@ class SessionService:
                 phase=RuntimePhase.CANCELLED,
                 history=history,
                 pending_tool=None,
+                pending_logical_call=None,
                 cancel_reason="Interrupted before snapshot",
             )
         return replace(session, agents=agents, updated_at=self._clock.now())
@@ -211,4 +223,44 @@ class SessionService:
                 self._plans[key].restore(None)
         if transition.closed_agent is not None:
             agents[transition.closed_agent] = replace(agents[transition.closed_agent], plan=None)
-        return replace(transition.session, agents=agents, updated_at=self._clock.now())
+        attempts = self._append_attempt(transition.session.llm_attempts, transition.attempt)
+        return replace(
+            transition.session,
+            agents=agents,
+            llm_attempts=attempts,
+            updated_at=self._clock.now(),
+        )
+
+    @staticmethod
+    def _append_attempt(
+        attempts: tuple[LLMAttemptRecord, ...],
+        attempt: LLMAttemptRecord | None,
+    ) -> tuple[LLMAttemptRecord, ...]:
+        if attempt is None:
+            return attempts
+        for existing in attempts:
+            if existing.attempt_id == attempt.attempt_id:
+                if existing == attempt:
+                    return attempts
+                raise ValueError("Conflicting replay for LLM attempt id")
+            if (
+                existing.logical_call_id == attempt.logical_call_id
+                and existing.attempt_index == attempt.attempt_index
+            ):
+                raise ValueError("Conflicting replay for logical call attempt index")
+        same_call = [item for item in attempts if item.logical_call_id == attempt.logical_call_id]
+        if not same_call:
+            if attempt.attempt_index != 1:
+                raise ValueError("A new logical call must start at attempt index 1")
+            if attempt.reason.value != "primary":
+                raise ValueError("A new logical call must start with PRIMARY")
+        else:
+            expected_index = max(item.attempt_index for item in same_call) + 1
+            if attempt.attempt_index != expected_index:
+                raise ValueError("Logical call attempt indexes must be contiguous")
+            first = same_call[0]
+            if attempt.scope != first.scope or attempt.request_profile != first.request_profile:
+                raise ValueError("Logical call scope and profile must remain stable")
+            if attempt.reason.value == "primary":
+                raise ValueError("PRIMARY may only be used for the first attempt")
+        return (*attempts, attempt)
