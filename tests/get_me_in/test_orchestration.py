@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime, timezone
+from decimal import Decimal
 import unittest
 
 from src.get_me_in.application.commands import Cancel, CancelSelection, CompleteHandoff, Continue, FailHandoff, UserMessage
@@ -9,6 +10,18 @@ from src.get_me_in.application.events import Cancelled, Failed, HandoffRequested
 from src.get_me_in.application.orchestration import Orchestrator
 from src.get_me_in.application.runtime import RuntimeTransition
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.llm_usage import (
+    CostEstimateBasis,
+    EstimatedCost,
+    LLMAttemptOutcome,
+    LLMAttemptPurpose,
+    LLMAttemptReason,
+    LLMAttemptRecord,
+    LLMAttemptScope,
+    ModelProfile,
+    ReportedUsage,
+    TokenUsage,
+)
 from src.get_me_in.domain.messages import MessageRecord, Role
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, PendingToolCall, RuntimePhase, SessionState
 
@@ -142,6 +155,26 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(AgentSessionState(), failed.session.agents[AgentKey.RESUME])
         self.assertEqual(RuntimePhase.FAILED, failed.session.agents[AgentKey.MAIN].phase)
 
+    def test_handoff_start_failure_closes_source_and_preserves_main_attempt(self) -> None:
+        main_attempt = _attempt()
+        orchestrator = Orchestrator(
+            {
+                AgentKey.MAIN: _FakeRuntime(AgentKey.MAIN, attempt=main_attempt),
+                AgentKey.RESUME: _FakeRuntime(
+                    AgentKey.RESUME,
+                    failure=Failed("provider_failure", "provider is unavailable"),
+                    fail_on_start=True,
+                ),
+            }
+        )
+
+        result = orchestrator.handle(_session(), UserMessage("delegate"))
+
+        self.assertIsInstance(result.event, ToolFinished)
+        self.assertEqual("call-main", result.event.call_id)
+        self.assertIs(main_attempt, result.attempt)
+        self.assertEqual(RuntimePhase.MODEL_QUEUED, result.session.agents[AgentKey.MAIN].phase)
+
     def test_model_reply_parse_failure_pauses_subagent_for_user_continuation(self) -> None:
         resume = _FakeRuntime(
             AgentKey.RESUME,
@@ -215,10 +248,20 @@ class OrchestratorTests(unittest.TestCase):
 
 
 class _FakeRuntime:
-    def __init__(self, key: AgentKey, *, target: AgentKey | None = None, failure: RuntimeEvent | None = None) -> None:
+    def __init__(
+        self,
+        key: AgentKey,
+        *,
+        target: AgentKey | None = None,
+        failure: RuntimeEvent | None = None,
+        attempt: LLMAttemptRecord | None = None,
+        fail_on_start: bool = False,
+    ) -> None:
         self._key = key
         self._target = target
         self._failure = failure
+        self._attempt = attempt
+        self._fail_on_start = fail_on_start
         self.session_ids: list[str] = []
         self.cancel_reasons: list[str] = []
         self.commands: list[object] = []
@@ -247,10 +290,20 @@ class _FakeRuntime:
                 ),
                 Paused("selection_cancelled", command.reason),
             )
+        if self._fail_on_start and isinstance(command, UserMessage):
+            return RuntimeTransition(
+                replace(state, phase=RuntimePhase.FAILED, pending_tool=None),
+                self._failure or Failed("provider_failure", "provider is unavailable"),
+                self._attempt,
+            )
         if self._key is AgentKey.MAIN:
             target = self._target or AgentKey.RESUME
             state = replace(state, phase=RuntimePhase.WAITING_FOR_HANDOFF, pending_tool=PendingToolCall("call-main", "switch_to_subagent", {}), turn_id="turn-main")
-            return RuntimeTransition(state, HandoffRequested("call-main", AgentKey.MAIN, target, "context"))
+            return RuntimeTransition(
+                state,
+                HandoffRequested("call-main", AgentKey.MAIN, target, "context"),
+                self._attempt,
+            )
         if isinstance(command, UserMessage):
             return RuntimeTransition(replace(state, phase=RuntimePhase.MODEL_PENDING, turn_id="turn-sub"), Progress("Calling model"))
         if self._failure is not None:
@@ -324,3 +377,19 @@ def _active_selection_handoff_session() -> SessionState:
 
 def _now() -> datetime:
     return datetime(2026, 7, 22, tzinfo=timezone.utc)
+
+
+def _attempt() -> LLMAttemptRecord:
+    return LLMAttemptRecord(
+        "attempt-main",
+        "call-main",
+        1,
+        LLMAttemptScope(AgentKey.MAIN, "turn-main", LLMAttemptPurpose.RUNTIME_DECISION),
+        LLMAttemptReason.PRIMARY,
+        ModelProfile.PRO,
+        "provider-model",
+        LLMAttemptOutcome.COMPLETED,
+        ReportedUsage(TokenUsage(10, 2)),
+        EstimatedCost(Decimal("0"), "USD", CostEstimateBasis.ASSUMED_UNCACHED),
+        _now(),
+    )

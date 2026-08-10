@@ -118,6 +118,7 @@ class Orchestrator:
                 event,
                 "handoff_start_failed",
                 target_transition.event.message,
+                attempt,
             )
         session = self._replace_agent(session, event.target, target_transition.state)
         return SessionTransition(
