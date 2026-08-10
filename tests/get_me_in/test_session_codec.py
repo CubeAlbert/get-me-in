@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime, timezone
+from decimal import Decimal
 import unittest
 
 from src.get_me_in.application.session_codec import (
@@ -10,6 +11,18 @@ from src.get_me_in.application.session_codec import (
     UnsupportedSessionSchemaError,
 )
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.llm_usage import (
+    CostEstimateBasis,
+    EstimatedCost,
+    LLMAttemptOutcome,
+    LLMAttemptPurpose,
+    LLMAttemptReason,
+    LLMAttemptRecord,
+    LLMAttemptScope,
+    ModelProfile,
+    ReportedUsage,
+    TokenUsage,
+)
 from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
 from src.get_me_in.domain.sessions import AgentSessionState, HandoffFrame, PendingToolCall, RuntimePhase, SessionState
@@ -174,6 +187,41 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "waiting for completion"):
             SessionSnapshotCodec().encode(inconsistent)
 
+    def test_round_trip_preserves_exact_llm_attempt_ledger_shape(self) -> None:
+        snapshot = _snapshot()
+        attempt = _attempt()
+        snapshot = SessionSnapshot(replace(snapshot.session, llm_attempts=(attempt,)), snapshot.saved_at)
+
+        payload = SessionSnapshotCodec().encode(snapshot)
+        restored = SessionSnapshotCodec().decode(payload)
+
+        self.assertEqual((attempt,), restored.session.llm_attempts)
+        self.assertEqual(
+            {
+                "attempt_id", "logical_call_id", "attempt_index", "scope", "reason",
+                "request_profile", "response_model", "outcome", "usage", "cost", "terminal_at",
+            },
+            set(payload["llm_attempts"][0]),
+        )
+        self.assertEqual("0.001", payload["llm_attempts"][0]["cost"]["amount"])
+
+    def test_old_v3_without_llm_attempts_restores_empty_ledger(self) -> None:
+        payload = SessionSnapshotCodec().encode(_snapshot())
+        del payload["llm_attempts"]
+
+        restored = SessionSnapshotCodec().decode(payload)
+
+        self.assertEqual((), restored.session.llm_attempts)
+
+    def test_persisted_duplicate_llm_attempts_are_rejected(self) -> None:
+        payload = SessionSnapshotCodec().encode(
+            SessionSnapshot(replace(_snapshot().session, llm_attempts=(_attempt(),)), _now())
+        )
+        payload["llm_attempts"].append(dict(payload["llm_attempts"][0]))
+
+        with self.assertRaisesRegex(ValueError, "Duplicate"):
+            SessionSnapshotCodec().decode(payload)
+
 
 def _snapshot(
     *,
@@ -233,3 +281,19 @@ def _handoff_snapshot() -> SessionSnapshot:
 
 def _now() -> datetime:
     return datetime(2026, 7, 22, tzinfo=timezone.utc)
+
+
+def _attempt() -> LLMAttemptRecord:
+    return LLMAttemptRecord(
+        "attempt-1",
+        "call-1",
+        1,
+        LLMAttemptScope(AgentKey.MAIN, "turn-1", LLMAttemptPurpose.RUNTIME_DECISION),
+        LLMAttemptReason.PRIMARY,
+        ModelProfile.PRO,
+        "provider-model",
+        LLMAttemptOutcome.COMPLETED,
+        ReportedUsage(TokenUsage(100, 20, cached_input_tokens=10)),
+        EstimatedCost(Decimal("0.001"), "USD", CostEstimateBasis.REPORTED_BREAKDOWN),
+        _now(),
+    )

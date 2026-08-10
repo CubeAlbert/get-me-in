@@ -3,8 +3,25 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 
 from src.get_me_in.domain.agents import AgentKey
+from src.get_me_in.domain.llm_usage import (
+    CostEstimateBasis,
+    CostUnavailable,
+    CostUnavailableReason,
+    EstimatedCost,
+    LLMAttemptOutcome,
+    LLMAttemptPurpose,
+    LLMAttemptReason,
+    LLMAttemptRecord,
+    LLMAttemptScope,
+    ModelProfile,
+    ReportedUsage,
+    TokenUsage,
+    UnavailableUsage,
+    UsageUnavailableReason,
+)
 from src.get_me_in.domain.messages import MessageRecord, Role, ToolCallRecord, ToolResultRecord
 from src.get_me_in.domain.plans import Plan, PlanItem, PlanStatus
 from src.get_me_in.domain.sessions import (
@@ -65,6 +82,7 @@ class SessionSnapshotCodec:
             "created_at": snapshot.session.created_at.isoformat(),
             "updated_at": snapshot.session.updated_at.isoformat(),
             "saved_at": snapshot.saved_at.isoformat(),
+            "llm_attempts": [self._encode_attempt(attempt) for attempt in snapshot.session.llm_attempts],
         }
 
     def decode(self, payload: Mapping[str, object]) -> SessionSnapshot:
@@ -87,11 +105,16 @@ class SessionSnapshotCodec:
                 handoff_stack=handoff_stack,
                 created_at=_time(payload["created_at"], "created_at"),
                 updated_at=_time(payload["updated_at"], "updated_at"),
+                llm_attempts=tuple(
+                    self._decode_attempt(_mapping(item, "llm_attempts item"))
+                    for item in _sequence(payload.get("llm_attempts", []), "llm_attempts")
+                ),
             )
             snapshot = SessionSnapshot(session, _time(payload["saved_at"], "saved_at"))
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"Invalid session snapshot: {error}") from error
         self._validate_session(snapshot.session)
+        self._validate_attempts(snapshot.session.llm_attempts)
         return snapshot
 
     def _validate_session(self, session: SessionState) -> None:
@@ -99,6 +122,7 @@ class SessionSnapshotCodec:
             raise ValueError("Session id must not be blank")
         if session.active_agent not in session.agents:
             raise ValueError("Active agent must have session state")
+        self._validate_attempts(session.llm_attempts)
         for key, state in session.agents.items():
             if state.phase not in _PERSISTABLE_PHASES:
                 raise ValueError(f"Phase {state.phase.value} cannot be restored safely")
@@ -134,6 +158,8 @@ class SessionSnapshotCodec:
     @staticmethod
     def _validate_agent(key: AgentKey, state: AgentSessionState) -> None:
         del key
+        if state.pending_logical_call is not None:
+            raise ValueError("Pending logical call is transient and cannot be persisted")
         _integer(state.format_repairs_used, "format_repairs_used")
         call_ids = {record.call_id for record in state.history if isinstance(record, ToolCallRecord)}
         result_ids = {record.call_id for record in state.history if isinstance(record, ToolResultRecord)}
@@ -166,6 +192,8 @@ class SessionSnapshotCodec:
         }
 
     def _decode_agent(self, payload: Mapping[str, object]) -> AgentSessionState:
+        if payload.get("pending_logical_call") is not None:
+            raise ValueError("Pending logical call is transient and cannot be restored")
         pending_raw = payload.get("pending_tool")
         pending = None if pending_raw is None else PendingToolCall(
             _text(_mapping(pending_raw, "pending_tool")["call_id"], "pending_tool.call_id"),
@@ -183,6 +211,153 @@ class SessionSnapshotCodec:
             cancel_reason=_text(payload["cancel_reason"], "cancel_reason"),
             plan=self._decode_plan(payload.get("plan")),
         )
+
+    @staticmethod
+    def _encode_attempt(attempt: LLMAttemptRecord) -> dict[str, object]:
+        usage: dict[str, object]
+        if isinstance(attempt.usage, ReportedUsage):
+            usage = {
+                "status": "reported",
+                "input_tokens": attempt.usage.value.input_tokens,
+                "output_tokens": attempt.usage.value.output_tokens,
+                "cached_input_tokens": attempt.usage.value.cached_input_tokens,
+                "reasoning_output_tokens": attempt.usage.value.reasoning_output_tokens,
+            }
+        else:
+            usage = {"status": "unavailable", "reason": attempt.usage.reason.value}
+        if isinstance(attempt.cost, EstimatedCost):
+            cost: dict[str, object] = {
+                "status": "estimated",
+                "amount": format(attempt.cost.amount, "f"),
+                "unit": attempt.cost.unit,
+                "basis": attempt.cost.basis.value,
+            }
+        else:
+            cost = {"status": "unavailable", "reason": attempt.cost.reason.value}
+        return {
+            "attempt_id": attempt.attempt_id,
+            "logical_call_id": attempt.logical_call_id,
+            "attempt_index": attempt.attempt_index,
+            "scope": {
+                "agent": attempt.scope.agent.value,
+                "turn_id": attempt.scope.turn_id,
+                "purpose": attempt.scope.purpose.value,
+                "handoff_episode_id": attempt.scope.handoff_episode_id,
+            },
+            "reason": attempt.reason.value,
+            "request_profile": attempt.request_profile.value,
+            "response_model": attempt.response_model,
+            "outcome": attempt.outcome.value,
+            "usage": usage,
+            "cost": cost,
+            "terminal_at": attempt.terminal_at.isoformat(),
+        }
+
+    @staticmethod
+    def _decode_attempt(payload: Mapping[str, object]) -> LLMAttemptRecord:
+        _exact_keys(
+            payload,
+            {
+                "attempt_id", "logical_call_id", "attempt_index", "scope", "reason",
+                "request_profile", "response_model", "outcome", "usage", "cost", "terminal_at",
+            },
+            "llm_attempts item",
+        )
+        scope_payload = _mapping(payload["scope"], "scope")
+        _exact_keys(scope_payload, {"agent", "turn_id", "purpose", "handoff_episode_id"}, "scope")
+        scope = LLMAttemptScope(
+            agent=AgentKey(_text(scope_payload["agent"], "scope.agent")),
+            turn_id=_text(scope_payload["turn_id"], "scope.turn_id"),
+            purpose=LLMAttemptPurpose(_text(scope_payload["purpose"], "scope.purpose")),
+            handoff_episode_id=_optional_text(scope_payload["handoff_episode_id"], "scope.handoff_episode_id"),
+        )
+        usage_payload = _mapping(payload["usage"], "usage")
+        usage_status = _text(usage_payload.get("status"), "usage.status")
+        if usage_status == "reported":
+            _exact_keys(
+                usage_payload,
+                {"status", "input_tokens", "output_tokens", "cached_input_tokens", "reasoning_output_tokens"},
+                "usage",
+            )
+            usage = ReportedUsage(
+                TokenUsage(
+                    input_tokens=_integer(usage_payload["input_tokens"], "usage.input_tokens"),
+                    output_tokens=_integer(usage_payload["output_tokens"], "usage.output_tokens"),
+                    cached_input_tokens=_optional_integer(usage_payload["cached_input_tokens"], "usage.cached_input_tokens"),
+                    reasoning_output_tokens=_optional_integer(usage_payload["reasoning_output_tokens"], "usage.reasoning_output_tokens"),
+                )
+            )
+        elif usage_status == "unavailable":
+            _exact_keys(usage_payload, {"status", "reason"}, "usage")
+            usage = UnavailableUsage(
+                UsageUnavailableReason(_text(usage_payload["reason"], "usage.reason"))
+            )
+        else:
+            raise ValueError(f"Unknown usage status: {usage_status}")
+
+        cost_payload = _mapping(payload["cost"], "cost")
+        cost_status = _text(cost_payload.get("status"), "cost.status")
+        if cost_status == "estimated":
+            _exact_keys(cost_payload, {"status", "amount", "unit", "basis"}, "cost")
+            cost = EstimatedCost(
+                _decimal(cost_payload["amount"], "cost.amount"),
+                _text(cost_payload["unit"], "cost.unit"),
+                CostEstimateBasis(_text(cost_payload["basis"], "cost.basis")),
+            )
+        elif cost_status == "unavailable":
+            _exact_keys(cost_payload, {"status", "reason"}, "cost")
+            cost = CostUnavailable(
+                CostUnavailableReason(_text(cost_payload["reason"], "cost.reason"))
+            )
+        else:
+            raise ValueError(f"Unknown cost status: {cost_status}")
+
+        return LLMAttemptRecord(
+            attempt_id=_text(payload["attempt_id"], "attempt_id"),
+            logical_call_id=_text(payload["logical_call_id"], "logical_call_id"),
+            attempt_index=_positive_integer(payload["attempt_index"], "attempt_index"),
+            scope=scope,
+            reason=LLMAttemptReason(_text(payload["reason"], "reason")),
+            request_profile=ModelProfile(_text(payload["request_profile"], "request_profile")),
+            response_model=_optional_text(payload["response_model"], "response_model"),
+            outcome=LLMAttemptOutcome(_text(payload["outcome"], "outcome")),
+            usage=usage,
+            cost=cost,
+            terminal_at=_time(payload["terminal_at"], "terminal_at"),
+        )
+
+    @staticmethod
+    def _validate_attempts(attempts: tuple[LLMAttemptRecord, ...]) -> None:
+        attempt_ids: set[str] = set()
+        logical_indexes: set[tuple[str, int]] = set()
+        grouped: dict[str, list[LLMAttemptRecord]] = {}
+        units: set[str] = set()
+        for attempt in attempts:
+            if attempt.attempt_id in attempt_ids:
+                raise ValueError("Duplicate LLM attempt id")
+            key = (attempt.logical_call_id, attempt.attempt_index)
+            if key in logical_indexes:
+                raise ValueError("Duplicate logical call attempt index")
+            attempt_ids.add(attempt.attempt_id)
+            logical_indexes.add(key)
+            grouped.setdefault(attempt.logical_call_id, []).append(attempt)
+            if isinstance(attempt.cost, EstimatedCost):
+                units.add(attempt.cost.unit)
+        if len(units) > 1:
+            raise ValueError("All estimated costs must use one billing unit")
+        for logical_call_id, group in grouped.items():
+            ordered = sorted(group, key=lambda item: item.attempt_index)
+            for expected_index, attempt in enumerate(ordered, start=1):
+                if attempt.attempt_index != expected_index:
+                    raise ValueError(f"Attempt indexes for {logical_call_id} must be contiguous")
+                if expected_index == 1 and attempt.reason.value != "primary":
+                    raise ValueError("The first attempt of a logical call must be PRIMARY")
+                if expected_index > 1 and attempt.reason.value == "primary":
+                    raise ValueError("PRIMARY may only be used for the first attempt")
+            first = ordered[0]
+            for attempt in ordered[1:]:
+                if attempt.scope != first.scope or attempt.request_profile != first.request_profile:
+                    raise ValueError("Logical call scope and profile must remain stable")
 
     @staticmethod
     def _encode_record(record: MessageRecord | ToolCallRecord | ToolResultRecord) -> dict[str, object]:
@@ -250,6 +425,14 @@ def _mapping(value: object, label: str) -> Mapping[str, object]:
     return value
 
 
+def _exact_keys(payload: Mapping[str, object], expected: set[str], label: str) -> None:
+    actual = set(payload)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise ValueError(f"{label} has invalid keys: missing={missing}, extra={extra}")
+
+
 def _schema_version(payload: Mapping[str, object]) -> int:
     try:
         value = payload["schema_version"]
@@ -272,6 +455,12 @@ def _text(value: object, label: str) -> str:
     return value
 
 
+def _optional_text(value: object, label: str) -> str | None:
+    if value is None:
+        return None
+    return _text(value, label)
+
+
 def _string(value: object, label: str) -> str:
     if not isinstance(value, str):
         raise TypeError(f"{label} must be a string")
@@ -282,6 +471,28 @@ def _integer(value: object, label: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise TypeError(f"{label} must be a non-negative integer")
     return value
+
+
+def _positive_integer(value: object, label: str) -> int:
+    result = _integer(value, label)
+    if result < 1:
+        raise ValueError(f"{label} must be a positive integer")
+    return result
+
+
+def _optional_integer(value: object, label: str) -> int | None:
+    if value is None:
+        return None
+    return _integer(value, label)
+
+
+def _decimal(value: object, label: str) -> Decimal:
+    if not isinstance(value, str) or not value.strip():
+        raise TypeError(f"{label} must be a decimal string")
+    try:
+        return Decimal(value)
+    except InvalidOperation as error:
+        raise ValueError(f"{label} must be a decimal string") from error
 
 
 def _boolean(value: object, label: str) -> bool:

@@ -25,6 +25,8 @@ _BASE_ENV = {
     "LLM_TIMEOUT": "60",
     "LLM_THINKING_ENABLED": "true",
     "SHOW_THINKING": "false",
+    "LLM_USABLE_CONTEXT_TOKENS": "230000",
+    "LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO": "0.95",
     "UI_LOCALE": "zh-CN",
     "MODEL_RESPONSE_LANGUAGE": "ui",
     "AGENT_MAX_MODEL_CALLS": "100",
@@ -99,6 +101,8 @@ class SettingsTests(unittest.TestCase):
             "RESUME_TEMPERATURE",
             "MEMORY_TEMPERATURE",
             "LLM_TIMEOUT",
+            "LLM_USABLE_CONTEXT_TOKENS",
+            "LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO",
             "UI_LOCALE",
             "MODEL_RESPONSE_LANGUAGE",
             "AGENT_MAX_MODEL_CALLS",
@@ -202,6 +206,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(Path("project/data/runtime/artifacts"), settings.artifacts_dir)
         self.assertEqual(60.0, settings.pdf_build_timeout_seconds)
         self.assertEqual(65536, settings.artifact_log_max_bytes)
+        self.assertEqual(230000, settings.llm_usable_context_tokens)
+        self.assertEqual(0.95, settings.llm_context_compression_threshold_ratio)
+        self.assertIsNone(settings.llm_pricing)
 
     def test_from_env_uses_chinese_localization_defaults_when_omitted(self) -> None:
         env = _env()
@@ -213,6 +220,16 @@ class SettingsTests(unittest.TestCase):
         self.assertIs(Locale.ZH_CN, settings.ui_locale)
         self.assertIs(Locale.ZH_CN, settings.response_locale)
         self.assertEqual(Path("project/data/locales"), settings.locales_dir)
+
+    def test_from_env_uses_context_defaults_when_omitted(self) -> None:
+        env = _env()
+        del env["LLM_USABLE_CONTEXT_TOKENS"]
+        del env["LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO"]
+
+        settings = Settings.from_env(env, project_root=Path("project"))
+
+        self.assertEqual(230000, settings.llm_usable_context_tokens)
+        self.assertEqual(0.95, settings.llm_context_compression_threshold_ratio)
 
     def test_from_env_requires_canonical_application_settings(self) -> None:
         settings = Settings.from_env(
@@ -472,6 +489,33 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(name=name):
                 with self.assertRaisesRegex(SettingsValidationError, name):
                     Settings.from_env(_env({name: value}), project_root=Path("project"))
+
+    def test_from_env_parses_complete_optional_llm_pricing_group(self) -> None:
+        settings = Settings.from_env(
+            _env({
+                "LLM_COST_UNIT": " usd ",
+                "LLM_PRO_INPUT_PRICE_PER_MILLION": "1.2",
+                "LLM_PRO_CACHED_INPUT_PRICE_PER_MILLION": "0.2",
+                "LLM_PRO_OUTPUT_PRICE_PER_MILLION": "3",
+                "LLM_FLASH_INPUT_PRICE_PER_MILLION": "0.4",
+                "LLM_FLASH_CACHED_INPUT_PRICE_PER_MILLION": "0.1",
+                "LLM_FLASH_OUTPUT_PRICE_PER_MILLION": "0.8",
+            }),
+            project_root=Path("project"),
+        )
+
+        self.assertEqual("USD", settings.llm_pricing.unit)
+
+    def test_from_env_rejects_partial_or_invalid_context_pricing(self) -> None:
+        for overrides in (
+            {"LLM_USABLE_CONTEXT_TOKENS": "0"},
+            {"LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO": "1"},
+            {"LLM_COST_UNIT": "USD"},
+            {"LLM_PRO_INPUT_PRICE_PER_MILLION": "-1", "LLM_COST_UNIT": "USD", "LLM_PRO_CACHED_INPUT_PRICE_PER_MILLION": "0", "LLM_PRO_OUTPUT_PRICE_PER_MILLION": "0", "LLM_FLASH_INPUT_PRICE_PER_MILLION": "0", "LLM_FLASH_CACHED_INPUT_PRICE_PER_MILLION": "0", "LLM_FLASH_OUTPUT_PRICE_PER_MILLION": "0"},
+        ):
+            with self.subTest(overrides=overrides):
+                with self.assertRaises(SettingsValidationError):
+                    Settings.from_env(_env(overrides), project_root=Path("project"))
 
     def test_from_env_rejects_invalid_show_thinking(self) -> None:
         with self.assertRaisesRegex(SettingsValidationError, "SHOW_THINKING"):

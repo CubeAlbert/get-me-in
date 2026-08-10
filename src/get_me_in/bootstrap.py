@@ -36,6 +36,7 @@ from src.get_me_in.application.session_codec import SessionSnapshotCodec
 from src.get_me_in.application.session_service import SessionService
 from src.get_me_in.application.orchestration import Orchestrator
 from src.get_me_in.application.knowledge_service import KnowledgeService
+from src.get_me_in.application.llm_usage import ContextPolicy, ContextSizer, LLMUsageService
 from src.get_me_in.application.memory_extractor import MemoryExtractor
 from src.get_me_in.application.memory_service import MemoryService
 from src.get_me_in.application.artifact_service import ArtifactService
@@ -248,6 +249,12 @@ def _build_application(
     )
     construction.callback(artifacts.close)
     workspace_access = WorkspaceAccessState()
+    context_policy = ContextPolicy(
+        ContextSizer(),
+        usable_context_tokens=settings.llm_usable_context_tokens,
+        threshold_ratio=settings.llm_context_compression_threshold_ratio,
+    )
+    usage_service = LLMUsageService(settings.llm_pricing)
     main_plan = PlanService(id_generator)
     resume_plan = PlanService(id_generator)
     session_id = id_generator.new_id()
@@ -338,6 +345,8 @@ def _build_application(
             resume_artifacts=artifacts,
             workspace_access=workspace_access,
         ),
+        context_policy=context_policy,
+        usage_service=usage_service,
     )
     resume_runtime = AgentRuntime(
         spec=resume_spec, prompt_renderer=prompt_renderer, llm=runtime_llms[AgentKey.RESUME],
@@ -353,6 +362,8 @@ def _build_application(
             external_files=external_files, retrieval=knowledge, resume_artifacts=artifacts,
             workspace_access=workspace_access,
         ),
+        context_policy=context_policy,
+        usage_service=usage_service,
     )
     session = SessionState(
         session_id=session_id,
@@ -374,6 +385,7 @@ def _build_application(
         clock=clock,
         id_generator=id_generator,
         workspace_access=workspace_access,
+        usage_service=usage_service,
     )
     runtime_construction.pop_all()
     construction.callback(sessions.close)

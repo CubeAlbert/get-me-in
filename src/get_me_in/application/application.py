@@ -23,6 +23,7 @@ from src.get_me_in.application.app_results import (
 from src.get_me_in.application.commands import RuntimeCommand
 from src.get_me_in.application.events import RuntimeEvent
 from src.get_me_in.application.app_results import CloseReport
+from src.get_me_in.application.llm_usage import UsageView
 from src.get_me_in.application.resources import ResourceStack
 from src.get_me_in.application.session_codec import SessionSnapshot
 from src.get_me_in.application.session_service import SessionService
@@ -117,6 +118,9 @@ class Application:
 
     def dump(self) -> Path:
         return self._sessions.dump()
+
+    def usage(self) -> UsageView:
+        return self._sessions.usage_view()
 
     def exit_subagent(self, summarize: bool = True) -> RuntimeEvent:
         return self._sessions.exit_subagent(summarize)

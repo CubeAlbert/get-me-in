@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 import math
 import os
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Mapping
 
@@ -12,6 +13,7 @@ from src.get_me_in.application.localization import (
     parse_locale,
     resolve_response_locale,
 )
+from src.get_me_in.application.llm_usage import LLMPricing, ProfileTokenPricing
 from src.get_me_in.ports.llm import ModelProfile
 
 
@@ -28,6 +30,8 @@ class KnowledgeIndexMode(StrEnum):
 
 _DEFAULT_UI_LOCALE = Locale.ZH_CN.value
 _DEFAULT_MODEL_RESPONSE_LANGUAGE = "ui"
+_DEFAULT_LLM_USABLE_CONTEXT_TOKENS = 230000
+_DEFAULT_LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO = 0.95
 DEFAULT_LOCALES_DIR = "data/locales"
 LEGACY_DATA_RELATIVE_PATHS = (
     "data/save",
@@ -102,6 +106,9 @@ class Settings:
     tqdm_disable: bool
     transformers_verbosity: str
     model_library_log_level: str
+    llm_usable_context_tokens: int = _DEFAULT_LLM_USABLE_CONTEXT_TOKENS
+    llm_context_compression_threshold_ratio: float = _DEFAULT_LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO
+    llm_pricing: LLMPricing | None = None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str], *, project_root: Path) -> "Settings":
@@ -212,6 +219,71 @@ class Settings:
                 raise SettingsValidationError(f"{name} must not be negative")
             return value
 
+        def positive_int_value(name: str, default: int | None = None) -> int:
+            raw = env[name] if default is None else env.get(name, str(default))
+            try:
+                value = int(raw)
+            except ValueError as error:
+                raise SettingsValidationError(f"{name} must be an integer") from error
+            if value < 1:
+                raise SettingsValidationError(f"{name} must be at least one")
+            return value
+
+        def context_ratio(name: str, default: float | None = None) -> float:
+            raw = env[name] if default is None else env.get(name, str(default))
+            try:
+                value = float(raw)
+            except ValueError as error:
+                raise SettingsValidationError(f"{name} must be a number") from error
+            if not math.isfinite(value) or not 0 < value < 1:
+                raise SettingsValidationError(f"{name} must be between 0 and 1")
+            return value
+
+        def optional_pricing() -> LLMPricing | None:
+            names = (
+                "LLM_COST_UNIT",
+                "LLM_PRO_INPUT_PRICE_PER_MILLION",
+                "LLM_PRO_CACHED_INPUT_PRICE_PER_MILLION",
+                "LLM_PRO_OUTPUT_PRICE_PER_MILLION",
+                "LLM_FLASH_INPUT_PRICE_PER_MILLION",
+                "LLM_FLASH_CACHED_INPUT_PRICE_PER_MILLION",
+                "LLM_FLASH_OUTPUT_PRICE_PER_MILLION",
+            )
+            present = [name for name in names if name in env and env[name].strip()]
+            if not present:
+                return None
+            if len(present) != len(names):
+                missing = [name for name in names if name not in present]
+                raise SettingsValidationError(
+                    f"LLM pricing settings must be provided as a complete group; missing: {', '.join(missing)}"
+                )
+
+            def price(name: str) -> Decimal:
+                try:
+                    value = Decimal(env[name].strip())
+                except InvalidOperation as error:
+                    raise SettingsValidationError(f"{name} must be a decimal") from error
+                if not value.is_finite() or value < 0:
+                    raise SettingsValidationError(f"{name} must be finite and non-negative")
+                return value
+
+            try:
+                return LLMPricing(
+                    unit=env["LLM_COST_UNIT"],
+                    pro=ProfileTokenPricing(
+                        price("LLM_PRO_INPUT_PRICE_PER_MILLION"),
+                        price("LLM_PRO_CACHED_INPUT_PRICE_PER_MILLION"),
+                        price("LLM_PRO_OUTPUT_PRICE_PER_MILLION"),
+                    ),
+                    flash=ProfileTokenPricing(
+                        price("LLM_FLASH_INPUT_PRICE_PER_MILLION"),
+                        price("LLM_FLASH_CACHED_INPUT_PRICE_PER_MILLION"),
+                        price("LLM_FLASH_OUTPUT_PRICE_PER_MILLION"),
+                    ),
+                )
+            except ValueError as error:
+                raise SettingsValidationError(str(error)) from error
+
         main_model_profile = model_profile("MAIN_MODEL_PROFILE")
         resume_model_profile = model_profile("RESUME_MODEL_PROFILE")
         memory_model_profile = model_profile("MEMORY_MODEL_PROFILE")
@@ -221,6 +293,15 @@ class Settings:
         memory_temperature = temperature("MEMORY_TEMPERATURE")
 
         timeout = positive_float("LLM_TIMEOUT")
+        usable_context_tokens = positive_int_value(
+            "LLM_USABLE_CONTEXT_TOKENS",
+            _DEFAULT_LLM_USABLE_CONTEXT_TOKENS,
+        )
+        context_threshold_ratio = context_ratio(
+            "LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO",
+            _DEFAULT_LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO,
+        )
+        llm_pricing = optional_pricing()
 
         max_calls_raw = env["AGENT_MAX_MODEL_CALLS"]
         try:
@@ -438,6 +519,9 @@ class Settings:
             tqdm_disable=boolean("TQDM_DISABLE"),
             transformers_verbosity=transformers_verbosity,
             model_library_log_level=model_library_log_level,
+            llm_usable_context_tokens=usable_context_tokens,
+            llm_context_compression_threshold_ratio=context_threshold_ratio,
+            llm_pricing=llm_pricing,
         )
 
 
