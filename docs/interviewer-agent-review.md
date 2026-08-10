@@ -3,7 +3,7 @@
 > 状态：R9-P 前置 Review 进行中
 > 分支：`feat/interviewer-agent`
 > 首次审查日期：2026-08-05
-> 授权边界：B-01 已实现并验证关闭；B00 已按精确实施清单和既定白名单完成工程实现，383 项测试、compileall 与 diff-check 已通过，review findings 已修复，真实 provider／估算校准仍待用户验收；Interviewer 及其他 production／测试实现仍未授权
+> 授权边界：B-01 已实现并验证关闭；B00 已按精确实施清单和既定白名单完成工程实现，两轮 review findings 已修复，385 项测试、compileall 与 diff-check 已通过，真实 provider／估算校准仍待用户验收；Interviewer 及其他 production／测试实现仍未授权
 > canonical 命名：新能力统一为 `InterviewerAgent`／`AgentKey.INTERVIEWER`；既有文档中的 `InterviewAgent` 原文不回写
 
 ## 1. 文档用途
@@ -182,16 +182,17 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 **当前状态与授权**
 
 - 用户在确认 B02 后提出：当前系统没有统计会话中的 token 用量，必须支持获取每一次 LLM 调用的 token 消耗。
-- B-01 已验证关闭；本项方案、精确 API／类型／序列化清单、文件白名单与验收边界均已确认。B00 工程实现已按白名单完成，当前仅保留真实 provider／估算校准验收门禁。
+- B-01 已验证关闭；本项方案、精确 API／类型／序列化清单、文件白名单与验收边界均已确认。B00 工程实现与两轮代码复审已按白名单完成，当前仅保留真实 provider／估算校准验收门禁。
 
 **当前代码事实**
 
-- `LLMResult` 当前只返回 `content`；`OpenAILLMAdapter` 没有读取 Chat Completions response 的 `usage`。
-- 当前锁定的 OpenAI SDK `2.43.0` 对 Chat Completions 提供 `prompt_tokens`、`completion_tokens`、`total_tokens`，并可选提供 `cached_tokens`、`reasoning_tokens` 等细分字段。
-- `AgentRuntime` 在 provider 调用前递增 `model_calls`，但该计数只表达当前用户回合的调用次数；新 `UserMessage` 会重建 per-turn state，因此它不是跨回合 token ledger。
-- `SessionView` 与 CLI `/status` 当前不包含 token 用量；B-01 已把 snapshot baseline 升为 schema v3，但 v3 初始仍没有逐次 LLM usage 记录。
-- 除 Main／Resume Runtime 外，MemoryExtractor 也直接调用 `LLMPort`；OpenAI Web Search 与 embedding 等 provider 请求不经过同一 `LLMPort`，是否纳入首版统计必须明确。
-- provider failure、timeout 或 cancellation 可能已经产生计费 token，但通常拿不到可靠 `usage`；不能用 `0` 冒充未知。
+- `LLMResult` 已返回可选 `content`、实际 response model 与 provider-neutral usage；`OpenAILLMAdapter` 读取 Chat Completions 的 input／output、可选 cached input／reasoning output，并验证 provider total。
+- provider 已返回 response 但 `choices` 为空或 content 缺失时，adapter 仍返回 metadata；Runtime 先提交 `COMPLETED` attempt，再按既有 invalid reply／pause 语义处理内容。
+- `SessionState.llm_attempts` 是跨回合 lifetime ledger；`model_calls` 仍只表达当前用户回合的调用次数，不作为 token 统计来源。
+- `/usage` 通过公开 Application query 展示 context safety、lifetime totals、Agent／purpose groups 与最近 attempts；snapshot schema v3 顶层 `llm_attempts` 负责 save／dump／restore。
+- 首版仅记录交互式 Main／Resume Runtime；MemoryExtractor、Web Search、embedding、STT／TTS 继续排除。缓存统计只包含 provider 报告的 cached input；output 使用统一价格，不存在 cached output 字段。
+- provider failure、timeout 或 cancellation 没有可靠 usage 时保存 typed unavailable，不以 `0` 冒充未知；费用按 uncached input、cached input 与 output 三部分估算。
+- 本机 `.env` 的每百万 tokens CNY 参考价已配置为 FLASH `1`／`0.02`／`2`、PRO `3`／`0.025`／`6`（顺序为 uncached input／cached input／output）；该部署配置不纳入 Git。
 
 **必须讨论**
 
@@ -450,13 +451,14 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 
 **最终决策状态**
 
-> B00 设计与实施前契约已关闭，工程实现已完成：原方案及第二轮复审结论继续有效，精确 module/type/field/enum、构造依赖、public query、Runtime→Session transition、Settings、CLI 和 schema v3 tagged-union encoding 均已落地。自动化工程验证已通过，真实 provider／估算校准仍待用户执行。
+> B00 设计与实施前契约已关闭，工程实现与两轮代码复审已完成：原方案及第二轮设计复审结论继续有效，精确 module/type/field/enum、构造依赖、public query、Runtime→Session transition、Settings、CLI 和 schema v3 tagged-union encoding 均已落地。空 provider `choices` 也会保留 response metadata 并形成 `COMPLETED` attempt；完整 unittest `385/385`、compileall 与 diff-check 已通过，真实 provider／估算校准仍待用户执行。
 
 **关闭条件**
 
 - ✅ 统计范围、attempt／logical call identity、snapshot 兼容、rewind、查询入口、unknown／cost 合法组合、scope taxonomy、context estimate 所有权、cache／replay／identity 规则和验证矩阵均已确认并通过最终文档一致性检查。
 - ✅ 已形成精确文件白名单，以及可由新会话直接执行的 API／类型／序列化清单；不再把命名、字段或 JSON 形状留给实现者临场决定。
-- 🔄 production／测试实现已按既定 2／16／2／11 白名单完成；仍需完成 16 项验收中的真实 provider smoke 与 estimator calibration，Interviewer production 继续禁止。
+- ✅ production／测试实现与两轮代码复审已按既定 2／16／2／11 白名单完成，完整 unittest `385/385`、compileall、diff-check 与 import boundary 通过。
+- 🔄 仍需完成 16 项验收中的真实 provider smoke 与 estimator calibration，Interviewer production 继续禁止。
 
 ### B01 —— MVP 产品职责、命名、输入与完成条件
 

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 310 — 关闭 B00 最终代码复审并配置本机参考价格](#决策-310--关闭-b00-最终代码复审并配置本机参考价格)
 - [决策 309 — 修复 B00 review findings 并补齐工程验收覆盖](#决策-309--修复-b00-review-findings-并补齐工程验收覆盖)
 - [决策 308 — 完成 B00 工程实现 checkpoint](#决策-308--完成-b00-工程实现-checkpoint)
 - [决策 307 — 授权下一新会话实施 B00 token usage](#决策-307--授权下一新会话实施-b00-token-usage)
@@ -7478,3 +7479,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 **后续：**
 
 - 在 `e66ff34`、`d90ad21`、`5ac588b` 后，继续等待用户运行 Main／Resume provider smoke、`/usage` lifetime/save／restore 和 estimator calibration；通过后再追加 B00 关闭 checkpoint。
+
+### 决策 310 —— 关闭 B00 最终代码复审并配置本机参考价格
+
+**背景：** 决策 309 的修复与补测提交后再次 review，发现 `OpenAILLMAdapter.complete()` 直接读取 `response.choices[0].message.content`；provider 已返回 response 但 `choices` 为空时会抛出 `IndexError`，导致已经可用的 response model／usage 在 Runtime 形成 attempt 前丢失。用户修复后要求复审，并确认缓存口径只记录 cached input。随后用户提供 FLASH／PRO 的 CNY 单价并要求更新本机 `.env`，最后要求检查活跃文档并 checkpoint。
+
+**决定：**
+
+- 采用提交 `04dadd6` 的修复：adapter 对缺少首个 choice／message 的 response 返回 `content=None`，同时保留实际 response model 与 normalized usage；Runtime 先记录 `COMPLETED` attempt，再按既有 invalid reply／pause 路径处理缺失内容。
+- B00 缓存口径保持不变：只记录 provider 明确报告的 cached input；input 费用拆分为 uncached input 与 cached input，output 使用统一单价，不增加 cached output 或 cache-write 字段。
+- 本机 `.env` 按每百万 tokens 配置 `CNY` 参考价：FLASH uncached input／cached input／output 为 `1`／`0.02`／`2`，PRO 为 `3`／`0.025`／`6`。该文件为部署本地配置，不纳入 Git；测试继续显式构造环境，不依赖仓库 `.env`。
+- 当前工程验证为完整 unittest `385/385`、`compileall`、`git diff --check` 与 import boundary 通过；B00 的代码 review finding 已关闭。
+
+**理由：**
+
+- provider response 是否有可解析内容与 response metadata 是否已产生是两个边界；保留后者才能满足 actual-attempt ledger 的 best-effort 准确性，也与已确认的 content 缺失后 pause 语义一致。
+- 当前 OpenAI Chat Completions contract 只提供 cached input 明细，没有 cached output；按 uncached input、cached input、output 三部分计算既符合当前 provider 数据，也避免重复统计 reasoning output 子集。
+- 将价格放在被忽略的 `.env` 中可完成本机部署配置，同时避免把环境配置耦合进测试或提交。
+
+**后续：**
+
+- 用户运行 Main／Resume 真实 provider smoke，核对 response usage、实际 response model、`/usage` lifetime 增量与 save／restore；再用代表性 ASCII、中文、代码／JSON、tool schema 与长 history 请求完成 estimator calibration。
+- 上述真实验收通过后再关闭 B00 并恢复 B03 Review；Interviewer、Memory usage、cache-write、cached output、其他 provider 与白名单外实现继续未授权。
