@@ -881,7 +881,7 @@
 - ✅ 完成 B00 最终全文一致性审查：关闭前决策 TOC／正文 304 条一致，追加关闭决策 305 后仍一致；`current.md` 最近 10 条、白名单计数 2／16／2／11、16 项验收和 active 文档术语一致，`git diff --check` 通过；恢复“已决定（暂不实施）”。
 - ✅ 补齐 `domain/llm_usage.py` 与 `application/llm_usage.py` 的全部 immutable types、enum values、DTO／service 字段和方法签名；固定 LLMResult、Session state、Runtime／Session transition、Settings、bootstrap、Application query 与 CLI renderer 的精确 API 变化。
 - ✅ 补齐 schema v3 顶层 `llm_attempts`、record／scope exact key set、reported／unavailable usage、estimated／unavailable cost、Decimal／datetime／`null` 编码、strict duplicate／cross-record validation、restore reconciliation 与 transient／derived 禁止持久化清单。
-- 📌 用户已授权下一新会话按 `docs/interviewer-agent-review.md` B00 的精确 API／类型／序列化清单、2／16／2／11 文件白名单和 16 项验收实施；当前会话只更新并提交授权文档，不得 coding。禁止借 B00 修改 Memory、其他 provider 能力、Interviewer production、compression、依赖、legacy 数据或任何白名单外文件。
+- ✅ 用户已授权下一新会话按 `docs/interviewer-agent-review.md` B00 的精确 API／类型／序列化清单、2／16／2／11 文件白名单和 16 项验收实施；当前会话只更新并提交授权文档，不得 coding。禁止借 B00 修改 Memory、其他 provider 能力、Interviewer production、compression、依赖、legacy 数据或任何白名单外文件。
 
 ## R9 —— 重构后功能（不在当前执行范围）
 

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 308 — 完成 B00 工程实现 checkpoint](#决策-308--完成-b00-工程实现-checkpoint)
 - [决策 307 — 授权下一新会话实施 B00 token usage](#决策-307--授权下一新会话实施-b00-token-usage)
 - [决策 306 — 补齐 B00 精确 API 类型与 schema v3 序列化清单](#决策-306--补齐-b00-精确-api-类型与-schema-v3-序列化清单)
 - [决策 305 — 关闭 B00 第二轮复审并恢复暂缓实施状态](#决策-305--关闭-b00-第二轮复审并恢复暂缓实施状态)
@@ -7433,3 +7434,24 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 当前会话提交 `docs/current.md`、`docs/task.md`、`docs/decision.md` 及 B00 tracker／design／plan 中的授权状态同步，不运行 B00 coding。
 - 下一新会话按本决定启动 B00 实施；任何白名单扩展或验收失败按停止门禁处理。
+
+### 决策 308 —— 完成 B00 工程实现 checkpoint
+
+**背景：** 用户授权按 B00 精确 API／类型／schema 清单实施后，已在 `feat/interviewer-agent` 完成既定 2／16／2／11 白名单内的 production、配置、CLI 与测试改动。工程验证包含 `373/373` 全量 unittest、`compileall` 和 `git diff --check`；另修正新增 context 配置缺失时错误要求必填的问题，使其使用默认值 `230000` 与 `0.95`，显式非法值仍拒绝。真实 provider smoke 与 estimator calibration 尚未由用户执行。
+
+**决定：**
+
+- B00 工程实现按四个逻辑子任务拆分并分别提交：`7790c66`（usage domain/service）、`8782c2e`（adapter／Runtime／Session ledger）、`9ddb355`（schema／Settings／composition）、`0b03897`（CLI／文案／用户文档）。
+- 当前状态从“已授权实施”推进为“工程实现完成、真实 provider／估算校准验收中”；在两项用户运行验收完成前，不关闭 B00，也不恢复 B03 Review。
+- 保持 B00 原有边界：不扩展到 Interviewer production、Memory usage、context compression、cache-write、其他 provider、依赖、legacy 数据目录或白名单外文件。
+
+**理由：**
+
+- 四个提交分别对应可审查的 domain、运行时生命周期、持久化／配置和 CLI 子任务，便于后续定位回退或审查范围。
+- 自动化验证已证明工程链路完整，但真实 provider response usage、response model、save／restore 和估算偏差只能在用户实际 provider／部署环境中确认，不能用单元测试替代。
+- 缺失 context 配置使用安全的既定应用额度和阈值默认值，既避免启动回归，也保留显式配置的严格校验。
+
+**后续：**
+
+- 用户运行 Main／Resume provider smoke，记录 `/usage` lifetime 增量与 save／restore；随后用代表性 ASCII、中文、代码／JSON、tool schema 和长 history 请求完成 estimator 校准。
+- 验收通过后再追加 B00 关闭 checkpoint；任何需要扩大文件、API、schema、依赖或数据边界的情况先停止并重新授权。
