@@ -169,6 +169,52 @@ class SessionDomainTests(unittest.TestCase):
         self.assertIsInstance(snapshot.session.llm_attempts[0].cost, EstimatedCost)
         self.assertEqual("USD", snapshot.session.llm_attempts[0].cost.unit)
 
+    def test_restore_keeps_known_cost_when_pricing_unit_is_unchanged(self) -> None:
+        restored = SessionSnapshot(
+            replace(_session("restored"), llm_attempts=(_attempt(),)),
+            _now(),
+        )
+        pricing = LLMPricing(
+            "USD",
+            ProfileTokenPricing(Decimal("1"), Decimal("0.5"), Decimal("2")),
+            ProfileTokenPricing(Decimal("1"), Decimal("0.5"), Decimal("2")),
+        )
+        service, _, _ = _service(
+            _session("current"),
+            restored,
+            usage_service=LLMUsageService(pricing),
+        )
+
+        service.restore("restored")
+
+        cost = service.snapshot().session.llm_attempts[0].cost
+        self.assertIsInstance(cost, EstimatedCost)
+        self.assertEqual(Decimal("0.001"), cost.amount)
+        self.assertEqual("USD", cost.unit)
+
+    def test_restore_reprices_known_cost_when_pricing_unit_changes(self) -> None:
+        restored = SessionSnapshot(
+            replace(_session("restored"), llm_attempts=(_attempt(),)),
+            _now(),
+        )
+        pricing = LLMPricing(
+            "EUR",
+            ProfileTokenPricing(Decimal("1"), Decimal("0.5"), Decimal("2")),
+            ProfileTokenPricing(Decimal("1"), Decimal("0.5"), Decimal("2")),
+        )
+        service, _, _ = _service(
+            _session("current"),
+            restored,
+            usage_service=LLMUsageService(pricing),
+        )
+
+        service.restore("restored")
+
+        cost = service.snapshot().session.llm_attempts[0].cost
+        self.assertIsInstance(cost, EstimatedCost)
+        self.assertEqual(Decimal("0.000135"), cost.amount)
+        self.assertEqual("EUR", cost.unit)
+
     def test_restore_clears_old_and_restored_workspace_grants(self) -> None:
         restored = SessionSnapshot(_session("restored"), _now())
         service, _, access = _service(_session("current"), restored)
