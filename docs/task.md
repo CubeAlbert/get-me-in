@@ -881,8 +881,8 @@
 - ✅ 完成 B00 最终全文一致性审查：关闭前决策 TOC／正文 304 条一致，追加关闭决策 305 后仍一致；`current.md` 最近 10 条、白名单计数 2／16／2／11、16 项验收和 active 文档术语一致，`git diff --check` 通过；恢复“已决定（暂不实施）”。
 - ✅ 补齐 `domain/llm_usage.py` 与 `application/llm_usage.py` 的全部 immutable types、enum values、DTO／service 字段和方法签名；固定 LLMResult、Session state、Runtime／Session transition、Settings、bootstrap、Application query 与 CLI renderer 的精确 API 变化。
 - ✅ 补齐 schema v3 顶层 `llm_attempts`、record／scope exact key set、reported／unavailable usage、estimated／unavailable cost、Decimal／datetime／`null` 编码、strict duplicate／cross-record validation、restore reconciliation 与 transient／derived 禁止持久化清单。
-- ✅ 用户已授权下一新会话按 `docs/interviewer-agent-review.md` B00 的精确 API／类型／序列化清单、2／16／2／11 文件白名单和 16 项验收实施；当前会话只更新并提交授权文档，不得 coding。禁止借 B00 修改 Memory、其他 provider 能力、Interviewer production、compression、依赖、legacy 数据或任何白名单外文件。
-- ✅ 按白名单完成 B00 工程实现，并在两轮 review 中修复 handoff attempt 传播、usage／cost basis invariant、`/usage` 展示与空 provider `choices` response metadata 保留；完整 unittest `385/385`、compileall、diff-check 与 import boundary 通过。
+- ✅ 用户已授权按 `docs/interviewer-agent-review.md` B00 的精确 API／类型／序列化清单、2／16／2／11 文件白名单和 16 项验收实施；后续工程实现已完成。禁止借 B00 修改 Memory、其他 provider 能力、Interviewer production、compression、依赖、legacy 数据或任何白名单外文件。
+- ✅ 按白名单完成 B00 工程实现，并在后续 review 中修复 handoff attempt 传播、usage／cost basis invariant、`/usage` 展示、空 provider `choices` response metadata、malformed usage 形状与 scope 类型边界；补齐同单位保留／换单位重算的 restore 覆盖；完整 unittest `390/390`、compileall、diff-check 与 import boundary 通过。
 - ✅ 本机 `.env` 已配置每百万 tokens 的 CNY 参考价：FLASH uncached input／cached input／output 为 `1`／`0.02`／`2`，PRO 为 `3`／`0.025`／`6`；仅记录 cached input，output 不区分缓存命中；`.env` 不纳入 Git。
 - 🔄 用户运行 Main／Resume 真实 provider smoke，核对 response usage／实际 response model／`/usage` lifetime 增量／save／restore，并使用代表性请求完成 estimator calibration；通过前不关闭 B00、不恢复 B03。
 

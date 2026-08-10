@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 311 — 修复 B00 malformed usage、scope 与 restore 覆盖并同步实施状态](#决策-311--修复-b00-malformed-usage-scope-与-restore-覆盖并同步实施状态)
 - [决策 310 — 关闭 B00 最终代码复审并配置本机参考价格](#决策-310--关闭-b00-最终代码复审并配置本机参考价格)
 - [决策 309 — 修复 B00 review findings 并补齐工程验收覆盖](#决策-309--修复-b00-review-findings-并补齐工程验收覆盖)
 - [决策 308 — 完成 B00 工程实现 checkpoint](#决策-308--完成-b00-工程实现-checkpoint)
@@ -7501,3 +7502,24 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 用户运行 Main／Resume 真实 provider smoke，核对 response usage、实际 response model、`/usage` lifetime 增量与 save／restore；再用代表性 ASCII、中文、代码／JSON、tool schema 与长 history 请求完成 estimator calibration。
 - 上述真实验收通过后再关闭 B00 并恢复 B03 Review；Interviewer、Memory usage、cache-write、cached output、其他 provider 与白名单外实现继续未授权。
+
+### 决策 311 —— 修复 B00 malformed usage、scope 与 restore 覆盖并同步实施状态
+
+**背景：** 决策 310 后的 review 发现三个工程缺口：OpenAI adapter 将存在但类型非法的 `prompt_tokens_details`／`completion_tokens_details` 与 absent optional details 都转换为 `None`，导致 scalar、list 或非法细分字段仍生成 `ReportedUsage`；`LLMAttemptRecord` 未在 domain constructor 边界验证 `LLMAttemptScope` 类型；restore 自动化只覆盖历史 `NO_PRICING` 补算，没有覆盖同单位保留旧金额和单位变化后按新价格重算。review 同时指出 `design.md` 与 `plan.md` 仍描述 B00 实施前状态。
+
+**决定：**
+
+- adapter 将 absent／`None` optional details 与 structurally invalid details 分开处理：缺失可选 details 仍按合法无 cached／reasoning 明细处理；scalar、list、无效容器或非法 token 字段统一返回 `Unavailable(MALFORMED)`。
+- `LLMAttemptRecord` 直接拒绝非 `LLMAttemptScope` 的 `scope`，不把错误延迟到汇总或序列化阶段。
+- restore 增加同单位保留历史 `EstimatedCost.amount`、单位变化按当前 profile 价格重算的自动化覆盖；既有 `NO_PRICING` 补算覆盖保持不变。
+- 活跃 `design.md`、`plan.md`、`task.md`、tracker 与 `current.md` 同步为 B00 工程实现／review 修复／自动化验收完成，真实 provider smoke 与 estimator calibration 仍为唯一剩余验收门禁；Interviewer production 与白名单外实现继续未授权。
+
+**理由：**
+
+- provider schema 中“未提供”和“提供了错误结构”具有不同可信度；只有前者可以安全降级为 unknown optional breakdown，后者必须阻止参考费用生成。
+- domain constructor 是 ledger record 的第一道稳定边界，提前拒绝非法 scope 可避免后续 grouping、序列化阶段崩溃。
+- restore 的同单位保留与跨单位重算是费用历史语义的两个不同分支，必须分别由测试保护，避免只验证 `NO_PRICING` 补算而漏掉已知旧金额。
+
+**验证：**
+
+- 子任务提交为 `0fef479`（malformed usage）、`5ba272c`（scope invariant）与 `c8bd1f9`（restore cost coverage）。完整 unittest `390/390`、`compileall`、`git diff --check` 与 import boundary 通过；真实 provider smoke 与 estimator calibration 尚未执行。
