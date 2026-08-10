@@ -201,6 +201,16 @@ class LLMAttemptRecord:
             if isinstance(self.usage, ReportedUsage):
                 if isinstance(self.cost, CostUnavailable) and self.cost.reason is CostUnavailableReason.USAGE_UNAVAILABLE:
                     raise ValueError("Reported usage cannot use USAGE_UNAVAILABLE cost")
+                if isinstance(self.cost, EstimatedCost):
+                    expected_basis = (
+                        CostEstimateBasis.REPORTED_BREAKDOWN
+                        if self.usage.value.cached_input_tokens is not None
+                        else CostEstimateBasis.ASSUMED_UNCACHED
+                    )
+                    if self.cost.basis is not expected_basis:
+                        raise ValueError(
+                            "Estimated cost basis must match cached input token availability"
+                        )
             elif not (
                 isinstance(self.cost, CostUnavailable)
                 and self.cost.reason is CostUnavailableReason.USAGE_UNAVAILABLE

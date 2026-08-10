@@ -50,11 +50,18 @@ class RendererUsageTests(unittest.TestCase):
             request_profile=ModelProfile.PRO,
             response_model="provider-model",
             outcome=LLMAttemptOutcome.COMPLETED,
-            usage=ReportedUsage(TokenUsage(input_tokens=8, output_tokens=3)),
+            usage=ReportedUsage(
+                TokenUsage(
+                    input_tokens=8,
+                    output_tokens=3,
+                    cached_input_tokens=2,
+                    reasoning_output_tokens=1,
+                )
+            ),
             cost=EstimatedCost(
                 Decimal("0.000011"),
                 "USD",
-                CostEstimateBasis.ASSUMED_UNCACHED,
+                CostEstimateBasis.REPORTED_BREAKDOWN,
             ),
             terminal_at=datetime(2026, 8, 10, tzinfo=timezone.utc),
         )
@@ -62,7 +69,7 @@ class RendererUsageTests(unittest.TestCase):
             context=ContextEstimate(120, 230000, 0.95, 218500, 0.01, ContextSafetyStatus.SAFE),
             logical_calls=1,
             attempts=1,
-            tokens=TokenTotals(8, 0, 8, 8, 3, 0, 11),
+            tokens=TokenTotals(8, 2, 6, 0, 3, 1, 11),
             usage_unknown_attempts=0,
             costs=CostTotals(Decimal("0.000011"), "USD", 0),
             groups=(
@@ -71,7 +78,7 @@ class RendererUsageTests(unittest.TestCase):
                     LLMAttemptPurpose.RUNTIME_DECISION,
                     1,
                     1,
-                    TokenTotals(8, 0, 8, 8, 3, 0, 11),
+                    TokenTotals(8, 2, 6, 0, 3, 1, 11),
                     0,
                     CostTotals(Decimal("0.000011"), "USD", 0),
                 ),
@@ -92,6 +99,12 @@ class RendererUsageTests(unittest.TestCase):
         self.assertIn("Usage", rendered)
         self.assertIn("attempt-1", rendered)
         self.assertIn("11", rendered)
+        self.assertIn("Cached input tokens", rendered)
+        self.assertIn("2", rendered)
+        self.assertIn("Uncached input tokens", rendered)
+        self.assertIn("Reasoning output tokens", rendered)
+        self.assertIn("Context threshold", rendered)
+        self.assertIn("95.0%", rendered)
         self.assertNotIn("provider-model", rendered)
         self.assertNotIn("prompt", rendered.casefold())
         self.assertNotIn("raw-response", rendered.casefold())

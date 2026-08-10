@@ -180,11 +180,37 @@ class Renderer:
         summary.add_row(self._translated_text("usage.context"), Text(
             f"{view.context.estimated_input_tokens} / {view.context.usable_context_tokens}"
         ))
+        summary.add_row(
+            self._translated_text("usage.context_threshold"),
+            Text(
+                f"{view.context.threshold_tokens} ({view.context.threshold_ratio:.1%})"
+            ),
+        )
+        summary.add_row(
+            self._translated_text("usage.context_utilization"),
+            Text(f"{view.context.utilization_ratio:.1%}"),
+        )
         summary.add_row(self._translated_text("usage.context_status"), Text(view.context.status.value))
         summary.add_row(self._translated_text("usage.logical_calls"), Text(str(view.logical_calls)))
         summary.add_row(self._translated_text("usage.attempts"), Text(str(view.attempts)))
         summary.add_row(self._translated_text("usage.input_tokens"), Text(str(view.tokens.input_tokens)))
+        summary.add_row(
+            self._translated_text("usage.cached_input_tokens"),
+            Text(str(view.tokens.cached_input_tokens)),
+        )
+        summary.add_row(
+            self._translated_text("usage.uncached_input_tokens"),
+            Text(str(view.tokens.uncached_input_tokens)),
+        )
+        summary.add_row(
+            self._translated_text("usage.assumed_uncached_input_tokens"),
+            Text(str(view.tokens.assumed_uncached_input_tokens)),
+        )
         summary.add_row(self._translated_text("usage.output_tokens"), Text(str(view.tokens.output_tokens)))
+        summary.add_row(
+            self._translated_text("usage.reasoning_output_tokens"),
+            Text(str(view.tokens.reasoning_output_tokens)),
+        )
         summary.add_row(self._translated_text("usage.total_tokens"), Text(str(view.tokens.total_tokens)))
         summary.add_row(self._translated_text("usage.unknown_attempts"), Text(str(view.usage_unknown_attempts)))
         amount = format(view.costs.amount, "f")

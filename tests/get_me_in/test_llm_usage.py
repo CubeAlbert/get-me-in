@@ -16,9 +16,12 @@ from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.llm_usage import (
     CostUnavailable,
     CostUnavailableReason,
+    CostEstimateBasis,
+    EstimatedCost,
     LLMAttemptOutcome,
     LLMAttemptPurpose,
     LLMAttemptReason,
+    LLMAttemptRecord,
     LLMAttemptScope,
     ModelProfile,
     ReportedUsage,
@@ -103,6 +106,24 @@ class LLMUsageTests(unittest.TestCase):
 
         self.assertIsInstance(attempt.cost, CostUnavailable)
         self.assertEqual(CostUnavailableReason.USAGE_UNAVAILABLE, attempt.cost.reason)
+
+    def test_estimated_cost_basis_matches_cached_input_availability(self) -> None:
+        scope = LLMAttemptScope(AgentKey.MAIN, "turn-1", LLMAttemptPurpose.RUNTIME_DECISION)
+
+        with self.assertRaisesRegex(ValueError, "basis"):
+            LLMAttemptRecord(
+                "attempt-1",
+                "call-1",
+                1,
+                scope,
+                LLMAttemptReason.PRIMARY,
+                ModelProfile.PRO,
+                "provider-model",
+                LLMAttemptOutcome.COMPLETED,
+                ReportedUsage(TokenUsage(10, 2)),
+                EstimatedCost(Decimal("0"), "USD", CostEstimateBasis.REPORTED_BREAKDOWN),
+                _NOW,
+            )
 
     def test_usage_view_aggregates_without_double_counting_reasoning_tokens(self) -> None:
         service = LLMUsageService(None)

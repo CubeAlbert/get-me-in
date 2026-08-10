@@ -222,6 +222,15 @@ class SessionSnapshotCodecTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Duplicate"):
             SessionSnapshotCodec().decode(payload)
 
+    def test_persisted_cost_basis_must_match_cached_usage_breakdown(self) -> None:
+        payload = SessionSnapshotCodec().encode(
+            SessionSnapshot(replace(_snapshot().session, llm_attempts=(_attempt(),)), _now())
+        )
+        payload["llm_attempts"][0]["usage"]["cached_input_tokens"] = None
+
+        with self.assertRaisesRegex(ValueError, "basis"):
+            SessionSnapshotCodec().decode(payload)
+
 
 def _snapshot(
     *,
