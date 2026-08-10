@@ -65,7 +65,10 @@ class OpenAILLMAdapter(LLMPort):
                 response = client.chat.completions.create(**create_kwargs)
             except APITimeoutError as error:
                 raise TimeoutError("Model completion timed out") from error
-            content = response.choices[0].message.content
+            choices = getattr(response, "choices", ())
+            first_choice = choices[0] if choices else None
+            message = getattr(first_choice, "message", None)
+            content = getattr(message, "content", None)
             response_model = getattr(response, "model", None)
             if not isinstance(response_model, str) or not response_model.strip():
                 response_model = None

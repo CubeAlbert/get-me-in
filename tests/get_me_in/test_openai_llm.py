@@ -15,6 +15,25 @@ from src.get_me_in.domain.llm_usage import ReportedUsage, UsageUnavailableReason
 
 
 class OpenAILLMAdapterTests(unittest.TestCase):
+    def test_empty_choices_preserve_response_metadata_and_usage_as_missing_content(self) -> None:
+        client = _FakeClient()
+        client.response = SimpleNamespace(
+            model="provider-model",
+            choices=(),
+            usage=SimpleNamespace(
+                prompt_tokens=100,
+                completion_tokens=30,
+                total_tokens=130,
+            ),
+        )
+
+        result = _adapter(lambda: client).complete(_request(), CancellationToken())
+
+        self.assertIsNone(result.content)
+        self.assertEqual("provider-model", result.response_model)
+        self.assertIsInstance(result.usage, ReportedUsage)
+        self.assertEqual(130, result.usage.value.total_tokens)
+
     def test_response_metadata_and_usage_are_normalized_without_requiring_content(self) -> None:
         client = _FakeClient()
         client.response = SimpleNamespace(

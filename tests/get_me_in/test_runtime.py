@@ -44,6 +44,23 @@ from src.get_me_in.tools.plan import build_plan_tools
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_missing_content_records_completed_attempt_before_invalid_reply_pause(self) -> None:
+        runtime, _, temporary_dir = _runtime(
+            [LLMResult(content=None, response_model="provider-model", usage=ReportedUsage(TokenUsage(12, 4)))],
+            format_repair_limit=0,
+        )
+        self.addCleanup(temporary_dir.cleanup)
+
+        event = _pump(runtime, UserMessage("question"))[-1]
+
+        self.assertIsInstance(event, Paused)
+        self.assertEqual("invalid_model_reply", event.code)
+        attempt = runtime.last_transition.attempt
+        self.assertIsNotNone(attempt)
+        self.assertEqual(LLMAttemptOutcome.COMPLETED, attempt.outcome)
+        self.assertEqual("provider-model", attempt.response_model)
+        self.assertEqual(16, attempt.usage.value.total_tokens)
+
     def test_provider_response_records_completed_attempt_and_metadata(self) -> None:
         result = LLMResult(
             content=_finish("answer", "private"),
