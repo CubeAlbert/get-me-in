@@ -125,6 +125,22 @@ class LLMUsageTests(unittest.TestCase):
                 _NOW,
             )
 
+    def test_attempt_record_rejects_invalid_scope_type(self) -> None:
+        with self.assertRaisesRegex(TypeError, "scope"):
+            LLMAttemptRecord(
+                "attempt-1",
+                "call-1",
+                1,
+                object(),
+                LLMAttemptReason.PRIMARY,
+                ModelProfile.PRO,
+                "provider-model",
+                LLMAttemptOutcome.COMPLETED,
+                ReportedUsage(TokenUsage(10, 2)),
+                EstimatedCost(Decimal("0"), "USD", CostEstimateBasis.ASSUMED_UNCACHED),
+                _NOW,
+            )
+
     def test_usage_view_aggregates_without_double_counting_reasoning_tokens(self) -> None:
         service = LLMUsageService(None)
         scope = LLMAttemptScope(AgentKey.MAIN, "turn-1", LLMAttemptPurpose.RUNTIME_DECISION)

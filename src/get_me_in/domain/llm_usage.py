@@ -173,6 +173,8 @@ class LLMAttemptRecord:
     terminal_at: datetime
 
     def __post_init__(self) -> None:
+        if not isinstance(self.scope, LLMAttemptScope):
+            raise TypeError("scope has an invalid type")
         for value, label, expected in (
             (self.reason, "reason", LLMAttemptReason),
             (self.request_profile, "request_profile", ModelProfile),
