@@ -866,14 +866,19 @@
 - ✅ L6：用户审查完成；README、五份核心文档和完成决策已更新并独立提交。最终事实迁入核心文档后，已按用户授权删除完成态专项执行文档；本专项完成且不进入 R9。
 - ⛔ 首版不增加 `/language`、自动语言检测、Session locale／schema、Prompt 多语言副本、Memory build 改造、embedding／Chroma 变更、依赖或数据迁移；本专项独立于 R9。
 
-## B00 —— 交互式 Runtime token usage（已完成设计，暂缓实施）
+## B00 —— 交互式 Runtime token usage（第二轮复审完成，暂缓实施）
 
 - ✅ 固定交互式 Agent Runtime actual-attempt 范围、Session 顶层 lifetime ledger、logical call／1-based attempt identity、typed usage／unknown／outcome、rewind 与 SubAgent closure 不回滚边界。
 - ✅ 固定 Orchestrator 显式 attempt scope、response envelope、post-response completion、可选 response model、OpenAI timeout adapter 映射，以及 RuntimeTransition → SessionTransition → SessionService 同次提交链路。
-- ✅ 固定 schema v3 可选 ledger 与单向兼容风险；严格校验 identity、logical-call 分组、cache 子集、provider total、Decimal 字符串和单一计费单位，不恢复 v2、不升级 v4。
+- ✅ 固定 schema v3 可选 ledger 与单向兼容风险；严格校验非空 identity／可选 model、带时区 terminal time、logical-call 分组、cached／reasoning 子集、provider total、Decimal 字符串和单一计费单位，不恢复 v2、不升级 v4。
 - ✅ 固定 provider usage、context estimate 和参考费用三条独立口径；全局 context 配置及估算缓冲由配置者负责，preflight pause 不发请求／不增 `model_calls`，普通消息继续追加，`/rewind` 显式后退。
 - ✅ 固定整组可选费用配置与 `CostUnavailable(NO_PRICING)`；单位变化时保留 usage 并按当前 profile 单价重算历史已知费用，不做汇率换算。
+- ✅ 复审补强 provider outcome／usage／response model／cost 的合法组合，新增 `CostUnavailable(USAGE_UNAVAILABLE)`、PRIMARY-first attempt reason、不允许非有限 Decimal，并确认历史 `NO_PRICING` 且 usage 已知时按当前启用价格补算。
 - ✅ 固定独立 `/usage` typed Application view、最近 10 条、隐私边界、MemoryExtractor 永久排除，以及精确 production／测试白名单和 16 项验收矩阵；新增真实 provider smoke 与 estimator／真实 input token 对照校准。
+- ✅ 固定 attempt scope：Agent／turn 必填、handoff episode 可选、purpose 首版只用 `RUNTIME_DECISION`，删除冗余 component；`/usage` 改为 Agent／purpose 汇总。
+- ✅ 固定 Runtime 私有唯一 request builder，由 preflight 与公开只读 context estimate 复用；查询链为 Application → SessionService → Orchestrator → active Runtime，不新增 `ApplicationCommand` 或 CLI drive 分支。
+- ✅ 首版删除当前 SDK 无标准来源的 cache-write usage／价格；cached 明细明确报告时使用 `REPORTED_BREAKDOWN`，缺失时使用 `ASSUMED_UNCACHED`。固定完全相同 record replay no-op、冲突 replay／logical index 拒绝、codec duplicate 拒绝，以及最近 10 条按 append order 获取。
+- ✅ 完成 B00 最终全文一致性审查：关闭前决策 TOC／正文 304 条一致，追加关闭决策 305 后仍一致；`current.md` 最近 10 条、白名单计数 2／16／2／11、16 项验收和 active 文档术语一致，`git diff --check` 通过；恢复“已决定（暂不实施）”。
 - ⏸️ production／测试实现仍未授权。未来必须由用户按 `docs/interviewer-agent-review.md` B00 白名单单独授权；禁止借 B00 修改 Memory、其他 provider 能力、Interviewer production、compression、依赖、legacy 数据或任何白名单外文件。
 
 ## R9 —— 重构后功能（不在当前执行范围）

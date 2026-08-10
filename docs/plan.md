@@ -372,13 +372,13 @@ R6-T 审查撤销决策 174 中“G6 已通过”的结论。R6-F 已获用户�
 
 **当前状态：** L0～L4 代码／测试 checkpoint、L5 工程验证与用户确认的双语言真实 provider／Windows TTY 体验均已完成；L5 最终完整 unittest 为 `346/346`，代码／测试审查修复 checkpoint 为 `02c9c5d`。L6 README、五份核心文档和决策记录已完成，完成态专项执行文档已在最终事实合并后删除。本专项不构成 R9 授权。
 
-### B00 —— 交互式 Runtime token usage（方案完成，暂缓实施）
+### B00 —— 交互式 Runtime token usage（方案与第二轮复审完成，暂缓实施）
 
 **目标：** 为 Main、Resume 与未来 Interviewer 的每次交互式 provider attempt 建立 Session lifetime ledger、typed usage／unknown、参考费用、`/usage` 查询和调用前 context preflight；明确排除 MemoryExtractor 与其他非交互 provider 能力。
 
-**已确认边界：** Orchestrator 显式传递 typed attempt scope；adapter 保留已取得 response 的 metadata，并在边界规范化 OpenAI timeout；schema v3 使用单向兼容的可选 ledger且接受旧代码降级丢失风险；context 配置和启发式安全缓冲由配置者负责；context pause 后普通消息继续追加，`/rewind` 显式后退；费用配置整组可选，缺失时使用 `CostUnavailable(NO_PRICING)`，单位变化时按当前 profile 价格重算历史已知 usage。
+**已确认边界：** Orchestrator 显式传递 typed attempt scope；Agent／turn 必填、handoff episode 可选、purpose 首版为 `RUNTIME_DECISION`，不保存冗余 component。adapter 保留已取得 response 的 metadata，并在边界规范化 OpenAI timeout；schema v3 使用单向兼容的可选 ledger且接受旧代码降级丢失风险；context 配置和启发式安全缓冲由配置者负责；Runtime 单一 request builder 同时服务 preflight 与公开只读 context estimate；context pause 后普通消息继续追加，`/rewind` 显式后退。复审已补强 outcome／usage／response model／cost 合法组合、PRIMARY-first reason、有限非负 Decimal、`USAGE_UNAVAILABLE`、历史 `NO_PRICING` restore 补算、append／codec 冲突规则和 timestamp／identity validation；首版删除当前 SDK 无标准来源的 cache-write，只保留 input／cached input／output 计价与 typed estimate basis。
 
-**实施门禁：** `docs/interviewer-agent-review.md` B00 的 2 个新增 production 文件、16 个 production／配置／用户文档修改、2 个新增测试、11 个测试修改和禁止清单保持唯一精确白名单。16 项验收覆盖 strict ledger invariant、response／timeout 语义、save／restore／rewind、`/usage`、context pause、可选费用、真实 provider smoke 与 estimate 对照校准。用户尚未授权 production／测试实现；未来进入 coding 前必须重新明确授权，白名单外需求必须停止。
+**实施门禁：** `docs/interviewer-agent-review.md` B00 的 2 个新增 production 文件、16 个 production／配置／用户文档修改、2 个新增测试、11 个测试修改和禁止清单保持唯一精确白名单。16 项验收覆盖 strict ledger invariant、合法组合、response／timeout 语义、save／restore／rewind、`/usage`、context pause、scope taxonomy、单一 request projection、cache／replay／identity、可选费用、真实 provider smoke 与 estimate 对照校准。第二轮复审与最终文档一致性验证已关闭；用户尚未授权 production／测试实现，白名单外需求必须停止。
 
 ### R9 —— 新功能恢复
 

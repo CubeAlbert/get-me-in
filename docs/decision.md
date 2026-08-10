@@ -8,6 +8,10 @@
 
 ## 目录
 
+- [决策 305 — 关闭 B00 第二轮复审并恢复暂缓实施状态](#决策-305--关闭-b00-第二轮复审并恢复暂缓实施状态)
+- [决策 304 — 删除 B00 cache-write 并关闭 replay identity 语义](#决策-304--删除-b00-cache-write-并关闭-replay-identity-语义)
+- [决策 303 — 固定 B00 最小 scope taxonomy 与 context estimate 单一路径](#决策-303--固定-b00-最小-scope-taxonomy-与-context-estimate-单一路径)
+- [决策 302 — 重开 B00 复审并补强 attempt usage cost 合法组合](#决策-302--重开-b00-复审并补强-attempt-usage-cost-合法组合)
 - [决策 301 — 完成 B00 token usage 审查修订并同步核心文档](#决策-301--完成-b00-token-usage-审查修订并同步核心文档)
 - [决策 300 — 完成 B00 token usage 方案并暂缓实施](#决策-300--完成-b00-token-usage-方案并暂缓实施)
 - [决策 299 — 完成 B-01 无状态 SubAgent 生命周期修复并恢复全量测试环境隔离](#决策-299--完成-b-01-无状态-subagent-生命周期修复并恢复全量测试环境隔离)
@@ -7277,3 +7281,106 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 - schema v4 或旧代码降级保护 —— 用户接受新 v3 ledger 被旧 reader 丢失的风险，不要求向前兼容。
 - 保存不可重算的完整历史定价快照或构建通用费用引擎 —— 超出参考估算需要；单位变化时直接按当前配置重算。
 - context pause 后禁止普通消息、替换上次输入或自动 rewind —— 用户确认继续追加是既定行为，是否后退由用户显式选择。
+
+### 决策 302 —— 重开 B00 复审并补强 attempt usage cost 合法组合
+
+**背景：** 用户要求继续审查已由决策 300／301 固化的 B00 token usage 方案。对照当前 `OpenAILLMAdapter`、`AgentRuntime`、Session codec 与费用 restore 规则后发现：文档把 usage 与 outcome 描述为“正交”，但没有限定合法组合；费用 unknown 只有 `NO_PRICING`，不能表达 usage 本身不可用；attempt reason 首条约束、非有限 Decimal、以及历史 `NO_PRICING` 在同单位重新启用价格后的补算语义也未关闭。用户确认采用推荐规则，并继续保持不实施门禁。
+
+**决定：**
+
+- usage 与 provider outcome 继续分字段建模，但不是任意笛卡尔积：`COMPLETED` 可搭配 `Reported`、`Unavailable(NOT_REPORTED)` 或 `Unavailable(MALFORMED)`，response model 可选；`TIMEOUT`／`CANCELLED`／`FAILED` 必须搭配 `Unavailable(NO_RESPONSE)` 且 response model 为空。
+- provider 已返回 response 后，即使 content 缺失、解析失败或上层才观察到取消，attempt 仍为 `COMPLETED` 并保留 response metadata；content 缺失继续沿用现有上层 failure 语义，不得由 adapter 提前抛弃 metadata。
+- 费用使用 `EstimatedCost` 或 `CostUnavailable(reason)`；新增 `USAGE_UNAVAILABLE`。usage 不可用时费用必须为 `CostUnavailable(USAGE_UNAVAILABLE)`；usage 已知但未配置价格时为 `CostUnavailable(NO_PRICING)`；usage 已知且已启用价格时才生成 estimate。
+- 每个 logical call 的 index 1 必须为 `PRIMARY`；`FORMAT_REPAIR`／`EXPLICIT_RETRY` 只能用于 index 2 及之后，后续不得再次出现 `PRIMARY`。codec 对 outcome／usage／response model／cost 和 reason／index 组合执行 strict validation。
+- 配置价格与持久化费用 Decimal 必须有限且非负，允许 0，显式拒绝负数、`NaN` 与正负 `Infinity`；JSON 继续使用精确十进制字符串，不经过 float。
+- 当前计费配置启用时，历史 `CostUnavailable(NO_PRICING)` 且 usage 已知的 attempt 使用当前 profile 价格补算，无论是否存在可比较的历史单位；`USAGE_UNAVAILABLE` 永不猜测费用。历史已有 estimate 同单位保留原金额，单位变化按既定规则重算，不做汇率换算。
+- 将 tracker 的 strict invariant 与 16 项验收矩阵同步补强，并更新 design／plan／task／current。B00 状态改回“讨论中（复审）”；下一步审查 `component`／`purpose` taxonomy 与 `/usage` context estimate 的单一请求构造入口。production／测试 implementation 继续未授权。
+
+**理由：**
+
+- provider response 是否存在决定 outcome、usage reason 与 response model 的合法空间；显式矩阵能阻止 codec 接受业务上不可能的组合，同时保留 post-response Application failure 与 provider completion 的分层。
+- 区分 `NO_PRICING` 与 `USAGE_UNAVAILABLE` 后，`/usage` 才能解释费用缺失究竟来自配置还是计量，并使 restore 只对可计算的历史 attempt 补算。
+- 历史 `NO_PRICING` 在重新启用同单位价格时也补算，消除了“同单位永远 unknown、换单位反而可重算”的不对称。
+- PRIMARY-first、有限 Decimal 和跨字段 strict validation 把已声明的 typed contract 变成可执行 invariant，避免由实现者临时猜测。
+
+**暂不处理：**
+
+- `component`／`purpose` 的首版 taxonomy，以及 Agent／turn 是否必填 —— 留给下一组 B00 复审。
+- preflight 与 `/usage` 如何复用唯一完整 request projection —— 留给下一组 B00 复审。
+- 任何 production／测试实现、Interviewer workflow、compression、依赖或白名单扩展 —— 均未授权。
+
+### 决策 303 —— 固定 B00 最小 scope taxonomy 与 context estimate 单一路径
+
+**背景：** 决策 302 关闭 attempt／usage／cost 合法组合后，B00 仍把 `component`、可选 Agent／turn 与未定义的 typed purpose 放进持久化 record，同时没有说明 `/usage` 如何在不读取 Runtime 私有字段的前提下构造与真实 provider 调用一致的 context projection。对照当前代码确认：B00 纳入的全部调用都来自交互式 `AgentRuntime`，均有明确 Agent 与 turn；真实 system prompt、tools 与 history 只在 Runtime `_complete_model()` 路径组装。用户确认采用最小 taxonomy 与单一路径方案，继续不授权实现。
+
+**决定：**
+
+- B00 attempt record 不保存 `component`。首版所有纳入范围的记录都来自交互式 `AgentRuntime`，固定值不能提供额外归属信息；`/usage` 从 Agent／component 分组改为 Agent／purpose 分组。
+- attempt scope 的 Agent 与 turn 改为必填，handoff episode 保持可选并继续使用活动 `HandoffFrame.call_id`。purpose 必填，B00 首版只定义 `RUNTIME_DECISION`，表示一次 Runtime 模型决策点；format repair／retry 仍由 attempt reason 表达。
+- Interviewer question／evaluation／report 等 purpose 不在 B00 预定义，必须等 B03／B04 workflow node 与 command／event 语义确认后再扩展，避免 token telemetry 反向决定尚未设计的 workflow。
+- Runtime 私有 `_build_model_request(state)` 是模型可见 request projection 的唯一构造路径，组装真实 system prompt、tools 与 encoded history。`_complete_model()` preflight 和公开只读 `AgentRuntime.context_estimate(state)` 必须复用它，usage service 不得另拼请求。
+- `context_estimate()` 不暴露 raw request、不生成 ID，也不改变 phase、`model_calls`、取消状态、Agent state 或 Session；`/usage` 展示的是不含用户尚未输入的下一条消息的当前基础投影，真正 provider 调用前在新输入已进入 history 后重新估算。
+- `/usage` 查询链固定为 `Application.usage()` → `SessionService.usage_view()` → `Orchestrator.context_estimate(session)` → `AgentRuntime.context_estimate(active_state)`；SessionService 从 lifetime ledger 派生其他汇总。命令 handler 直接调用公开 Application API 并交给 Renderer，不新增 `ApplicationCommand`，不进入 CLI drive。
+- 以上公开方法和修改均位于已确认 B00 production 白名单，禁止清单与文件数量不扩大。验收矩阵补充必填 scope、无 component、Agent／purpose 分组、单一 request builder 和 estimate 无副作用验证。
+
+**理由：**
+
+- 删除无信息量的 component 并把当前真实必有的 Agent／turn 设为必填，能收紧 schema，避免持久化大量无归属记录或未来依赖空值分支。
+- `RUNTIME_DECISION` 与 attempt reason 分离：purpose 表达“为什么需要这一业务决策点”，reason 表达“这是 primary、repair 还是 retry”，同一 logical call 的 invariant 保持清晰。
+- preflight 与 `/usage` 共用 Runtime 唯一 request projection，才能保证 system prompt、tool descriptors、handoff context 和 history 变化不会造成两套估算逻辑漂移。
+- 公开只读查询链保留 SessionState／Orchestrator／Runtime 的现有所有权，不让 CLI 或新的 usage service穿透 Runtime 私有状态，也不需要扩大 app command／CLI drive 协议。
+
+**后续：**
+
+- B00 进入最终全文一致性审查，重点检查幂等追加冲突、cache 明细缺失／部分报告、terminal timestamp／identity strict validation 与验收覆盖；审查结束前仍保持“讨论中（复审）”。
+- production／测试实现、Interviewer purpose 扩展、context compression 与任何白名单外工作继续未授权。
+
+### 决策 304 —— 删除 B00 cache-write 并关闭 replay identity 语义
+
+**背景：** 决策 303 后的最终一致性审查发现，B00 虽然声明 `cache_write_input_tokens` 与对应价格，但当前锁定的 OpenAI SDK 2.43.0 Chat Completions usage contract 只提供 prompt／completion totals，以及可选 cached／reasoning 明细，没有标准 cache-write 字段或已确认的兼容 provider 映射。保留该字段会迫使 adapter 猜测来源。审查同时发现，相同 attempt replay 的 no-op／conflict 边界、persisted duplicate、terminal timestamp 与 recent ordering 尚未精确定义。用户确认采用删除 cache-write 和收紧 invariant 的推荐方案，implementation 仍未授权。
+
+**决定：**
+
+- B00 首版删除 `cache_write_input_tokens`、PRO／FLASH cache-write price 配置和 `/usage` cache-write 汇总。未来只有具体 provider contract、字段名称和计费语义明确后，才能单独设计扩展；不得从 OpenAI-compatible extra fields 猜测。
+- provider 明确报告 `cached_input_tokens`（包括 0）时，uncached input 为 input - cached，cost estimate basis 为 `REPORTED_BREAKDOWN`；cached 字段缺失时不能当作明确的 0，全部 input 暂按普通 input 价格并标记 `ASSUMED_UNCACHED`。
+- reasoning output 是 output 子集且已包含在 output token／output price 中；reasoning 明细缺失不影响 output 计价，也不得重复累计。
+- Session append 遇到完全相同的既有 attempt id record 时幂等 no-op；同一 attempt id 任一字段冲突时拒绝；同一 `(logical_call_id, attempt_index)` 使用不同 attempt id 时拒绝。codec 对 persisted ledger 中任何重复 attempt id 或 logical-call/index key 一律拒绝，不能把损坏 snapshot 当作 replay。
+- attempt／logical call／turn 等 identity 文本必须非空，可选 response model 存在时也必须非空；terminal time 必须为带时区 ISO-8601。timestamp 不要求跨记录单调递增，`/usage` 最近 10 条按 canonical ledger append order 截取，不按 timestamp 重排。
+- 计费整组可选配置缩减为一个 `LLM_COST_UNIT`，以及 PRO／FLASH 各自 input／cached input／output 三个每百万 token 单价；仍要求全部缺失或全部提供、有限且非负。
+- 将 tracker、design、plan、task、current 和 16 项验收矩阵同步更新；production／测试文件白名单、禁止清单和文件数量不变。
+
+**理由：**
+
+- canonical telemetry 只能保存 provider contract 明确提供的事实；为未来兼容性预留一个当前无法映射的字段，会把 provider-specific 猜测伪装成严格 schema。
+- 区分“明确报告 cached=0”与“没有 cached 明细”后，参考费用可以透明表达精度，而不把缺失值误当事实。
+- 把 Runtime transition replay 与 snapshot corruption 分开：应用内完全相同重放可幂等，持久化文件中的 duplicate 则必须严格拒绝，符合当前 schema v3 的 corruption policy。
+- append order 是 ledger 的 canonical 顺序；terminal clock 可能相同或回拨，不应改变 recent attempts 的确定性。
+
+**后续：**
+
+- 执行 B00 最终文档验证；若 active 文档无矛盾、白名单与验收一致，则恢复“已决定（暂不实施）”并回到 B03。
+- B00 production／测试实现、cache-write 扩展、Interviewer、compression 与白名单外工作继续未授权。
+
+### 决策 305 —— 关闭 B00 第二轮复审并恢复暂缓实施状态
+
+**背景：** 用户连续确认决策 302～304 的 B00 复审修订后，执行最终文档与门禁验证。当前 active B00 方案已经关闭 outcome／usage／cost、scope taxonomy、request projection、cache、replay／duplicate、identity／timestamp 与 recent ordering；需要确认核心文档、专项 tracker、append-only 决策和精确白名单没有状态或计数漂移，再决定是否恢复“已决定”。
+
+**验证结果：**
+
+- `docs/decision.md` TOC 与正文均为 304 条，最新 302～304 标题／锚点存在且顺序正确；追加本决策后同步成为 305 条。
+- `docs/current.md` 在追加本决策前恰好保留 304～295 最近 10 条；追加后调整为 305～296，完整历史继续由 decision 保存。
+- B00 白名单保持 2 个新增 production、16 个修改 production／配置／用户文档、2 个新增测试、11 个修改测试；没有扩大禁止边界。
+- 验收矩阵保持连续 16 项，并已覆盖合法组合、scope、single request projection、cache estimate basis、replay／duplicate、identity／timestamp、append-order recent、真实 provider smoke 与 estimator calibration。
+- active tracker／design／plan／task／current 对 B00 状态、术语、cache-write 排除、Agent／purpose 分组、费用配置和未授权门禁一致；历史决策中的旧原文按 append-only 规则保留，由 302～305 明确覆盖。
+- `git diff --check` 通过；本轮只修改六份文档，没有 production／测试实现或 legacy 数据访问。
+
+**决定：**
+
+- B00 第二轮复审关闭，状态恢复为“已决定（暂不实施）”。决策 300／301 的未修改部分与 302～304 的覆盖修订共同构成当前完整方案，implementation 白名单仍以 tracker 为唯一入口。
+- B00 production／测试 coding 继续未授权；未来若要实施，必须由用户重新明确授权，并按当前白名单和 16 项验收执行。cache-write、Interviewer、compression 或其他白名单外扩展必须单独确认。
+- R9-P 当前讨论路由回 B03：先确定 Orchestrator 面向 executor 的最小 typed protocol，再确定 Interviewer persistent agent-local state envelope 与 transient execution state。
+
+**理由：**
+
+- 最终验证没有发现仍需实现者临场猜测的 B00 字段、组合、所有权或失败语义；继续保持“讨论中”已没有未决设计依据。
+- 把“设计已关闭”与“实现未授权”分开，可以稳定保留已确认方案，同时不误放开跨文件 production／测试工作。
