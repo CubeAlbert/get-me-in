@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 309 — 修复 B00 review findings 并补齐工程验收覆盖](#决策-309--修复-b00-review-findings-并补齐工程验收覆盖)
 - [决策 308 — 完成 B00 工程实现 checkpoint](#决策-308--完成-b00-工程实现-checkpoint)
 - [决策 307 — 授权下一新会话实施 B00 token usage](#决策-307--授权下一新会话实施-b00-token-usage)
 - [决策 306 — 补齐 B00 精确 API 类型与 schema v3 序列化清单](#决策-306--补齐-b00-精确-api-类型与-schema-v3-序列化清单)
@@ -7455,3 +7456,25 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 用户运行 Main／Resume provider smoke，记录 `/usage` lifetime 增量与 save／restore；随后用代表性 ASCII、中文、代码／JSON、tool schema 和长 history 请求完成 estimator 校准。
 - 验收通过后再追加 B00 关闭 checkpoint；任何需要扩大文件、API、schema、依赖或数据边界的情况先停止并重新授权。
+
+### 决策 309 —— 修复 B00 review findings 并补齐工程验收覆盖
+
+**背景：** 对 B00 工程实现的 review 在真实 provider smoke 前发现三个 P2 问题和一个工程验收覆盖缺口：SubAgent 启动失败分支调用 `_close_failure()` 漏传 Main attempt；reported usage 的 cached 明细与 `EstimatedCost.basis` 没有交叉 invariant；`/usage` 丢失 cached／uncached／assumed-uncached／reasoning token 以及 threshold／utilization；Runtime、provider、Session lifecycle 关键路径缺少自动化保护。review 本身未修改工作树。
+
+**决定：**
+
+- 修复 handoff start failure 的 optional attempt 传播，并用回归测试确认原 Main attempt 仍可提交到 Session transition。
+- 在 `LLMAttemptRecord` domain invariant 中固定：cached 明细存在时 cost basis 必须为 `REPORTED_BREAKDOWN`，缺失时必须为 `ASSUMED_UNCACHED`；codec 通过构造 record 继承该严格拒绝行为。
+- `/usage` 展示 context threshold／utilization 以及 cached、uncached、assumed-uncached、reasoning token；不改变 DTO、canonical Decimal 或隐私边界。
+- 增加 format-repair identity、timeout／post-response cancel／no-response cancel／failure、preflight 无 provider 副作用、APITimeoutError、malformed provider total、Session append/replay/rewind/restore reconciliation 和 basis codec 拒绝测试。
+- 将 canonical tracker 的两个 context 配置键改为“缺失使用 `230000`／`0.95` 默认值，显式值严格校验”；真实 provider smoke 与 estimator calibration 仍保持暂停。
+
+**理由：**
+
+- 这三项修复分别关闭了确定性的异常路径、持久化数据合法性漏洞和用户可见信息缺失，不扩大 B00 白名单。
+- 补测覆盖了 review 指出的工程验收矩阵关键分支，使 `383/383` 的自动化结果比原先 `373/373` 更能支持 smoke 前门禁判断，但不替代真实 provider 验收。
+- tracker 与已落地 Settings 行为一致后，后续 bootstrap／review 不会再次把默认配置误判为必填。
+
+**后续：**
+
+- 在 `e66ff34`、`d90ad21`、`5ac588b` 后，继续等待用户运行 Main／Resume provider smoke、`/usage` lifetime/save／restore 和 estimator calibration；通过后再追加 B00 关闭 checkpoint。
