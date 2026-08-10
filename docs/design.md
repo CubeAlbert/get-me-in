@@ -844,7 +844,7 @@ Workflow 与当前项目的 Hub-and-Spoke 架构并不冲突。Hub-and-Spoke 约
 - 问题库、rubric、模型调用、工具 capability 与外部依赖清单；
 - 新文件、类、构造依赖、公开方法、snapshot migration 和独立实施切片。
 
-### 6.14 交互式 Runtime token usage（B00，已决定但未授权实施）
+### 6.14 交互式 Runtime token usage（B00，已授权下一新会话实施）
 
 首版只统计 Main、Resume 与未来 Interviewer 等交互式 Agent Runtime 主动发起的 `LLMPort.complete()` actual attempt；MemoryExtractor、Web Search、embedding、STT／TTS 均排除。`SessionState` 顶层 immutable attempt tuple 是唯一 lifetime ledger；Agent closure、context 销毁、Plan 清理和 `/rewind` 不回滚已经发生的 attempt，save／dump／restore 保留完整 ledger，汇总始终从 attempts 派生。
 
@@ -860,7 +860,7 @@ context preflight 与 lifetime usage 分离。全局 `usable_context_tokens` 和
 
 精确实施契约以 `docs/interviewer-agent-review.md` B00 为 canonical 入口：`domain/llm_usage.py` 固定 attempt／usage／cost／scope 的 immutable types 与 enum values，`application/llm_usage.py` 固定 pricing、context、totals／view 和 `LLMUsageService` API；既有 LLM、Session、Runtime、Orchestrator、Application、Settings、bootstrap 与 CLI 的字段／签名变化也已逐项列出。schema v3 固定使用顶层 `llm_attempts` array，record／scope 使用 exact key set，`usage` 与 `cost` 使用 `status` tagged union，Decimal 使用精确字符串，可选细分显式写 `null`；transient pending logical call、context／aggregate DTO、prompt／response／异常文本均不持久化。
 
-完整 production／测试白名单与 16 项验收矩阵同样以该 B00 小节为唯一入口；验收包含严格合法组合、scope taxonomy、单一 request projection、cache／replay／identity、真实 provider smoke 和 estimator／provider input token 对照校准。设计、第二轮复审、精确 API／类型／序列化清单与文档一致性验证均已关闭；implementation 继续未授权，任何白名单外扩展必须停止确认。
+完整 production／测试白名单与 16 项验收矩阵同样以该 B00 小节为唯一入口；验收包含严格合法组合、scope taxonomy、单一 request projection、cache／replay／identity、真实 provider smoke 和 estimator／provider input token 对照校准。设计、第二轮复审、精确 API／类型／序列化清单与文档一致性验证均已关闭；用户已授权下一新会话按清单 implementation，当前会话不 coding，任何白名单外扩展必须停止确认。
 
 ## 7. 迁移策略
 

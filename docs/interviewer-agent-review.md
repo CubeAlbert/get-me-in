@@ -3,7 +3,7 @@
 > 状态：R9-P 前置 Review 进行中
 > 分支：`feat/interviewer-agent`
 > 首次审查日期：2026-08-05
-> 授权边界：B-01 已实现并验证关闭；B00 设计、精确 API／类型／序列化清单均已关闭并继续暂缓实施，production／测试实现仍未授权；Interviewer 及其他 production／测试实现同样未授权
+> 授权边界：B-01 已实现并验证关闭；B00 设计与精确实施清单已关闭，用户已授权下一新会话按既定白名单实施，但明确禁止当前会话 coding；Interviewer 及其他 production／测试实现仍未授权
 > canonical 命名：新能力统一为 `InterviewerAgent`／`AgentKey.INTERVIEWER`；既有文档中的 `InterviewAgent` 原文不回写
 
 ## 1. 文档用途
@@ -16,7 +16,7 @@
 - 用户确认后的最终决策；
 - 可验证的关闭条件。
 
-本文件不是实现授权。B00 小节已经包含该专项可直接实施的最终 API／类型／序列化清单、精确文件白名单和验收矩阵；其余 Interviewer 阻塞点仍须在全部关闭后形成整体最终 API 清单、实施切片和验收矩阵，再由用户单独授权 coding。
+本文件本身不构成整体 Interviewer 实现授权。B00 小节已经包含该专项可直接实施的最终 API／类型／序列化清单、精确文件白名单和验收矩阵，且决策 307 已记录用户对下一新会话 B00 coding 的单独授权；其余 Interviewer 阻塞点仍须在全部关闭后形成整体最终 API 清单、实施切片和验收矩阵，再由用户单独授权 coding。
 
 ## 2. 已确认、不再作为开放阻塞点的边界
 
@@ -38,7 +38,7 @@
 | ID | 阻塞点 | 当前状态 | 主要依赖 | 阻塞的下一步 |
 |---|---|---|---|---|
 | B-01 | SubAgent 单次 handoff 上下文生命周期与退出销毁 | 已验证关闭 | 当前 Session／handoff 链路 | 已解除 |
-| B00 | 逐次 LLM token usage 的采集、归属、持久化与查询 | 已决定（API 清单已补齐，暂不实施） | B-01、当前 LLM／Session 链路 | 设计与精确 API／类型／序列化清单已关闭；等待未来单独 coding 授权 |
+| B00 | 逐次 LLM token usage 的采集、归属、持久化与查询 | 已授权下一新会话实施 | B-01、当前 LLM／Session 链路 | 当前会话只提交授权文档；下一新会话按既定清单 coding |
 | B01 | MVP 产品职责、命名、输入与完成条件 | 已验证关闭 | 无 | 全部后续设计 |
 | B02 | Workflow 阶段、分支、循环与预算上限 | 已验证关闭 | B01 | state、executor、测试 |
 | B03 | typed executor protocol 与 agent-local state 形状 | 待讨论 | B02 | Orchestrator、Session、composition |
@@ -57,7 +57,7 @@
 ```text
 B-01（已验证关闭）
   ↓
-B00（已决定，API 清单已补齐，暂不实施）
+B00（已授权下一新会话实施；当前会话不 coding）
 
 B01（已关闭）
  ├─→ B02 ─→ B03 ─→ B04 ─→ B05 ─→ B06
@@ -182,7 +182,7 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 **当前状态与授权**
 
 - 用户在确认 B02 后提出：当前系统没有统计会话中的 token 用量，必须支持获取每一次 LLM 调用的 token 消耗。
-- B-01 已验证关闭；本项方案、精确 API／类型／序列化清单、文件白名单与验收边界均已确认，但用户明确要求暂不实施，production／测试实现仍未授权。
+- B-01 已验证关闭；本项方案、精确 API／类型／序列化清单、文件白名单与验收边界均已确认。用户已明确授权下一新会话按清单实施，同时要求当前会话只更新并提交文档，不得 coding。
 
 **当前代码事实**
 
@@ -382,7 +382,7 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 7. restore 的费用 reconciliation 发生在 codec strict decode 与 SessionService 接管之间；它只替换 record 的 `cost`，不改变 record 顺序、identity、scope、usage、outcome 或 terminal time。下一次普通 save／dump 才写回 reconciled cost。
 8. schema version 继续为 `3`；B00 不增加 migration object、journal、aggregate key 或独立 repository。旧 v3 reader 可能丢失 ledger 的风险保持用户已接受的单向兼容边界。
 
-**已确认的未来实施白名单（当前未授权执行）**
+**下一新会话已授权的实施白名单（当前会话不执行）**
 
 新增 production 文件：
 
@@ -429,7 +429,7 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 
 明确禁止扩大到：MemoryExtractor／MemoryService／后台 worker、Web Search／embedding／STT／TTS、`application/app_commands.py`、`domain/events.py`、CLI app 驱动、JSON repository adapter 的 production 实现、Prompt、Knowledge／Artifact／Workspace、Interviewer production 代码、依赖／lock、四个 legacy 数据目录，以及 transcript compression。若实施中发现必须修改上述边界，必须停止并重新提交最小扩展清单。
 
-**已确认的未来验收矩阵（当前不执行）**
+**下一新会话必须执行的验收矩阵（当前会话不执行）**
 
 1. adapter 能规范化 provider 的核心 input／output 和全部可选细分字段；取得 response 时保留可选 provider response model，未取得 response 时不得用 profile 配置值冒充实际返回 model。
 2. provider 缺少可选 cache／reasoning 明细时 usage 仍有效；缺少核心 usage 时返回 typed unavailable，不以 0 代替。
@@ -450,13 +450,13 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 
 **最终决策状态**
 
-> B00 设计与实施前契约已关闭：原方案及第二轮复审结论继续有效，精确 module/type/field/enum、构造依赖、public query、Runtime→Session transition、Settings、CLI 和 schema v3 tagged-union encoding 均已补齐。B00 状态为“已决定（API 清单已补齐，暂不实施）”；未来必须重新获得明确 coding 授权。
+> B00 设计与实施前契约已关闭：原方案及第二轮复审结论继续有效，精确 module/type/field/enum、构造依赖、public query、Runtime→Session transition、Settings、CLI 和 schema v3 tagged-union encoding 均已补齐。用户已授权下一新会话按该清单 coding；当前会话只完成授权 checkpoint，不得实施。
 
 **关闭条件**
 
 - ✅ 统计范围、attempt／logical call identity、snapshot 兼容、rewind、查询入口、unknown／cost 合法组合、scope taxonomy、context estimate 所有权、cache／replay／identity 规则和验证矩阵均已确认并通过最终文档一致性检查。
 - ✅ 已形成精确文件白名单，以及可由新会话直接执行的 API／类型／序列化清单；不再把命名、字段或 JSON 形状留给实现者临场决定。
-- ⏸️ production／测试实现仍暂缓，未来仍须由用户另行授权；本次文档补齐不构成 coding 授权。
+- 📌 production／测试实现已获下一新会话授权；实施必须严格限定在既定 2／16／2／11 白名单与 16 项验收内，当前会话不得 coding。
 
 ### B01 —— MVP 产品职责、命名、输入与完成条件
 
@@ -889,6 +889,6 @@ R9-F  完整工程验证 + 真实 provider/TTY smoke + 用户审查
 
 ## 5. 当前审查结论
 
-当前没有“技术上无法实现”的硬阻塞；B-01、B01、B02 已验证关闭，B00 的设计与精确实施清单已关闭但按用户要求暂不实施。Interviewer production／测试实现仍未授权。
+当前没有“技术上无法实现”的硬阻塞；B-01、B01、B02 已验证关闭，B00 的设计与精确实施清单已关闭并获下一新会话实施授权。当前会话不 coding；Interviewer production／测试实现仍未授权。
 
-下一条讨论进入 **B03 —— typed executor protocol 与 agent-local state 形状**；每次只更新已确认结论和依赖，不提前实施代码。
+下一新会话先按 B00 清单实施并完成验收；B00 关闭后再恢复 **B03 —— typed executor protocol 与 agent-local state 形状**。B00 实施不得提前进入 Interviewer production code。

@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 307 — 授权下一新会话实施 B00 token usage](#决策-307--授权下一新会话实施-b00-token-usage)
 - [决策 306 — 补齐 B00 精确 API 类型与 schema v3 序列化清单](#决策-306--补齐-b00-精确-api-类型与-schema-v3-序列化清单)
 - [决策 305 — 关闭 B00 第二轮复审并恢复暂缓实施状态](#决策-305--关闭-b00-第二轮复审并恢复暂缓实施状态)
 - [决策 304 — 删除 B00 cache-write 并关闭 replay identity 语义](#决策-304--删除-b00-cache-write-并关闭-replay-identity-语义)
@@ -7409,3 +7410,26 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - B00 文档现已支持新会话直接实施；只有用户另行明确授权后，才可按 tracker 的 API／类型／序列化清单、文件白名单和 16 项验收进入 production／测试 coding。
 - 当前 R9-P 路由仍回到 B03。Interviewer purpose、workflow state、compression、Memory usage、cache-write、其他 provider 能力或任何白名单外扩展仍须单独设计与授权。
+
+### 决策 307 —— 授权下一新会话实施 B00 token usage
+
+**背景：** 决策 306 已补齐 B00 的精确 API、类型与 schema v3 序列化清单。用户要求在授权前执行最后一次实施就绪检查。只读审计核对了当前代码调用点、本地 OpenAI SDK `CompletionUsage`／`ChatCompletion` 字段、`APITimeoutError` 继承关系、ModelProfile re-export、LLMResult／Settings 兼容默认值、Runtime→Session transition、codec／restore、CLI query、2／16／2／11 文件白名单与 16 项验收，未发现需要先修改设计或扩大白名单的阻塞项。当前基线完整 unittest `356/356` 通过；`compileall` 首次受外部 uv cache 权限影响，改用本次运行的可写临时 cache 后通过；工作树保持干净。用户随后明确授权实施，但要求只更新并提交文档，不在当前会话 coding。
+
+**决定：**
+
+- 授权下一新会话严格按 `docs/interviewer-agent-review.md` B00 的精确 API／类型／序列化清单、2 个新增 production、16 个修改 production／配置／用户文档、2 个新增测试、11 个修改测试和 16 项验收实施交互式 Runtime token usage。
+- 当前会话授权范围只包含更新并提交状态文档；不得创建或修改 production／测试实现，不得把本决定解释为当前会话立即 coding。
+- 下一新会话必须先执行 `/project-bootstrap`，确认位于 `feat/interviewer-agent`、工作树干净且本授权 checkpoint 为当前基线，再开始实施。建议从 immutable usage domain types、application pricing／context 纯逻辑及其测试开始，按 Plan → Execute → Result Validation → Replan 逐切片推进。
+- 白名单外文件、公开 API／schema 扩展、依赖、legacy 数据目录、MemoryExtractor／MemoryService、Web Search／embedding／STT／TTS、cache-write、context compression 与 Interviewer production 实现均不在授权范围；如实施发现确有必要，必须立即停止并重新提交最小扩展清单。
+- B00 完成并通过工程验收与用户运行的真实 provider／estimate calibration smoke 后，才恢复 R9-P B03 Review；B00 授权不构成 Interviewer coding 授权。
+
+**理由：**
+
+- 最终审计已经把设计可实施性、当前基线健康和未来功能验收分开：现有 356 项测试与 compileall 证明起点健康，16 项 B00 验收仍必须在实现后逐项完成。
+- 把授权限定到下一新会话可以保持本轮文档 checkpoint 原子化，让实现会话从干净、可追溯的基线启动，同时避免在授权记录提交前混入 production／测试变更。
+- 沿用既定白名单和停止门禁能够防止 token telemetry 扩散到后台 Memory、其他 provider 能力、Interviewer workflow 或未设计的 compression schema。
+
+**后续：**
+
+- 当前会话提交 `docs/current.md`、`docs/task.md`、`docs/decision.md` 及 B00 tracker／design／plan 中的授权状态同步，不运行 B00 coding。
+- 下一新会话按本决定启动 B00 实施；任何白名单扩展或验收失败按停止门禁处理。
