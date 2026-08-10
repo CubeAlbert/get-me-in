@@ -68,6 +68,43 @@ class OpenAILLMAdapterTests(unittest.TestCase):
         self.assertIsInstance(result.usage, UnavailableUsage)
         self.assertEqual(UsageUnavailableReason.NOT_REPORTED, result.usage.reason)
 
+    def test_absent_optional_usage_details_remain_reported(self) -> None:
+        client = _FakeClient()
+        client.response = SimpleNamespace(
+            model="provider-model",
+            choices=(SimpleNamespace(message=SimpleNamespace(content='{"content": "ok"}')),),
+            usage=SimpleNamespace(
+                prompt_tokens=100,
+                completion_tokens=30,
+                total_tokens=130,
+            ),
+        )
+
+        result = _adapter(lambda: client).complete(_request(), CancellationToken())
+
+        self.assertIsInstance(result.usage, ReportedUsage)
+        self.assertIsNone(result.usage.value.cached_input_tokens)
+
+    def test_invalid_usage_detail_shapes_are_malformed(self) -> None:
+        for details in ("malformed", [], object(), {"cached_tokens": "invalid"}):
+            with self.subTest(details=details):
+                client = _FakeClient()
+                client.response = SimpleNamespace(
+                    model="provider-model",
+                    choices=(SimpleNamespace(message=SimpleNamespace(content='{"content": "ok"}')),),
+                    usage=SimpleNamespace(
+                        prompt_tokens=100,
+                        completion_tokens=30,
+                        total_tokens=130,
+                        prompt_tokens_details=details,
+                    ),
+                )
+
+                result = _adapter(lambda: client).complete(_request(), CancellationToken())
+
+                self.assertIsInstance(result.usage, UnavailableUsage)
+                self.assertEqual(UsageUnavailableReason.MALFORMED, result.usage.reason)
+
     def test_inconsistent_provider_total_is_malformed_usage(self) -> None:
         client = _FakeClient()
         client.response = SimpleNamespace(

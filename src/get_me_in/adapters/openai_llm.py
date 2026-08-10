@@ -129,6 +129,8 @@ def _normalize_usage(raw: object) -> ReportedUsage | UnavailableUsage:
 def _optional_token(container: object, name: str) -> int | None | object:
     if container is None or container is _MISSING:
         return None
+    if not isinstance(container, Mapping) and not hasattr(container, "__dict__"):
+        return _MISSING
     value = _field(container, name)
     if value is _MISSING or value is None:
         return None
