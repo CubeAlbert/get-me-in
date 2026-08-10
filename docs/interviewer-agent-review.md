@@ -3,7 +3,7 @@
 > 状态：R9-P 前置 Review 进行中
 > 分支：`feat/interviewer-agent`
 > 首次审查日期：2026-08-05
-> 授权边界：B-01 已实现并验证关闭；B00 第二轮设计复审已关闭并继续暂缓实施，production／测试实现仍未授权；Interviewer 及其他 production／测试实现同样未授权
+> 授权边界：B-01 已实现并验证关闭；B00 设计、精确 API／类型／序列化清单均已关闭并继续暂缓实施，production／测试实现仍未授权；Interviewer 及其他 production／测试实现同样未授权
 > canonical 命名：新能力统一为 `InterviewerAgent`／`AgentKey.INTERVIEWER`；既有文档中的 `InterviewAgent` 原文不回写
 
 ## 1. 文档用途
@@ -16,7 +16,7 @@
 - 用户确认后的最终决策；
 - 可验证的关闭条件。
 
-本文件不是实现授权，也不是最终 API 清单。全部阻塞点关闭后，仍须先形成精确文件／类／公开方法白名单、实施切片和验收矩阵，再由用户单独授权 coding。
+本文件不是实现授权。B00 小节已经包含该专项可直接实施的最终 API／类型／序列化清单、精确文件白名单和验收矩阵；其余 Interviewer 阻塞点仍须在全部关闭后形成整体最终 API 清单、实施切片和验收矩阵，再由用户单独授权 coding。
 
 ## 2. 已确认、不再作为开放阻塞点的边界
 
@@ -38,7 +38,7 @@
 | ID | 阻塞点 | 当前状态 | 主要依赖 | 阻塞的下一步 |
 |---|---|---|---|---|
 | B-01 | SubAgent 单次 handoff 上下文生命周期与退出销毁 | 已验证关闭 | 当前 Session／handoff 链路 | 已解除 |
-| B00 | 逐次 LLM token usage 的采集、归属、持久化与查询 | 已决定（暂不实施） | B-01、当前 LLM／Session 链路 | 第二轮复审与最终一致性验证已关闭；等待未来单独 coding 授权 |
+| B00 | 逐次 LLM token usage 的采集、归属、持久化与查询 | 已决定（API 清单已补齐，暂不实施） | B-01、当前 LLM／Session 链路 | 设计与精确 API／类型／序列化清单已关闭；等待未来单独 coding 授权 |
 | B01 | MVP 产品职责、命名、输入与完成条件 | 已验证关闭 | 无 | 全部后续设计 |
 | B02 | Workflow 阶段、分支、循环与预算上限 | 已验证关闭 | B01 | state、executor、测试 |
 | B03 | typed executor protocol 与 agent-local state 形状 | 待讨论 | B02 | Orchestrator、Session、composition |
@@ -57,7 +57,7 @@
 ```text
 B-01（已验证关闭）
   ↓
-B00（已决定，暂不实施）
+B00（已决定，API 清单已补齐，暂不实施）
 
 B01（已关闭）
  ├─→ B02 ─→ B03 ─→ B04 ─→ B05 ─→ B06
@@ -182,7 +182,7 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 **当前状态与授权**
 
 - 用户在确认 B02 后提出：当前系统没有统计会话中的 token 用量，必须支持获取每一次 LLM 调用的 token 消耗。
-- B-01 已验证关闭；本项方案、精确文件白名单与验收边界已经用户确认，但用户明确要求暂不实施，production／测试实现仍未授权。
+- B-01 已验证关闭；本项方案、精确 API／类型／序列化清单、文件白名单与验收边界均已确认，但用户明确要求暂不实施，production／测试实现仍未授权。
 
 **当前代码事实**
 
@@ -254,6 +254,134 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 - 参考费用配置改为整组可选：全局 `LLM_COST_UNIT`，以及 PRO／FLASH 各自的 `INPUT_PRICE_PER_MILLION`、`CACHED_INPUT_PRICE_PER_MILLION`、`OUTPUT_PRICE_PER_MILLION`（完整键以 `LLM_PRO_...`／`LLM_FLASH_...` 命名）要么全部缺失、要么全部提供；部分提供视为配置错误。首版不提供 cache-write price key。整组缺失时 token usage 正常记录，usage 已知的新 attempt 费用为 `CostUnavailable(NO_PRICING)`，不得阻止应用启动。启用时单位 trim 后转大写且只要求非空；价格使用有限且非负的 `Decimal`、允许 0，显式拒绝负数、`NaN` 与正负 `Infinity`。配置只用于本地 estimate，不进入 provider 请求；`.env.example` 明示必须按实际 provider 修改，测试显式构造 env，不读取真实 `.env`。
 - provider 已返回核心 input／output、但没有 cached 明细时，参考费用把全部 input 暂按普通 input 单价计算并标记 `ASSUMED_UNCACHED`；明确报告 cached（包括 0）时按 input - cached 计算 uncached 并标记 `REPORTED_BREAKDOWN`。reasoning 已包含在 output 中，缺少 reasoning 明细不影响 output 计价；核心 input／output 不可用时费用才是 `USAGE_UNAVAILABLE`。recent attempts 默认固定 ledger 最后 10 条，首版不增加筛选、分页或命令参数。
 
+**精确类型与 API 清单（实现必须逐项遵守）**
+
+以下名称、字段、枚举值、方法签名和 owner 是 B00 的最终清单；实现不得换成开放 `dict`、同义重复 DTO、全局 recorder 或第二套 ledger。除明确标为 public query 的方法外，类型公开仅表示模块级 typed contract，不承诺 CLI 外部兼容层。
+
+`src/get_me_in/domain/llm_usage.py` 新增以下 immutable domain 类型：
+
+| 类型 | 精确成员 |
+|---|---|
+| `ModelProfile(StrEnum)` | 从 `ports/llm.py` 迁移为 domain canonical owner：`PRO = "pro"`、`FLASH = "flash"`；`ports.llm` 必须原名 re-export，既有 import site 不迁移 |
+| `LLMAttemptPurpose(StrEnum)` | `RUNTIME_DECISION = "runtime_decision"` |
+| `LLMAttemptReason(StrEnum)` | `PRIMARY = "primary"`、`FORMAT_REPAIR = "format_repair"`、`EXPLICIT_RETRY = "explicit_retry"` |
+| `LLMAttemptOutcome(StrEnum)` | `COMPLETED = "completed"`、`TIMEOUT = "timeout"`、`CANCELLED = "cancelled"`、`FAILED = "failed"` |
+| `UsageUnavailableReason(StrEnum)` | `NOT_REPORTED = "not_reported"`、`NO_RESPONSE = "no_response"`、`MALFORMED = "malformed"` |
+| `CostUnavailableReason(StrEnum)` | `NO_PRICING = "no_pricing"`、`USAGE_UNAVAILABLE = "usage_unavailable"` |
+| `CostEstimateBasis(StrEnum)` | `REPORTED_BREAKDOWN = "reported_breakdown"`、`ASSUMED_UNCACHED = "assumed_uncached"` |
+| `TokenUsage` | frozen dataclass：`input_tokens: int`、`output_tokens: int`、`cached_input_tokens: int | None = None`、`reasoning_output_tokens: int | None = None`；只读 property `total_tokens: int` 与 `uncached_input_tokens: int`，不保存 provider total |
+| `ReportedUsage` | frozen dataclass：`value: TokenUsage` |
+| `UnavailableUsage` | frozen dataclass：`reason: UsageUnavailableReason` |
+| `UsageMeasurement` | `ReportedUsage | UnavailableUsage` 的公开 type alias |
+| `EstimatedCost` | frozen dataclass：`amount: Decimal`、`unit: str`、`basis: CostEstimateBasis` |
+| `CostUnavailable` | frozen dataclass：`reason: CostUnavailableReason` |
+| `CostMeasurement` | `EstimatedCost | CostUnavailable` 的公开 type alias |
+| `LLMAttemptScope` | frozen dataclass：`agent: AgentKey`、`turn_id: str`、`purpose: LLMAttemptPurpose`、`handoff_episode_id: str | None = None` |
+| `LLMAttemptRecord` | frozen dataclass：`attempt_id: str`、`logical_call_id: str`、`attempt_index: int`、`scope: LLMAttemptScope`、`reason: LLMAttemptReason`、`request_profile: ModelProfile`、`response_model: str | None`、`outcome: LLMAttemptOutcome`、`usage: UsageMeasurement`、`cost: CostMeasurement`、`terminal_at: datetime` |
+
+这些 domain constructors 必须拒绝 bool 冒充 int、负 token、cached／reasoning 越界、空 identity／unit／可选 model、无时区时间、负数或非有限 Decimal，以及既定 outcome／usage／model／cost 非法组合。跨 record 连续 index、同组 scope/profile 一致性与唯一性由 ledger validator 统一验证，不能分散为只在 Renderer 中检查。
+
+`src/get_me_in/application/llm_usage.py` 新增 application types 与服务：
+
+| 类型 | 精确成员／公开方法 |
+|---|---|
+| `ContextSafetyStatus(StrEnum)` | `SAFE = "safe"`、`BLOCKED = "blocked"`；`estimated_input_tokens >= threshold_tokens` 时为 `BLOCKED` |
+| `ContextEstimate` | frozen dataclass：`estimated_input_tokens: int`、`usable_context_tokens: int`、`threshold_ratio: float`、`threshold_tokens: int`、`utilization_ratio: float`、`status: ContextSafetyStatus`；`threshold_tokens = floor(usable_context_tokens * threshold_ratio)`，`utilization_ratio = estimated_input_tokens / usable_context_tokens` |
+| `ProfileTokenPricing` | frozen dataclass：`input_per_million: Decimal`、`cached_input_per_million: Decimal`、`output_per_million: Decimal` |
+| `LLMPricing` | frozen dataclass：`unit: str`、`pro: ProfileTokenPricing`、`flash: ProfileTokenPricing`；`for_profile(profile: ModelProfile) -> ProfileTokenPricing` |
+| `TokenTotals` | frozen dataclass：`input_tokens: int`、`cached_input_tokens: int`、`uncached_input_tokens: int`、`assumed_uncached_input_tokens: int`、`output_tokens: int`、`reasoning_output_tokens: int`、`total_tokens: int`。cache 明细缺失时，该 attempt 的全部 input 同时计入 `uncached_input_tokens` 与 `assumed_uncached_input_tokens` |
+| `CostTotals` | frozen dataclass：`amount: Decimal`、`unit: str | None`、`unknown_attempts: int`；ledger 中全部 `EstimatedCost.unit` 必须相同，完全没有 known cost 时 amount 为 `Decimal("0")`、unit 为 `None` |
+| `UsageGroupView` | frozen dataclass：`agent: AgentKey`、`purpose: LLMAttemptPurpose`、`logical_calls: int`、`attempts: int`、`tokens: TokenTotals`、`usage_unknown_attempts: int`、`costs: CostTotals` |
+| `UsageView` | frozen dataclass：`context: ContextEstimate`、`logical_calls: int`、`attempts: int`、`tokens: TokenTotals`、`usage_unknown_attempts: int`、`costs: CostTotals`、`groups: tuple[UsageGroupView, ...]`、`recent_attempts: tuple[LLMAttemptRecord, ...]` |
+| `ContextSizer` | `estimate(request: LLMRequest) -> int`；精确公式为 request 固定 2 tokens，加每条 message 固定 4 tokens，再加该 `message.content` 中 `ceil(ASCII code point 数 / 4) + 非 ASCII code point 数`；空 content 仍计 message overhead。只读取完整 request，线性、无副作用 |
+| `ContextPolicy` | `__init__(sizer: ContextSizer, *, usable_context_tokens: int, threshold_ratio: float)`；`evaluate(request: LLMRequest) -> ContextEstimate` |
+| `LLMUsageService` | `__init__(pricing: LLMPricing | None)`；`build_attempt(*, attempt_id: str, logical_call_id: str, attempt_index: int, scope: LLMAttemptScope, reason: LLMAttemptReason, request_profile: ModelProfile, response_model: str | None, outcome: LLMAttemptOutcome, usage: UsageMeasurement, terminal_at: datetime) -> LLMAttemptRecord`；`reconcile_restored(attempts: tuple[LLMAttemptRecord, ...]) -> tuple[LLMAttemptRecord, ...]`；`usage_view(attempts: tuple[LLMAttemptRecord, ...], context: ContextEstimate) -> UsageView` |
+
+`LLMUsageService.build_attempt()` 是唯一费用计算入口；known usage 的精确金额为 `(uncached_input * input_price + cached_input * cached_price + output * output_price) / Decimal(1_000_000)`，reasoning 不重复计价。cached 明细缺失时 `cached_input=0`、全部 input 进入 uncached price 并使用 `ASSUMED_UNCACHED`；它按当前 pricing 生成 record 内的 `EstimatedCost`／`CostUnavailable`。`reconcile_restored()` 只执行已确认的同单位保留、异单位重算、历史 `NO_PRICING` 补算规则；`usage_view()` 只派生 totals／groups／recent 10，不修改 ledger。Agent／purpose groups 按枚举值稳定排序；recent 保持 append order。
+
+既有文件的精确类型变化与调用签名：
+
+| 文件 | 精确变化 |
+|---|---|
+| `ports/llm.py` | 从 domain 原名 re-export `ModelProfile`，避免 domain↔ports 循环且保持既有 imports；`LLMResult` 改为 frozen dataclass：`content: str | None`、`response_model: str | None = None`、`usage: UsageMeasurement = UnavailableUsage(UsageUnavailableReason.NOT_REPORTED)`；`LLMPort.complete(request, cancellation) -> LLMResult` 签名不变。默认值只用于既有 fake／排除范围调用兼容，production adapter 必须显式返回 normalized usage。adapter 已取到 response 但 core usage 缺失时返回 `UnavailableUsage(NOT_REPORTED)`，字段非法或 provider total 不等于 input + output 时返回 `UnavailableUsage(MALFORMED)`；没有 response 的 exception 不构造 `LLMResult` |
+| `adapters/openai_llm.py` | `OpenAILLMAdapter.complete(request: LLMRequest, cancellation: CancellationSignal) -> LLMResult` 签名不变；显式返回 normalized response envelope，把 OpenAI `APITimeoutError` 映射为 built-in `TimeoutError`，并删除取得 response 后再次以 cancellation 抛错的检查；post-response cancellation 由 Runtime 在先保存 `COMPLETED` attempt 后处理 |
+| `domain/sessions.py` | 新增 frozen `PendingLogicalCall(logical_call_id: str, next_attempt_index: int, next_attempt_reason: LLMAttemptReason)`；`AgentSessionState` 新增 `pending_logical_call: PendingLogicalCall | None = None`；`SessionState` 新增 `llm_attempts: tuple[LLMAttemptRecord, ...] = ()` |
+| `application/runtime.py` | `RuntimeTransition` 新增 `attempt: LLMAttemptRecord | None = None`；`AgentRuntime.__init__()` 新增 keyword-only `context_policy: ContextPolicy` 与 `usage_service: LLMUsageService`；`advance(state, command, *, session_id: str, attempt_scope: LLMAttemptScope | None = None) -> RuntimeTransition`；新增 public read-only `context_estimate(state: AgentSessionState) -> ContextEstimate`；新增 private `_build_model_request(state: AgentSessionState) -> LLMRequest`。只有会进入 provider 的 `Continue` 必须收到 scope，其他 command 传 `None` |
+| `application/orchestration.py` | `SessionTransition` 新增 `attempt: LLMAttemptRecord | None = None`；`handle()`／handoff／failure 分支原样传播 attempt；新增 public read-only `context_estimate(session: SessionState) -> ContextEstimate`。Orchestrator 在 provider-bound `Continue` 时使用 active Agent、state turn 与活动 handoff frame 构造 scope；Main 无 episode，SubAgent 使用 `HandoffFrame.call_id` |
+| `application/session_service.py` | `SessionService.__init__()` 新增 keyword-only `usage_service: LLMUsageService`；新增 public query `usage_view() -> UsageView`；`restore()` 在赋值前调用 `reconcile_restored()`；`_apply_transition()` 在同一 immutable replace 中追加 optional attempt、更新 Agent state 与 `updated_at`，并实现 exact replay no-op／conflict reject |
+| `application/session_codec.py` | `SessionSnapshotCodec.encode(snapshot: SessionSnapshot) -> dict[str, object]` 与 `decode(payload: Mapping[str, object]) -> SessionSnapshot` 签名、`SCHEMA_VERSION = 3` 均不变；新增 ledger encode／decode 与 encode/decode 共用 strict validator，精确 JSON 见下一节 |
+| `application/application.py` | 新增 public query `usage() -> UsageView`，只委派 `SessionService.usage_view()`；`handle()` union 和 `ApplicationCommand` 不变 |
+| `application/settings.py` | `Settings` 末尾新增 `llm_usable_context_tokens: int = 230000`、`llm_context_compression_threshold_ratio: float = 0.95`、`llm_pricing: LLMPricing | None = None`，避免扩大到既有直接构造 Settings 的白名单外测试；`from_env()` 仍要求两个 context key，费用组可选。环境键固定为 `LLM_USABLE_CONTEXT_TOKENS`、`LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO`、`LLM_COST_UNIT`、`LLM_PRO_INPUT_PRICE_PER_MILLION`、`LLM_PRO_CACHED_INPUT_PRICE_PER_MILLION`、`LLM_PRO_OUTPUT_PRICE_PER_MILLION`、`LLM_FLASH_INPUT_PRICE_PER_MILLION`、`LLM_FLASH_CACHED_INPUT_PRICE_PER_MILLION`、`LLM_FLASH_OUTPUT_PRICE_PER_MILLION` |
+| `bootstrap.py` | 从 Settings 构造一个 immutable `ContextPolicy` 与一个 `LLMUsageService` 并显式注入全部交互式 Runtime；同一 `LLMUsageService` 注入 SessionService。二者是 borrowed、无 `close()` 的同步依赖，不改变各 Runtime 独立 LLM／CancellationToken 所有权 |
+| `cli/commands.py` | `build_command_registry()` 签名不变；注册无参数 `/usage` handler，直接调用 `application.usage()` 与 `renderer.render_usage(view)` 后返回 `HANDLED`；非空参数返回本地化 usage-error，不产生 `ApplicationCommand`／`RuntimeCommand` |
+| `cli/renderer.py` | 新增 public `render_usage(view: UsageView) -> None`；只消费 DTO／record 的安全字段，费用 amount 只在展示时格式化，不改 canonical Decimal |
+
+`OpenAILLMAdapter.complete()` 的 public 签名不变；它负责把 OpenAI `APITimeoutError` 映射为 built-in `TimeoutError`，从已取得 response 读取可选 content／model／usage，并在构造 `LLMResult` 前完成 provider total 与细分字段规范化。取得 response 后即使 content 为 `None` 也必须返回 `LLMResult`，不得先抛出“missing content”而丢失 metadata；Runtime 对 `None` content 继续走现有 invalid reply／pause 语义，但必须先把该 response 形成 `COMPLETED` attempt。preflight pause code 固定为 `context_limit_reached`，沿用 `Paused(code, message)` 与 `WAITING_FOR_USER`，不增加新 event。
+
+`PendingLogicalCall` 的状态转换固定为：新的业务决策点在 PRIMARY provider 调用前创建 `{logical_call_id, 1, PRIMARY}`；格式修复排队时变为相同 id、index + 1、`FORMAT_REPAIR`；未来显式应用 retry 同理使用 `EXPLICIT_RETRY`。provider terminal attempt 总会经 transition 返回；若仍将继续同组 repair／retry，则 state 保存下一次值，否则清空。preflight 阻断不创建；snapshot normalise 必须清空；codec 不编码该 transient 字段，并拒绝 persistable state 带有非空 pending logical call。
+
+**精确 Session schema v3 序列化清单**
+
+`SessionSnapshotCodec.encode()` 在现有顶层对象中始终新增 `"llm_attempts": [...]`；`decode()` 对合法旧 v3 缺少该 key 时使用空 tuple。key 存在时必须是 array，不能是 `null`；每项、`scope`、`usage`、`cost` 都必须具有下列精确 key set，缺 key、额外 key、错误类型或未知 enum value 均拒绝。现有 snapshot 其他对象及顶层未知 key 的处理策略不因 B00 改变。
+
+```json
+{
+  "attempt_id": "attempt-id",
+  "logical_call_id": "logical-call-id",
+  "attempt_index": 1,
+  "scope": {
+    "agent": "main",
+    "turn_id": "turn-id",
+    "purpose": "runtime_decision",
+    "handoff_episode_id": null
+  },
+  "reason": "primary",
+  "request_profile": "pro",
+  "response_model": "provider-model-or-null",
+  "outcome": "completed",
+  "usage": {
+    "status": "reported",
+    "input_tokens": 120,
+    "output_tokens": 30,
+    "cached_input_tokens": 20,
+    "reasoning_output_tokens": null
+  },
+  "cost": {
+    "status": "estimated",
+    "amount": "0.00123",
+    "unit": "USD",
+    "basis": "reported_breakdown"
+  },
+  "terminal_at": "2026-08-10T12:00:00+08:00"
+}
+```
+
+两个 tagged union 的另一种精确形状为：
+
+```json
+{
+  "usage": {
+    "status": "unavailable",
+    "reason": "no_response"
+  },
+  "cost": {
+    "status": "unavailable",
+    "reason": "usage_unavailable"
+  }
+}
+```
+
+序列化规则固定如下：
+
+1. `scope.handoff_episode_id`、`response_model`、reported usage 的两个可选细分 key 始终写出，未知值编码为 JSON `null`；不以 key 缺失表达新记录的 `None`。
+2. `TokenUsage.total_tokens`、`uncached_input_tokens`、provider 原始 total、`PendingLogicalCall`、`ContextEstimate`、`UsageView`、totals／groups、prompt、response content 与异常文本均不持久化。
+3. Decimal amount 使用 `format(value, "f")` 的有限非负十进制字符串；decode 直接构造 `Decimal`，不经过 float。unit 保存 trim + uppercase 后的非空值；record 中不做展示舍入。
+4. datetime 使用带 UTC offset 的 `datetime.isoformat()`；`Z` 若被现有 `_time` 接受可解码，但下一次 encode 仍按 Python canonical ISO 输出。naive datetime 拒绝。
+5. ledger validator 在 encode 与 decode 后都运行；decode 额外拒绝任何重复 `attempt_id` 或重复 `(logical_call_id, attempt_index)`，即使两个对象逐字段完全相同也拒绝。Application append 才允许完全相同 record replay no-op。
+6. 同一 logical call 的 scope 四字段和 `request_profile` 必须完全相同，index 必须从 1 连续；全 ledger 的 known estimated cost unit 至多一个。合法 outcome／usage／model／cost 组合与 token／Decimal invariants 同 domain contract。
+7. restore 的费用 reconciliation 发生在 codec strict decode 与 SessionService 接管之间；它只替换 record 的 `cost`，不改变 record 顺序、identity、scope、usage、outcome 或 terminal time。下一次普通 save／dump 才写回 reconciled cost。
+8. schema version 继续为 `3`；B00 不增加 migration object、journal、aggregate key 或独立 repository。旧 v3 reader 可能丢失 ledger 的风险保持用户已接受的单向兼容边界。
+
 **已确认的未来实施白名单（当前未授权执行）**
 
 新增 production 文件：
@@ -322,12 +450,13 @@ B01～B10 ─→ B11 ─→ B12 ─→ 单独 coding 授权
 
 **最终决策状态**
 
-> B00 第二轮复审已关闭：原方案继续有效，并已补强 outcome／usage／response model／cost 合法组合、attempt reason 顺序、有限 Decimal、`NO_PRICING` restore 补算、最小 scope taxonomy、preflight／`/usage` 单一 request projection、cache 字段边界、replay／duplicate、identity／timestamp 与 recent ordering。最终文档、TOC、白名单计数和 16 项验收一致性验证通过。B00 恢复为“已决定（暂不实施）”；未来必须重新获得明确 coding 授权。
+> B00 设计与实施前契约已关闭：原方案及第二轮复审结论继续有效，精确 module/type/field/enum、构造依赖、public query、Runtime→Session transition、Settings、CLI 和 schema v3 tagged-union encoding 均已补齐。B00 状态为“已决定（API 清单已补齐，暂不实施）”；未来必须重新获得明确 coding 授权。
 
 **关闭条件**
 
 - ✅ 统计范围、attempt／logical call identity、snapshot 兼容、rewind、查询入口、unknown／cost 合法组合、scope taxonomy、context estimate 所有权、cache／replay／identity 规则和验证矩阵均已确认并通过最终文档一致性检查。
-- ✅ 已形成精确文件白名单；production／测试实现暂缓，未来仍须由用户另行授权。
+- ✅ 已形成精确文件白名单，以及可由新会话直接执行的 API／类型／序列化清单；不再把命名、字段或 JSON 形状留给实现者临场决定。
+- ⏸️ production／测试实现仍暂缓，未来仍须由用户另行授权；本次文档补齐不构成 coding 授权。
 
 ### B01 —— MVP 产品职责、命名、输入与完成条件
 
@@ -760,6 +889,6 @@ R9-F  完整工程验证 + 真实 provider/TTY smoke + 用户审查
 
 ## 5. 当前审查结论
 
-当前没有“技术上无法实现”的硬阻塞；B-01、B01、B02 已验证关闭，B00 已决定但按用户要求暂不实施。Interviewer production／测试实现仍未授权。
+当前没有“技术上无法实现”的硬阻塞；B-01、B01、B02 已验证关闭，B00 的设计与精确实施清单已关闭但按用户要求暂不实施。Interviewer production／测试实现仍未授权。
 
 下一条讨论进入 **B03 —— typed executor protocol 与 agent-local state 形状**；每次只更新已确认结论和依赖，不提前实施代码。

@@ -858,7 +858,9 @@ context preflight 与 lifetime usage 分离。全局 `usable_context_tokens` 和
 
 参考费用按 PRO／FLASH profile 的同单位有限非负 Decimal input／cached input／output 单价估算，不是供应商账单。cached 明细明确报告时使用 `REPORTED_BREAKDOWN`，缺失时全部 input 暂按普通价格并标记 `ASSUMED_UNCACHED`；reasoning 已包含在 output 中。计费配置整组可选：全部缺失时 token ledger 正常工作，usage 已知的新 attempt 使用 `CostUnavailable(NO_PRICING)`；usage unavailable 使用 `CostUnavailable(USAGE_UNAVAILABLE)`；部分提供或价格为负数／非有限值均视为配置错误。相同单位下已有 estimate 保留调用时金额；单位变化时保留 usage 并用当前 profile 价格重算全部已知历史费用；历史 `NO_PRICING` 且 usage 已知时也按当前配置补算，不进行汇率转换。独立 `/usage` 通过 `Application.usage()` → `SessionService.usage_view()` → `Orchestrator.context_estimate()` → `AgentRuntime.context_estimate()` 的只读链展示当前 context estimate、Session lifetime 汇总、Agent／purpose 分组、unknown 数和 ledger append order 最后的 10 条 attempt；不按 timestamp 重排，命令不新增 `ApplicationCommand`、不进入 CLI drive，也不泄露 prompt、raw request、回复或 provider 异常原文。
 
-完整 production／测试白名单与 16 项验收矩阵以 `docs/interviewer-agent-review.md` B00 为当前入口；验收包含严格合法组合、scope taxonomy、单一 request projection、cache／replay／identity、真实 provider smoke 和 estimator／provider input token 对照校准。第二轮复审与最终文档一致性验证已关闭；implementation 继续未授权，任何白名单外扩展必须停止确认。
+精确实施契约以 `docs/interviewer-agent-review.md` B00 为 canonical 入口：`domain/llm_usage.py` 固定 attempt／usage／cost／scope 的 immutable types 与 enum values，`application/llm_usage.py` 固定 pricing、context、totals／view 和 `LLMUsageService` API；既有 LLM、Session、Runtime、Orchestrator、Application、Settings、bootstrap 与 CLI 的字段／签名变化也已逐项列出。schema v3 固定使用顶层 `llm_attempts` array，record／scope 使用 exact key set，`usage` 与 `cost` 使用 `status` tagged union，Decimal 使用精确字符串，可选细分显式写 `null`；transient pending logical call、context／aggregate DTO、prompt／response／异常文本均不持久化。
+
+完整 production／测试白名单与 16 项验收矩阵同样以该 B00 小节为唯一入口；验收包含严格合法组合、scope taxonomy、单一 request projection、cache／replay／identity、真实 provider smoke 和 estimator／provider input token 对照校准。设计、第二轮复审、精确 API／类型／序列化清单与文档一致性验证均已关闭；implementation 继续未授权，任何白名单外扩展必须停止确认。
 
 ## 7. 迁移策略
 

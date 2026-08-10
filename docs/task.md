@@ -866,7 +866,7 @@
 - ✅ L6：用户审查完成；README、五份核心文档和完成决策已更新并独立提交。最终事实迁入核心文档后，已按用户授权删除完成态专项执行文档；本专项完成且不进入 R9。
 - ⛔ 首版不增加 `/language`、自动语言检测、Session locale／schema、Prompt 多语言副本、Memory build 改造、embedding／Chroma 变更、依赖或数据迁移；本专项独立于 R9。
 
-## B00 —— 交互式 Runtime token usage（第二轮复审完成，暂缓实施）
+## B00 —— 交互式 Runtime token usage（精确实施清单完成，暂缓实施）
 
 - ✅ 固定交互式 Agent Runtime actual-attempt 范围、Session 顶层 lifetime ledger、logical call／1-based attempt identity、typed usage／unknown／outcome、rewind 与 SubAgent closure 不回滚边界。
 - ✅ 固定 Orchestrator 显式 attempt scope、response envelope、post-response completion、可选 response model、OpenAI timeout adapter 映射，以及 RuntimeTransition → SessionTransition → SessionService 同次提交链路。
@@ -879,6 +879,8 @@
 - ✅ 固定 Runtime 私有唯一 request builder，由 preflight 与公开只读 context estimate 复用；查询链为 Application → SessionService → Orchestrator → active Runtime，不新增 `ApplicationCommand` 或 CLI drive 分支。
 - ✅ 首版删除当前 SDK 无标准来源的 cache-write usage／价格；cached 明细明确报告时使用 `REPORTED_BREAKDOWN`，缺失时使用 `ASSUMED_UNCACHED`。固定完全相同 record replay no-op、冲突 replay／logical index 拒绝、codec duplicate 拒绝，以及最近 10 条按 append order 获取。
 - ✅ 完成 B00 最终全文一致性审查：关闭前决策 TOC／正文 304 条一致，追加关闭决策 305 后仍一致；`current.md` 最近 10 条、白名单计数 2／16／2／11、16 项验收和 active 文档术语一致，`git diff --check` 通过；恢复“已决定（暂不实施）”。
+- ✅ 补齐 `domain/llm_usage.py` 与 `application/llm_usage.py` 的全部 immutable types、enum values、DTO／service 字段和方法签名；固定 LLMResult、Session state、Runtime／Session transition、Settings、bootstrap、Application query 与 CLI renderer 的精确 API 变化。
+- ✅ 补齐 schema v3 顶层 `llm_attempts`、record／scope exact key set、reported／unavailable usage、estimated／unavailable cost、Decimal／datetime／`null` 编码、strict duplicate／cross-record validation、restore reconciliation 与 transient／derived 禁止持久化清单。
 - ⏸️ production／测试实现仍未授权。未来必须由用户按 `docs/interviewer-agent-review.md` B00 白名单单独授权；禁止借 B00 修改 Memory、其他 provider 能力、Interviewer production、compression、依赖、legacy 数据或任何白名单外文件。
 
 ## R9 —— 重构后功能（不在当前执行范围）

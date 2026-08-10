@@ -8,6 +8,7 @@
 
 ## 目录
 
+- [决策 306 — 补齐 B00 精确 API 类型与 schema v3 序列化清单](#决策-306--补齐-b00-精确-api-类型与-schema-v3-序列化清单)
 - [决策 305 — 关闭 B00 第二轮复审并恢复暂缓实施状态](#决策-305--关闭-b00-第二轮复审并恢复暂缓实施状态)
 - [决策 304 — 删除 B00 cache-write 并关闭 replay identity 语义](#决策-304--删除-b00-cache-write-并关闭-replay-identity-语义)
 - [决策 303 — 固定 B00 最小 scope taxonomy 与 context estimate 单一路径](#决策-303--固定-b00-最小-scope-taxonomy-与-context-estimate-单一路径)
@@ -7384,3 +7385,27 @@ result = tool.handler(**action["args"])  # read_content(path="/...", line_from=1
 
 - 最终验证没有发现仍需实现者临场猜测的 B00 字段、组合、所有权或失败语义；继续保持“讨论中”已没有未决设计依据。
 - 把“设计已关闭”与“实现未授权”分开，可以稳定保留已确认方案，同时不误放开跨文件 production／测试工作。
+
+### 决策 306 —— 补齐 B00 精确 API 类型与 schema v3 序列化清单
+
+**背景：** 决策 305 关闭了 B00 行为设计和文件／验收白名单，但用户在准备新会话实施时指出，tracker 仍明确声明“不是最终 API 清单”。只读对照当前 `LLMResult`、`AgentSessionState`、`AgentRuntime`、`Orchestrator`、`SessionService`、`SessionSnapshotCodec`、Settings、bootstrap 与 CLI 后确认：已有文档尚未固定新类型的类名和字段、既有方法的精确签名、pricing／view DTO、依赖注入，以及 ledger JSON 的 key set／tagged-union encoding；直接实施仍会要求新会话临场决定公开契约。用户要求先保留已提交的 B00 设计 checkpoint，再单独补齐 API、类型与序列化清单。本轮只修改文档，未授权 production／测试 coding。
+
+**决定：**
+
+- `docs/interviewer-agent-review.md` B00 成为该专项的最终实施契约，固定新增 `domain/llm_usage.py` 的 canonical `ModelProfile`、attempt／scope／usage／cost enums、variants 与 immutable record；`ports.llm` 原名 re-export `ModelProfile` 以避免循环和既有 import site 扩散。`application/llm_usage.py` 固定 pricing、context、totals／group／view DTO、`ContextSizer`、`ContextPolicy` 和 `LLMUsageService` 精确字段与 public methods。
+- 固定既有 surface：`LLMResult` 返回 optional content／response model 与 typed usage；Session 增加 transient `PendingLogicalCall` 和顶层 immutable `llm_attempts`；Runtime／Session transition 各传播 optional attempt；Orchestrator 构造 scope；SessionService 负责 append／restore reconciliation／usage view；Application 只增加 public `usage()` query；Settings 将九个环境键解析为 context fields 与 optional `LLMPricing`；bootstrap 显式注入；`/usage` 直接 query + render，不增加 command/event 或 CLI drive 分支。
+- 固定 schema v3 顶层 key 为 `llm_attempts`。每条 record、scope、reported／unavailable usage 和 estimated／unavailable cost 使用 exact key set 与 `status` discriminator；新 encode 对 optional model／episode／细分字段显式写 `null`。Decimal 使用 `format(value, "f")` 字符串，datetime 必须带时区；provider total 只在 adapter 校验，不持久化。
+- `PendingLogicalCall`、context／aggregate／view DTO、provider raw total、prompt、response content 和异常文本均禁止持久化。encode／decode 都运行 ledger invariant；persisted duplicate 一律拒绝，Application 内完全相同 record replay 才允许 no-op；restore reconciliation 只能替换 cost 并保持 canonical attempt facts 与 append order。
+- tracker 顶部免责声明改为：B00 已有最终 API 清单，但整体 Interviewer Review 仍不是最终实现清单。B00 状态更新为“已决定（API 清单已补齐，暂不实施）”；原 2／16／2／11 文件白名单和 16 项验收不扩大。
+
+**理由：**
+
+- 将 domain facts、application projection、provider envelope 和 JSON tagged unions 分层固定，能够让新会话直接按 contract 实施，同时避免为了方便序列化退回开放 dict 或重复 aggregate。
+- `LLMResult` 直接返回 provider-neutral usage variant，adapter 可以在 response 边界区分 missing 与 malformed；no-response 仍由 Runtime exception path 构造 terminal attempt，不需要伪造 response envelope。
+- schema v3 对新 ledger 子树使用 exact key set、显式 `null` 与十进制字符串，使 round-trip、损坏检测和未来 schema 演进有确定边界；保持顶层既有 unknown-key 行为可避免借 B00 改写整个 codec policy。
+- 这次补齐修正了决策 305 对“无需临场猜测”的过早判断，但不改变已确认行为、文件白名单或未授权门禁。
+
+**后续：**
+
+- B00 文档现已支持新会话直接实施；只有用户另行明确授权后，才可按 tracker 的 API／类型／序列化清单、文件白名单和 16 项验收进入 production／测试 coding。
+- 当前 R9-P 路由仍回到 B03。Interviewer purpose、workflow state、compression、Memory usage、cache-write、其他 provider 能力或任何白名单外扩展仍须单独设计与授权。
