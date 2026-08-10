@@ -41,6 +41,7 @@ CLI 命令由 `CommandRegistry` 注册并提供补全与帮助：
 - `/help`：显示可用命令
 - `/edit`：使用编辑器输入长文本
 - `/dump`：导出当前会话
+- `/usage`：查看当前会话的 token 用量、参考费用和上下文估算（不接受参数）
 - `/restore`：恢复会话
 - `/rewind`：回退到用户回合
 - `/ragreload`：重载知识库
@@ -50,6 +51,8 @@ CLI 命令由 `CommandRegistry` 注册并提供补全与帮助：
 - `/exit`：退出 CLI
 
 命令名称、帮助文本和补全以 `CommandRegistry.help_entries()` 与 `CommandRegistry.completions()` 的实际结果为准。
+
+`/usage` 只统计交互式 Runtime 的 provider attempt；MemoryExtractor、Web Search、embedding、STT/TTS 不计入 Session ledger。费用是按可选配置计算的参考估算，不代表供应商账单；`LLM_USABLE_CONTEXT_TOKENS` 和 `LLM_CONTEXT_COMPRESSION_THRESHOLD_RATIO` 用于调用前的上下文安全阈值。
 
 ## 数据与配置边界
 

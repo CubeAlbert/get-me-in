@@ -172,6 +172,14 @@ class CoreCommandTests(unittest.TestCase):
             self.registry.dispatch("/build-memory"),
         )
 
+    def test_usage_is_a_read_only_public_query_without_runtime_command(self) -> None:
+        result = self.registry.dispatch("/usage")
+
+        self.assertEqual(CommandAction.HANDLED, result.action)
+        self.assertEqual(["usage"], self.renderer.usage_views)
+        self.assertEqual([], self.application.commands)
+        self.assertIn("/usage", self.registry.completions())
+
     def test_approval_and_exit_commands_have_typed_results(self) -> None:
         self.assertEqual(CommandResult(CommandAction.SET_APPROVAL), self.registry.dispatch("/approval"))
         self.assertEqual(ApprovalMode.AUTO, self.registry.dispatch("/approval auto").approval_mode)
@@ -563,6 +571,9 @@ class _Application:
     def view(self) -> _View:
         return _View()
 
+    def usage(self) -> object:
+        return "usage"
+
     def list_sessions(self) -> tuple[SessionPreview, ...]:
         return (
             SessionPreview("session-1", AgentKey.MAIN, datetime(2026, 7, 22, 8, tzinfo=timezone.utc), "first session"),
@@ -591,6 +602,7 @@ class _InputController:
 class _Renderer:
     def __init__(self) -> None:
         self.notices: list[str] = []
+        self.usage_views: list[object] = []
 
     def render_notice(self, message: str) -> None:
         self.notices.append(message)
@@ -603,6 +615,9 @@ class _Renderer:
 
     def render_event(self, event: object) -> None:
         pass
+
+    def render_usage(self, view: object) -> None:
+        self.usage_views.append(view)
 
 
 def _console(output: StringIO) -> Console:

@@ -143,6 +143,12 @@ def build_command_registry(
         path = application.handle(DumpSession())
         return handled(translator.text("command.exported", path=path))
 
+    def usage_command(arguments: str) -> CommandResult:
+        if arguments:
+            return handled(translator.text("command.usage.usage_error"))
+        renderer.render_usage(application.usage())
+        return CommandResult(CommandAction.HANDLED)
+
     def restore_command(arguments: str) -> CommandResult:
         if not arguments:
             sessions = application.list_sessions()
@@ -220,6 +226,7 @@ def build_command_registry(
     registry.register(CommandSpec("/help", translator.text("command.help.description"), help_command))
     registry.register(CommandSpec("/edit", translator.text("command.edit.description"), edit_command))
     registry.register(CommandSpec("/dump", translator.text("command.dump.description"), dump_command))
+    registry.register(CommandSpec("/usage", translator.text("command.usage.description"), usage_command))
     registry.register(CommandSpec("/restore", translator.text("command.restore.description"), restore_command))
     registry.register(CommandSpec("/rewind", translator.text("command.rewind.description"), rewind_command))
     registry.register(CommandSpec("/ragreload", translator.text("command.ragreload.unavailable_description"), unavailable_command))

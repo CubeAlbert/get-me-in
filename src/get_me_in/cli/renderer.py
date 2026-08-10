@@ -30,6 +30,7 @@ from src.get_me_in.application.app_results import (
     KnowledgeReloaded,
     MemoryBuildScheduled,
 )
+from src.get_me_in.application.llm_usage import UsageView
 from src.get_me_in.domain.agents import AgentKey
 from src.get_me_in.domain.plans import Plan, PlanStatus
 from src.get_me_in.domain.sessions import RuntimePhase, SessionView
@@ -173,6 +174,62 @@ class Renderer:
                 border_style="dim",
             )
         )
+
+    def render_usage(self, view: UsageView) -> None:
+        summary = Table.grid(padding=(0, 1))
+        summary.add_row(self._translated_text("usage.context"), Text(
+            f"{view.context.estimated_input_tokens} / {view.context.usable_context_tokens}"
+        ))
+        summary.add_row(self._translated_text("usage.context_status"), Text(view.context.status.value))
+        summary.add_row(self._translated_text("usage.logical_calls"), Text(str(view.logical_calls)))
+        summary.add_row(self._translated_text("usage.attempts"), Text(str(view.attempts)))
+        summary.add_row(self._translated_text("usage.input_tokens"), Text(str(view.tokens.input_tokens)))
+        summary.add_row(self._translated_text("usage.output_tokens"), Text(str(view.tokens.output_tokens)))
+        summary.add_row(self._translated_text("usage.total_tokens"), Text(str(view.tokens.total_tokens)))
+        summary.add_row(self._translated_text("usage.unknown_attempts"), Text(str(view.usage_unknown_attempts)))
+        amount = format(view.costs.amount, "f")
+        unit = view.costs.unit or "-"
+        summary.add_row(self._translated_text("usage.estimated_cost"), Text(f"{amount} {unit}"))
+        summary.add_row(self._translated_text("usage.cost_unknown_attempts"), Text(str(view.costs.unknown_attempts)))
+        self._console.print(Panel(summary, title=self._translated_text("usage.title"), border_style="dim"))
+
+        if view.groups:
+            groups = Table(show_header=True, box=None, padding=(0, 1))
+            groups.add_column(self._translated_text("usage.group_agent"))
+            groups.add_column(self._translated_text("usage.group_purpose"))
+            groups.add_column(self._translated_text("usage.group_attempts"), justify="right")
+            groups.add_column(self._translated_text("usage.group_tokens"), justify="right")
+            groups.add_column(self._translated_text("usage.group_cost"), justify="right")
+            for group in view.groups:
+                cost = f"{format(group.costs.amount, 'f')} {group.costs.unit or '-'}"
+                groups.add_row(
+                    self._enum_text(group.agent, _AGENT_LOCALE_KEYS.get(group.agent)),
+                    Text(group.purpose.value),
+                    Text(str(group.attempts)),
+                    Text(str(group.tokens.total_tokens)),
+                    Text(cost),
+                )
+            self._console.print(groups)
+
+        if view.recent_attempts:
+            recent = Table(show_header=True, box=None, padding=(0, 1))
+            recent.add_column(self._translated_text("usage.recent_id"))
+            recent.add_column(self._translated_text("usage.recent_agent"))
+            recent.add_column(self._translated_text("usage.recent_outcome"))
+            recent.add_column(self._translated_text("usage.recent_tokens"), justify="right")
+            for attempt in view.recent_attempts:
+                tokens = (
+                    str(attempt.usage.value.total_tokens)
+                    if hasattr(attempt.usage, "value")
+                    else self._translator.text("usage.unknown")
+                )
+                recent.add_row(
+                    Text(attempt.attempt_id),
+                    self._enum_text(attempt.scope.agent, _AGENT_LOCALE_KEYS.get(attempt.scope.agent)),
+                    Text(attempt.outcome.value),
+                    Text(tokens),
+                )
+            self._console.print(recent)
 
     def render_help(self, entries: tuple[tuple[str, str], ...]) -> None:
         table = Table(show_header=False, box=None, padding=(0, 1))
