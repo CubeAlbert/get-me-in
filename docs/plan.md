@@ -6,7 +6,7 @@
 
 ## 1. 总体策略
 
-本次采用受控重写，不在旧 `BaseAgent`、`App` 和全局 Registry 上继续叠加功能。当前架构已在 `src/get_me_in/` 中独立构建，根入口已完成切换并通过 R8-O；R8-D 已由 `7514af3` 删除 legacy production 源码并完成 checkpoint，R8-G 文档归一化与完整 G8 已完成并通过最终用户审查。当前停在 R9 独立授权门禁前。
+本次采用受控重写，不在旧 `BaseAgent`、`App` 和全局 Registry 上继续叠加功能。当前架构已在 `src/get_me_in/` 中独立构建，根入口已完成切换并通过 R8-O；R8-D 已由 `7514af3` 删除 legacy production 源码并完成 checkpoint，R8-G 文档归一化与完整 G8 已完成并通过最终用户审查。B00 工程实现、review 修复与自动化验收已完成，当前处于真实 provider smoke／estimator calibration 门禁；通过后恢复 B03 Review，Interviewer production 仍未授权。
 
 执行原则：
 

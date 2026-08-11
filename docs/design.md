@@ -905,4 +905,4 @@ context preflight 与 lifetime usage 分离。全局 `usable_context_tokens` 和
 | R-D5 | 授权重构核心自动化测试 | 以自动化测试保护 domain/application 迁移门禁 |
 | R-D6 | 不迁移旧运行时数据，仅保留 reference/prompts/resume templates | 删除 legacy migration 工作，当前架构使用全新会话和索引 |
 
-R-D1～R-D6 已由用户确认。R0～R8、G5-F、R6-F、R7-T2 与完整 G8 均已完成；R8-D 提交为 `7514af3`，决策 239／240 记录 G8 和最终用户审查，决策 241 记录完成态文档契约收口。当前停在 R9 独立授权门禁前。
+R-D1～R-D6 已由用户确认。R0～R8、G5-F、R6-F、R7-T2 与完整 G8 均已完成；R8-D 提交为 `7514af3`，决策 239／240 记录 G8 和最终用户审查，决策 241 记录完成态文档契约收口。B00 工程实现、review 修复与自动化验收已完成，当前处于真实 provider smoke／estimator calibration 门禁；通过后恢复 B03 Review，Interviewer production 仍未授权。
